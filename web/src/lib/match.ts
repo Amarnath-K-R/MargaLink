@@ -74,25 +74,36 @@ export function passesFilters(m: JournalMeta, f: JournalFilters): boolean {
   return true;
 }
 
+let metaCache: JournalMeta[] | null = null;
 let indexCache: { int8: Int8Array; meta: JournalMeta[]; dim: number } | null = null;
+
+/** meta.json only (~a few hundred KB) — for anything that just needs journal
+ * info (browse/search, the field dropdown), without pulling the int8 vector
+ * file (index.bin) that only matching/ranking actually needs. */
+export async function loadMeta(): Promise<JournalMeta[]> {
+  if (metaCache) return metaCache;
+  const res = await fetch("/index/meta.json");
+  if (!res.ok) throw new Error("failed to load journal list");
+  metaCache = (await res.json()) as JournalMeta[];
+  return metaCache;
+}
 
 async function loadIndex() {
   if (indexCache) return indexCache;
-  const manifest = await loadManifest();
-  const [binRes, metaRes] = await Promise.all([
+  const [manifest, meta, binRes] = await Promise.all([
+    loadManifest(),
+    loadMeta(),
     fetch("/index/index.bin"),
-    fetch("/index/meta.json"),
   ]);
-  if (!binRes.ok || !metaRes.ok) throw new Error("failed to load journal index");
+  if (!binRes.ok) throw new Error("failed to load journal index");
   const buf = new Int8Array(await binRes.arrayBuffer());
-  const meta = (await metaRes.json()) as JournalMeta[];
   indexCache = { int8: buf, meta, dim: manifest.dim };
   return indexCache;
 }
 
 /** Distinct fields present in the index, sorted — for populating a filter dropdown. */
 export async function getAvailableFields(): Promise<string[]> {
-  const { meta } = await loadIndex();
+  const meta = await loadMeta();
   const fields = new Set<string>();
   for (const m of meta) if (m.field) fields.add(m.field);
   return Array.from(fields).sort();

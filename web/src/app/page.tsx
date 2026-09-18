@@ -155,9 +155,14 @@ export default function Home() {
       <header className="mb-12">
         <div className="mb-8 flex items-baseline justify-between">
           <span className="font-serif text-lg font-medium">MargaLink</span>
-          <Link href="/privacy" className="text-sm text-ink-soft hover:text-ink">
-            How privacy works
-          </Link>
+          <nav className="flex gap-5 text-sm text-ink-soft">
+            <Link href="/journals" className="hover:text-ink">
+              Browse journals
+            </Link>
+            <Link href="/privacy" className="hover:text-ink">
+              How privacy works
+            </Link>
+          </nav>
         </div>
         <h1 className="font-serif text-4xl font-medium leading-tight sm:text-5xl">
           Find the right journal.
