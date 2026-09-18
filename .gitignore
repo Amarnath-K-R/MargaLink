@@ -10,3 +10,5 @@ __pycache__/
 .DS_Store
 pipeline/data/
 *.log
+web/public/index/
+web/.impeccable/

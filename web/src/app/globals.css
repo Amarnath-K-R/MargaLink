@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f0efea;
+  --paper-alt: #e6e4dc;
+  --ink: #1b1f27;
+  --ink-soft: #565b66;
+  --accent: #2c5f6f;
+  --accent-soft: #dde6e6;
+  --line: #d8d5cc;
+  --away: #a15a3f; /* the "would leave this device" color — used only for that */
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-alt: var(--paper-alt);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-line: var(--line);
+  --color-away: var(--away);
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
