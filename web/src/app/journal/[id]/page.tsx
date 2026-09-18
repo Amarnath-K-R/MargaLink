@@ -48,9 +48,23 @@ export default async function JournalPage(props: PageProps<"/journal/[id]">) {
           value={journal.is_in_doaj ? "Listed in DOAJ" : "Not verified in DOAJ"}
         />
         <Row
+          label="Indexed in MEDLINE"
+          value={journal.medline_indexed ? "Yes" : "Not verified"}
+        />
+        <Row
           label="Article processing fee"
           value={journal.apc_usd != null ? `$${journal.apc_usd.toLocaleString()} USD` : "Not reported"}
         />
+        {journal.doaj_apc_amount != null && journal.doaj_apc_currency && (
+          <Row
+            label="Fee (DOAJ's own figure)"
+            value={`${journal.doaj_apc_amount.toLocaleString()} ${journal.doaj_apc_currency}`}
+          />
+        )}
+        {journal.publication_time_weeks != null && (
+          <Row label="Typical time to publish" value={`~${journal.publication_time_weeks} weeks`} />
+        )}
+        {journal.license_type && <Row label="Licence" value={journal.license_type} />}
         {journal.issn_l && <Row label="ISSN" value={journal.issn_l} mono />}
         {journal.last_publication_year && (
           <Row label="Last publication year" value={String(journal.last_publication_year)} />
@@ -60,21 +74,36 @@ export default async function JournalPage(props: PageProps<"/journal/[id]">) {
         )}
       </dl>
 
-      {journal.homepage_url && (
-        <a
-          href={journal.homepage_url}
-          target="_blank"
-          rel="noopener noreferrer nofollow"
-          className="mt-10 inline-block text-accent hover:underline"
-        >
-          Visit the journal&apos;s official page
-        </a>
-      )}
+      <div className="mt-10 flex flex-wrap gap-x-6 gap-y-2">
+        {journal.homepage_url && (
+          <a
+            href={journal.homepage_url}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="text-accent hover:underline"
+          >
+            Visit the journal&apos;s official page
+          </a>
+        )}
+        {journal.review_url && (
+          <a
+            href={journal.review_url}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="text-accent hover:underline"
+          >
+            Peer review policy
+          </a>
+        )}
+      </div>
 
       <p className="mt-10 border-t border-line pt-6 text-sm text-ink-soft">
-        This information comes from OpenAlex and hasn&apos;t been
-        independently verified. The journal&apos;s own page is the final
-        authority — see the link above.
+        This information comes from OpenAlex
+        {journal.publication_time_weeks != null || journal.license_type
+          ? " and DOAJ"
+          : ""}
+        , and hasn&apos;t been independently verified. The journal&apos;s own
+        page is the final authority — see the links above.
       </p>
     </main>
   );

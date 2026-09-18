@@ -10,6 +10,7 @@ Writes: web/public/index/{manifest.json, index.bin, meta.json}
 """
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,8 +18,10 @@ import numpy as np
 
 from bakeoff import BUILD_SIZE, WINNER_PATH, load_journals
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from enrichment import build_meta_entry, load_doaj, load_nlm, load_sources  # noqa: E402
+
 OUT_DIR = Path(__file__).parent.parent.parent / "web" / "public" / "index"
-SOURCES_PATH = Path(__file__).parent.parent / "data" / "sources.jsonl"
 
 # Python model id (sentence-transformers) -> browser model id (transformers.js ONNX export)
 BROWSER_MODEL_ID = {
@@ -30,26 +33,6 @@ BROWSER_MODEL_ID = {
 
 def quantize_int8(unit_vecs: np.ndarray) -> np.ndarray:
     return np.clip(np.round(unit_vecs * 127), -127, 127).astype(np.int8)
-
-
-def top_field(topics: list[dict]) -> str | None:
-    if not topics:
-        return None
-    return topics[0].get("field", {}).get("display_name")
-
-
-def load_sources_by_id() -> dict[str, dict]:
-    """Real OpenAlex metadata for journals also present in the ~20k Phase 1
-    source list — not every demo journal will be in there (different filter
-    passes), so lookups fall back to null fields, not fake data."""
-    if not SOURCES_PATH.exists():
-        return {}
-    sources = {}
-    with SOURCES_PATH.open() as f:
-        for line in f:
-            j = json.loads(line)
-            sources[j["id"]] = j
-    return sources
 
 
 def reproduce_journal_order() -> list[dict]:
@@ -81,34 +64,15 @@ def main() -> None:
     if not browser_model_id:
         raise RuntimeError(f"no browser model id mapping for {model_name}")
 
-    sources = load_sources_by_id()
+    sources, doaj, nlm = load_sources(), load_doaj(), load_nlm()
     matched = sum(1 for j in order if j["id"] in sources)
     print(f"real metadata available for {matched}/{len(order)} journals (from sources.jsonl)")
+    print(f"doaj enrichment: {sum(1 for j in order if j['id'] in doaj)}/{len(order)}")
+    print(f"nlm enrichment: {sum(1 for j in order if j['id'] in nlm)}/{len(order)}")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     quantize_int8(centroids).tofile(OUT_DIR / "index.bin")
-    meta = []
-    for j in order:
-        s = sources.get(j["id"])
-        meta.append(
-            {
-                "id": j["id"],
-                "display_name": j["display_name"],
-                "field": top_field(s.get("topics", [])) if s else None,
-                "is_in_doaj": s.get("is_in_doaj") if s else None,
-                "apc_usd": s.get("apc_usd") if s else None,
-                "country_code": s.get("country_code") if s else None,
-                # detail-page-only fields — ponytail: kept in the same file as
-                # match/filter fields for simplicity at this scale (562
-                # journals). At the full ~20k, split into a separate
-                # detail-only fetch if index.json's size becomes a real cost.
-                "issn_l": s.get("issn_l") if s else None,
-                "works_count": s.get("works_count") if s else None,
-                "last_publication_year": s.get("last_publication_year") if s else None,
-                "homepage_url": s.get("homepage_url") if s else None,
-                "host_organization_name": s.get("host_organization_name") if s else None,
-            }
-        )
+    meta = [build_meta_entry(j["id"], j["display_name"], sources, doaj, nlm) for j in order]
     (OUT_DIR / "meta.json").write_text(json.dumps(meta))
     manifest = {
         "model_id": browser_model_id,

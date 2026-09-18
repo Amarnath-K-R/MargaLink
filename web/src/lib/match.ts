@@ -8,14 +8,20 @@ export type JournalMeta = {
   display_name: string;
   field: string | null;
   is_in_doaj: boolean | null;
-  apc_usd: number | null;
+  apc_usd: number | null; // OpenAlex, normalized to USD — used for the fee filter
   country_code: string | null;
+  medline_indexed: boolean | null;
+  publication_time_weeks: number | null;
   // detail-page-only, not used for matching/filtering
   issn_l?: string | null;
   works_count?: number | null;
   last_publication_year?: number | null;
   homepage_url?: string | null;
   host_organization_name?: string | null;
+  license_type?: string | null;
+  review_url?: string | null;
+  doaj_apc_amount?: number | null; // DOAJ's own figure — may not be USD, display-only
+  doaj_apc_currency?: string | null;
 };
 
 export type MatchResult = JournalMeta & { score: number };
@@ -24,6 +30,8 @@ export type JournalFilters = {
   field?: string;
   openAccessOnly?: boolean;
   maxFeeUsd?: number;
+  maxPublicationWeeks?: number;
+  medlineOnly?: boolean;
 };
 
 export function quantizeInt8(unitVec: Float32Array): Int8Array {
@@ -57,6 +65,12 @@ export function passesFilters(m: JournalMeta, f: JournalFilters): boolean {
   if (f.field && m.field !== f.field) return false;
   if (f.openAccessOnly && !m.is_in_doaj) return false;
   if (f.maxFeeUsd !== undefined && (m.apc_usd == null || m.apc_usd > f.maxFeeUsd)) return false;
+  if (
+    f.maxPublicationWeeks !== undefined &&
+    (m.publication_time_weeks == null || m.publication_time_weeks > f.maxPublicationWeeks)
+  )
+    return false;
+  if (f.medlineOnly && !m.medline_indexed) return false;
   return true;
 }
 

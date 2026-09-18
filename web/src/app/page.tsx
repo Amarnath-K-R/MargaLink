@@ -24,6 +24,13 @@ const FEE_PRESETS = [
   { label: "Under $5,000", value: 5000 },
 ] as const;
 
+const SPEED_PRESETS = [
+  { label: "Any speed", value: undefined },
+  { label: "Under 8 weeks", value: 8 },
+  { label: "Under 16 weeks", value: 16 },
+  { label: "Under 26 weeks", value: 26 },
+] as const;
+
 export default function Home() {
   const [stage, setStage] = useState<Stage>("idle");
   const [trace, setTrace] = useState<string[]>([]);
@@ -248,6 +255,30 @@ export default function Home() {
                   ))}
                 </select>
               </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-ink-soft">Speed</span>
+                <select
+                  value={
+                    filters.maxPublicationWeeks === undefined
+                      ? ""
+                      : String(filters.maxPublicationWeeks)
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    applyFilters({
+                      ...filters,
+                      maxPublicationWeeks: v === "" ? undefined : Number(v),
+                    });
+                  }}
+                  className="rounded-sm border border-line bg-paper px-2 py-1.5"
+                >
+                  {SPEED_PRESETS.map((p) => (
+                    <option key={p.label} value={p.value === undefined ? "" : String(p.value)}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="flex items-center gap-2 pb-1.5">
                 <input
                   type="checkbox"
@@ -257,6 +288,14 @@ export default function Home() {
                   }
                 />
                 <span>Open access (DOAJ) only</span>
+              </label>
+              <label className="flex items-center gap-2 pb-1.5">
+                <input
+                  type="checkbox"
+                  checked={filters.medlineOnly ?? false}
+                  onChange={(e) => applyFilters({ ...filters, medlineOnly: e.target.checked })}
+                />
+                <span>MEDLINE-indexed only</span>
               </label>
             </div>
           </div>
@@ -276,11 +315,19 @@ export default function Home() {
                       {(r.score / 127 / 127).toFixed(3)}
                     </span>
                   </div>
-                  {(r.field || r.is_in_doaj || r.apc_usd != null) && (
+                  {(r.field ||
+                    r.is_in_doaj ||
+                    r.medline_indexed ||
+                    r.apc_usd != null ||
+                    r.publication_time_weeks != null) && (
                     <div className="mt-1 flex flex-wrap gap-3 pl-6 text-xs text-ink-soft">
                       {r.field && <span>{r.field}</span>}
                       {r.is_in_doaj && <span className="text-accent">Open access (DOAJ)</span>}
+                      {r.medline_indexed && <span className="text-accent">MEDLINE</span>}
                       {r.apc_usd != null && <span>${r.apc_usd.toLocaleString()} fee</span>}
+                      {r.publication_time_weeks != null && (
+                        <span>~{r.publication_time_weeks}wk to publish</span>
+                      )}
                     </div>
                   )}
                 </li>

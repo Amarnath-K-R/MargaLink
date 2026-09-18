@@ -39,6 +39,8 @@ const m: JournalMeta = {
   is_in_doaj: true,
   apc_usd: 2000,
   country_code: "IN",
+  medline_indexed: true,
+  publication_time_weeks: 12,
 };
 assert(passesFilters(m, {}), "no filters passes everything");
 assert(passesFilters(m, { field: "Medicine" }), "matching field passes");
@@ -48,5 +50,10 @@ assert(!passesFilters({ ...m, is_in_doaj: false }, { openAccessOnly: true }), "n
 assert(passesFilters(m, { maxFeeUsd: 2000 }), "fee at the cap passes");
 assert(!passesFilters(m, { maxFeeUsd: 1999 }), "fee over the cap is excluded");
 assert(!passesFilters({ ...m, apc_usd: null }, { maxFeeUsd: 2000 }), "unknown fee is excluded by a fee filter, not assumed free");
+assert(passesFilters(m, { maxPublicationWeeks: 12 }), "publication time at the cap passes");
+assert(!passesFilters(m, { maxPublicationWeeks: 11 }), "publication time over the cap is excluded");
+assert(!passesFilters({ ...m, publication_time_weeks: null }, { maxPublicationWeeks: 12 }), "unknown publication time is excluded, not assumed fast");
+assert(passesFilters(m, { medlineOnly: true }), "MEDLINE-indexed passes medlineOnly");
+assert(!passesFilters({ ...m, medline_indexed: false }, { medlineOnly: true }), "not MEDLINE-indexed is excluded");
 
 console.log("match.selfcheck: OK");
