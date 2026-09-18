@@ -6,59 +6,20 @@ the plan's "at least one index signal" criterion, native to the API, no
 need to cross-reference DOAJ/Scopus/NLM separately just to build this list —
 that's enrich.py's job, adding badges/metrics to what's already here).
 
-OpenAlex enforces a sustained-rate limit well under its documented daily
-credit budget (observed: a handful of requests, then 429s, regardless of an
-API key) — this run paces very conservatively and expects to take hours.
-
 Usage: uv run --env-file .env fetch_sources.py
 Output: pipeline/data/sources.jsonl (gitignored), one line per journal.
 """
 
 import json
-import os
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-BASE = "https://api.openalex.org"
-HEADERS = {"User-Agent": "MargaLink-Pipeline (mailto:amarnathcseamrita@gmail.com)"}
-API_KEY = os.environ.get("OPENALEX_API_KEY")
+from openalex import BASE, get
+
 OUT_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 TARGET = 20_000
-REQUEST_DELAY_S = 2.5  # conservative — see module docstring
+REQUEST_DELAY_S = 2.5  # conservative — see openalex.py docstring
 FIELDS = "id,display_name,issn_l,issn,works_count,last_publication_year,is_in_doaj,is_core,apc_usd,country_code,host_organization_name,homepage_url,topics"
-
-
-def _with_key(url: str, key: str | None) -> str:
-    if not key:
-        return url
-    return url + ("&" if "?" in url else "?") + f"api_key={key}"
-
-
-def _get(url: str, attempts: int = 8) -> dict:
-    url = _with_key(url, API_KEY)
-    for attempt in range(attempts):
-        try:
-            req = urllib.request.Request(url, headers=HEADERS)
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                return json.loads(resp.read())
-        except urllib.error.HTTPError as e:
-            if attempt == attempts - 1:
-                raise
-            if e.code == 429:
-                retry_after = e.headers.get("Retry-After")
-                wait = float(retry_after) if retry_after else 20 * (attempt + 1)
-                print(f"429, waiting {wait:.0f}s (attempt {attempt + 1}/{attempts})", flush=True)
-                time.sleep(wait)
-            else:
-                time.sleep(5 * (attempt + 1))
-        except Exception as e:
-            if attempt == attempts - 1:
-                raise
-            print(f"error {e!r}, retrying", flush=True)
-            time.sleep(5 * (attempt + 1))
-    raise RuntimeError("unreachable")
 
 
 def already_fetched_ids() -> set[str]:
@@ -84,7 +45,7 @@ def main() -> None:
     with OUT_PATH.open("a") as out:
         while saved < TARGET:
             url = f"{BASE}/sources?filter=type:journal,is_core:true&select={FIELDS}&per_page=200&cursor={cursor}"
-            data = _get(url)
+            data = get(url)
             results = data.get("results", [])
             if not results:
                 print("no more results from OpenAlex", flush=True)
@@ -110,10 +71,6 @@ def main() -> None:
 
 
 def _self_check() -> None:
-    assert _with_key("http://x?a=1", "k") == "http://x?a=1&api_key=k"
-    assert _with_key("http://x", "k") == "http://x?api_key=k"
-    assert _with_key("http://x", None) == "http://x"
-
     import tempfile
 
     global OUT_PATH
