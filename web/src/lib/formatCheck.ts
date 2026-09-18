@@ -103,7 +103,13 @@ export function checkFormat(fullText: string): FormatCheckResult {
     },
     requiredSections: {
       ethics: findSection(fullText, [/ethic(al|s)\s+(statement|approval|declaration)/i, /institutional review board|IRB approval/i]),
-      funding: findSection(fullText, [/^\s*funding\s*:?\s*$/im, /this (work|research|study) was supported by/i, /\bfunding statement\b/i]),
+      // Same numbered-heading gap as References ("5. Funding" wouldn't match
+      // a bare "^funding$" line) — allow the same optional numbering prefix.
+      funding: findSection(fullText, [
+        /^\s*(?:[ivx]+\.|[a-z]\.|\d+\.?)?\s*funding\s*:?\s*$/im,
+        /this (work|research|study) was supported by/i,
+        /\bfunding statement\b/i,
+      ]),
       conflictsOfInterest: findSection(fullText, [/conflicts? of interest/i, /competing interests?/i, /declaration of interests?/i]),
       dataAvailability: findSection(fullText, [/data availability/i, /availability of data/i, /data sharing statement/i]),
     },

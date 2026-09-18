@@ -167,4 +167,8 @@ assert(
   `expected 2 references under a numbered "5. References" heading, got ${numberedRefsResult.referenceCount}`
 );
 
+// Same numbered-heading gap on the Funding detector ("4. Funding")
+const NUMBERED_FUNDING = "Abstract\n\nShort abstract.\n\n4. Funding\n\nNo external funding was received.";
+assert(checkFormat(NUMBERED_FUNDING).requiredSections.funding, "numbered '4. Funding' heading should be detected");
+
 console.log("formatCheck.selfcheck: OK");
