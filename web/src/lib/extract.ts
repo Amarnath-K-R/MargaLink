@@ -41,6 +41,11 @@ async function extractFromDocx(file: File): Promise<ExtractedPaper> {
   const buf = await file.arrayBuffer();
   const { value } = await mammoth.extractRawText({ arrayBuffer: buf });
   const text = value.replace(/\s+/g, " ").trim();
+  // ponytail: first-3000-chars-of-whole-document, not "find the Abstract
+  // heading" — a doc with a long title page/author block/TOC before the
+  // abstract could get truncated before the abstract even starts. Works for
+  // the common case (abstract near the top); upgrade to heading detection if
+  // match quality on real uploads shows this biting.
   return { text: text.slice(0, 3000) };
 }
 
