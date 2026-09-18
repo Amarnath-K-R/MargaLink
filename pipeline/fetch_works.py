@@ -1,10 +1,21 @@
-"""Phase 1: for each journal in sources.jsonl, fetch ~150 recent papers
+"""Phase 1: for each journal in sources.jsonl, fetch up to 200 recent papers
 (title + abstract only) to build its centroid from.
 
 This is the expensive step — one API call per journal, ~20,000 total, and
 per-journal calls are the ones that triggered sustained rate-limiting
 earlier even with an API key. Paced conservatively; expect this to run for
 hours, resumable if interrupted.
+
+Abstract coverage on OpenAlex is publisher-dependent, not uniform — verified
+by direct sampling: Elsevier ~24%, Wiley ~32%, Springer ~20% of recent works
+have a reconstructable abstract, vs. ~100% for SAGE and Taylor & Francis.
+A journal with poor coverage can fail MIN_PAPERS_TO_KEEP even though it has
+thousands of works — that's real data sparsity, not a bug (confirmed by
+manually inspecting "skipped" journals: e.g. Food Research International,
+Elsevier, 19,641 works, only 1/25 sampled had an abstract). PAPERS_PER_JOURNAL
+is set to 200 (OpenAlex's actual per_page max) rather than some lower number
+specifically to give low-coverage journals the widest net a single API call
+(no added cost) can provide.
 
 Usage: uv run --env-file .env fetch_works.py
 Output: pipeline/data/works.jsonl (gitignored), one line per journal:
@@ -19,7 +30,7 @@ from openalex import BASE, get, reconstruct_abstract, safe_iter_jsonl
 
 SOURCES_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 OUT_PATH = Path(__file__).parent / "data" / "works.jsonl"
-PAPERS_PER_JOURNAL = 150
+PAPERS_PER_JOURNAL = 200  # OpenAlex's per_page max — still one API call, no added cost
 MIN_PAPERS_TO_KEEP = 10  # need at least a few for a meaningful centroid
 REQUEST_DELAY_S = 1.0
 
