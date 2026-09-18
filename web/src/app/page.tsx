@@ -11,6 +11,7 @@ import {
   type JournalFilters,
 } from "@/lib/match";
 import { journalHref } from "@/lib/journal-url";
+import { checkFormat, type FormatCheckResult } from "@/lib/formatCheck";
 
 type Stage = "idle" | "reading" | "embedding" | "matching" | "done" | "error";
 
@@ -41,6 +42,7 @@ export default function Home() {
   const [queryVector, setQueryVector] = useState<Float32Array | null>(null);
   const [availableFields, setAvailableFields] = useState<string[]>([]);
   const [filters, setFilters] = useState<JournalFilters>({});
+  const [formatResult, setFormatResult] = useState<FormatCheckResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const log = useCallback((line: string) => setTrace((t) => [...t, line]), []);
@@ -54,6 +56,7 @@ export default function Home() {
       setCalls([]);
       setQueryVector(null);
       setFilters({});
+      setFormatResult(null);
 
       // Instrument fetch for the duration of this run — real proof, not a
       // claim, that no request during matching carries the paper's text.
@@ -72,13 +75,14 @@ export default function Home() {
 
       try {
         log(`Reading ${file.name} (${(file.size / 1024).toFixed(0)} KB)`);
-        const { text } = await extractFromFile(file);
+        const { text, fullText } = await extractFromFile(file);
         log(`Extracted ${text.length} characters — stays in this tab`);
         if (text.trim().length < 50) {
           throw new Error(
             "Couldn't find readable text in this file. If it's a scanned PDF (no text layer), text extraction won't work on it — try a PDF exported directly from Word or LaTeX instead."
           );
         }
+        setFormatResult(checkFormat(fullText));
 
         setStage("embedding");
         log("Loading the embedding model (cached after first run)");
@@ -339,6 +343,56 @@ export default function Home() {
         </section>
       )}
 
+      {formatResult && (
+        <section className="mt-12 border-t border-line pt-8">
+          <h2 className="font-serif text-xl font-medium">Format check</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            General structure, detected from your paper&apos;s text — not yet
+            checked against your chosen journal&apos;s specific limits.
+          </p>
+
+          <dl className="mt-6">
+            <CheckRow label="Word count" value={formatResult.wordCount.toLocaleString()} />
+            <CheckRow
+              label="Abstract"
+              value={
+                formatResult.abstract.found
+                  ? `Found, ${formatResult.abstract.wordCount ?? "?"} words${formatResult.abstract.structured ? " (structured)" : ""}`
+                  : "Not detected"
+              }
+              detected={formatResult.abstract.found}
+            />
+            <CheckRow
+              label="Ethics statement"
+              value={formatResult.requiredSections.ethics ? "Detected" : "Not detected"}
+              detected={formatResult.requiredSections.ethics}
+            />
+            <CheckRow
+              label="Funding statement"
+              value={formatResult.requiredSections.funding ? "Detected" : "Not detected"}
+              detected={formatResult.requiredSections.funding}
+            />
+            <CheckRow
+              label="Conflicts of interest"
+              value={formatResult.requiredSections.conflictsOfInterest ? "Detected" : "Not detected"}
+              detected={formatResult.requiredSections.conflictsOfInterest}
+            />
+            <CheckRow
+              label="Data availability statement"
+              value={formatResult.requiredSections.dataAvailability ? "Detected" : "Not detected"}
+              detected={formatResult.requiredSections.dataAvailability}
+            />
+            <CheckRow
+              label="References (approximate)"
+              value={formatResult.referenceCount != null ? String(formatResult.referenceCount) : "Not detected"}
+              detected={formatResult.referenceCount != null}
+            />
+            <CheckRow label="Figures referenced" value={String(formatResult.figureCount)} />
+            <CheckRow label="Tables referenced" value={String(formatResult.tableCount)} />
+          </dl>
+        </section>
+      )}
+
       <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
         <p>
           This build matches against 562 journals — the sample used to pick
@@ -350,5 +404,22 @@ export default function Home() {
         </p>
       </footer>
     </main>
+  );
+}
+
+function CheckRow({
+  label,
+  value,
+  detected,
+}: {
+  label: string;
+  value: string;
+  detected?: boolean;
+}) {
+  return (
+    <div className="flex justify-between border-t border-line py-2.5 text-sm first:border-t-0">
+      <dt className="text-ink-soft">{label}</dt>
+      <dd className={detected ? "text-accent" : ""}>{value}</dd>
+    </div>
   );
 }

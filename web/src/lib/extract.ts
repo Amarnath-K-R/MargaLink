@@ -4,6 +4,7 @@
 
 export type ExtractedPaper = {
   text: string; // best-effort title + abstract, used as the embedding input
+  fullText: string; // the whole document, for the format check
 };
 
 export async function extractFromFile(file: File): Promise<ExtractedPaper> {
@@ -23,30 +24,40 @@ async function extractFromPdf(file: File): Promise<ExtractedPaper> {
   const buf = await file.arrayBuffer();
   const doc = await pdfjsLib.getDocument({ data: buf }).promise;
 
-  // Title + abstract live on page 1 for the overwhelming majority of papers.
-  // Full-text parsing is unnecessary for matching — see plan §3.2.
-  const page = await doc.getPage(1);
-  const content = await page.getTextContent();
-  const text = content.items
-    .map((item) => ("str" in item ? item.str : ""))
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const pageTexts: string[] = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    // Join items with a plain space, but insert a real newline wherever
+    // pdf.js marks a line ending (hasEOL) — without this, "Abstract" on its
+    // own line collapses into running prose and no heading regex can find
+    // it (caught by a real end-to-end PDF, not just the sample-text tests).
+    let pageText = "";
+    for (const item of content.items) {
+      if (!("str" in item)) continue;
+      pageText += item.str + (item.hasEOL ? "\n" : " ");
+    }
+    pageTexts.push(pageText);
+  }
+  const fullText = pageTexts.join("\n\n").replace(/[ \t]+/g, " ").trim();
 
-  return { text: text.slice(0, 3000) }; // title+abstract rarely exceed this
+  // Title + abstract live on page 1 for the overwhelming majority of papers —
+  // that's all the embedding needs (see plan §3.2). The format check below
+  // uses the full text.
+  return { text: fullText.slice(0, 3000), fullText };
 }
 
 async function extractFromDocx(file: File): Promise<ExtractedPaper> {
   const mammoth = await import("mammoth");
   const buf = await file.arrayBuffer();
   const { value } = await mammoth.extractRawText({ arrayBuffer: buf });
-  const text = value.replace(/\s+/g, " ").trim();
+  const fullText = value.replace(/[ \t]+/g, " ").trim();
   // ponytail: first-3000-chars-of-whole-document, not "find the Abstract
   // heading" — a doc with a long title page/author block/TOC before the
   // abstract could get truncated before the abstract even starts. Works for
   // the common case (abstract near the top); upgrade to heading detection if
   // match quality on real uploads shows this biting.
-  return { text: text.slice(0, 3000) };
+  return { text: fullText.slice(0, 3000), fullText };
 }
 
 // No unit test here — nothing pure to check without a browser + a real file.
