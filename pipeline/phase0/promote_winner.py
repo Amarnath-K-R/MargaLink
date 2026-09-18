@@ -98,6 +98,15 @@ def main() -> None:
                 "is_in_doaj": s.get("is_in_doaj") if s else None,
                 "apc_usd": s.get("apc_usd") if s else None,
                 "country_code": s.get("country_code") if s else None,
+                # detail-page-only fields — ponytail: kept in the same file as
+                # match/filter fields for simplicity at this scale (562
+                # journals). At the full ~20k, split into a separate
+                # detail-only fetch if index.json's size becomes a real cost.
+                "issn_l": s.get("issn_l") if s else None,
+                "works_count": s.get("works_count") if s else None,
+                "last_publication_year": s.get("last_publication_year") if s else None,
+                "homepage_url": s.get("homepage_url") if s else None,
+                "host_organization_name": s.get("host_organization_name") if s else None,
             }
         )
     (OUT_DIR / "meta.json").write_text(json.dumps(meta))

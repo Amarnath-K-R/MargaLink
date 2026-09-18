@@ -10,6 +10,12 @@ export type JournalMeta = {
   is_in_doaj: boolean | null;
   apc_usd: number | null;
   country_code: string | null;
+  // detail-page-only, not used for matching/filtering
+  issn_l?: string | null;
+  works_count?: number | null;
+  last_publication_year?: number | null;
+  homepage_url?: string | null;
+  host_organization_name?: string | null;
 };
 
 export type MatchResult = JournalMeta & { score: number };

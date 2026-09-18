@@ -10,6 +10,7 @@ import {
   type MatchResult,
   type JournalFilters,
 } from "@/lib/match";
+import { journalHref } from "@/lib/journal-url";
 
 type Stage = "idle" | "reading" | "embedding" | "matching" | "done" | "error";
 
@@ -267,7 +268,9 @@ export default function Home() {
                   <div className="flex items-baseline justify-between gap-4">
                     <span className="flex gap-3">
                       <span className="text-ink-soft">{i + 1}</span>
-                      <span>{r.display_name}</span>
+                      <Link href={journalHref(r.id)} className="hover:underline">
+                        {r.display_name}
+                      </Link>
                     </span>
                     <span className="font-mono text-xs text-ink-soft">
                       {(r.score / 127 / 127).toFixed(3)}
