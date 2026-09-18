@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Serif, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const plexSerif = IBM_Plex_Serif({
@@ -20,10 +21,26 @@ const plexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
+const TITLE = "MargaLink — find the right journal";
+const DESCRIPTION =
+  "Upload a finished paper and get matching journals. The paper never leaves your device.";
+
 export const metadata: Metadata = {
-  title: "MargaLink — find the right journal",
-  description:
-    "Upload a finished paper and get matching journals. The paper never leaves your device.",
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    siteName: "MargaLink",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
