@@ -18,6 +18,7 @@ import numpy as np
 from bakeoff import BUILD_SIZE, WINNER_PATH, load_journals
 
 OUT_DIR = Path(__file__).parent.parent.parent / "web" / "public" / "index"
+SOURCES_PATH = Path(__file__).parent.parent / "data" / "sources.jsonl"
 
 # Python model id (sentence-transformers) -> browser model id (transformers.js ONNX export)
 BROWSER_MODEL_ID = {
@@ -29,6 +30,26 @@ BROWSER_MODEL_ID = {
 
 def quantize_int8(unit_vecs: np.ndarray) -> np.ndarray:
     return np.clip(np.round(unit_vecs * 127), -127, 127).astype(np.int8)
+
+
+def top_field(topics: list[dict]) -> str | None:
+    if not topics:
+        return None
+    return topics[0].get("field", {}).get("display_name")
+
+
+def load_sources_by_id() -> dict[str, dict]:
+    """Real OpenAlex metadata for journals also present in the ~20k Phase 1
+    source list — not every demo journal will be in there (different filter
+    passes), so lookups fall back to null fields, not fake data."""
+    if not SOURCES_PATH.exists():
+        return {}
+    sources = {}
+    with SOURCES_PATH.open() as f:
+        for line in f:
+            j = json.loads(line)
+            sources[j["id"]] = j
+    return sources
 
 
 def reproduce_journal_order() -> list[dict]:
@@ -60,9 +81,25 @@ def main() -> None:
     if not browser_model_id:
         raise RuntimeError(f"no browser model id mapping for {model_name}")
 
+    sources = load_sources_by_id()
+    matched = sum(1 for j in order if j["id"] in sources)
+    print(f"real metadata available for {matched}/{len(order)} journals (from sources.jsonl)")
+
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     quantize_int8(centroids).tofile(OUT_DIR / "index.bin")
-    meta = [{"id": j["id"], "display_name": j["display_name"]} for j in order]
+    meta = []
+    for j in order:
+        s = sources.get(j["id"])
+        meta.append(
+            {
+                "id": j["id"],
+                "display_name": j["display_name"],
+                "field": top_field(s.get("topics", [])) if s else None,
+                "is_in_doaj": s.get("is_in_doaj") if s else None,
+                "apc_usd": s.get("apc_usd") if s else None,
+                "country_code": s.get("country_code") if s else None,
+            }
+        )
     (OUT_DIR / "meta.json").write_text(json.dumps(meta))
     manifest = {
         "model_id": browser_model_id,

@@ -4,11 +4,24 @@ import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 import { extractFromFile } from "@/lib/extract";
 import { embed } from "@/lib/embed";
-import { matchJournals, type MatchResult } from "@/lib/match";
+import {
+  matchJournals,
+  getAvailableFields,
+  type MatchResult,
+  type JournalFilters,
+} from "@/lib/match";
 
 type Stage = "idle" | "reading" | "embedding" | "matching" | "done" | "error";
 
 type NetworkCall = { method: string; url: string; hadBody: boolean };
+
+const FEE_PRESETS = [
+  { label: "Any fee", value: undefined },
+  { label: "Free only", value: 0 },
+  { label: "Under $1,500", value: 1500 },
+  { label: "Under $3,000", value: 3000 },
+  { label: "Under $5,000", value: 5000 },
+] as const;
 
 export default function Home() {
   const [stage, setStage] = useState<Stage>("idle");
@@ -17,6 +30,9 @@ export default function Home() {
   const [results, setResults] = useState<MatchResult[] | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [queryVector, setQueryVector] = useState<Float32Array | null>(null);
+  const [availableFields, setAvailableFields] = useState<string[]>([]);
+  const [filters, setFilters] = useState<JournalFilters>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
   const log = useCallback((line: string) => setTrace((t) => [...t, line]), []);
@@ -28,6 +44,8 @@ export default function Home() {
       setResults(null);
       setErrorMsg(null);
       setCalls([]);
+      setQueryVector(null);
+      setFilters({});
 
       // Instrument fetch for the duration of this run — real proof, not a
       // claim, that no request during matching carries the paper's text.
@@ -58,11 +76,13 @@ export default function Home() {
         log("Loading the embedding model (cached after first run)");
         const vector = await embed(text);
         log(`Computed a ${vector.length}-dimension vector on this device`);
+        setQueryVector(vector);
 
         setStage("matching");
         log("Ranking journals locally against the vector");
         const matches = await matchJournals(vector, 10);
         log(`Found ${matches.length} candidate journals`);
+        void getAvailableFields().then(setAvailableFields);
 
         setResults(matches);
         setStage("done");
@@ -78,6 +98,16 @@ export default function Home() {
   );
 
   const busy = stage === "reading" || stage === "embedding" || stage === "matching";
+
+  // Re-rank locally (no re-extract/re-embed, no network call — the index is
+  // already cached) whenever a filter control changes on an already-run paper.
+  const applyFilters = useCallback(
+    (next: JournalFilters) => {
+      setFilters(next);
+      if (queryVector) void matchJournals(queryVector, 10, next).then(setResults);
+    },
+    [queryVector]
+  );
 
   const onFiles = useCallback(
     (files: FileList | null) => {
@@ -178,25 +208,84 @@ export default function Home() {
         </div>
       )}
 
-      {results && results.length > 0 && (
+      {queryVector && (
         <section className="mt-12">
-          <h2 className="mb-4 font-serif text-xl font-medium">Best matches</h2>
-          <ol>
-            {results.map((r, i) => (
-              <li
-                key={r.id}
-                className="flex items-baseline justify-between gap-4 border-t border-line py-3 first:border-t-0"
-              >
-                <span className="flex gap-3">
-                  <span className="text-ink-soft">{i + 1}</span>
-                  <span>{r.display_name}</span>
-                </span>
-                <span className="font-mono text-xs text-ink-soft">
-                  {(r.score / 127 / 127).toFixed(3)}
-                </span>
-              </li>
-            ))}
-          </ol>
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+            <h2 className="font-serif text-xl font-medium">Best matches</h2>
+            <div className="flex flex-wrap items-end gap-4 text-sm">
+              <label className="flex flex-col gap-1">
+                <span className="text-ink-soft">Field</span>
+                <select
+                  value={filters.field ?? ""}
+                  onChange={(e) =>
+                    applyFilters({ ...filters, field: e.target.value || undefined })
+                  }
+                  className="rounded-sm border border-line bg-paper px-2 py-1.5"
+                >
+                  <option value="">All fields</option>
+                  {availableFields.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-ink-soft">Fee</span>
+                <select
+                  value={filters.maxFeeUsd === undefined ? "" : String(filters.maxFeeUsd)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    applyFilters({ ...filters, maxFeeUsd: v === "" ? undefined : Number(v) });
+                  }}
+                  className="rounded-sm border border-line bg-paper px-2 py-1.5"
+                >
+                  {FEE_PRESETS.map((p) => (
+                    <option key={p.label} value={p.value === undefined ? "" : String(p.value)}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 pb-1.5">
+                <input
+                  type="checkbox"
+                  checked={filters.openAccessOnly ?? false}
+                  onChange={(e) =>
+                    applyFilters({ ...filters, openAccessOnly: e.target.checked })
+                  }
+                />
+                <span>Open access (DOAJ) only</span>
+              </label>
+            </div>
+          </div>
+
+          {results && results.length > 0 ? (
+            <ol data-testid="results">
+              {results.map((r, i) => (
+                <li key={r.id} className="border-t border-line py-3 first:border-t-0">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <span className="flex gap-3">
+                      <span className="text-ink-soft">{i + 1}</span>
+                      <span>{r.display_name}</span>
+                    </span>
+                    <span className="font-mono text-xs text-ink-soft">
+                      {(r.score / 127 / 127).toFixed(3)}
+                    </span>
+                  </div>
+                  {(r.field || r.is_in_doaj || r.apc_usd != null) && (
+                    <div className="mt-1 flex flex-wrap gap-3 pl-6 text-xs text-ink-soft">
+                      {r.field && <span>{r.field}</span>}
+                      {r.is_in_doaj && <span className="text-accent">Open access (DOAJ)</span>}
+                      {r.apc_usd != null && <span>${r.apc_usd.toLocaleString()} fee</span>}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-ink-soft">No journals match these filters. Try widening them.</p>
+          )}
         </section>
       )}
 
