@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+*.pyc
+__pycache__/
+.venv/
+.env
+.env.local
+.DS_Store
+pipeline/data/
+*.log
