@@ -30,7 +30,7 @@ REQUEST_DELAY_S = 0.55  # ~1.8 req/s, safely under DOAJ's 2 req/s
 HEADERS = {"User-Agent": "MargaLink-Pipeline (mailto:amarnathcseamrita@gmail.com)"}
 
 
-def _get(url: str, attempts: int = 5) -> dict:
+def _get(url: str, attempts: int = 12) -> dict:
     for attempt in range(attempts):
         try:
             req = urllib.request.Request(url, headers=HEADERS)
@@ -45,8 +45,12 @@ def _get(url: str, attempts: int = 5) -> dict:
         except Exception as e:
             if attempt == attempts - 1:
                 raise
-            print(f"error {e!r}, retrying", flush=True)
-            time.sleep(5 * (attempt + 1))
+            # DNS failure / connection reset is usually the machine's
+            # network dropping briefly (sleep/wake, wifi reconnect) on an
+            # hours-long unattended job — worth several minutes of patience.
+            wait = min(15 * (attempt + 1), 90)
+            print(f"error {e!r}, waiting {wait}s (attempt {attempt + 1}/{attempts})", flush=True)
+            time.sleep(wait)
     raise RuntimeError("unreachable")
 
 

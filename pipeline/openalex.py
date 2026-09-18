@@ -24,7 +24,7 @@ def with_key(url: str, key: str | None = None) -> str:
     return url + ("&" if "?" in url else "?") + f"api_key={key}"
 
 
-def get(url: str, attempts: int = 8) -> dict:
+def get(url: str, attempts: int = 14) -> dict:
     url = with_key(url)
     for attempt in range(attempts):
         try:
@@ -51,8 +51,15 @@ def get(url: str, attempts: int = 8) -> dict:
         except Exception as e:
             if attempt == attempts - 1:
                 raise
-            print(f"error {e!r}, retrying", flush=True)
-            time.sleep(5 * (attempt + 1))
+            # Non-HTTP errors (DNS failure, connection reset) are usually
+            # the machine's network dropping briefly — sleep/wake, wifi
+            # reconnect, a VPN hiccup — not the server. Worth waiting
+            # several minutes for on an hours-long unattended job, capped
+            # so a truly dead connection still surfaces eventually rather
+            # than hanging forever.
+            wait = min(15 * (attempt + 1), 90)
+            print(f"error {e!r}, waiting {wait}s (attempt {attempt + 1}/{attempts})", flush=True)
+            time.sleep(wait)
     raise RuntimeError("unreachable")
 
 
