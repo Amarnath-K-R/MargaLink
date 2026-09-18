@@ -109,4 +109,38 @@ const FALSE_POSITIVE_CHECK = "x ".repeat(4000) + "\nAbstract\n\nA note about abs
 const fpResult = checkFormat(FALSE_POSITIVE_CHECK);
 assert(!fpResult.abstract.found, "an 'Abstract' heading past the 6000-char head window should not match");
 
+// Plural figure/table references ("Figures 1 and 2") — the singular-only
+// pattern silently dropped every number in a plural list.
+const PLURAL_REFS = `
+Abstract
+
+Short abstract text here for the paper.
+
+Introduction
+
+Figures 1 and 2 show the setup. Tables 1, 2 and 3 summarize the results.
+`;
+const pluralResult = checkFormat(PLURAL_REFS);
+assert(pluralResult.figureCount === 2, `expected figures 1,2 from a plural reference, got ${pluralResult.figureCount}`);
+assert(pluralResult.tableCount === 3, `expected tables 1,2,3 from a plural reference, got ${pluralResult.tableCount}`);
+
+// IEEE-style numbered/capitalized heading ("I. INTRODUCTION") — previously
+// only bare "introduction"/"1. introduction" was recognized as an abstract
+// end-boundary, so this style fell through to the wider flat-window fallback.
+const IEEE_STYLE = `
+Abstract
+
+This is the abstract for an IEEE-style paper with a numbered heading.
+
+I. INTRODUCTION
+
+Body text starts here.
+`;
+const ieeeResult = checkFormat(IEEE_STYLE);
+assert(ieeeResult.abstract.found, "IEEE-style abstract should be found");
+assert(
+  ieeeResult.abstract.wordCount !== null && ieeeResult.abstract.wordCount < 20,
+  `should stop at 'I. INTRODUCTION', not run past it, got ${ieeeResult.abstract.wordCount} words`
+);
+
 console.log("formatCheck.selfcheck: OK");

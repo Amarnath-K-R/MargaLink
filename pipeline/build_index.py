@@ -19,6 +19,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from enrichment import build_meta_entry, load_doaj, load_nlm, load_sources
+from openalex import safe_iter_jsonl
 
 DATA_DIR = Path(__file__).parent / "data"
 OUT_DIR = Path(__file__).parent.parent / "web" / "public" / "index"
@@ -29,12 +30,7 @@ BUILD_SIZE = 100
 
 
 def load_works() -> dict[str, list[dict]]:
-    works = {}
-    with (DATA_DIR / "works.jsonl").open() as f:
-        for line in f:
-            j = json.loads(line)
-            works[j["id"]] = j["papers"]
-    return works
+    return {j["id"]: j["papers"] for j in safe_iter_jsonl(DATA_DIR / "works.jsonl")}
 
 
 def normalize(vecs: np.ndarray) -> np.ndarray:

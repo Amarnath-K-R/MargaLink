@@ -44,6 +44,12 @@ export default function Home() {
   const [filters, setFilters] = useState<JournalFilters>({});
   const [formatResult, setFormatResult] = useState<FormatCheckResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Guards against out-of-order matchJournals() results: the filter
+  // controls are interactable as soon as queryVector is set, which is
+  // before the initial (unfiltered) match finishes — so a filter change can
+  // race process()'s own match call. Whichever call's result lands, only
+  // apply it if it's still the most recently *started* one.
+  const matchSeq = useRef(0);
 
   const log = useCallback((line: string) => setTrace((t) => [...t, line]), []);
 
@@ -92,11 +98,12 @@ export default function Home() {
 
         setStage("matching");
         log("Ranking journals locally against the vector");
+        const mySeq = ++matchSeq.current;
         const matches = await matchJournals(vector, 10);
         log(`Found ${matches.length} candidate journals`);
         void getAvailableFields().then(setAvailableFields);
 
-        setResults(matches);
+        if (mySeq === matchSeq.current) setResults(matches);
         setStage("done");
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : String(err));
@@ -116,7 +123,17 @@ export default function Home() {
   const applyFilters = useCallback(
     (next: JournalFilters) => {
       setFilters(next);
-      if (queryVector) void matchJournals(queryVector, 10, next).then(setResults);
+      if (!queryVector) return;
+      const mySeq = ++matchSeq.current;
+      matchJournals(queryVector, 10, next)
+        .then((matches) => {
+          if (mySeq === matchSeq.current) setResults(matches);
+        })
+        .catch((err) => {
+          if (mySeq !== matchSeq.current) return;
+          setErrorMsg(err instanceof Error ? err.message : String(err));
+          setStage("error");
+        });
     },
     [queryVector]
   );

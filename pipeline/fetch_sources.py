@@ -14,7 +14,7 @@ import json
 import time
 from pathlib import Path
 
-from openalex import BASE, get
+from openalex import BASE, get, safe_iter_jsonl
 
 OUT_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 TARGET = 20_000
@@ -23,13 +23,7 @@ FIELDS = "id,display_name,issn_l,issn,works_count,last_publication_year,is_in_do
 
 
 def already_fetched_ids() -> set[str]:
-    if not OUT_PATH.exists():
-        return set()
-    ids = set()
-    with OUT_PATH.open() as f:
-        for line in f:
-            ids.add(json.loads(line)["id"])
-    return ids
+    return {j["id"] for j in safe_iter_jsonl(OUT_PATH)}
 
 
 def main() -> None:
@@ -77,7 +71,7 @@ def _self_check() -> None:
     real_out = OUT_PATH
     with tempfile.TemporaryDirectory() as d:
         OUT_PATH = Path(d) / "sources.jsonl"
-        OUT_PATH.write_text('{"id": "a"}\n{"id": "b"}\n')
+        OUT_PATH.write_text('{"id": "a"}\n{"id": "b"}\n{"id": "c", "trunc')
         assert already_fetched_ids() == {"a", "b"}
     OUT_PATH = real_out
 

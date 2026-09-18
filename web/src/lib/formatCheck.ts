@@ -32,10 +32,17 @@ function extractAbstract(fullText: string): { text: string } | null {
   if (!startMatch || startMatch.index === undefined) return null;
 
   const afterStart = head.slice(startMatch.index + startMatch[0].length);
+  // Optional numbering prefix (1./I./A.) then the heading word — catches
+  // "1. Introduction", "I. INTRODUCTION", "Introduction" alike.
   const endMatch = afterStart.match(
-    /^\s*(keywords?|key\s*words?|introduction|1\.?\s+introduction|1\s+introduction)\s*:?\s*$/im
+    /^\s*(?:[ivx]+\.|[a-z]\.|\d+\.?)?\s*(keywords?|key\s*words?|introduction|background|materials and methods)\s*:?\s*$/im
   );
-  const abstractText = endMatch?.index !== undefined ? afterStart.slice(0, endMatch.index) : afterStart.slice(0, 2500);
+  // ponytail: a heading style this doesn't recognize (rare, but real —
+  // reference-style heading detection is inherently open-ended) falls back
+  // to a flat window sized to a typical abstract, not the full remaining
+  // text, to bound how much unrelated content can leak in. Upgrade: report
+  // when this fallback fired so the UI can flag the word count as uncertain.
+  const abstractText = endMatch?.index !== undefined ? afterStart.slice(0, endMatch.index) : afterStart.slice(0, 1500);
   return { text: abstractText.trim() };
 }
 
@@ -67,12 +74,16 @@ function countReferences(fullText: string): number | null {
 
 /** Counts unique figure/table numbers referenced (a figure is usually cited
  * several times in text — "Figure 2" appears repeatedly — so this is the
- * count of distinct numbers seen, not the raw match count). */
-function countUniqueNumbered(fullText: string, pattern: RegExp): number {
+ * count of distinct numbers seen, not the raw match count). Handles both
+ * "Figure 2" and plural lists like "Figures 1 and 2" / "Tables 1, 2 and 3"
+ * — the singular-only version silently dropped every number in a plural
+ * reference, since "Figures" doesn't match a pattern anchored on "Figure". */
+function countUniqueNumbered(fullText: string, label: string): number {
   const numbers = new Set<number>();
-  for (const m of fullText.matchAll(pattern)) {
-    const n = parseInt(m[1], 10);
-    if (!Number.isNaN(n)) numbers.add(n);
+  const re = new RegExp(`\\b(?:${label})s?\\.?\\s*((?:\\d+\\s*(?:[-–,]|and)\\s*)*\\d+)`, "gi");
+  for (const m of fullText.matchAll(re)) {
+    const nums = m[1].match(/\d+/g);
+    if (nums) for (const n of nums) numbers.add(parseInt(n, 10));
   }
   return numbers.size;
 }
@@ -93,7 +104,7 @@ export function checkFormat(fullText: string): FormatCheckResult {
       dataAvailability: findSection(fullText, [/data availability/i, /availability of data/i, /data sharing statement/i]),
     },
     referenceCount: countReferences(fullText),
-    figureCount: countUniqueNumbered(fullText, /\bFig(?:ure)?\.?\s*(\d+)/gi),
-    tableCount: countUniqueNumbered(fullText, /\bTable\s*(\d+)/gi),
+    figureCount: countUniqueNumbered(fullText, "Fig(?:ure)?"),
+    tableCount: countUniqueNumbered(fullText, "Table"),
   };
 }

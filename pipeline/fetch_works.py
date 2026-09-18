@@ -15,7 +15,7 @@ import json
 import time
 from pathlib import Path
 
-from openalex import BASE, get, reconstruct_abstract
+from openalex import BASE, get, reconstruct_abstract, safe_iter_jsonl
 
 SOURCES_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 OUT_PATH = Path(__file__).parent / "data" / "works.jsonl"
@@ -25,21 +25,11 @@ REQUEST_DELAY_S = 1.0
 
 
 def load_source_ids() -> list[str]:
-    ids = []
-    with SOURCES_PATH.open() as f:
-        for line in f:
-            ids.append(json.loads(line)["id"])
-    return ids
+    return [j["id"] for j in safe_iter_jsonl(SOURCES_PATH)]
 
 
 def already_fetched_ids() -> set[str]:
-    if not OUT_PATH.exists():
-        return set()
-    ids = set()
-    with OUT_PATH.open() as f:
-        for line in f:
-            ids.add(json.loads(line)["id"])
-    return ids
+    return {j["id"] for j in safe_iter_jsonl(OUT_PATH)}
 
 
 def fetch_papers(source_id: str, n: int) -> list[dict]:
@@ -92,7 +82,9 @@ def _self_check() -> None:
         SOURCES_PATH = Path(d) / "sources.jsonl"
         OUT_PATH = Path(d) / "works.jsonl"
         SOURCES_PATH.write_text('{"id": "a"}\n{"id": "b"}\n{"id": "c"}\n')
-        OUT_PATH.write_text('{"id": "a", "papers": []}\n')
+        # a truncated last line — like an interrupted run would leave — must
+        # not crash the resume; "a" is still recovered.
+        OUT_PATH.write_text('{"id": "a", "papers": []}\n{"id": "b", "pape')
         assert load_source_ids() == ["a", "b", "c"]
         assert already_fetched_ids() == {"a"}
     SOURCES_PATH, OUT_PATH = real_sources, real_out

@@ -21,6 +21,14 @@ async function getPipeline(): Promise<FeatureExtractionPipeline> {
         manifest.model_id
       )) as unknown as FeatureExtractionPipeline;
     })();
+    // A Promise is truthy whether it resolves or rejects — without this, a
+    // transient failure (e.g. the model download drops) permanently wedges
+    // every future upload in the tab behind the same stale rejection, since
+    // `if (!pipelinePromise)` would never be true again. Clear it on
+    // rejection so the next call retries from scratch.
+    pipelinePromise.catch(() => {
+      pipelinePromise = null;
+    });
   }
   return pipelinePromise;
 }

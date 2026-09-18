@@ -23,6 +23,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from openalex import safe_iter_jsonl
+
 SOURCES_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 OUT_PATH = Path(__file__).parent / "data" / "nlm.jsonl"
 REQUEST_DELAY_S = 0.4  # ~2.5 req/s, safely under NCBI's 3 req/s (no key)
@@ -74,29 +76,35 @@ def top_field(topics: list[dict]) -> str | None:
 
 
 def candidates() -> list[dict]:
-    out = []
-    with SOURCES_PATH.open() as f:
-        for line in f:
-            j = json.loads(line)
-            if j.get("issn_l") and top_field(j.get("topics", [])) in BIOMEDICAL_FIELDS:
-                out.append(j)
-    return out
+    return [
+        j
+        for j in safe_iter_jsonl(SOURCES_PATH)
+        if j.get("issn_l") and top_field(j.get("topics", [])) in BIOMEDICAL_FIELDS
+    ]
 
 
 def already_done() -> set[str]:
-    if not OUT_PATH.exists():
-        return set()
-    ids = set()
-    with OUT_PATH.open() as f:
-        for line in f:
-            ids.add(json.loads(line)["id"])
-    return ids
+    return {j["id"] for j in safe_iter_jsonl(OUT_PATH)}
 
 
-def is_medline_indexed(issn: str) -> bool:
+def _parse_indexed_count(data: dict) -> bool | None:
+    """None means the response couldn't be understood — the caller should
+    skip writing a done-record so this journal is retried on the next run,
+    rather than defaulting a malformed response to count=0 and permanently
+    recording a false "not indexed" that's never checked again."""
+    count = data.get("esearchresult", {}).get("count")
+    if count is None:
+        return None
+    return int(count) > 0
+
+
+def is_medline_indexed(issn: str) -> bool | None:
     term = urllib.parse.quote(f"{issn}[ISSN] AND currentlyindexed[All]")
     data = _get(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=nlmcatalog&term={term}&retmode=json")
-    return int(data.get("esearchresult", {}).get("count", "0")) > 0
+    result = _parse_indexed_count(data)
+    if result is None:
+        print(f"unexpected esearch response for ISSN {issn}, skipping (retried next run): {data!r}", flush=True)
+    return result
 
 
 def main() -> None:
@@ -109,6 +117,8 @@ def main() -> None:
     with OUT_PATH.open("a") as out:
         for i, source in enumerate(todo):
             indexed = is_medline_indexed(source["issn_l"])
+            if indexed is None:
+                continue  # not written — stays "unchecked", picked up next run
             out.write(json.dumps({"id": source["id"], "medline_indexed": indexed}) + "\n")
             out.flush()
             if indexed:
@@ -125,6 +135,14 @@ def _self_check() -> None:
     assert top_field([]) is None
     assert "Medicine" in BIOMEDICAL_FIELDS
     assert "Engineering" not in BIOMEDICAL_FIELDS
+
+    assert _parse_indexed_count({"esearchresult": {"count": "1"}}) is True
+    assert _parse_indexed_count({"esearchresult": {"count": "0"}}) is False
+    # a malformed/error response (e.g. NCBI's error body) must not be read
+    # as count=0 — that would permanently record a false negative
+    assert _parse_indexed_count({"esearchresult": {"ERROR": "..."}}) is None
+    assert _parse_indexed_count({}) is None
+
     print("enrich_nlm self-check: OK")
 
 

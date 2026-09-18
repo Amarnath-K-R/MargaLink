@@ -4,21 +4,15 @@ metadata dict per journal. Used by both the interim demo builder
 so this join is written once, not twice.
 """
 
-import json
 from pathlib import Path
+
+from openalex import safe_iter_jsonl
 
 DATA_DIR = Path(__file__).parent / "data"
 
 
 def _load_jsonl_by_id(path: Path) -> dict[str, dict]:
-    if not path.exists():
-        return {}
-    out = {}
-    with path.open() as f:
-        for line in f:
-            j = json.loads(line)
-            out[j["id"]] = j
-    return out
+    return {j["id"]: j for j in safe_iter_jsonl(path)}
 
 
 def load_sources() -> dict[str, dict]:

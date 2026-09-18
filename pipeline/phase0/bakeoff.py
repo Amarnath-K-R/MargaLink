@@ -135,10 +135,12 @@ def main() -> None:
     if best_top10 < 0.5:
         print(
             "\nGATE: best top10 accuracy is below 0.5 — per plan, stop and reconsider "
-            "the approach before building any UI."
+            "the approach before building any UI. Not writing a winner file — "
+            "a failing model must not get promoted into web/public/index by "
+            "promote_winner.py just because the warning above scrolled by."
         )
-    else:
-        print(f"\nGATE PASSED: {best_name} clears 0.5 top10 accuracy ({best_top10:.3f}).")
+        return
+    print(f"\nGATE PASSED: {best_name} clears 0.5 top10 accuracy ({best_top10:.3f}).")
 
     centroids, heldout_vecs, true_idxs = best_arrays
     np.savez(

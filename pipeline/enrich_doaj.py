@@ -22,6 +22,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from openalex import safe_iter_jsonl
+
 SOURCES_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 OUT_PATH = Path(__file__).parent / "data" / "doaj.jsonl"
 REQUEST_DELAY_S = 0.55  # ~1.8 req/s, safely under DOAJ's 2 req/s
@@ -49,30 +51,22 @@ def _get(url: str, attempts: int = 5) -> dict:
 
 
 def doaj_candidates() -> list[dict]:
-    out = []
-    with SOURCES_PATH.open() as f:
-        for line in f:
-            j = json.loads(line)
-            if j.get("is_in_doaj") and j.get("issn_l"):
-                out.append(j)
-    return out
+    return [j for j in safe_iter_jsonl(SOURCES_PATH) if j.get("is_in_doaj") and j.get("issn_l")]
 
 
 def already_done() -> set[str]:
-    if not OUT_PATH.exists():
-        return set()
-    ids = set()
-    with OUT_PATH.open() as f:
-        for line in f:
-            ids.add(json.loads(line)["id"])
-    return ids
+    return {j["id"] for j in safe_iter_jsonl(OUT_PATH)}
 
 
 def extract_fields(bibjson: dict) -> dict:
-    apc = bibjson.get("apc", {})
-    apc_max = apc.get("max", [{}])
-    license_list = bibjson.get("license", [{}])
-    editorial = bibjson.get("editorial", {})
+    # `.get(key, {})` only supplies the default when the key is *absent* —
+    # a sparse/legacy DOAJ record with "apc": null (present, but null) makes
+    # this None instead, and the next .get() call on it crashes. `or {}`
+    # catches both cases.
+    apc = bibjson.get("apc") or {}
+    apc_max = apc.get("max") or [{}]
+    license_list = bibjson.get("license") or [{}]
+    editorial = bibjson.get("editorial") or {}
     return {
         "publication_time_weeks": bibjson.get("publication_time_weeks"),
         # DOAJ reports fees in the journal's own currency, not always USD —
@@ -126,6 +120,14 @@ def _self_check() -> None:
     no_apc = extract_fields({"apc": {"has_apc": False}, "license": []})
     assert no_apc["apc_amount"] is None
     assert no_apc["license_type"] is None
+
+    # A sparse/legacy DOAJ record can have these keys present but null,
+    # not absent — must not crash (previously did: bibjson.get("apc", {})
+    # returns None here, not the default, since the key exists).
+    null_fields = extract_fields({"apc": None, "license": None, "editorial": None})
+    assert null_fields["apc_amount"] is None
+    assert null_fields["license_type"] is None
+    assert null_fields["review_process"] is None
 
     print("enrich_doaj self-check: OK")
 
