@@ -48,6 +48,11 @@ export default function Home() {
         log(`Reading ${file.name} (${(file.size / 1024).toFixed(0)} KB)`);
         const { text } = await extractFromFile(file);
         log(`Extracted ${text.length} characters — stays in this tab`);
+        if (text.trim().length < 50) {
+          throw new Error(
+            "Couldn't find readable text in this file. If it's a scanned PDF (no text layer), text extraction won't work on it — try a PDF exported directly from Word or LaTeX instead."
+          );
+        }
 
         setStage("embedding");
         log("Loading the embedding model (cached after first run)");
