@@ -188,9 +188,10 @@ export default function Home() {
 
       <footer id="privacy" className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
         <p>
-          Extraction, embedding, and ranking all run in your browser. The journal
-          index above is an interim sample (~200 journals) for this early build —
-          matching against all indexed journals ships in a later phase.
+          Extraction, embedding, and ranking all run in your browser. This build
+          matches against 562 journals — the sample used to pick the embedding
+          model (82% top-10 accuracy on held-out papers). The full index (~20,000
+          journals) ships in a later phase.
         </p>
       </footer>
     </main>
