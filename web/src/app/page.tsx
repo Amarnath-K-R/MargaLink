@@ -72,15 +72,19 @@ export default function Home() {
     [log]
   );
 
+  const busy = stage === "reading" || stage === "embedding" || stage === "matching";
+
   const onFiles = useCallback(
     (files: FileList | null) => {
+      // Guard against starting a second run mid-processing — process()
+      // temporarily wraps window.fetch, and two overlapping runs would
+      // stomp on each other's restore of the original fetch.
+      if (busy) return;
       const file = files?.[0];
       if (file) void process(file);
     },
-    [process]
+    [process, busy]
   );
-
-  const busy = stage === "reading" || stage === "embedding" || stage === "matching";
 
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-14 sm:py-20">
@@ -100,8 +104,12 @@ export default function Home() {
       </header>
 
       <div className="grid gap-8 sm:grid-cols-[1fr_1.1fr]">
-        <div
+        <button
+          type="button"
+          disabled={busy}
+          aria-label="Upload a PDF or DOCX paper"
           onDragOver={(e) => {
+            if (busy) return;
             e.preventDefault();
             setDragOver(true);
           }}
@@ -109,12 +117,12 @@ export default function Home() {
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            onFiles(e.dataTransfer.files);
+            if (!busy) onFiles(e.dataTransfer.files);
           }}
           onClick={() => inputRef.current?.click()}
-          className={`flex h-56 cursor-pointer flex-col items-center justify-center gap-2 rounded-sm border text-center transition-colors ${
-            dragOver ? "border-accent bg-accent-soft" : "border-line bg-paper-alt"
-          }`}
+          className={`flex h-56 flex-col items-center justify-center gap-2 rounded-sm border text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${
+            busy ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+          } ${dragOver ? "border-accent bg-accent-soft" : "border-line bg-paper-alt"}`}
         >
           <input
             ref={inputRef}
@@ -125,7 +133,7 @@ export default function Home() {
           />
           <p className="font-medium">Drop a PDF or DOCX</p>
           <p className="text-sm text-ink-soft">or click to choose a file</p>
-        </div>
+        </button>
 
         <div className="border-l border-line pl-6">
           <p className="mb-3 text-sm font-medium text-accent">On this device</p>
