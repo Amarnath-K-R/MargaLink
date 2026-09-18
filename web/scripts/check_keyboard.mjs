@@ -4,7 +4,9 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
-await page.goto("http://localhost:3000");
+// The tool now lives at /match — the intro overlay fronts the homepage
+// ("/") instead, so no need to skip it here.
+await page.goto("http://localhost:3000/match");
 await page.waitForSelector("text=Find the right journal.");
 
 // Tab from the top of the page until the dropzone is focused.

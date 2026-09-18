@@ -9,11 +9,16 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <main className="mx-auto w-full max-w-2xl px-6 py-14 sm:py-20">
-      <Link href="/" className="text-sm text-ink-soft hover:text-ink">
-        ← Back
-      </Link>
+      <div className="mb-8 flex items-baseline justify-between">
+        <Link href="/" className="font-serif text-lg font-medium">
+          MargaLink
+        </Link>
+        <Link href="/match" className="text-sm text-ink-soft hover:text-ink">
+          ← Back to matching
+        </Link>
+      </div>
 
-      <h1 className="mt-6 font-serif text-3xl font-medium sm:text-4xl">
+      <h1 className="font-serif text-3xl font-medium sm:text-4xl">
         How privacy works
       </h1>
       <p className="mt-3 text-lg text-ink-soft">

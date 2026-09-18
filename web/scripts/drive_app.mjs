@@ -14,7 +14,9 @@ page.on("console", (msg) => {
 });
 page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
 
-await page.goto("http://localhost:3000");
+// The tool now lives at /match — the intro overlay fronts the homepage
+// ("/") instead, so no need to skip it here.
+await page.goto("http://localhost:3000/match");
 await page.waitForSelector("text=Find the right journal.");
 await page.screenshot({ path: `${SCRATCH}/screenshot_1_initial.png` });
 

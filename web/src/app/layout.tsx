@@ -21,9 +21,9 @@ const plexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
-const TITLE = "MargaLink — find the right journal";
+const TITLE = "MargaLink — get your paper ready to submit";
 const DESCRIPTION =
-  "Upload a finished paper and get matching journals. The paper never leaves your device.";
+  "Match your paper to a journal, check its format, and soon get it reviewed — all without your paper ever leaving your device.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

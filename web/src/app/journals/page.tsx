@@ -44,7 +44,7 @@ export default function JournalsPage() {
         <p className="mt-2 text-ink-soft">
           {journals ? `${journals.length.toLocaleString()} journals in this build.` : "Loading…"}{" "}
           Looking to match a specific paper?{" "}
-          <Link href="/" className="text-accent hover:underline">
+          <Link href="/match" className="text-accent hover:underline">
             Upload it instead
           </Link>
           .

@@ -13,7 +13,9 @@ page.on("console", (msg) => {
 });
 page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
 
-await page.goto("http://localhost:3000");
+// The tool now lives at /match — the intro overlay fronts the homepage
+// ("/") instead, so no need to skip it here.
+await page.goto("http://localhost:3000/match");
 await page.waitForSelector("text=Find the right journal.");
 
 const [fc] = await Promise.all([
@@ -32,7 +34,7 @@ await firstLink.click();
 await page.waitForSelector("text=Article processing fee");
 const bodyText = await page.innerText("body");
 console.log("journal page shows the same name:", bodyText.includes(linkText));
-console.log("has back link:", bodyText.includes("Back"));
+console.log("has browse-journals link back:", bodyText.includes("Browse journals"));
 
 console.log("console errors:", consoleErrors.length ? consoleErrors.join("\n") : "(none)");
 await browser.close();
