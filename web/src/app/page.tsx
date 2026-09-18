@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 import { extractFromFile } from "@/lib/extract";
 import { embed } from "@/lib/embed";
@@ -86,9 +87,9 @@ export default function Home() {
       <header className="mb-12">
         <div className="mb-8 flex items-baseline justify-between">
           <span className="font-serif text-lg font-medium">MargaLink</span>
-          <a href="#privacy" className="text-sm text-ink-soft hover:text-ink">
+          <Link href="/privacy" className="text-sm text-ink-soft hover:text-ink">
             How privacy works
-          </a>
+          </Link>
         </div>
         <h1 className="font-serif text-4xl font-medium leading-tight sm:text-5xl">
           Find the right journal.
@@ -186,12 +187,14 @@ export default function Home() {
         </section>
       )}
 
-      <footer id="privacy" className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
+      <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
         <p>
-          Extraction, embedding, and ranking all run in your browser. This build
-          matches against 562 journals — the sample used to pick the embedding
-          model (82% top-10 accuracy on held-out papers). The full index (~20,000
-          journals) ships in a later phase.
+          This build matches against 562 journals — the sample used to pick
+          the embedding model (82% top-10 accuracy on held-out papers). The
+          full index (~20,000 journals) ships in a later phase.{" "}
+          <Link href="/privacy" className="text-accent hover:underline">
+            How privacy works
+          </Link>
         </p>
       </footer>
     </main>
