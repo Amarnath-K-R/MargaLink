@@ -95,64 +95,67 @@ function PrivacyDiagram() {
   return (
     <figure className="mt-6">
       <svg
-        viewBox="0 0 760 400"
+        viewBox="0 0 420 598"
         role="img"
         aria-label="Diagram: inside your browser, a paper is extracted to text, embedded into a vector, then ranked against a journal index — all locally. Two public files (the embedding model and the journal index) download once into the browser. No MargaLink server is part of this flow."
         className="w-full h-auto"
         style={{ color: "var(--ink)" }}
       >
+        {/* Vertical stack (not a wide horizontal flow) so it stays legible at
+            phone width — the diagram scales by width, and a narrow viewBox
+            shrinks far less on a 375px screen than a wide one would. */}
         <defs>
-          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
           </marker>
         </defs>
 
-        {/* top public file box */}
-        <rect x="260" y="14" width="240" height="52" rx="2" fill="none" stroke="currentColor" strokeWidth="1" />
-        <text x="380" y="36" textAnchor="middle" fontSize="12" fontFamily="var(--font-sans)">Embedding model (~30MB)</text>
-        <text x="380" y="52" textAnchor="middle" fontSize="11" fill="var(--ink-soft)" fontFamily="var(--font-sans)">public file, no personal data</text>
-        <line x1="380" y1="66" x2="380" y2="110" stroke="currentColor" strokeWidth="1" markerEnd="url(#arrow)" />
-        <text x="392" y="90" fontSize="10.5" fill="var(--ink-soft)" fontFamily="var(--font-sans)">downloads once, cached</text>
+        <g fontFamily="var(--font-sans)">
+          {/* top public file box */}
+          <rect x="70" y="14" width="280" height="52" rx="2" fill="none" stroke="currentColor" strokeWidth="1" />
+          <text x="210" y="37" textAnchor="middle" fontSize="15">Embedding model (~30MB)</text>
+          <text x="210" y="54" textAnchor="middle" fontSize="13" fill="var(--ink-soft)">public file, no personal data</text>
+          <line x1="210" y1="66" x2="210" y2="104" stroke="currentColor" markerEnd="url(#arrow)" />
+          <text x="222" y="89" fontSize="13" fill="var(--ink-soft)">downloads once, cached</text>
 
-        {/* browser boundary */}
-        <rect x="20" y="110" width="720" height="160" rx="3" fill="none" stroke="var(--accent)" strokeWidth="1.5" />
-        <text x="36" y="130" fontSize="12" fontFamily="var(--font-sans)" fill="var(--accent)">Your browser</text>
+          {/* browser boundary */}
+          <rect x="20" y="104" width="380" height="310" rx="3" fill="none" stroke="var(--accent)" strokeWidth="1.5" />
+          <text x="36" y="126" fontSize="15" fill="var(--accent)">Your browser</text>
 
-        {/* pipeline steps */}
-        <g fontFamily="var(--font-sans)" fontSize="12">
-          <rect x="45" y="170" width="90" height="42" rx="2" fill="none" stroke="currentColor" />
-          <text x="90" y="195" textAnchor="middle">Paper</text>
+          {/* pipeline steps, stacked */}
+          <rect x="60" y="140" width="300" height="42" rx="2" fill="none" stroke="currentColor" />
+          <text x="210" y="166" textAnchor="middle" fontSize="15">Paper</text>
 
-          <line x1="135" y1="191" x2="190" y2="191" stroke="currentColor" markerEnd="url(#arrow)" />
-          <text x="162" y="182" textAnchor="middle" fontSize="10.5" fill="var(--ink-soft)">extract</text>
+          <line x1="210" y1="182" x2="210" y2="208" stroke="currentColor" markerEnd="url(#arrow)" />
+          <text x="222" y="199" fontSize="13" fill="var(--ink-soft)">extract</text>
 
-          <rect x="192" y="170" width="90" height="42" rx="2" fill="none" stroke="currentColor" />
-          <text x="237" y="195" textAnchor="middle">Text</text>
+          <rect x="60" y="208" width="300" height="42" rx="2" fill="none" stroke="currentColor" />
+          <text x="210" y="234" textAnchor="middle" fontSize="15">Text</text>
 
-          <line x1="282" y1="191" x2="337" y2="191" stroke="currentColor" markerEnd="url(#arrow)" />
-          <text x="309" y="182" textAnchor="middle" fontSize="10.5" fill="var(--ink-soft)">embed</text>
+          <line x1="210" y1="250" x2="210" y2="276" stroke="currentColor" markerEnd="url(#arrow)" />
+          <text x="222" y="267" fontSize="13" fill="var(--ink-soft)">embed</text>
 
-          <rect x="339" y="170" width="90" height="42" rx="2" fill="none" stroke="currentColor" />
-          <text x="384" y="195" textAnchor="middle">Vector</text>
+          <rect x="60" y="276" width="300" height="42" rx="2" fill="none" stroke="currentColor" />
+          <text x="210" y="302" textAnchor="middle" fontSize="15">Vector</text>
 
-          <line x1="429" y1="191" x2="484" y2="191" stroke="currentColor" markerEnd="url(#arrow)" />
-          <text x="456" y="182" textAnchor="middle" fontSize="10.5" fill="var(--ink-soft)">rank</text>
+          <line x1="210" y1="318" x2="210" y2="344" stroke="currentColor" markerEnd="url(#arrow)" />
+          <text x="222" y="335" fontSize="13" fill="var(--ink-soft)">rank</text>
 
-          <rect x="486" y="170" width="200" height="42" rx="2" fill="none" stroke="currentColor" />
-          <text x="586" y="195" textAnchor="middle">Ranked journals</text>
+          <rect x="60" y="344" width="300" height="50" rx="2" fill="none" stroke="currentColor" />
+          <text x="210" y="374" textAnchor="middle" fontSize="15">Ranked journals</text>
+
+          {/* bottom public file box */}
+          <line x1="210" y1="414" x2="210" y2="452" stroke="currentColor" markerEnd="url(#arrow)" />
+          <text x="222" y="437" fontSize="13" fill="var(--ink-soft)">downloads once, cached</text>
+          <rect x="70" y="452" width="280" height="52" rx="2" fill="none" stroke="currentColor" strokeWidth="1" />
+          <text x="210" y="475" textAnchor="middle" fontSize="15">Journal index (~8MB)</text>
+          <text x="210" y="492" textAnchor="middle" fontSize="13" fill="var(--ink-soft)">public file, no personal data</text>
+
+          {/* absent server, explicitly drawn */}
+          <rect x="70" y="524" width="280" height="54" rx="2" fill="none" stroke="var(--away)" strokeWidth="1" strokeDasharray="4 3" />
+          <text x="210" y="547" textAnchor="middle" fontSize="15" fill="var(--away)">MargaLink server</text>
+          <text x="210" y="564" textAnchor="middle" fontSize="13" fill="var(--away)">no such request exists</text>
         </g>
-
-        {/* bottom public file box */}
-        <line x1="384" y1="330" x2="384" y2="270" stroke="currentColor" strokeWidth="1" markerEnd="url(#arrow)" />
-        <text x="396" y="310" fontSize="10.5" fill="var(--ink-soft)" fontFamily="var(--font-sans)">downloads once, cached</text>
-        <rect x="264" y="330" width="240" height="52" rx="2" fill="none" stroke="currentColor" strokeWidth="1" />
-        <text x="384" y="352" textAnchor="middle" fontSize="12" fontFamily="var(--font-sans)">Journal index (~8MB)</text>
-        <text x="384" y="368" textAnchor="middle" fontSize="11" fill="var(--ink-soft)" fontFamily="var(--font-sans)">public file, no personal data</text>
-
-        {/* absent server, explicitly drawn */}
-        <rect x="560" y="330" width="180" height="52" rx="2" fill="none" stroke="var(--away)" strokeWidth="1" strokeDasharray="4 3" />
-        <text x="650" y="352" textAnchor="middle" fontSize="12" fill="var(--away)" fontFamily="var(--font-sans)">MargaLink server</text>
-        <text x="650" y="368" textAnchor="middle" fontSize="11" fill="var(--away)" fontFamily="var(--font-sans)">no such request exists</text>
       </svg>
       <figcaption className="mt-3 text-sm text-ink-soft">
         Everything that touches your paper happens inside the browser
