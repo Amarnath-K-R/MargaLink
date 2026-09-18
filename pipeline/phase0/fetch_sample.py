@@ -9,6 +9,7 @@ Output: pipeline/data/phase0_raw.jsonl (gitignored), one line per journal:
 """
 
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -16,13 +17,16 @@ from pathlib import Path
 
 BASE = "https://api.openalex.org"
 HEADERS = {"User-Agent": "MargaLink-Phase0-Spike (mailto:amarnathcseamrita@gmail.com)"}
+API_KEY = os.environ.get("OPENALEX_API_KEY")  # optional; raises the rate limit a lot
 OUT_PATH = Path(__file__).parent.parent / "data" / "phase0_raw.jsonl"
 TARGET_JOURNALS = 2000
 PAPERS_PER_JOURNAL = 150  # gives 100 for centroid build + spare for held-out
-REQUEST_DELAY_S = 0.4  # unauthenticated traffic throttles well under the documented 100 req/s
+REQUEST_DELAY_S = 0.15 if API_KEY else 0.4  # anonymous pool throttles much tighter
 
 
 def _get(url: str, attempts: int = 6) -> dict:
+    if API_KEY:
+        url += ("&" if "?" in url else "?") + f"api_key={API_KEY}"
     for attempt in range(attempts):
         try:
             req = urllib.request.Request(url, headers=HEADERS)
