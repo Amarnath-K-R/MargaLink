@@ -158,8 +158,8 @@ export default function MatchPage() {
             MargaLink
           </Link>
           <nav className="flex gap-5 text-sm text-ink-soft">
-            <Link href="/journals" className="hover:text-ink">
-              Browse journals
+            <Link href="/" className="hover:text-ink">
+              ← Back
             </Link>
             <Link href="/privacy" className="hover:text-ink">
               How privacy works
