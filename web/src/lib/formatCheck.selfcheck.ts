@@ -143,4 +143,28 @@ assert(
   `should stop at 'I. INTRODUCTION', not run past it, got ${ieeeResult.abstract.wordCount} words`
 );
 
+// Numbered References heading ("5. References") — a common Word-numbered-
+// section style that a bare "references"-only match misses entirely, found
+// via a real user upload (a 13k-word review whose references went entirely
+// undetected despite clearly having a reference list).
+const NUMBERED_REFS_HEADING = `
+Abstract
+
+Short abstract text here.
+
+1. Introduction
+
+Body.
+
+5. References
+
+[1] Smith, J. Deep learning basics. Journal of AI, 2020.
+[2] Doe, J. Agricultural imaging. Journal of Ag Tech, 2019.
+`;
+const numberedRefsResult = checkFormat(NUMBERED_REFS_HEADING);
+assert(
+  numberedRefsResult.referenceCount === 2,
+  `expected 2 references under a numbered "5. References" heading, got ${numberedRefsResult.referenceCount}`
+);
+
 console.log("formatCheck.selfcheck: OK");

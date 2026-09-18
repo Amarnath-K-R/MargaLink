@@ -61,7 +61,11 @@ function findSection(fullText: string, patterns: RegExp[]): boolean {
  * counting "(YYYY)" citations if the style isn't numbered (e.g. APA). Both
  * are approximations — labeled as such in the UI, never asserted exact. */
 function countReferences(fullText: string): number | null {
-  const headingMatch = fullText.match(/^\s*(references|bibliography|works cited)\s*$/im);
+  // Optional numbering prefix (1./I./A.) — "5. References" is a common
+  // Word-numbered-heading style, and the bare version missed it entirely.
+  const headingMatch = fullText.match(
+    /^\s*(?:[ivx]+\.|[a-z]\.|\d+\.?)?\s*(references|bibliography|works cited)\s*$/im
+  );
   if (!headingMatch || headingMatch.index === undefined) return null;
   const section = fullText.slice(headingMatch.index + headingMatch[0].length);
 
