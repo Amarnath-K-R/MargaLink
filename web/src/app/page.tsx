@@ -201,7 +201,7 @@ export default function Home() {
 
         <div className="border-l border-line pl-6">
           <p className="mb-3 text-sm font-medium text-accent">On this device</p>
-          <ol className="space-y-2 text-sm">
+          <ol className="space-y-2 text-sm" aria-live="polite" role="status">
             {trace.length === 0 && !busy && (
               <li className="text-ink-soft">Upload a paper to see each step run, live.</li>
             )}
@@ -211,10 +211,10 @@ export default function Home() {
                 <span>{line}</span>
               </li>
             ))}
-            {busy && <li className="text-ink-soft">…</li>}
+            {busy && <li className="text-ink-soft">Working…</li>}
           </ol>
           {stage === "error" && (
-            <p className="mt-3 text-sm text-away">{errorMsg}</p>
+            <p className="mt-3 text-sm text-away" role="alert">{errorMsg}</p>
           )}
         </div>
       </div>
