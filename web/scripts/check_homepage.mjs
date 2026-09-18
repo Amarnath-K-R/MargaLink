@@ -32,8 +32,9 @@ console.log("clicking a numbered step reaches the tool: yes");
 await page.goBack();
 await page.waitForSelector("text=Get your paper ready to submit.");
 
-// Click through to journals.
-await page.click('a[href="/journals"]');
+// Click through to journals (header nav + the new tool card both link
+// there now — use .first() rather than an ambiguous selector).
+await page.locator('a[href="/journals"]').first().click();
 await page.waitForSelector("text=Browse journals");
 console.log("clicking through reaches /journals: yes");
 

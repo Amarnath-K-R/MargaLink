@@ -1,6 +1,19 @@
 import Link from "next/link";
 import IntroOverlay from "@/components/IntroOverlay";
 
+const TOOLS = [
+  {
+    title: "Browse journals",
+    body: "Search by name or field, see fees and indexing — no upload needed.",
+    href: "/journals",
+  },
+  {
+    title: "Match your paper",
+    body: "Upload a finished paper, get ranked journal matches, and check its format — on your device.",
+    href: "/match",
+  },
+];
+
 const PATH_STEPS = [
   {
     title: "Match to a journal",
@@ -53,6 +66,19 @@ export default function HomePage() {
           </p>
         </header>
 
+        <section className="grid gap-6 sm:grid-cols-2">
+          {TOOLS.map((tool) => (
+            <Link
+              key={tool.title}
+              href={tool.href}
+              className="rounded-sm border border-line bg-paper-alt p-6 hover:border-accent"
+            >
+              <p className="font-serif text-lg font-medium">{tool.title}</p>
+              <p className="mt-2 text-sm text-ink-soft">{tool.body}</p>
+            </Link>
+          ))}
+        </section>
+
         <section className="mt-16">
           <h2 className="font-serif text-xl font-medium">
             The path from finished paper to submission
@@ -79,27 +105,6 @@ export default function HomePage() {
               </li>
             ))}
           </ol>
-        </section>
-
-        <section className="mt-16 grid gap-6 sm:grid-cols-2">
-          <Link
-            href="/journals"
-            className="rounded-sm border border-line bg-paper-alt p-5 hover:border-accent"
-          >
-            <p className="font-medium">Browse journals</p>
-            <p className="mt-1 text-sm text-ink-soft">
-              Explore by name or field without uploading anything.
-            </p>
-          </Link>
-          <Link
-            href="/privacy"
-            className="rounded-sm border border-line bg-paper-alt p-5 hover:border-accent"
-          >
-            <p className="font-medium">How privacy works</p>
-            <p className="mt-1 text-sm text-ink-soft">
-              What leaves your device, what doesn&apos;t, and why that&apos;s checkable, not just claimed.
-            </p>
-          </Link>
         </section>
 
         <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
