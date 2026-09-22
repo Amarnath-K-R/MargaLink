@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "for f in src/lib/*.selfcheck.ts; do node \"$f\" || exit 1; done",
+    "test": "for f in $(find src -name '*.selfcheck.ts'); do node \"$f\" || exit 1; done",
     "check": "npm run typecheck && npm run lint && npm test",
     "smoke": "for f in scripts/check_*.mjs; do node \"$f\" || exit 1; done",
     "deploy": "next build && rm -f out/_next/static/media/ort-wasm-simd-threaded.asyncify*.wasm && wrangler pages deploy out --project-name margalink --branch main --commit-dirty=true"

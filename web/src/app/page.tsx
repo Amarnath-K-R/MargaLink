@@ -1,178 +1,35 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import {
-  ArrowDown,
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  LockKeyhole,
-  ScanLine,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { ArrowDown, ArrowUpRight, ChevronDown, LockKeyhole, ScanLine, Sparkles } from "lucide-react";
 import { between } from "@/lib/easing";
+import { useScrollProgress } from "./_home/useScrollProgress.ts";
+import { stagger, motionStyle, countUp, decodeText } from "./_home/motion.ts";
+import { journalCards, requestRows, reviewTiersData, privacyMetrics } from "./_home/demoData.ts";
+import { StageLabel, PrivacyPill, scrollToId } from "./_home/atoms.tsx";
+import SiteHeader from "./_home/SiteHeader.tsx";
 import IntroSequence from "@/components/IntroSequence";
 import ThreePaperScene from "@/components/ThreePaperScene";
 import "./_home/home.css";
 
-const journalCards = [
-  { title: "Ecological Systems", field: "ECOLOGY · Q1", score: "92%", fee: "$0 APC" },
-  { title: "Methods & Metrics", field: "DATA SCIENCE · Q2", score: "87%", fee: "$1,200 APC" },
-  { title: "Field Notes", field: "INTERDISCIPLINARY · Q1", score: "81%", fee: "$0 APC" },
-];
-
-const requestRows = [
-  { verb: "GET", label: "journal-index.json", note: "local cache", icon: Check, noSend: false },
-  { verb: "RUN", label: "embedding-model", note: "on device", icon: Check, noSend: false },
-  { verb: "RUN", label: "similarity-search", note: "on device", icon: Check, noSend: false },
-  { verb: "POST", label: "paper text", note: "not sent", icon: ShieldCheck, noSend: true },
-];
-
-const reviewTiersData = [
-  { name: "Quick", detail: "2–3 biggest issues", time: "~2 min", featured: false },
-  { name: "Standard", detail: "Balanced coverage", time: "~5 min", featured: true },
-  { name: "Thorough", detail: "Every subsection + table", time: "~12 min", featured: false },
-];
-
-const privacyMetrics = [
-  { value: "0", label: "paper text stored server-side" },
-  { value: "1", label: "clear, optional exception" },
-  { value: "∞", label: "ways to check the log" },
-];
-
-function scrollToId(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-}
-
-// Local 0→1 progress for how far a section has scrolled into view — 0 when its
-// top is at the bottom of the viewport, 1 once it's mostly arrived. Unlike a
-// fraction of total page scroll, this stays correct regardless of how long the
-// page is or how tall any one section ends up being.
-function localProgress(rect: DOMRect, viewportHeight: number) {
-  const start = viewportHeight;
-  const end = viewportHeight * 0.35;
-  return Math.min(1, Math.max(0, (start - rect.top) / (start - end)));
-}
-
-// A staggered cascade for a group of `count` siblings: item `index` gets its own
-// reveal window within the section's local progress, so children arrive in
-// sequence rather than all at once.
-function stagger(progress: number, index: number, count: number, distance = 24, axis: "x" | "y" = "y") {
-  const span = 0.55;
-  const stepStart = count > 1 ? (index / (count - 1)) * (1 - span) : 0;
-  const t = between(progress, stepStart, Math.min(1, stepStart + span));
-  const shift = (1 - t) * distance;
-  return { opacity: t, transform: axis === "x" ? `translateX(${shift}px)` : `translateY(${shift}px)` };
-}
-
-// Reduced-motion escape hatch: skip the computed transform entirely so content
-// just renders at its natural position, fully visible, no scroll-linked motion.
-function motionStyle(reducedMotion: boolean, style: CSSProperties): CSSProperties {
-  return reducedMotion ? {} : style;
-}
-
-// t is an already-`between()`d 0→1 fraction; returns the counted-up integer.
-function countUp(target: number, t: number) {
-  return Math.round(target * t);
-}
-
-// A terminal-style decode: the first `text.length * t` characters are resolved,
-// the rest are substituted from a fixed glyph set. `flicker` (a continuously
-// changing value, e.g. the raw section progress) reseeds the substitution so
-// unresolved characters visibly cycle as the visitor scrolls, and hold still
-// the moment they stop.
-const DECODE_GLYPHS = "!<>-_/[]{}=+*^?#0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-function decodeText(text: string, t: number, flicker: number) {
-  const revealCount = Math.floor(text.length * t);
-  return text
-    .split("")
-    .map((char, index) => {
-      if (char === " " || char === "." || index < revealCount) return char;
-      const glyphIndex = Math.floor(index * 13 + flicker * 997) % DECODE_GLYPHS.length;
-      return DECODE_GLYPHS[glyphIndex];
-    })
-    .join("");
-}
-
-function StageLabel({ number, label }: { number: string; label: string }) {
-  return (
-    <div className="stage-label">
-      <span>{number}</span>
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function PrivacyPill({ children }: { children: ReactNode }) {
-  return (
-    <span className="privacy-pill">
-      <span className="privacy-dot" />
-      {children}
-    </span>
-  );
-}
-
 function Home() {
-  const [progress, setProgress] = useState(0);
-  const [heroProgress, setHeroProgress] = useState(0);
-  const [journalsProgress, setJournalsProgress] = useState(0);
-  const [matchingProgress, setMatchingProgress] = useState(0);
-  const [reviewProgress, setReviewProgress] = useState(0);
-  const [privacyProgress, setPrivacyProgress] = useState(0);
-  const [finalProgress, setFinalProgress] = useState(0);
-  const [reducedMotion, setReducedMotion] = useState(false);
-
-  const heroRef = useRef<HTMLElement>(null);
-  const journalsRef = useRef<HTMLElement>(null);
-  const matchingRef = useRef<HTMLElement>(null);
-  const reviewRef = useRef<HTMLElement>(null);
-  const privacyRef = useRef<HTMLElement>(null);
-  const finalRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    // Reading a media query requires `window`, so this can only happen after
-    // mount — a real "sync with an external system" case, not derivable state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setReducedMotion(mq.matches);
-    const handler = (event: MediaQueryListEvent) => setReducedMotion(event.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
-  useEffect(() => {
-    let frame = 0;
-    const update = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const viewportHeight = window.innerHeight;
-        const maxScroll = document.documentElement.scrollHeight - viewportHeight;
-        setProgress(maxScroll > 0 ? Math.min(1, Math.max(0, window.scrollY / maxScroll)) : 0);
-
-        const hero = heroRef.current;
-        if (hero) {
-          const travel = Math.max(hero.offsetHeight - viewportHeight, 1);
-          setHeroProgress(Math.min(1, Math.max(0, -hero.getBoundingClientRect().top / travel)));
-        }
-
-        if (journalsRef.current) setJournalsProgress(localProgress(journalsRef.current.getBoundingClientRect(), viewportHeight));
-        if (matchingRef.current) setMatchingProgress(localProgress(matchingRef.current.getBoundingClientRect(), viewportHeight));
-        if (reviewRef.current) setReviewProgress(localProgress(reviewRef.current.getBoundingClientRect(), viewportHeight));
-        if (privacyRef.current) setPrivacyProgress(localProgress(privacyRef.current.getBoundingClientRect(), viewportHeight));
-        if (finalRef.current) setFinalProgress(localProgress(finalRef.current.getBoundingClientRect(), viewportHeight));
-      });
-    };
-    update();
-    window.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
-  }, []);
+  const {
+    progress,
+    heroProgress,
+    journalsProgress,
+    matchingProgress,
+    reviewProgress,
+    privacyProgress,
+    finalProgress,
+    reducedMotion,
+    heroRef,
+    journalsRef,
+    matchingRef,
+    reviewRef,
+    privacyRef,
+    finalRef,
+  } = useScrollProgress();
 
   const screenDive = useMemo(() => (reducedMotion ? 0 : between(progress, 0.12, 0.2)), [progress, reducedMotion]);
   const featureEntry = useMemo(() => (reducedMotion ? 1 : between(progress, 0.13, 0.21)), [progress, reducedMotion]);
@@ -182,18 +39,7 @@ function Home() {
       <ThreePaperScene progress={progress} heroProgress={heroProgress} reducedMotion={reducedMotion} />
       <div className="grain" aria-hidden="true" />
 
-      <header className="site-header">
-        <button className="brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Back to top">
-          <span className="brand-mark">M</span>
-          <span>MargaLink</span>
-        </button>
-        <div className="header-meta">
-          <span className="mono header-note">PRIVATE BY DEFAULT</span>
-          <button className="header-cta" onClick={() => scrollToId("pathways")}>
-            Explore the workflow <ArrowUpRight size={15} strokeWidth={1.8} />
-          </button>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main>
         <section id="hero" ref={heroRef} className="hero section-shell">
