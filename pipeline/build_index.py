@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from enrichment import build_meta_entry, load_doaj, load_nlm, load_sources
+from enrichment import build_meta_entry, is_conference_proceedings_name, load_doaj, load_nlm, load_sources
 from openalex import safe_iter_jsonl
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -27,6 +27,20 @@ OUT_DIR = Path(__file__).parent.parent / "web" / "public" / "index"
 PY_MODEL_NAME = "thenlper/gte-small"  # Phase 0 bake-off winner — frozen
 BROWSER_MODEL_ID = "Xenova/gte-small"  # same weights, ONNX export
 BUILD_SIZE = 100
+
+# Cloudflare Pages' free plan caps a deployment at 20,000 files total, which
+# a dedicated static page per journal alone would consume at full scale.
+# Only the top PRERENDER_LIMIT by output volume get a real, crawlable
+# /journal/[id] page; the rest stay fully browsable via the client-side
+# index on /journals, just without a dedicated URL of their own.
+PRERENDER_LIMIT = 2000
+
+
+def mark_prerendered(meta: list[dict], limit: int = PRERENDER_LIMIT) -> None:
+    ranked = sorted(meta, key=lambda m: m["works_count"] or 0, reverse=True)
+    prerendered_ids = {m["id"] for m in ranked[:limit]}
+    for m in meta:
+        m["prerendered"] = m["id"] in prerendered_ids
 
 
 def load_works() -> dict[str, list[dict]]:
@@ -47,7 +61,11 @@ def main() -> None:
     works = load_works()
     doaj = load_doaj()
     nlm = load_nlm()
-    joined_ids = [sid for sid in sources if sid in works]
+    joined_ids = [
+        sid
+        for sid in sources
+        if sid in works and not is_conference_proceedings_name(sources[sid]["display_name"])
+    ]
     print(f"{len(sources)} sources, {len(works)} with papers fetched, {len(joined_ids)} joined")
     print(f"doaj enrichment: {sum(1 for i in joined_ids if i in doaj)}/{len(joined_ids)}")
     print(f"nlm enrichment: {sum(1 for i in joined_ids if i in nlm)}/{len(joined_ids)}")
@@ -59,11 +77,19 @@ def main() -> None:
     dim = model.get_embedding_dimension()
     centroids = np.zeros((len(joined_ids), dim), dtype=np.float32)
 
+    # A handful of fetched "abstracts" turned out to be tens of thousands of
+    # characters (mis-scraped full text, not real abstracts) — well past
+    # gte-small's own 512-token window, so nothing past this cap changes the
+    # embedding anyway. Left untruncated, a single such outlier in a batch
+    # drags that whole batch's attention cost up ~50x on MPS (measured: one
+    # batch went from ~3s to ~230s), rather than just being wasted compute.
+    MAX_CHARS = 2000
+
     all_texts, boundaries = [], []
     for sid in joined_ids:
         papers = works[sid][:BUILD_SIZE]
         boundaries.append(len(papers))
-        all_texts.extend(f"{p['title']}\n\n{p['abstract']}" for p in papers)
+        all_texts.extend(f"{p['title']}\n\n{p['abstract']}"[:MAX_CHARS] for p in papers)
 
     print(f"embedding {len(all_texts)} papers...")
     all_vecs = normalize(model.encode(all_texts, batch_size=64, show_progress_bar=True))
@@ -75,6 +101,7 @@ def main() -> None:
     meta = [
         build_meta_entry(sid, sources[sid]["display_name"], sources, doaj, nlm) for sid in joined_ids
     ]
+    mark_prerendered(meta)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     quantize_int8(centroids).tofile(OUT_DIR / "index.bin")
@@ -91,7 +118,17 @@ def main() -> None:
 
 
 def _self_check() -> None:
-    print("build_index self-check: OK (pure logic covered by enrichment.py's own self-check)")
+    meta = [{"id": f"j{i}", "works_count": i} for i in range(5)]
+    mark_prerendered(meta, limit=2)
+    assert {m["id"] for m in meta if m["prerendered"]} == {"j4", "j3"}
+    assert sum(1 for m in meta if m["prerendered"]) == 2
+
+    meta_with_nulls = [{"id": "a", "works_count": None}, {"id": "b", "works_count": 5}]
+    mark_prerendered(meta_with_nulls, limit=1)
+    assert meta_with_nulls[1]["prerendered"] is True
+    assert meta_with_nulls[0]["prerendered"] is False
+
+    print("build_index self-check: OK")
 
 
 if __name__ == "__main__":
