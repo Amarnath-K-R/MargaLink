@@ -2,6 +2,16 @@
 
 Prepared on 18 September 2026. Scope: all research fields. Builder: one person, using Claude Code, about 10 or more hours per week.
 
+> **Status, added later:** this is the plan written *before* implementation
+> started, kept as-written on purpose — code comments and commit messages
+> reference its section numbers (`plan §6.2`, `§13`, etc.), so renumbering
+> it would silently break those references. The product, market, roadmap,
+> income, and risk sections (§1, §2, §4.1–4.3, §5, §6, §7, §9–13) still
+> describe the real product accurately. Only the *architecture* went
+> stale as the system got built — three places are marked `> **Superseded:**`
+> inline below. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how
+> the system actually works today.
+
 ## 1. Product in one paragraph
 
 A researcher uploads a finished paper. The site suggests the best matching journals, with citation metrics, indexing status, fees and review speed. It then gives the formatting rules for the chosen journal, checks the paper against them, and offers an optional review of the paper before submission. The paper text stays on the user's device wherever that is technically possible.
@@ -35,6 +45,12 @@ This is the main selling point, so it must be true, simple and easy to explain.
 3. A small embedding model runs in the browser through transformers.js. It turns the title and abstract into a list of a few hundred numbers.
 4. Only that list of numbers is sent to the server.
 5. The server compares it with the stored journal embeddings and returns the ranked list.
+
+> **Superseded:** steps 4–5 describe a server-side ranker. The built system
+> has no server in this path at all — the browser downloads the full
+> (public, non-personal) journal index once and ranks locally. See
+> `docs/ARCHITECTURE.md`. This is a stricter reading of the same privacy
+> goal this section describes, not a different one.
 
 Notes:
 * The same embedding model must be used for the journals and for the user's paper. Pick one small model that runs well in a browser, around 25 to 130 MB, and keep it fixed.
@@ -95,6 +111,12 @@ This is a one time batch job. It can run on your own computer over a few days. R
 ### 4.5 Scope advice
 
 You chose all research fields. The matching engine handles that with no extra work. The extra work is in the details, such as formatting rules, which must be collected per journal. So build the database for all fields, but collect formatting rules for the top 2,000 to 3,000 journals first, and add more based on what users search for.
+
+> **Superseded (numbers only):** the built index has 18,125 journals, not
+> the 50,000–100,000 this section expected — OpenAlex's `is_core:true`
+> filter (see `pipeline/fetch_sources.py`) is stricter than "all research
+> fields" alone. The scope advice itself (all fields for matching,
+> formatting rules for a smaller prioritized set) still holds.
 
 ## 5. Matching quality
 
@@ -157,6 +179,12 @@ What it must not do:
 | Hosting | Vercel or Cloudflare Pages | Free tier is enough to start |
 | Payments | Razorpay | UPI support, simple for Indian users |
 | Analytics | Plausible or Umami | No cookies, fits the privacy claim |
+
+> **Superseded:** no database of any kind — the "Database" row above never
+> got built; the journal index is a static quantized file the browser
+> downloads (see `docs/ARCHITECTURE.md`). Hosting is Cloudflare Pages
+> specifically, not "Vercel or." Payments and analytics remain unbuilt, not
+> superseded — still accurate as a plan for later.
 
 Working with Claude Code:
 * Keep a CLAUDE.md file in the project. Put the three privacy rules from section 3.1 in it, so every change respects them.

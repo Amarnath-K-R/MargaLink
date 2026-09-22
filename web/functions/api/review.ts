@@ -6,37 +6,11 @@
 // endpoint is a disclosed, opt-in exception, not a quiet expansion of what
 // leaves the device.
 //
-// A real manuscript fact-check turned up three real failure modes in an
-// earlier, simpler version of this prompt: the model attributed numbers to
-// the abstract that only appeared in Results/Tables (it was inferring
-// section boundaries from raw text, not reading real ones), it flagged two
-// "inconsistencies" that actually reconciled via arithmetic it never
-// checked, and it misread a table's contents outright. Fixes:
-//   1. The abstract is extracted and handed over as its own labeled block
-//      (reusing formatCheck.ts's extractAbstract — already correct against
-//      real PDFs), so "is this in the abstract" is no longer an inference.
-//   2. Every finding requires a verbatim citation; filterGrounded() checks
-//      every citation actually appears in the source text server-side —
-//      never trusts the model's own claim that a quote is real — and drops
-//      any finding that doesn't verify, before it reaches the client.
-//   3. The prompt explicitly requires arithmetic reconciliation and a
-//      careful re-read of any table before a finding is reported.
-//   4. Extended thinking (adaptive effort) makes the model reason through
-//      verification — checking quotes, arithmetic, section attribution —
-//      before it commits to the tool call, in the SAME request. A literal
-//      second Claude call (draft, then a separate verify-and-prune pass)
-//      was tried first and worked, but re-sends the full paper text a
-//      second time and doubles latency for accuracy gains that a single
-//      well-instructed reasoning pass captures almost as well — thinking
-//      is the cheaper way to get "check your work" inside one round-trip.
-//      Note: the API rejects combining extended thinking with a *forced*
-//      tool_choice, so tool use here is "auto" plus an explicit instruction
-//      to call it — the existing "no tool_use in the response" error path
-//      is the safety net if that instruction is ever not followed.
-//
-// Three review depths (ReviewTier) map to Anthropic's effort levels —
-// verification rigor (grounding, arithmetic) is identical at every tier;
-// only how exhaustively the model looks varies. See TIER_CONFIG below.
+// What this handler defends against (real failure modes found against a
+// real manuscript, and why grounding/arithmetic-checking/extended-thinking
+// are here) is documented in full in ../../../docs/ARCHITECTURE.md under
+// "The AI review: what it defends against, and why" — read that before
+// changing the prompt, the grounding check, or the tier config below.
 import { findJournalRules, REQUIRED_STATEMENT_LABELS, type RequiredStatementKey, type JournalRules } from "../../src/lib/journalRules.ts";
 import { extractAbstract } from "../../src/lib/formatCheck.ts";
 

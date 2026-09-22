@@ -4,7 +4,8 @@ Filter: type:journal AND is_core:true — OpenAlex's own curated flag meaning
 the journal is listed in at least one respected cross-index list (this is
 the plan's "at least one index signal" criterion, native to the API, no
 need to cross-reference DOAJ/Scopus/NLM separately just to build this list —
-that's enrich.py's job, adding badges/metrics to what's already here).
+that's enrich_doaj.py's and enrich_nlm.py's job, adding badges/metrics to
+what's already here).
 
 Usage: uv run --env-file .env fetch_sources.py
 Output: pipeline/data/sources.jsonl (gitignored), one line per journal.

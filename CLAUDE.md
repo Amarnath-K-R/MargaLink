@@ -45,3 +45,44 @@ rule 1.
   papers — changing it means rebuilding the whole index.
 - Journal index ships to the browser as int8 (not fp32): negligible
   accuracy loss (~1pp), ~4x smaller download.
+
+## Running it
+
+Web app: `cd web && npm install && npm run dev` — but `/journals`,
+`/match`, `/journal/[id]`, and `npm run build` all need the pipeline's
+output first (see below); without it you only get `/`, `/privacy`, `/review`.
+
+Pipeline, in order (see `pipeline/README.md` for the full explanation —
+`fetch_works.py` alone takes hours and is resumable):
+```bash
+cd pipeline && uv sync
+uv run --env-file .env fetch_sources.py
+uv run --env-file .env fetch_works.py
+uv run --env-file .env enrich_doaj.py
+uv run --env-file .env enrich_nlm.py
+uv run build_index.py
+```
+
+Deploy: `cd web && npm run deploy` (builds, strips the oversized WASM file
+Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
+`wrangler pages deploy`).
+
+## Environment variables
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `OPENALEX_API_KEY` | `pipeline/.env` | Raises OpenAlex's rate limit; the fetchers work without it, just slower. |
+| `ANTHROPIC_API_KEY` | `web/.dev.vars` locally, the Cloudflare Pages dashboard in prod | The AI review's only credential — server-side only, `functions/api/review.ts`. |
+| `NEXT_PUBLIC_SITE_URL` | `web/`, build-time | Absolute URL for `sitemap.ts`/`robots.ts`/OG tags. Unset in dev; no domain registered yet (see `journal-finder-plan.md` §13). |
+
+## Verification
+
+This repo's standing convention — reuse these rather than inventing new
+one-off checks:
+```bash
+cd web && npm run check     # typecheck + lint + the *.selfcheck.ts files
+cd web && npm run smoke     # Playwright checks against a running dev server
+cd pipeline && uv run selfcheck.py && uv run ruff check .
+```
+`.github/workflows/check.yml` runs the first and third (minus `smoke`,
+which needs a live dev server) on every push.
