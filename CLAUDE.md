@@ -11,11 +11,22 @@ matching journals. See `journal-finder-plan.md` for the full product plan.
    language notice first.
 
 In practice: extraction (`web/src/lib/extract.ts`), embedding
-(`embed.ts`), and ranking (`match.ts`) all run in the browser. The only
-network calls during matching are for the public model weights and the
-public journal index — never the paper's text. `page.tsx` instruments
-`fetch()` during processing and shows every request made, so this is
-checkable on the page itself, not just asserted here.
+(`embed.ts`), ranking (`match.ts`), the rule-based format check
+(`formatCheck.ts`) and journal-rules check (`rulesCheck.ts`) all run in the
+browser — no network calls during any of them carry the paper's text, only
+the public model weights and public journal index. `match/page.tsx`
+instruments `fetch()` for the whole page lifetime (not just one run) and
+shows every request made, so this is checkable on the page itself, not just
+asserted here.
+
+**The one disclosed exception (rule 3):** the LLM pre-submission review
+(`functions/api/review.ts`) sends paper text to Anthropic's Claude API —
+opt-in only, behind an explicit consent step (`ReviewConsent.tsx`) that
+names exactly what happens before anything is sent, never a default-on
+path. This is the project's only server-side code and the only feature
+where "never leaves your device" doesn't hold. Every other feature keeps
+rule 1 absolutely; this one is rule 3's carve-out, not a quiet exception to
+rule 1.
 
 ## Layout
 
@@ -23,7 +34,9 @@ checkable on the page itself, not just asserted here.
   journal/paper data, builds the journal index. Never runs in production;
   its output (`web/public/index/*`) is static files the browser fetches.
 - `web/` — Next.js app, static export (`output: "export"` in
-  `next.config.ts`) — no backend.
+  `next.config.ts`) — no backend, **except** `web/functions/api/review.ts`
+  (a Cloudflare Pages Function, holding the Anthropic API key server-side
+  since the browser must never see it — see the disclosed exception above).
 
 ## Frozen decisions (Phase 0)
 

@@ -1,9 +1,13 @@
 // Dev-only: verify the format check runs end-to-end on a real multi-page PDF
 // and detects the sections it actually contains.
 import { chromium } from "playwright";
+import { mkdirSync } from "node:fs";
 
-const SCRATCH =
-  "/private/tmp/claude-501/-Users-amar-Projects-MargaLink/a160d450-6812-4cbc-9444-54305e64ab90/scratchpad";
+// Output dir for screenshots/artifacts this script writes — override with
+// SMOKE_OUT, defaults to a gitignored folder next to this script.
+const SCRATCH = process.env.SMOKE_OUT ?? new URL("../.smoke/", import.meta.url).pathname;
+mkdirSync(SCRATCH, { recursive: true });
+const FIXTURE = new URL("./fixtures/test-paper.pdf", import.meta.url).pathname;
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
@@ -22,7 +26,7 @@ const [fc] = await Promise.all([
   page.waitForEvent("filechooser"),
   page.click("text=Drop a PDF or DOCX"),
 ]);
-await fc.setFiles(`${SCRATCH}/full_paper.pdf`);
+await fc.setFiles(`${FIXTURE}`);
 await page.waitForSelector("text=Format check", { timeout: 30000 });
 
 const bodyText = await page.innerText("body");

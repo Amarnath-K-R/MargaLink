@@ -1,8 +1,11 @@
 // Dev-only: screenshot the privacy page to check the diagram renders.
 import { chromium } from "playwright";
+import { mkdirSync } from "node:fs";
 
-const SCRATCH =
-  "/private/tmp/claude-501/-Users-amar-Projects-MargaLink/a160d450-6812-4cbc-9444-54305e64ab90/scratchpad";
+// Output dir for screenshots/artifacts this script writes — override with
+// SMOKE_OUT, defaults to a gitignored folder next to this script.
+const SCRATCH = process.env.SMOKE_OUT ?? new URL("../.smoke/", import.meta.url).pathname;
+mkdirSync(SCRATCH, { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
