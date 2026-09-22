@@ -13,6 +13,7 @@
 // changing the prompt, the grounding check, or the tier config below.
 import { findJournalRules, REQUIRED_STATEMENT_LABELS, type RequiredStatementKey, type JournalRules } from "../../src/lib/journalRules.ts";
 import { extractAbstract } from "../../src/lib/formatCheck.ts";
+import { REVIEW_TIERS, type ReviewTier, type Citation, type ReviewResult } from "../../src/lib/reviewTypes.ts";
 
 type Env = {
   ANTHROPIC_API_KEY: string;
@@ -27,7 +28,7 @@ const MODEL = "claude-sonnet-5";
 // below (quote-grounding, arithmetic reconciliation) apply at every tier —
 // "quick" means less exhaustive coverage, never less careful about
 // fabrication. filterGrounded() is a universal safety net regardless of tier.
-export type ReviewTier = "quick" | "standard" | "thorough";
+// ReviewTier/REVIEW_TIERS live in reviewTypes.ts, shared with the client.
 const TIER_CONFIG: Record<ReviewTier, { effort: "low" | "medium" | "high"; maxTokens: number; guidance: string }> = {
   quick: {
     effort: "low",
@@ -63,14 +64,6 @@ const TIER_CONFIG: Record<ReviewTier, { effort: "low" | "medium" | "high"; maxTo
 // even a very long paper, so this only needs to guard against someone
 // pasting something absurd, not a real manuscript.
 const MAX_TEXT_CHARS = 150_000;
-
-type Citation = { quote: string; section: string };
-type ReviewResult = {
-  journalFit: { assessment: "good" | "possible" | "poor"; explanation: string };
-  inconsistencies: { description: string; citations: Citation[] }[];
-  statisticalReporting: { description: string; severity: "minor" | "major"; citations: Citation[] }[];
-  otherObservations: string[];
-};
 
 const CITATION_SCHEMA = {
   type: "array",
@@ -126,6 +119,18 @@ const REVIEW_TOOL = {
     required: ["journalFit", "inconsistencies", "statisticalReporting", "otherObservations"],
   },
 } as const;
+
+// Compile-time drift guard: if ReviewResult (src/lib/reviewTypes.ts) ever
+// gains a field, this fails to typecheck until REVIEW_TOOL's JSON Schema
+// above is updated to cover it too — cheaper than a runtime validator for a
+// 4-field contract.
+const _schemaCoversType: Record<keyof ReviewResult, true> = {
+  journalFit: true,
+  inconsistencies: true,
+  statisticalReporting: true,
+  otherObservations: true,
+};
+void _schemaCoversType;
 
 function requiredStatementsList(rules: JournalRules): string {
   return rules.requiredStatements.map((k: RequiredStatementKey) => REQUIRED_STATEMENT_LABELS[k]).join(", ") || "none required";
@@ -331,7 +336,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   }
   // Default to "standard" — keeps this backward-compatible with any caller
   // that doesn't send a tier, rather than rejecting the request outright.
-  const tier: ReviewTier = ["quick", "standard", "thorough"].includes(body.tier as string)
+  const tier: ReviewTier = REVIEW_TIERS.includes(body.tier as ReviewTier)
     ? (body.tier as ReviewTier)
     : "standard";
 

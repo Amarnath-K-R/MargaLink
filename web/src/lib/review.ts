@@ -3,25 +3,10 @@
 // MUST get explicit consent (see components/ReviewConsent.tsx) before
 // calling requestReview(); this module doesn't enforce that itself, it just
 // does the sending, limiting, and response validation once consent exists.
-
-// Every inconsistency/statisticalReporting finding must cite the exact
-// source text it's built on — a description alone lets the model drift
-// into paraphrase-that-becomes-fabrication (verified against a real
-// manuscript: it attributed numbers to the abstract that were only ever in
-// the Results tables). The server checks every quote actually appears in
-// the paper before returning anything — see functions/api/review.ts.
-export type Citation = { quote: string; section: string };
-
-// Kept in sync with functions/api/review.ts's ReviewTier — duplicated
-// rather than shared, since the client can't import from functions/.
-export type ReviewTier = "quick" | "standard" | "thorough";
-
-export type ReviewResult = {
-  journalFit: { assessment: "good" | "possible" | "poor"; explanation: string };
-  inconsistencies: { description: string; citations: Citation[] }[];
-  statisticalReporting: { description: string; severity: "minor" | "major"; citations: Citation[] }[];
-  otherObservations: string[];
-};
+// Types live in reviewTypes.ts — the one file both this client module and
+// functions/api/review.ts import from. Import the types you need from
+// @/lib/reviewTypes directly rather than through here.
+import type { ReviewResult, ReviewTier } from "./reviewTypes.ts";
 
 const USAGE_KEY = "margalink-review-uses";
 export const FREE_REVIEWS_PER_DEVICE = 3;

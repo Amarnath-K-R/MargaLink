@@ -1,4 +1,4 @@
-import type { Citation, ReviewResult } from "@/lib/review";
+import type { Citation, ReviewResult } from "@/lib/reviewTypes";
 
 // Every citation shown here already passed a server-side check that its
 // quote actually appears in the paper (see filterGrounded in

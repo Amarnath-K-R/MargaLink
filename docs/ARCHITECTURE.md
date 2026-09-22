@@ -121,13 +121,19 @@ of these defenses actually lives in code.)
 ## The invariant that keeps `src/lib/` and `functions/` from duplicating types
 
 `functions/api/review.ts` already imports directly from `src/lib/`
-(`journalRules.ts`, `formatCheck.ts`) via relative paths — there's no
-Workers-runtime barrier stopping it. The rule that makes this safe:
-**`functions/` may import from `src/lib/` only modules that are pure or
-isomorphic** — no `window`, no `localStorage`, no `fs`. Most of `src/lib/`
-qualifies; a handful of browser-only modules (`embed.ts`, `extract.ts`)
-and one Node-only module (`journalsServer.ts`, used at build time) don't,
-and should never be imported from `functions/`.
+(`journalRules.ts`, `formatCheck.ts`, `reviewTypes.ts`) via relative
+paths — there's no Workers-runtime barrier stopping it. The rule that
+makes this safe: **`functions/` may import from `src/lib/` only modules
+that are pure or isomorphic** — no `window`, no `localStorage`, no `fs`.
+Most of `src/lib/` qualifies; a handful of browser-only modules
+(`embed.ts`, `extract.ts`) and one Node-only module (`journalsServer.ts`,
+used at build time) don't, and should never be imported from `functions/`.
+
+`src/lib/reviewTypes.ts` is the cleanest example: it's the one file both
+the client (`review.ts` and its consumers) and `functions/api/review.ts`
+import `Citation`/`ReviewTier`/`ReviewResult`/`REVIEW_TIERS` from, instead
+of each side declaring its own copy. It qualifies for the same reason —
+just types and a `const` array, nothing environment-specific.
 
 ## Read these five files first
 
