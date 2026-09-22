@@ -12,6 +12,8 @@
 // indistinguishable plain digits once a PDF's text layer is extracted —
 // there is no reliable way to detect them, so those journals leave this
 // field unset rather than claim a check that isn't real.
+import { shortId } from "./journalUrl.ts";
+
 export type RequiredStatementKey = "ethics" | "funding" | "conflictsOfInterest" | "dataAvailability";
 
 export type JournalRules = {
@@ -132,6 +134,6 @@ export const JOURNAL_RULES: JournalRules[] = [
 // Accepts either form — a MatchResult's `id` is the full OpenAlex URL
 // (https://openalex.org/S172573765), but journalId above is stored short.
 export function findJournalRules(openAlexIdOrShort: string): JournalRules | undefined {
-  const short = openAlexIdOrShort.split("/").pop() ?? openAlexIdOrShort;
+  const short = shortId(openAlexIdOrShort);
   return JOURNAL_RULES.find((r) => r.journalId === short);
 }

@@ -5,7 +5,7 @@
 // "/index/meta.json" would have nothing serving it at that point).
 import fs from "node:fs";
 import path from "node:path";
-import type { JournalMeta } from "./match";
+import type { JournalMeta } from "./match.ts";
 
 let cache: JournalMeta[] | null = null;
 

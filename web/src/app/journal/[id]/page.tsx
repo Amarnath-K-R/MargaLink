@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getAllJournals, getPrerenderedJournals } from "@/lib/journals-server";
-import { shortId } from "@/lib/journal-url";
+import { getAllJournals, getPrerenderedJournals } from "@/lib/journalsServer";
+import { shortId } from "@/lib/journalUrl";
 import type { JournalMeta } from "@/lib/match";
 import JournalDetail from "@/components/JournalDetail";
 

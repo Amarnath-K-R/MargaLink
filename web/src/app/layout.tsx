@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Serif, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
-import { SITE_URL } from "@/lib/site";
+import { SITE_URL, SITE_NAME, SITE_TITLE, SITE_DESCRIPTION } from "@/lib/site";
 import "./globals.css";
 
 const plexSerif = IBM_Plex_Serif({
@@ -21,25 +21,21 @@ const plexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
-const TITLE = "MargaLink — get your paper ready to submit";
-const DESCRIPTION =
-  "Match your paper to a journal, check its format, and soon get it reviewed — all without your paper ever leaving your device.";
-
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: TITLE,
-  description: DESCRIPTION,
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
   openGraph: {
-    title: TITLE,
-    description: DESCRIPTION,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
     url: SITE_URL,
-    siteName: "MargaLink",
+    siteName: SITE_NAME,
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: TITLE,
-    description: DESCRIPTION,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
   },
 };
 

@@ -11,7 +11,7 @@ import {
   type MatchResult,
   type JournalFilters,
 } from "@/lib/match";
-import { journalHref, isPrerendered } from "@/lib/journal-url";
+import { journalHref, isPrerendered } from "@/lib/journalUrl";
 import { checkFormat, type FormatCheckResult } from "@/lib/formatCheck";
 import { findJournalRules } from "@/lib/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";

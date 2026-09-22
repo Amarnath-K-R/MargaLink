@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { loadMeta, getAvailableFields, type JournalMeta } from "@/lib/match";
-import { journalHref, isPrerendered } from "@/lib/journal-url";
+import { journalHref, isPrerendered } from "@/lib/journalUrl";
 import JournalDetail from "@/components/JournalDetail";
 
 const DISPLAY_CAP = 100;

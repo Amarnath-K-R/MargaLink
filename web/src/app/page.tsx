@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import IntroSequence from "@/components/IntroSequence";
 import ThreePaperScene from "@/components/ThreePaperScene";
+import "./_home/home.css";
 
 const journalCards = [
   { title: "Ecological Systems", field: "ECOLOGY · Q1", score: "92%", fee: "$0 APC" },
