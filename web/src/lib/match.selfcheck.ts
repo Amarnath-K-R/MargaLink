@@ -1,10 +1,7 @@
 // Runnable check for match.ts's ranking math. Not part of the app bundle —
 // run directly: node src/lib/match.selfcheck.ts
 import { quantizeInt8, topK, passesFilters, type JournalMeta } from "./match.ts";
-
-function assert(cond: boolean, msg: string) {
-  if (!cond) throw new Error(`FAILED: ${msg}`);
-}
+import assert from "node:assert/strict";
 
 // quantize: round-trips a unit vector into the int8 range
 const q = quantizeInt8(new Float32Array([1, -1, 0.5, -0.5, 0]));

@@ -1,10 +1,7 @@
 // Runnable check for review.ts's pure logic (stripping, counters) — not
 // part of the app bundle. Run directly: node src/lib/review.selfcheck.ts
 import { stripIdentifyingInfo } from "./review.ts";
-
-function assert(cond: boolean, msg: string) {
-  if (!cond) throw new Error(`FAILED: ${msg}`);
-}
+import assert from "node:assert/strict";
 
 const BYLINE_PAPER = `Deep Learning for Crop Disease Detection
 

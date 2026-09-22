@@ -12,13 +12,19 @@ Writes: web/public/index/{manifest.json, index.bin, meta.json}
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from enrichment import build_meta_entry, is_conference_proceedings_name, load_doaj, load_nlm, load_sources
+from enrichment import (
+    build_meta_entry,
+    is_conference_proceedings_name,
+    load_doaj,
+    load_nlm,
+    load_sources,
+)
 from openalex import safe_iter_jsonl
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -110,7 +116,7 @@ def main() -> None:
         "model_id": BROWSER_MODEL_ID,
         "dim": dim,
         "journal_count": len(joined_ids),
-        "built_at": datetime.now(timezone.utc).isoformat(),
+        "built_at": datetime.now(UTC).isoformat(),
         "note": f"Production index (partial while fetch_works.py runs): {len(joined_ids)}/{len(sources)} journals",
     }
     (OUT_DIR / "manifest.json").write_text(json.dumps(manifest))
@@ -132,9 +138,4 @@ def _self_check() -> None:
 
 
 if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == "--self-check":
-        _self_check()
-    else:
-        main()
+    main()

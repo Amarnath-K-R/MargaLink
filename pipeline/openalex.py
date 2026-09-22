@@ -118,6 +118,3 @@ def _self_check() -> None:
 
     print("openalex self-check: OK")
 
-
-if __name__ == "__main__":
-    _self_check()

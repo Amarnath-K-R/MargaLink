@@ -2,10 +2,7 @@
 // Run directly: node src/lib/rulesCheck.selfcheck.ts
 import { checkRules } from "./rulesCheck.ts";
 import type { JournalRules } from "./journalRules.ts";
-
-function assert(cond: boolean, msg: string) {
-  if (!cond) throw new Error(`FAILED: ${msg}`);
-}
+import assert from "node:assert/strict";
 
 const RULES: JournalRules = {
   journalId: "test",

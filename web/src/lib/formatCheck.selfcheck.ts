@@ -2,10 +2,7 @@
 // text — not part of the app bundle. Run directly:
 //   node src/lib/formatCheck.selfcheck.ts
 import { checkFormat } from "./formatCheck.ts";
-
-function assert(cond: boolean, msg: string) {
-  if (!cond) throw new Error(`FAILED: ${msg}`);
-}
+import assert from "node:assert/strict";
 
 const SAMPLE_PAPER = `
 Deep Learning for Crop Disease Detection

@@ -104,9 +104,4 @@ def _self_check() -> None:
 
 
 if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == "--self-check":
-        _self_check()
-    else:
-        main()
+    main()
