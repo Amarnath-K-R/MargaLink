@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { extractFromFile } from "@/lib/extract";
-import { JOURNAL_RULES, findJournalRules } from "@/lib/journalRules";
+import { findJournalRules } from "@/lib/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
 import { requestReview, reviewsRemaining } from "@/lib/review";
 import type { ReviewResult, ReviewTier } from "@/lib/reviewTypes";
@@ -15,12 +15,8 @@ import PaperDropzone from "@/components/PaperDropzone";
 import ReviewConsent from "@/components/ReviewConsent";
 import ReviewResultPanel from "@/components/ReviewResultPanel";
 import RulesCheckPanel from "@/components/RulesCheckPanel";
-
-const TIER_OPTIONS: { value: ReviewTier; label: string; description: string }[] = [
-  { value: "quick", label: "Quick", description: "The 2-3 most significant issues, fast." },
-  { value: "standard", label: "Standard", description: "Balanced coverage of the main sections." },
-  { value: "thorough", label: "Thorough", description: "Every subsection and table, maximum effort." },
-];
+import JournalPicker from "./_components/JournalPicker.tsx";
+import TierPicker from "./_components/TierPicker.tsx";
 
 // Attach → choose a known journal directly → see Claude's review. Unlike
 // /match, there's no embedding/ranking here at all — the journal is an
@@ -129,36 +125,7 @@ export default function ReviewPage() {
         {fileName && !uploadError && <p className="mt-3 text-sm text-ink-soft">Loaded {fileName}.</p>}
       </section>
 
-      {paperText && (
-        <section className="mt-12 border-t border-line pt-8">
-          <p className="mb-3 text-sm font-medium text-accent">2. Choose a journal</p>
-          <p className="mb-4 text-sm text-ink-soft">
-            Only journals with hand-verified guidelines are listed here — see{" "}
-            <Link href="/match" className="text-accent hover:underline">
-              match your paper
-            </Link>{" "}
-            instead if you want ranked suggestions across the full index.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {JOURNAL_RULES.map((j) => (
-              <button
-                key={j.journalId}
-                type="button"
-                onClick={() => selectJournal(j.journalId)}
-                aria-pressed={selectedJournalId === j.journalId}
-                className={`rounded-sm border p-4 text-left transition-colors ${
-                  selectedJournalId === j.journalId
-                    ? "border-accent bg-accent-soft"
-                    : "border-line bg-paper-alt hover:border-accent"
-                }`}
-              >
-                <p className="font-serif font-medium">{j.journalName}</p>
-                <p className="mt-1 text-xs text-ink-soft">{j.scopeSummary}</p>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      {paperText && <JournalPicker selectedJournalId={selectedJournalId} onSelect={selectJournal} />}
 
       {selectedRules && rulesResult && (
         <section className="mt-12 border-t border-line pt-8">
@@ -180,24 +147,7 @@ export default function ReviewPage() {
             text off this device.
           </p>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            {TIER_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setTier(opt.value)}
-                aria-pressed={tier === opt.value}
-                className={`rounded-sm border p-3 text-left text-sm transition-colors ${
-                  tier === opt.value
-                    ? "border-accent bg-accent-soft"
-                    : "border-line bg-paper-alt hover:border-accent"
-                }`}
-              >
-                <p className="font-medium">{opt.label}</p>
-                <p className="mt-0.5 text-xs text-ink-soft">{opt.description}</p>
-              </button>
-            ))}
-          </div>
+          <TierPicker tier={tier} onSelect={setTier} />
 
           <button
             type="button"
