@@ -18,15 +18,19 @@ export type FormatCheckResult = {
   tableCount: number;
 };
 
-function countWords(text: string): number {
+export function countWords(text: string): number {
   const words = text.trim().match(/\S+/g);
   return words ? words.length : 0;
 }
 
 /** Find the Abstract section: from a line that's just "Abstract" (near the
  * top, so we don't match the word appearing later, e.g. in a reference
- * title) to the next heading-like line. */
-function extractAbstract(fullText: string): { text: string } | null {
+ * title) to the next heading-like line. Exported for review.ts — an LLM
+ * asked to reason about "what does the abstract say" from raw undifferentiated
+ * text will infer section boundaries and sometimes infer them wrong; handing
+ * it this already-extracted, labeled span instead removes that failure mode
+ * at the source rather than hoping the model gets it right. */
+export function extractAbstract(fullText: string): { text: string } | null {
   const head = fullText.slice(0, 6000); // abstract is always near the start
   const startMatch = head.match(/^\s*abstract\s*:?\s*$/im);
   if (!startMatch || startMatch.index === undefined) return null;
@@ -53,9 +57,25 @@ function isStructuredAbstract(abstractText: string): boolean {
   return (matches?.length ?? 0) >= 2;
 }
 
-function findSection(fullText: string, patterns: RegExp[]): boolean {
+export function findSection(fullText: string, patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(fullText));
 }
+
+// Shared with rulesCheck.ts, which detects the same four statement kinds
+// against a specific journal's required list instead of this generic one —
+// one definition of what each statement "looks like" in extracted text.
+export const REQUIRED_STATEMENT_PATTERNS = {
+  ethics: [/ethic(al|s)\s+(statement|approval|declaration)/i, /institutional review board|IRB approval/i],
+  // Numbered-heading gap ("5. Funding" wouldn't match a bare "^funding$"
+  // line) — allow an optional numbering prefix, same as References below.
+  funding: [
+    /^\s*(?:[ivx]+\.|[a-z]\.|\d+\.?)?\s*funding\s*:?\s*$/im,
+    /this (work|research|study) was supported by/i,
+    /\bfunding statement\b/i,
+  ],
+  conflictsOfInterest: [/conflicts? of interest/i, /competing interests?/i, /declaration of interests?/i],
+  dataAvailability: [/data availability/i, /availability of data/i, /data sharing statement/i],
+} satisfies Record<string, RegExp[]>;
 
 /** References section: numbered entries first ("[1]" / "1."); falls back to
  * counting "(YYYY)" citations if the style isn't numbered (e.g. APA). Both
@@ -102,16 +122,10 @@ export function checkFormat(fullText: string): FormatCheckResult {
       structured: abstract ? isStructuredAbstract(abstract.text) : false,
     },
     requiredSections: {
-      ethics: findSection(fullText, [/ethic(al|s)\s+(statement|approval|declaration)/i, /institutional review board|IRB approval/i]),
-      // Same numbered-heading gap as References ("5. Funding" wouldn't match
-      // a bare "^funding$" line) — allow the same optional numbering prefix.
-      funding: findSection(fullText, [
-        /^\s*(?:[ivx]+\.|[a-z]\.|\d+\.?)?\s*funding\s*:?\s*$/im,
-        /this (work|research|study) was supported by/i,
-        /\bfunding statement\b/i,
-      ]),
-      conflictsOfInterest: findSection(fullText, [/conflicts? of interest/i, /competing interests?/i, /declaration of interests?/i]),
-      dataAvailability: findSection(fullText, [/data availability/i, /availability of data/i, /data sharing statement/i]),
+      ethics: findSection(fullText, REQUIRED_STATEMENT_PATTERNS.ethics),
+      funding: findSection(fullText, REQUIRED_STATEMENT_PATTERNS.funding),
+      conflictsOfInterest: findSection(fullText, REQUIRED_STATEMENT_PATTERNS.conflictsOfInterest),
+      dataAvailability: findSection(fullText, REQUIRED_STATEMENT_PATTERNS.dataAvailability),
     },
     referenceCount: countReferences(fullText),
     figureCount: countUniqueNumbered(fullText, "Fig(?:ure)?"),

@@ -6,25 +6,31 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "deploy": "next build && rm -f out/_next/static/media/ort-wasm-simd-threaded.asyncify*.wasm && wrangler pages deploy out --project-name margalink --branch main --commit-dirty=true"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",
+    "lucide-react": "^1.47.0",
     "mammoth": "^1.12.3",
     "next": "16.3.5",
     "pdfjs-dist": "^6.3.289",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "three": "^0.186.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260919.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.186.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "playwright": "^1.63.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.135.0"
   }
 }

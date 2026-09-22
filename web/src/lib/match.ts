@@ -22,6 +22,12 @@ export type JournalMeta = {
   review_url?: string | null;
   doaj_apc_amount?: number | null; // DOAJ's own figure — may not be USD, display-only
   doaj_apc_currency?: string | null;
+  // Whether this journal has a dedicated static /journal/[id] page (only the
+  // top ~2,000 by output volume do, to stay under Cloudflare Pages' 20,000
+  // file cap — see pipeline/build_index.py's mark_prerendered). Missing on
+  // older builds (e.g. the Phase 0 interim demo), which predate this field
+  // and had every journal prerendered — see isPrerendered() in journal-url.ts.
+  prerendered?: boolean;
 };
 
 export type MatchResult = JournalMeta & { score: number };

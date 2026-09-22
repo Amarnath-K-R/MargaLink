@@ -14,7 +14,20 @@ let pipelinePromise: Promise<FeatureExtractionPipeline> | null = null;
 async function getPipeline(): Promise<FeatureExtractionPipeline> {
   if (!pipelinePromise) {
     pipelinePromise = (async () => {
-      const { pipeline } = await import("@huggingface/transformers");
+      const { pipeline, env } = await import("@huggingface/transformers");
+      // Without this, onnxruntime-web's default wasmPaths resolves relative
+      // to the module itself — Next's bundler statically detects that and
+      // copies the runtime's WASM files (one is 25.6MB) into the static
+      // export, which is over Cloudflare Pages' 25MB per-file limit. Point
+      // at the exact matching version on jsdelivr instead — a public, no-
+      // personal-data fetch, same trust category as the model weights
+      // below, which already come from Hugging Face's CDN.
+      // ponytail: version is hand-pinned, not read from the installed
+      // package — if @huggingface/transformers is ever upgraded, check
+      // node_modules/onnxruntime-web/package.json's version and update this
+      // to match, or the JS glue and the WASM binary could drift apart.
+      env.backends.onnx.wasm!.wasmPaths =
+        "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.0-dev.20260914-8d85527a0/dist/";
       const manifest = await loadManifest();
       return (await pipeline(
         "feature-extraction",

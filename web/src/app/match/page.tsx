@@ -1,17 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { extractFromFile } from "@/lib/extract";
 import { embed } from "@/lib/embed";
+import { loadManifest } from "@/lib/manifest";
 import {
   matchJournals,
   getAvailableFields,
   type MatchResult,
   type JournalFilters,
 } from "@/lib/match";
-import { journalHref } from "@/lib/journal-url";
+import { journalHref, isPrerendered } from "@/lib/journal-url";
 import { checkFormat, type FormatCheckResult } from "@/lib/formatCheck";
+import { findJournalRules } from "@/lib/journalRules";
+import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
+import JournalDetail from "@/components/JournalDetail";
+import PaperDropzone from "@/components/PaperDropzone";
+import RulesCheckPanel from "@/components/RulesCheckPanel";
+import CheckRow from "@/components/CheckRow";
 
 type Stage = "idle" | "reading" | "embedding" | "matching" | "done" | "error";
 
@@ -38,12 +45,15 @@ export default function MatchPage() {
   const [calls, setCalls] = useState<NetworkCall[]>([]);
   const [results, setResults] = useState<MatchResult[] | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [queryVector, setQueryVector] = useState<Float32Array | null>(null);
   const [availableFields, setAvailableFields] = useState<string[]>([]);
   const [filters, setFilters] = useState<JournalFilters>({});
   const [formatResult, setFormatResult] = useState<FormatCheckResult | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
+  const [paperText, setPaperText] = useState<string | null>(null);
+  const [rulesChecks, setRulesChecks] = useState<Record<string, RulesCheckResult>>({});
+  const [openRulesCheckId, setOpenRulesCheckId] = useState<string | null>(null);
+  const [journalCount, setJournalCount] = useState<number | null>(null);
   // Guards against out-of-order matchJournals() results: the filter
   // controls are interactable as soon as queryVector is set, which is
   // before the initial (unfiltered) match finishes — so a filter change can
@@ -52,6 +62,28 @@ export default function MatchPage() {
   const matchSeq = useRef(0);
 
   const log = useCallback((line: string) => setTrace((t) => [...t, line]), []);
+
+  // Instrument fetch for the page's whole lifetime, not just one matching
+  // run — real proof, not a claim, that nothing leaves this tab unlogged,
+  // no matter when a request happens to fire.
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async (...args: Parameters<typeof fetch>) => {
+      const [input, init] = args;
+      const url = typeof input === "string" ? input : input.toString();
+      setCalls((prev) => [...prev, { method: init?.method ?? "GET", url, hadBody: Boolean(init?.body) }]);
+      return originalFetch(...args);
+    };
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
+
+  useEffect(() => {
+    loadManifest()
+      .then((manifest) => setJournalCount(manifest.journal_count))
+      .catch(() => {});
+  }, []);
 
   const process = useCallback(
     async (file: File) => {
@@ -63,21 +95,9 @@ export default function MatchPage() {
       setQueryVector(null);
       setFilters({});
       setFormatResult(null);
-
-      // Instrument fetch for the duration of this run — real proof, not a
-      // claim, that no request during matching carries the paper's text.
-      const seen: NetworkCall[] = [];
-      const originalFetch = window.fetch;
-      window.fetch = async (...args: Parameters<typeof fetch>) => {
-        const [input, init] = args;
-        const url = typeof input === "string" ? input : input.toString();
-        seen.push({
-          method: init?.method ?? "GET",
-          url,
-          hadBody: Boolean(init?.body),
-        });
-        return originalFetch(...args);
-      };
+      setPaperText(null);
+      setRulesChecks({});
+      setOpenRulesCheckId(null);
 
       try {
         log(`Reading ${file.name} (${(file.size / 1024).toFixed(0)} KB)`);
@@ -89,6 +109,7 @@ export default function MatchPage() {
           );
         }
         setFormatResult(checkFormat(fullText));
+        setPaperText(fullText);
 
         setStage("embedding");
         log("Loading the embedding model (cached after first run)");
@@ -108,9 +129,6 @@ export default function MatchPage() {
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : String(err));
         setStage("error");
-      } finally {
-        window.fetch = originalFetch;
-        setCalls(seen);
       }
     },
     [log]
@@ -138,16 +156,21 @@ export default function MatchPage() {
     [queryVector]
   );
 
-  const onFiles = useCallback(
-    (files: FileList | null) => {
-      // Guard against starting a second run mid-processing — process()
-      // temporarily wraps window.fetch, and two overlapping runs would
-      // stomp on each other's restore of the original fetch.
-      if (busy) return;
-      const file = files?.[0];
-      if (file) void process(file);
+  const toggleRulesCheck = useCallback(
+    (journalId: string) => {
+      if (openRulesCheckId === journalId) {
+        setOpenRulesCheckId(null);
+        return;
+      }
+      if (!rulesChecks[journalId] && paperText) {
+        const rules = findJournalRules(journalId);
+        if (rules) {
+          setRulesChecks((prev) => ({ ...prev, [journalId]: checkRules(paperText, rules) }));
+        }
+      }
+      setOpenRulesCheckId(journalId);
     },
-    [process, busy]
+    [openRulesCheckId, rulesChecks, paperText]
   );
 
   return (
@@ -175,36 +198,7 @@ export default function MatchPage() {
       </header>
 
       <div className="grid gap-8 sm:grid-cols-[1fr_1.1fr]">
-        <button
-          type="button"
-          disabled={busy}
-          aria-label="Upload a PDF or DOCX paper"
-          onDragOver={(e) => {
-            if (busy) return;
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-            if (!busy) onFiles(e.dataTransfer.files);
-          }}
-          onClick={() => inputRef.current?.click()}
-          className={`flex h-56 flex-col items-center justify-center gap-2 rounded-sm border text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${
-            busy ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-          } ${dragOver ? "border-accent bg-accent-soft" : "border-line bg-paper-alt"}`}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf,.docx"
-            className="hidden"
-            onChange={(e) => onFiles(e.target.files)}
-          />
-          <p className="font-medium">Drop a PDF or DOCX</p>
-          <p className="text-sm text-ink-soft">or click to choose a file</p>
-        </button>
+        <PaperDropzone busy={busy} onFile={(file) => void process(file)} />
 
         <div className="border-l border-line pl-6">
           <p className="mb-3 text-sm font-medium text-accent">On this device</p>
@@ -330,36 +324,81 @@ export default function MatchPage() {
 
           {results && results.length > 0 ? (
             <ol data-testid="results">
-              {results.map((r, i) => (
-                <li key={r.id} className="border-t border-line py-3 first:border-t-0">
-                  <div className="flex items-baseline justify-between gap-4">
-                    <span className="flex gap-3">
-                      <span className="text-ink-soft">{i + 1}</span>
-                      <Link href={journalHref(r.id)} className="hover:underline">
-                        {r.display_name}
-                      </Link>
-                    </span>
-                    <span className="font-mono text-xs text-ink-soft">
-                      {(r.score / 127 / 127).toFixed(3)}
-                    </span>
-                  </div>
-                  {(r.field ||
-                    r.is_in_doaj ||
-                    r.medline_indexed ||
-                    r.apc_usd != null ||
-                    r.publication_time_weeks != null) && (
-                    <div className="mt-1 flex flex-wrap gap-3 pl-6 text-xs text-ink-soft">
-                      {r.field && <span>{r.field}</span>}
-                      {r.is_in_doaj && <span className="text-accent">Open access (DOAJ)</span>}
-                      {r.medline_indexed && <span className="text-accent">MEDLINE</span>}
-                      {r.apc_usd != null && <span>${r.apc_usd.toLocaleString()} fee</span>}
-                      {r.publication_time_weeks != null && (
-                        <span>~{r.publication_time_weeks}wk to publish</span>
-                      )}
+              {results.map((r, i) => {
+                const prerendered = isPrerendered(r);
+                const expanded = expandedResultId === r.id;
+                const journalRules = findJournalRules(r.id);
+                const rulesOpen = openRulesCheckId === r.id;
+                const rulesResult = rulesChecks[r.id];
+                return (
+                  <li key={r.id} className="border-t border-line py-3 first:border-t-0">
+                    <div className="flex items-baseline justify-between gap-4">
+                      <span className="flex gap-3">
+                        <span className="text-ink-soft">{i + 1}</span>
+                        {prerendered ? (
+                          <Link href={journalHref(r.id)} className="hover:underline">
+                            {r.display_name}
+                          </Link>
+                        ) : (
+                          // No dedicated static page (outside the top ~2,000 by
+                          // output volume) — expand details inline instead.
+                          <button
+                            type="button"
+                            onClick={() => setExpandedResultId(expanded ? null : r.id)}
+                            className="text-left hover:underline"
+                            aria-expanded={expanded}
+                          >
+                            {r.display_name}
+                          </button>
+                        )}
+                      </span>
+                      <span className="font-mono text-xs text-ink-soft">
+                        {(r.score / 127 / 127).toFixed(3)}
+                      </span>
                     </div>
-                  )}
-                </li>
-              ))}
+                    {(r.field ||
+                      r.is_in_doaj ||
+                      r.medline_indexed ||
+                      r.apc_usd != null ||
+                      r.publication_time_weeks != null) && (
+                      <div className="mt-1 flex flex-wrap gap-3 pl-6 text-xs text-ink-soft">
+                        {r.field && <span>{r.field}</span>}
+                        {r.is_in_doaj && <span className="text-accent">Open access (DOAJ)</span>}
+                        {r.medline_indexed && <span className="text-accent">MEDLINE</span>}
+                        {r.apc_usd != null && <span>${r.apc_usd.toLocaleString()} fee</span>}
+                        {r.publication_time_weeks != null && (
+                          <span>~{r.publication_time_weeks}wk to publish</span>
+                        )}
+                      </div>
+                    )}
+                    {expanded && (
+                      <div className="mt-3 rounded-sm border border-line bg-paper-alt p-4 pl-6">
+                        <JournalDetail journal={r} />
+                      </div>
+                    )}
+                    {journalRules && (
+                      <div className="pl-6">
+                        <button
+                          type="button"
+                          onClick={() => toggleRulesCheck(r.id)}
+                          className="mt-1.5 text-xs text-accent hover:underline"
+                          aria-expanded={rulesOpen}
+                        >
+                          {rulesOpen ? "Hide" : "Check against"} {journalRules.journalName}&apos;s rules
+                        </button>
+                        {rulesOpen && rulesResult && <RulesCheckPanel result={rulesResult} />}
+                      </div>
+                    )}
+                    {journalRules && (
+                      <div className="pl-6">
+                        <Link href="/review" className="mt-1.5 inline-block text-xs text-accent hover:underline">
+                          AI review available for {journalRules.journalName} →
+                        </Link>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ol>
           ) : (
             <p className="text-ink-soft">No journals match these filters. Try widening them.</p>
@@ -419,31 +458,14 @@ export default function MatchPage() {
 
       <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
         <p>
-          This build matches against 562 journals — the sample used to pick
-          the embedding model (82% top-10 accuracy on held-out papers). The
-          full index (~20,000 journals) ships in a later phase.{" "}
+          {journalCount != null
+            ? `This build matches against ${journalCount.toLocaleString()} journals — embedded entirely on-device.`
+            : "Matching runs against the full journal index — embedded entirely on-device."}{" "}
           <Link href="/privacy" className="text-accent hover:underline">
             How privacy works
           </Link>
         </p>
       </footer>
     </main>
-  );
-}
-
-function CheckRow({
-  label,
-  value,
-  detected,
-}: {
-  label: string;
-  value: string;
-  detected?: boolean;
-}) {
-  return (
-    <div className="flex justify-between border-t border-line py-2.5 text-sm first:border-t-0">
-      <dt className="text-ink-soft">{label}</dt>
-      <dd className={detected ? "text-accent" : ""}>{value}</dd>
-    </div>
   );
 }

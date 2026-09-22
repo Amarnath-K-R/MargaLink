@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { loadMeta, getAvailableFields, type JournalMeta } from "@/lib/match";
-import { journalHref } from "@/lib/journal-url";
+import { journalHref, isPrerendered } from "@/lib/journal-url";
+import JournalDetail from "@/components/JournalDetail";
 
 const DISPLAY_CAP = 100;
 
@@ -12,6 +13,7 @@ export default function JournalsPage() {
   const [fields, setFields] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [field, setField] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     void loadMeta().then(setJournals);
@@ -88,21 +90,45 @@ export default function JournalsPage() {
       </p>
 
       <ol className="mt-4">
-        {shown.map((j) => (
-          <li key={j.id} className="border-t border-line py-3 first:border-t-0">
-            <Link href={journalHref(j.id)} className="hover:underline">
-              {j.display_name}
-            </Link>
-            {(j.field || j.is_in_doaj || j.medline_indexed || j.apc_usd != null) && (
-              <div className="mt-1 flex flex-wrap gap-3 text-xs text-ink-soft">
-                {j.field && <span>{j.field}</span>}
-                {j.is_in_doaj && <span className="text-accent">Open access (DOAJ)</span>}
-                {j.medline_indexed && <span className="text-accent">MEDLINE</span>}
-                {j.apc_usd != null && <span>${j.apc_usd.toLocaleString()} fee</span>}
-              </div>
-            )}
-          </li>
-        ))}
+        {shown.map((j) => {
+          const prerendered = isPrerendered(j);
+          const expanded = expandedId === j.id;
+          return (
+            <li key={j.id} className="border-t border-line py-3 first:border-t-0">
+              {prerendered ? (
+                <Link href={journalHref(j.id)} className="hover:underline">
+                  {j.display_name}
+                </Link>
+              ) : (
+                // No dedicated static page for this one (outside the top ~2,000
+                // by output volume — see build_index.py's mark_prerendered);
+                // expand its details right here instead of linking to a page
+                // that wouldn't exist under static export.
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expanded ? null : j.id)}
+                  className="text-left hover:underline"
+                  aria-expanded={expanded}
+                >
+                  {j.display_name}
+                </button>
+              )}
+              {(j.field || j.is_in_doaj || j.medline_indexed || j.apc_usd != null) && (
+                <div className="mt-1 flex flex-wrap gap-3 text-xs text-ink-soft">
+                  {j.field && <span>{j.field}</span>}
+                  {j.is_in_doaj && <span className="text-accent">Open access (DOAJ)</span>}
+                  {j.medline_indexed && <span className="text-accent">MEDLINE</span>}
+                  {j.apc_usd != null && <span>${j.apc_usd.toLocaleString()} fee</span>}
+                </div>
+              )}
+              {expanded && (
+                <div className="mt-3 rounded-sm border border-line bg-paper-alt p-4">
+                  <JournalDetail journal={j} />
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ol>
     </main>
   );

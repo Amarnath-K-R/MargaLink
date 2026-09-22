@@ -45,10 +45,14 @@ export default function PrivacyPage() {
             Anything that would need to leave your device is opt-in.
           </p>
           <p className="mt-1 text-ink-soft">
-            Matching and the format check never do. A future paid review
-            feature would need a large language model, which can&apos;t run in
-            a browser — that will ask first, in plain language, before
-            sending anything.
+            Matching, the format check, and the journal rules check never do.
+            One feature is the exception:{" "}
+            <Link href="#review-exception" className="text-accent hover:underline">
+              getting a paper reviewed
+            </Link>{" "}
+            uses a large language model, which can&apos;t run in a browser —
+            it asks first, in plain language, exactly what it&apos;s about to
+            send, before sending anything.
           </p>
         </li>
       </ol>
@@ -85,6 +89,37 @@ export default function PrivacyPage() {
         don&apos;t send it anywhere either. The whole comparison happens
         locally, against the journal index already in your browser.
       </p>
+
+      <h2 id="review-exception" className="mt-12 font-serif text-xl font-medium">
+        The one exception: getting a paper reviewed
+      </h2>
+      <p className="mt-3 text-ink-soft">
+        Everything above — matching, the format check, the journal rules check — runs
+        entirely on your device. Getting a paper reviewed is different: it sends your
+        paper&apos;s text to Anthropic&apos;s Claude API, because that kind of review needs a
+        large language model, and no model capable of it runs in a browser today. This is
+        the only feature in MargaLink that works this way, and it only runs if you
+        explicitly ask for it:
+      </p>
+      <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
+        <li>
+          Nothing is sent until you confirm a plain-language notice naming exactly what&apos;s
+          about to happen — there is no default-on path.
+        </li>
+        <li>
+          Author names and email addresses are stripped from the text first, on a
+          best-effort basis, before anything leaves your device.
+        </li>
+        <li>
+          Anthropic&apos;s API terms don&apos;t use this data to train models. MargaLink
+          doesn&apos;t store what you send, before or after the review.
+        </li>
+        <li>
+          Like every other request in MargaLink, this one shows up in the network-request
+          log on the matching page when it happens — it isn&apos;t hidden from the same
+          transparency check the rest of the site relies on.
+        </li>
+      </ul>
 
       <h2 className="mt-12 font-serif text-xl font-medium">Accounts and payment</h2>
       <p className="mt-3 text-ink-soft">

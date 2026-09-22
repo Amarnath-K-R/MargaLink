@@ -36,6 +36,14 @@ yarn-error.log*
 # vercel
 .vercel
 
+# wrangler (Cloudflare Pages Functions local dev) — .dev.vars holds the
+# Anthropic API key for local testing, must never be committed
+.dev.vars
+.wrangler/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scripts/*.mjs smoke-check output (screenshots etc) — see scripts/*.mjs
+/.smoke/

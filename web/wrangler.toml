@@ -1,0 +1,9 @@
+name = "margalink"
+pages_build_output_dir = "out"
+compatibility_date = "2026-09-18"
+
+# Real production KV namespace for functions/api/review.ts's daily cap.
+# Not secret — just a namespace id, safe to commit.
+[[kv_namespaces]]
+binding = "REVIEWS_KV"
+id = "8378b6ae716e4ba18cf06f4fe7a605ba"
