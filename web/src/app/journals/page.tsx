@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { loadMeta, getAvailableFields, type JournalMeta } from "@/lib/match";
-import { journalHref, isPrerendered } from "@/lib/journalUrl";
+import { JournalResultTitle, JournalResultChips } from "@/components/JournalResultRow";
 import JournalDetail from "@/components/JournalDetail";
+import PageHeader from "@/components/PageHeader";
 
 const DISPLAY_CAP = 100;
 
@@ -33,25 +34,21 @@ export default function JournalsPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-14 sm:py-20">
-      <header className="mb-10">
-        <div className="mb-8 flex items-baseline justify-between">
-          <Link href="/" className="font-serif text-lg font-medium">
-            MargaLink
-          </Link>
-          <Link href="/privacy" className="text-sm text-ink-soft hover:text-ink">
-            How privacy works
-          </Link>
-        </div>
-        <h1 className="font-serif text-3xl font-medium sm:text-4xl">Browse journals</h1>
-        <p className="mt-2 text-ink-soft">
-          {journals ? `${journals.length.toLocaleString()} journals in this build.` : "Loading…"}{" "}
-          Looking to match a specific paper?{" "}
-          <Link href="/match" className="text-accent hover:underline">
-            Upload it instead
-          </Link>
-          .
-        </p>
-      </header>
+      <PageHeader
+        width="3xl"
+        links={[{ href: "/privacy", label: "How privacy works" }]}
+        title="Browse journals"
+        subtitle={
+          <p className="mt-2 text-ink-soft">
+            {journals ? `${journals.length.toLocaleString()} journals in this build.` : "Loading…"}{" "}
+            Looking to match a specific paper?{" "}
+            <Link href="/match" className="text-accent hover:underline">
+              Upload it instead
+            </Link>
+            .
+          </p>
+        }
+      />
 
       <div className="flex flex-wrap gap-4">
         <label className="flex flex-1 flex-col gap-1" style={{ minWidth: 220 }}>
@@ -91,36 +88,15 @@ export default function JournalsPage() {
 
       <ol className="mt-4">
         {shown.map((j) => {
-          const prerendered = isPrerendered(j);
           const expanded = expandedId === j.id;
           return (
             <li key={j.id} className="border-t border-line py-3 first:border-t-0">
-              {prerendered ? (
-                <Link href={journalHref(j.id)} className="hover:underline">
-                  {j.display_name}
-                </Link>
-              ) : (
-                // No dedicated static page for this one (outside the top ~2,000
-                // by output volume — see build_index.py's mark_prerendered);
-                // expand its details right here instead of linking to a page
-                // that wouldn't exist under static export.
-                <button
-                  type="button"
-                  onClick={() => setExpandedId(expanded ? null : j.id)}
-                  className="text-left hover:underline"
-                  aria-expanded={expanded}
-                >
-                  {j.display_name}
-                </button>
-              )}
-              {(j.field || j.is_in_doaj || j.medline_indexed || j.apc_usd != null) && (
-                <div className="mt-1 flex flex-wrap gap-3 text-xs text-ink-soft">
-                  {j.field && <span>{j.field}</span>}
-                  {j.is_in_doaj && <span className="text-accent">Open access (DOAJ)</span>}
-                  {j.medline_indexed && <span className="text-accent">MEDLINE</span>}
-                  {j.apc_usd != null && <span>${j.apc_usd.toLocaleString()} fee</span>}
-                </div>
-              )}
+              <JournalResultTitle
+                journal={j}
+                expanded={expanded}
+                onToggleExpand={() => setExpandedId(expanded ? null : j.id)}
+              />
+              <JournalResultChips journal={j} />
               {expanded && (
                 <div className="mt-3 rounded-sm border border-line bg-paper-alt p-4">
                   <JournalDetail journal={j} />

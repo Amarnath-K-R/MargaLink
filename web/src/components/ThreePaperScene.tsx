@@ -2,34 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import type * as THREE from "three";
+import { clamp01, between, lerp } from "@/lib/easing";
+import { setOpacity } from "@/components/three/sceneHelpers";
 
 type ThreePaperSceneProps = {
   progress: number;
   heroProgress: number;
   reducedMotion: boolean;
 };
-
-const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
-const smooth = (value: number) => value * value * (3 - 2 * value);
-const between = (value: number, start: number, end: number) => smooth(clamp01((value - start) / (end - start)));
-const lerp = (from: number, to: number, amount: number) => from + (to - from) * amount;
-
-function setOpacity(group: THREE.Group, opacity: number) {
-  group.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.material) return;
-    // A transparent mesh still writes the depth buffer by default even at
-    // opacity 0 — an "invisible" panel (e.g. reviewGroup's solid box) can
-    // occlude whatever's drawn behind it, punching a paper-colored hole in
-    // the paper. Skip rendering entirely once it's faded out instead.
-    mesh.visible = opacity > 0.002;
-    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    materials.forEach((material) => {
-      material.transparent = true;
-      material.opacity = opacity;
-    });
-  });
-}
 
 function addPaperLines(THREE: typeof import("three"), group: THREE.Group) {
   const ink = new THREE.MeshBasicMaterial({ color: 0x565b66, transparent: true, opacity: 0.32 });

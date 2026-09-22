@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getAllJournals, getPrerenderedJournals } from "@/lib/journalsServer";
 import { shortId } from "@/lib/journalUrl";
 import type { JournalMeta } from "@/lib/match";
 import JournalDetail from "@/components/JournalDetail";
+import PageHeader from "@/components/PageHeader";
 
 export async function generateStaticParams() {
   return getPrerenderedJournals().map((j) => ({ id: shortId(j.id) }));
@@ -31,16 +31,7 @@ export default async function JournalPage(props: PageProps<"/journal/[id]">) {
 
   return (
     <main className="mx-auto w-full max-w-2xl px-6 py-14 sm:py-20">
-      <div className="mb-8 flex items-baseline justify-between">
-        <Link href="/" className="font-serif text-lg font-medium">
-          MargaLink
-        </Link>
-        <Link href="/journals" className="text-sm text-ink-soft hover:text-ink">
-          ← Browse journals
-        </Link>
-      </div>
-
-      <h1 className="font-serif text-3xl font-medium sm:text-4xl">{journal.display_name}</h1>
+      <PageHeader width="2xl" links={[{ href: "/journals", label: "← Browse journals" }]} title={journal.display_name} />
       <JournalDetail journal={journal} />
     </main>
   );

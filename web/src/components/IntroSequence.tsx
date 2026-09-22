@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { clamp01 } from "@/lib/easing";
 import ThreeIntroScene from "@/components/ThreeIntroScene";
 
 type IntroSequenceProps = { children: ReactNode };
@@ -37,7 +38,7 @@ export default function IntroSequence({ children }: IntroSequenceProps) {
   }, [alreadySeen]);
 
   const questionOpacity = progress < 0.4 ? 1 : Math.max(0, 1 - (progress - 0.4) / 0.14);
-  const wordmarkOpacity = Math.min(1, Math.max(0, (progress - 0.5) / 0.18));
+  const wordmarkOpacity = clamp01((progress - 0.5) / 0.18);
 
   useEffect(() => {
     document.body.classList.toggle("intro-bridge-pending", !fading && !dismissed);
@@ -87,7 +88,7 @@ export default function IntroSequence({ children }: IntroSequenceProps) {
               <em>Link</em>
             </span>
           </div>
-          <div className="intro-caption" style={{ opacity: Math.min(1, Math.max(0, (progress - 0.63) * 3.2)) }}>
+          <div className="intro-caption" style={{ opacity: clamp01((progress - 0.63) * 3.2) }}>
             A quieter way to publish
           </div>
           <div className="intro-status mono" style={{ opacity: fading ? 0 : 0.8 }}>

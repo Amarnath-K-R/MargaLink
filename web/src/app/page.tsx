@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import { between } from "@/lib/easing";
 import IntroSequence from "@/components/IntroSequence";
 import ThreePaperScene from "@/components/ThreePaperScene";
 import "./_home/home.css";
@@ -45,11 +46,6 @@ function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 }
 
-const reveal = (value: number, start: number, end: number) => {
-  const normalized = Math.min(1, Math.max(0, (value - start) / (end - start)));
-  return normalized * normalized * (3 - 2 * normalized);
-};
-
 // Local 0→1 progress for how far a section has scrolled into view — 0 when its
 // top is at the bottom of the viewport, 1 once it's mostly arrived. Unlike a
 // fraction of total page scroll, this stays correct regardless of how long the
@@ -66,7 +62,7 @@ function localProgress(rect: DOMRect, viewportHeight: number) {
 function stagger(progress: number, index: number, count: number, distance = 24, axis: "x" | "y" = "y") {
   const span = 0.55;
   const stepStart = count > 1 ? (index / (count - 1)) * (1 - span) : 0;
-  const t = reveal(progress, stepStart, Math.min(1, stepStart + span));
+  const t = between(progress, stepStart, Math.min(1, stepStart + span));
   const shift = (1 - t) * distance;
   return { opacity: t, transform: axis === "x" ? `translateX(${shift}px)` : `translateY(${shift}px)` };
 }
@@ -77,7 +73,7 @@ function motionStyle(reducedMotion: boolean, style: CSSProperties): CSSPropertie
   return reducedMotion ? {} : style;
 }
 
-// t is an already-`reveal()`d 0→1 fraction; returns the counted-up integer.
+// t is an already-`between()`d 0→1 fraction; returns the counted-up integer.
 function countUp(target: number, t: number) {
   return Math.round(target * t);
 }
@@ -178,8 +174,8 @@ function Home() {
     };
   }, []);
 
-  const screenDive = useMemo(() => (reducedMotion ? 0 : reveal(progress, 0.12, 0.2)), [progress, reducedMotion]);
-  const featureEntry = useMemo(() => (reducedMotion ? 1 : reveal(progress, 0.13, 0.21)), [progress, reducedMotion]);
+  const screenDive = useMemo(() => (reducedMotion ? 0 : between(progress, 0.12, 0.2)), [progress, reducedMotion]);
+  const featureEntry = useMemo(() => (reducedMotion ? 1 : between(progress, 0.13, 0.21)), [progress, reducedMotion]);
 
   return (
     <div className="margalink-page">
@@ -212,8 +208,8 @@ function Home() {
             <div
               className="hero-brand-landing"
               style={{
-                opacity: 1 - reveal(heroProgress, 0.02, 0.18),
-                transform: `translate(-50%, calc(-50% + ${reveal(heroProgress, 0.02, 0.18) * -22}px))`,
+                opacity: 1 - between(heroProgress, 0.02, 0.18),
+                transform: `translate(-50%, calc(-50% + ${between(heroProgress, 0.02, 0.18) * -22}px))`,
               }}
             >
               <span className="hero-brand-highlight">
@@ -233,8 +229,8 @@ function Home() {
               <div
                 className="hero-word hero-word-keep"
                 style={{
-                  opacity: reveal(heroProgress, 0.04, 0.16),
-                  transform: `translate3d(${(1 - reveal(heroProgress, 0.04, 0.16)) * -36}px, ${(1 - reveal(heroProgress, 0.04, 0.16)) * 28}px, 0) scale(${0.94 + reveal(heroProgress, 0.04, 0.16) * 0.06})`,
+                  opacity: between(heroProgress, 0.04, 0.16),
+                  transform: `translate3d(${(1 - between(heroProgress, 0.04, 0.16)) * -36}px, ${(1 - between(heroProgress, 0.04, 0.16)) * 28}px, 0) scale(${0.94 + between(heroProgress, 0.04, 0.16) * 0.06})`,
                 }}
               >
                 Keep
@@ -242,8 +238,8 @@ function Home() {
               <div
                 className="hero-word hero-word-paper"
                 style={{
-                  opacity: reveal(heroProgress, 0.16, 0.3),
-                  transform: `translate3d(${(1 - reveal(heroProgress, 0.16, 0.3)) * 52}px, ${(1 - reveal(heroProgress, 0.16, 0.3)) * 22}px, 0) rotate(${(1 - reveal(heroProgress, 0.16, 0.3)) * -3}deg)`,
+                  opacity: between(heroProgress, 0.16, 0.3),
+                  transform: `translate3d(${(1 - between(heroProgress, 0.16, 0.3)) * 52}px, ${(1 - between(heroProgress, 0.16, 0.3)) * 22}px, 0) rotate(${(1 - between(heroProgress, 0.16, 0.3)) * -3}deg)`,
                 }}
               >
                 the paper.
@@ -251,8 +247,8 @@ function Home() {
               <div
                 className="hero-word hero-word-lose"
                 style={{
-                  opacity: reveal(heroProgress, 0.48, 0.64),
-                  transform: `translate3d(${(1 - reveal(heroProgress, 0.48, 0.64)) * -20}px, ${(1 - reveal(heroProgress, 0.48, 0.64)) * 20}px, 0)`,
+                  opacity: between(heroProgress, 0.48, 0.64),
+                  transform: `translate3d(${(1 - between(heroProgress, 0.48, 0.64)) * -20}px, ${(1 - between(heroProgress, 0.48, 0.64)) * 20}px, 0)`,
                 }}
               >
                 Lose the
@@ -260,8 +256,8 @@ function Home() {
               <div
                 className="hero-word hero-word-guess"
                 style={{
-                  opacity: reveal(heroProgress, 0.63, 0.79),
-                  transform: `translate3d(${(1 - reveal(heroProgress, 0.63, 0.79)) * 34}px, ${(1 - reveal(heroProgress, 0.63, 0.79)) * 28}px, 0) scale(${0.92 + reveal(heroProgress, 0.63, 0.79) * 0.08})`,
+                  opacity: between(heroProgress, 0.63, 0.79),
+                  transform: `translate3d(${(1 - between(heroProgress, 0.63, 0.79)) * 34}px, ${(1 - between(heroProgress, 0.63, 0.79)) * 28}px, 0) scale(${0.92 + between(heroProgress, 0.63, 0.79) * 0.08})`,
                 }}
               >
                 guesswork.
@@ -269,8 +265,8 @@ function Home() {
               <div
                 className="hero-support"
                 style={{
-                  opacity: reveal(heroProgress, 0.77, 0.9),
-                  transform: `translateY(${(1 - reveal(heroProgress, 0.77, 0.9)) * 22}px)`,
+                  opacity: between(heroProgress, 0.77, 0.9),
+                  transform: `translateY(${(1 - between(heroProgress, 0.77, 0.9)) * 22}px)`,
                 }}
               >
                 <p className="hero-deck">
@@ -321,14 +317,14 @@ function Home() {
             <div
               className="pathways-stamp"
               style={motionStyle(reducedMotion, {
-                opacity: 1 - reveal(progress, 0.235, 0.26),
-                transform: `translateY(${-reveal(progress, 0.235, 0.26) * 30}px) scale(${1 - reveal(progress, 0.235, 0.26) * 0.15})`,
+                opacity: 1 - between(progress, 0.235, 0.26),
+                transform: `translateY(${-between(progress, 0.235, 0.26) * 30}px) scale(${1 - between(progress, 0.235, 0.26) * 0.15})`,
               })}
             >
               <span
                 style={motionStyle(reducedMotion, {
-                  opacity: reveal(progress, 0.14, 0.19),
-                  transform: `scale(${1.18 - reveal(progress, 0.14, 0.19) * 0.18}) rotate(${(1 - reveal(progress, 0.14, 0.19)) * -5}deg)`,
+                  opacity: between(progress, 0.14, 0.19),
+                  transform: `scale(${1.18 - between(progress, 0.14, 0.19) * 0.18}) rotate(${(1 - between(progress, 0.14, 0.19)) * -5}deg)`,
                 })}
               >
                 Before submission.
@@ -336,8 +332,8 @@ function Home() {
               <span
                 className="pathways-stamp-accent"
                 style={motionStyle(reducedMotion, {
-                  opacity: reveal(progress, 0.17, 0.22),
-                  transform: `scale(${1.18 - reveal(progress, 0.17, 0.22) * 0.18}) rotate(${(1 - reveal(progress, 0.17, 0.22)) * 5}deg)`,
+                  opacity: between(progress, 0.17, 0.22),
+                  transform: `scale(${1.18 - between(progress, 0.17, 0.22) * 0.18}) rotate(${(1 - between(progress, 0.17, 0.22)) * 5}deg)`,
                 })}
               >
                 there is a better first move.
@@ -348,8 +344,8 @@ function Home() {
               <div
                 className="story-copy"
                 style={motionStyle(reducedMotion, {
-                  opacity: reveal(progress, 0.25, 0.37),
-                  transform: `translateY(${(1 - reveal(progress, 0.25, 0.37)) * 24}px)`,
+                  opacity: between(progress, 0.25, 0.37),
+                  transform: `translateY(${(1 - between(progress, 0.25, 0.37)) * 24}px)`,
                 })}
               >
                 <StageLabel number="01" label="Start with the paper" />
@@ -361,8 +357,8 @@ function Home() {
               <div
                 className="workflow-list"
                 style={motionStyle(reducedMotion, {
-                  transform: `translateX(${(1 - reveal(progress, 0.25, 0.37)) * 30 - journalsProgress * 36}px)`,
-                  opacity: reveal(progress, 0.25, 0.37) * (1 - journalsProgress * 0.45),
+                  transform: `translateX(${(1 - between(progress, 0.25, 0.37)) * 30 - journalsProgress * 36}px)`,
+                  opacity: between(progress, 0.25, 0.37) * (1 - journalsProgress * 0.45),
                 })}
               >
                 <button className="workflow-row" onClick={() => scrollToId("journals")}>
@@ -400,14 +396,14 @@ function Home() {
             className="journals-count"
             style={motionStyle(reducedMotion, {
               opacity:
-                reveal(journalsProgress, 0.35, 0.5) *
-                (1 - reveal(journalsProgress, 0.55, 0.75)) *
-                (1 - reveal(matchingProgress, 0, 0.5)),
-              transform: `translateY(${-reveal(journalsProgress, 0.55, 0.75) * 14}px) scale(${1 - reveal(journalsProgress, 0.55, 0.75) * 0.1})`,
+                between(journalsProgress, 0.35, 0.5) *
+                (1 - between(journalsProgress, 0.55, 0.75)) *
+                (1 - between(matchingProgress, 0, 0.5)),
+              transform: `translateY(${-between(journalsProgress, 0.55, 0.75) * 14}px) scale(${1 - between(journalsProgress, 0.55, 0.75) * 0.1})`,
             })}
           >
             <span className="journals-count-number">
-              {countUp(4281, reducedMotion ? 1 : reveal(journalsProgress, 0.35, 0.5)).toLocaleString("en-US")}
+              {countUp(4281, reducedMotion ? 1 : between(journalsProgress, 0.35, 0.5)).toLocaleString("en-US")}
             </span>
             <span className="journals-count-caption">Journals indexed, zero uploads</span>
           </div>
@@ -416,8 +412,8 @@ function Home() {
             <div
               className="story-copy"
               style={motionStyle(reducedMotion, {
-                opacity: reveal(journalsProgress, 0.25, 1),
-                transform: `translateX(${(1 - reveal(journalsProgress, 0.25, 1)) * -36}px)`,
+                opacity: between(journalsProgress, 0.25, 1),
+                transform: `translateX(${(1 - between(journalsProgress, 0.25, 1)) * -36}px)`,
               })}
             >
               <StageLabel number="02" label="Find the right journal" />
@@ -433,8 +429,8 @@ function Home() {
             <div
               className="journal-panel"
               style={motionStyle(reducedMotion, {
-                opacity: reveal(journalsProgress, 0.65, 0.95) * (1 - matchingProgress * 0.35),
-                transform: `translateX(${(1 - reveal(journalsProgress, 0.65, 0.95)) * 56}px) scale(${1 - matchingProgress * 0.06})`,
+                opacity: between(journalsProgress, 0.65, 0.95) * (1 - matchingProgress * 0.35),
+                transform: `translateX(${(1 - between(journalsProgress, 0.65, 0.95)) * 56}px) scale(${1 - matchingProgress * 0.06})`,
                 filter: `blur(${matchingProgress * 4}px)`,
               })}
             >
@@ -449,7 +445,7 @@ function Home() {
                     key={card.title}
                     style={motionStyle(
                       reducedMotion,
-                      stagger(reveal(journalsProgress, 0.65, 0.95), index, journalCards.length, 20),
+                      stagger(between(journalsProgress, 0.65, 0.95), index, journalCards.length, 20),
                     )}
                   >
                     <div className="card-number">0{index + 1}</div>
@@ -480,16 +476,16 @@ function Home() {
             className="matching-decode"
             style={motionStyle(reducedMotion, {
               opacity:
-                reveal(matchingProgress, 0.35, 0.5) *
-                (1 - reveal(matchingProgress, 0.55, 0.75)) *
-                (1 - reveal(reviewProgress, 0, 0.5)),
-              transform: `translateY(${-reveal(matchingProgress, 0.55, 0.75) * 14}px)`,
+                between(matchingProgress, 0.35, 0.5) *
+                (1 - between(matchingProgress, 0.55, 0.75)) *
+                (1 - between(reviewProgress, 0, 0.5)),
+              transform: `translateY(${-between(matchingProgress, 0.55, 0.75) * 14}px)`,
             })}
           >
             <span>
               {decodeText(
                 "Everything stays on-device.",
-                reducedMotion ? 1 : reveal(matchingProgress, 0.35, 0.5),
+                reducedMotion ? 1 : between(matchingProgress, 0.35, 0.5),
                 matchingProgress,
               )}
             </span>
@@ -497,19 +493,19 @@ function Home() {
 
           <div className="story-grid">
             <div className="story-copy">
-              <div style={motionStyle(reducedMotion, stagger(reveal(matchingProgress, 0.3, 1), 0, 4, 22))}>
+              <div style={motionStyle(reducedMotion, stagger(between(matchingProgress, 0.3, 1), 0, 4, 22))}>
                 <StageLabel number="03" label="Keep it in the tab" />
               </div>
-              <h2 style={motionStyle(reducedMotion, stagger(reveal(matchingProgress, 0.3, 1), 1, 4, 22))}>
+              <h2 style={motionStyle(reducedMotion, stagger(between(matchingProgress, 0.3, 1), 1, 4, 22))}>
                 Your paper can find its fit without leaving your browser.
               </h2>
-              <p style={motionStyle(reducedMotion, stagger(reveal(matchingProgress, 0.3, 1), 2, 4, 22))}>
+              <p style={motionStyle(reducedMotion, stagger(between(matchingProgress, 0.3, 1), 2, 4, 22))}>
                 Match runs on-device. Structural checks look at word count, sections, and references while a live
                 request log shows exactly what crossed the network boundary.
               </p>
               <div
                 className="privacy-lock"
-                style={motionStyle(reducedMotion, stagger(reveal(matchingProgress, 0.3, 1), 3, 4, 22))}
+                style={motionStyle(reducedMotion, stagger(between(matchingProgress, 0.3, 1), 3, 4, 22))}
               >
                 <LockKeyhole size={17} />
                 <span>
@@ -521,8 +517,8 @@ function Home() {
             <div
               className="network-panel"
               style={motionStyle(reducedMotion, {
-                opacity: reveal(matchingProgress, 0.65, 0.95) * (1 - reviewProgress * 0.35),
-                transform: `scale(${0.88 + reveal(matchingProgress, 0.65, 0.95) * 0.12 - reviewProgress * 0.06}) translateY(${(1 - reveal(matchingProgress, 0.65, 0.95)) * 26}px)`,
+                opacity: between(matchingProgress, 0.65, 0.95) * (1 - reviewProgress * 0.35),
+                transform: `scale(${0.88 + between(matchingProgress, 0.65, 0.95) * 0.12 - reviewProgress * 0.06}) translateY(${(1 - between(matchingProgress, 0.65, 0.95)) * 26}px)`,
                 filter: `blur(${reviewProgress * 4}px)`,
               })}
             >
@@ -542,7 +538,7 @@ function Home() {
                       className={row.noSend ? "request-row no-send" : "request-row"}
                       style={motionStyle(
                         reducedMotion,
-                        stagger(reveal(matchingProgress, 0.65, 0.95), index, requestRows.length, 16),
+                        stagger(between(matchingProgress, 0.65, 0.95), index, requestRows.length, 16),
                       )}
                     >
                       <Icon size={14} />
@@ -572,19 +568,19 @@ function Home() {
             className="review-sweep"
             style={motionStyle(reducedMotion, {
               opacity:
-                reveal(reviewProgress, 0.35, 0.5) *
-                (1 - reveal(reviewProgress, 0.6, 0.82)) *
-                (1 - reveal(privacyProgress, 0, 0.5)),
+                between(reviewProgress, 0.35, 0.5) *
+                (1 - between(reviewProgress, 0.6, 0.82)) *
+                (1 - between(privacyProgress, 0, 0.5)),
             })}
           >
             <span
               className="review-sweep-bar"
-              style={motionStyle(reducedMotion, { transform: `scaleX(${reveal(reviewProgress, 0.35, 0.5)})` })}
+              style={motionStyle(reducedMotion, { transform: `scaleX(${between(reviewProgress, 0.35, 0.5)})` })}
             />
             <span
               className="review-sweep-headline"
               style={motionStyle(reducedMotion, {
-                clipPath: `inset(0 ${(1 - reveal(reviewProgress, 0.35, 0.5)) * 100}% 0 0)`,
+                clipPath: `inset(0 ${(1 - between(reviewProgress, 0.35, 0.5)) * 100}% 0 0)`,
               })}
             >
               Nothing leaves without asking.
@@ -593,19 +589,19 @@ function Home() {
 
           <div className="story-grid reverse-mobile">
             <div className="story-copy">
-              <div style={motionStyle(reducedMotion, stagger(reveal(reviewProgress, 0.3, 1), 0, 4, 22))}>
+              <div style={motionStyle(reducedMotion, stagger(between(reviewProgress, 0.3, 1), 0, 4, 22))}>
                 <StageLabel number="04" label="Review by consent" />
               </div>
-              <h2 style={motionStyle(reducedMotion, stagger(reveal(reviewProgress, 0.3, 1), 1, 4, 22))}>
+              <h2 style={motionStyle(reducedMotion, stagger(between(reviewProgress, 0.3, 1), 1, 4, 22))}>
                 When text needs to leave, the boundary is visible.
               </h2>
-              <p style={motionStyle(reducedMotion, stagger(reveal(reviewProgress, 0.3, 1), 2, 4, 22))}>
+              <p style={motionStyle(reducedMotion, stagger(between(reviewProgress, 0.3, 1), 2, 4, 22))}>
                 Choose a shortlist, pick the depth, and decide every time. The one step that sends paper text away
                 from the device is never hidden in the fine print.
               </p>
               <div
                 className="away-note"
-                style={motionStyle(reducedMotion, stagger(reveal(reviewProgress, 0.3, 1), 3, 4, 22))}
+                style={motionStyle(reducedMotion, stagger(between(reviewProgress, 0.3, 1), 3, 4, 22))}
               >
                 <span className="away-dot" />
                 <span>
@@ -617,15 +613,15 @@ function Home() {
             <div
               className="review-panel"
               style={motionStyle(reducedMotion, {
-                opacity: reveal(reviewProgress, 0.72, 1) * (1 - privacyProgress * 0.35),
-                transform: `scale(${0.9 + reveal(reviewProgress, 0.72, 1) * 0.1 - privacyProgress * 0.05}) translateY(${(1 - reveal(reviewProgress, 0.72, 1)) * 24}px)`,
+                opacity: between(reviewProgress, 0.72, 1) * (1 - privacyProgress * 0.35),
+                transform: `scale(${0.9 + between(reviewProgress, 0.72, 1) * 0.1 - privacyProgress * 0.05}) translateY(${(1 - between(reviewProgress, 0.72, 1)) * 24}px)`,
                 filter: `blur(${privacyProgress * 4}px)`,
               })}
             >
               <div
                 className="review-consent"
                 style={motionStyle(reducedMotion, {
-                  clipPath: `inset(0% 0% ${(1 - reveal(reviewProgress, 0.72, 1)) * 100}% 0%)`,
+                  clipPath: `inset(0% 0% ${(1 - between(reviewProgress, 0.72, 1)) * 100}% 0%)`,
                 })}
               >
                 <span className="mono">CONSENT GATE</span>
@@ -639,7 +635,7 @@ function Home() {
                     className={tier.featured ? "tier featured" : "tier"}
                     style={motionStyle(
                       reducedMotion,
-                      stagger(reveal(reviewProgress, 0.72, 1), index, reviewTiersData.length, 18),
+                      stagger(between(reviewProgress, 0.72, 1), index, reviewTiersData.length, 18),
                     )}
                   >
                     <span className="tier-radio" />

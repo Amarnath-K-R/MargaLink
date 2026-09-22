@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { extractFromFile } from "@/lib/extract";
 import { JOURNAL_RULES, findJournalRules } from "@/lib/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
 import { requestReview, reviewsRemaining } from "@/lib/review";
 import type { ReviewResult, ReviewTier } from "@/lib/reviewTypes";
+import { errorMessage } from "@/lib/errorMessage";
+import ErrorText from "@/components/ErrorText";
+import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
+import PageHeader from "@/components/PageHeader";
 import PaperDropzone from "@/components/PaperDropzone";
 import ReviewConsent from "@/components/ReviewConsent";
 import ReviewResultPanel from "@/components/ReviewResultPanel";
 import RulesCheckPanel from "@/components/RulesCheckPanel";
-
-type NetworkCall = { method: string; url: string; hadBody: boolean };
 
 const TIER_OPTIONS: { value: ReviewTier; label: string; description: string }[] = [
   { value: "quick", label: "Quick", description: "The 2-3 most significant issues, fast." },
@@ -36,23 +38,7 @@ export default function ReviewPage() {
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [tier, setTier] = useState<ReviewTier>("standard");
-  const [calls, setCalls] = useState<NetworkCall[]>([]);
-
-  // Same transparency mechanism as /match, for the page's whole lifetime —
-  // this page's entire purpose is one request that leaves the device, so
-  // showing it here matters at least as much as it does there.
-  useEffect(() => {
-    const originalFetch = window.fetch;
-    window.fetch = async (...args: Parameters<typeof fetch>) => {
-      const [input, init] = args;
-      const url = typeof input === "string" ? input : input.toString();
-      setCalls((prev) => [...prev, { method: init?.method ?? "GET", url, hadBody: Boolean(init?.body) }]);
-      return originalFetch(...args);
-    };
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, []);
+  const { calls } = useNetworkTrace();
 
   const onFile = useCallback(
     async (file: File) => {
@@ -76,7 +62,7 @@ export default function ReviewPage() {
         setPaperText(fullText);
         setFileName(file.name);
       } catch (err) {
-        setUploadError(err instanceof Error ? err.message : String(err));
+        setUploadError(errorMessage(err));
       } finally {
         setBusy(false);
       }
@@ -111,7 +97,7 @@ export default function ReviewPage() {
       // failure, e.g. an Anthropic error or a stop_reason) rather than a
       // generic message — this is the one flow with a real external
       // dependency that can fail in ways worth actually seeing.
-      setReviewError(err instanceof Error ? err.message : "Review failed — try again in a moment.");
+      setReviewError(errorMessage(err, "Review failed — try again in a moment."));
     } finally {
       setReviewLoading(false);
     }
@@ -121,37 +107,25 @@ export default function ReviewPage() {
 
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-14 sm:py-20">
-      <header className="mb-12">
-        <div className="mb-8 flex items-baseline justify-between">
-          <Link href="/" className="font-serif text-lg font-medium">
-            MargaLink
-          </Link>
-          <nav className="flex gap-5 text-sm text-ink-soft">
-            <Link href="/" className="hover:text-ink">
-              ← Back
-            </Link>
-            <Link href="/privacy" className="hover:text-ink">
-              How privacy works
-            </Link>
-          </nav>
-        </div>
-        <h1 className="font-serif text-4xl font-medium leading-tight sm:text-5xl">
-          Get it reviewed.
-        </h1>
-        <p className="mt-3 max-w-md text-lg text-ink-soft">
-          Attach a paper, choose a journal, and get a structural check plus an AI review —
-          checked against that journal&apos;s actual guidelines.
-        </p>
-      </header>
+      <PageHeader
+        width="4xl"
+        links={[
+          { href: "/", label: "← Back" },
+          { href: "/privacy", label: "How privacy works" },
+        ]}
+        title="Get it reviewed."
+        subtitle={
+          <p className="mt-3 max-w-md text-lg text-ink-soft">
+            Attach a paper, choose a journal, and get a structural check plus an AI review —
+            checked against that journal&apos;s actual guidelines.
+          </p>
+        }
+      />
 
       <section>
         <p className="mb-3 text-sm font-medium text-accent">1. Attach your paper</p>
         <PaperDropzone busy={busy} onFile={(file) => void onFile(file)} />
-        {uploadError && (
-          <p role="alert" className="mt-3 text-sm text-away">
-            {uploadError}
-          </p>
-        )}
+        {uploadError && <ErrorText>{uploadError}</ErrorText>}
         {fileName && !uploadError && <p className="mt-3 text-sm text-ink-soft">Loaded {fileName}.</p>}
       </section>
 
@@ -246,32 +220,16 @@ export default function ReviewPage() {
               onCancel={() => setConsentOpen(false)}
             />
           )}
-          {reviewError && (
-            <p role="alert" className="mt-3 text-sm text-away">
-              {reviewError}
-            </p>
-          )}
+          {reviewError && <ErrorText>{reviewError}</ErrorText>}
           {reviewResult && <ReviewResultPanel result={reviewResult} />}
         </section>
       )}
 
-      {calls.length > 0 && (
-        <section className="mt-12 rounded-sm border border-line bg-paper-alt p-4 text-sm">
-          <p className="mb-2 font-medium">Network requests made during this run</p>
-          <ul className="space-y-1 font-mono text-xs text-ink-soft">
-            {calls.map((c, i) => (
-              <li key={i}>
-                {c.method} {c.url} — {c.hadBody ? "had a body" : "no body sent"}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-ink-soft">
-            {calls.some((c) => c.hadBody)
-              ? "A request with a body only happens after you confirm the review consent notice above."
-              : "No request has carried a body yet."}
-          </p>
-        </section>
-      )}
+      <NetworkTracePanel calls={calls} className="mt-12 rounded-sm border border-line bg-paper-alt p-4 text-sm">
+        {calls.some((c) => c.hadBody)
+          ? "A request with a body only happens after you confirm the review consent notice above."
+          : "No request has carried a body yet."}
+      </NetworkTracePanel>
 
       <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
         <p>

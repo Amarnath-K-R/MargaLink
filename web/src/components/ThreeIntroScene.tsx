@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import type * as THREE from "three";
+import { clamp01, smooth } from "@/lib/easing";
+import { forEachMaterial } from "@/components/three/sceneHelpers";
 
 type ThreeIntroSceneProps = { onProgress?: (value: number) => void };
 
@@ -144,8 +146,8 @@ export default function ThreeIntroScene({ onProgress }: ThreeIntroSceneProps) {
       const render = (time: number) => {
         const elapsed = time - started;
         const progress = Math.min(1, elapsed / 8000);
-        const ease = progress * progress * (3 - 2 * progress);
-        const handoff = Math.min(1, Math.max(0, (progress - 0.78) / 0.22));
+        const ease = smooth(progress);
+        const handoff = clamp01((progress - 0.78) / 0.22);
         onProgressRef.current?.(progress);
 
         heroPaper.position.y = Math.sin(elapsed * 0.0012) * 0.08;
@@ -164,14 +166,14 @@ export default function ThreeIntroScene({ onProgress }: ThreeIntroSceneProps) {
         });
         world.rotation.y = Math.sin(elapsed * 0.00032) * 0.08;
         world.position.y = ease * 0.15;
-        world.traverse((object) => {
-          const mesh = object as THREE.Mesh;
-          if (!mesh.material) return;
-          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          materials.forEach((material) => {
-            material.transparent = true;
-            material.opacity *= 1 - handoff;
-          });
+        // Unlike ThreePaperScene's setOpacity (an absolute value reassigned
+        // every frame), this multiplies the *current* opacity down each
+        // frame — a one-shot decay toward zero as the intro hands off,
+        // not a scroll-position-driven value. Different policy, same
+        // traversal shape (forEachMaterial).
+        forEachMaterial(world, (material) => {
+          material.transparent = true;
+          material.opacity *= 1 - handoff;
         });
         renderer.render(scene, camera);
         raf = requestAnimationFrame(render);

@@ -11,18 +11,20 @@ import {
   type MatchResult,
   type JournalFilters,
 } from "@/lib/match";
-import { journalHref, isPrerendered } from "@/lib/journalUrl";
 import { checkFormat, type FormatCheckResult } from "@/lib/formatCheck";
 import { findJournalRules } from "@/lib/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
+import { errorMessage } from "@/lib/errorMessage";
+import ErrorText from "@/components/ErrorText";
 import JournalDetail from "@/components/JournalDetail";
+import { JournalResultTitle, JournalResultChips } from "@/components/JournalResultRow";
+import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
+import PageHeader from "@/components/PageHeader";
 import PaperDropzone from "@/components/PaperDropzone";
 import RulesCheckPanel from "@/components/RulesCheckPanel";
 import CheckRow from "@/components/CheckRow";
 
 type Stage = "idle" | "reading" | "embedding" | "matching" | "done" | "error";
-
-type NetworkCall = { method: string; url: string; hadBody: boolean };
 
 const FEE_PRESETS = [
   { label: "Any fee", value: undefined },
@@ -42,7 +44,7 @@ const SPEED_PRESETS = [
 export default function MatchPage() {
   const [stage, setStage] = useState<Stage>("idle");
   const [trace, setTrace] = useState<string[]>([]);
-  const [calls, setCalls] = useState<NetworkCall[]>([]);
+  const { calls, resetCalls } = useNetworkTrace();
   const [results, setResults] = useState<MatchResult[] | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [queryVector, setQueryVector] = useState<Float32Array | null>(null);
@@ -63,22 +65,6 @@ export default function MatchPage() {
 
   const log = useCallback((line: string) => setTrace((t) => [...t, line]), []);
 
-  // Instrument fetch for the page's whole lifetime, not just one matching
-  // run — real proof, not a claim, that nothing leaves this tab unlogged,
-  // no matter when a request happens to fire.
-  useEffect(() => {
-    const originalFetch = window.fetch;
-    window.fetch = async (...args: Parameters<typeof fetch>) => {
-      const [input, init] = args;
-      const url = typeof input === "string" ? input : input.toString();
-      setCalls((prev) => [...prev, { method: init?.method ?? "GET", url, hadBody: Boolean(init?.body) }]);
-      return originalFetch(...args);
-    };
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, []);
-
   useEffect(() => {
     loadManifest()
       .then((manifest) => setJournalCount(manifest.journal_count))
@@ -91,7 +77,7 @@ export default function MatchPage() {
       setTrace([]);
       setResults(null);
       setErrorMsg(null);
-      setCalls([]);
+      resetCalls();
       setQueryVector(null);
       setFilters({});
       setFormatResult(null);
@@ -127,11 +113,11 @@ export default function MatchPage() {
         if (mySeq === matchSeq.current) setResults(matches);
         setStage("done");
       } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : String(err));
+        setErrorMsg(errorMessage(err));
         setStage("error");
       }
     },
-    [log]
+    [log, resetCalls]
   );
 
   const busy = stage === "reading" || stage === "embedding" || stage === "matching";
@@ -149,7 +135,7 @@ export default function MatchPage() {
         })
         .catch((err) => {
           if (mySeq !== matchSeq.current) return;
-          setErrorMsg(err instanceof Error ? err.message : String(err));
+          setErrorMsg(errorMessage(err));
           setStage("error");
         });
     },
@@ -175,27 +161,15 @@ export default function MatchPage() {
 
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-14 sm:py-20">
-      <header className="mb-12">
-        <div className="mb-8 flex items-baseline justify-between">
-          <Link href="/" className="font-serif text-lg font-medium">
-            MargaLink
-          </Link>
-          <nav className="flex gap-5 text-sm text-ink-soft">
-            <Link href="/" className="hover:text-ink">
-              ← Back
-            </Link>
-            <Link href="/privacy" className="hover:text-ink">
-              How privacy works
-            </Link>
-          </nav>
-        </div>
-        <h1 className="font-serif text-4xl font-medium leading-tight sm:text-5xl">
-          Find the right journal.
-        </h1>
-        <p className="mt-3 max-w-md text-lg text-ink-soft">
-          Nothing about your paper leaves this tab.
-        </p>
-      </header>
+      <PageHeader
+        width="4xl"
+        links={[
+          { href: "/", label: "← Back" },
+          { href: "/privacy", label: "How privacy works" },
+        ]}
+        title="Find the right journal."
+        subtitle={<p className="mt-3 max-w-md text-lg text-ink-soft">Nothing about your paper leaves this tab.</p>}
+      />
 
       <div className="grid gap-8 sm:grid-cols-[1fr_1.1fr]">
         <PaperDropzone busy={busy} onFile={(file) => void process(file)} />
@@ -214,29 +188,15 @@ export default function MatchPage() {
             ))}
             {busy && <li className="text-ink-soft">Working…</li>}
           </ol>
-          {stage === "error" && (
-            <p className="mt-3 text-sm text-away" role="alert">{errorMsg}</p>
-          )}
+          {stage === "error" && <ErrorText>{errorMsg}</ErrorText>}
         </div>
       </div>
 
-      {calls.length > 0 && (
-        <div className="mt-10 rounded-sm border border-line bg-paper-alt p-4 text-sm">
-          <p className="mb-2 font-medium">Network requests made during this run</p>
-          <ul className="space-y-1 font-mono text-xs text-ink-soft">
-            {calls.map((c, i) => (
-              <li key={i}>
-                {c.method} {c.url} — {c.hadBody ? "had a body" : "no body sent"}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-ink-soft">
-            {calls.filter((c) => c.hadBody).length === 0
-              ? "None of these carried your paper's text — they fetch the public model and index files."
-              : "Warning: a request above carried a body — this should never happen for matching."}
-          </p>
-        </div>
-      )}
+      <NetworkTracePanel calls={calls}>
+        {calls.filter((c) => c.hadBody).length === 0
+          ? "None of these carried your paper's text — they fetch the public model and index files."
+          : "Warning: a request above carried a body — this should never happen for matching."}
+      </NetworkTracePanel>
 
       {queryVector && (
         <section className="mt-12">
@@ -325,7 +285,6 @@ export default function MatchPage() {
           {results && results.length > 0 ? (
             <ol data-testid="results">
               {results.map((r, i) => {
-                const prerendered = isPrerendered(r);
                 const expanded = expandedResultId === r.id;
                 const journalRules = findJournalRules(r.id);
                 const rulesOpen = openRulesCheckId === r.id;
@@ -335,42 +294,17 @@ export default function MatchPage() {
                     <div className="flex items-baseline justify-between gap-4">
                       <span className="flex gap-3">
                         <span className="text-ink-soft">{i + 1}</span>
-                        {prerendered ? (
-                          <Link href={journalHref(r.id)} className="hover:underline">
-                            {r.display_name}
-                          </Link>
-                        ) : (
-                          // No dedicated static page (outside the top ~2,000 by
-                          // output volume) — expand details inline instead.
-                          <button
-                            type="button"
-                            onClick={() => setExpandedResultId(expanded ? null : r.id)}
-                            className="text-left hover:underline"
-                            aria-expanded={expanded}
-                          >
-                            {r.display_name}
-                          </button>
-                        )}
+                        <JournalResultTitle
+                          journal={r}
+                          expanded={expanded}
+                          onToggleExpand={() => setExpandedResultId(expanded ? null : r.id)}
+                        />
                       </span>
                       <span className="font-mono text-xs text-ink-soft">
                         {(r.score / 127 / 127).toFixed(3)}
                       </span>
                     </div>
-                    {(r.field ||
-                      r.is_in_doaj ||
-                      r.medline_indexed ||
-                      r.apc_usd != null ||
-                      r.publication_time_weeks != null) && (
-                      <div className="mt-1 flex flex-wrap gap-3 pl-6 text-xs text-ink-soft">
-                        {r.field && <span>{r.field}</span>}
-                        {r.is_in_doaj && <span className="text-accent">Open access (DOAJ)</span>}
-                        {r.medline_indexed && <span className="text-accent">MEDLINE</span>}
-                        {r.apc_usd != null && <span>${r.apc_usd.toLocaleString()} fee</span>}
-                        {r.publication_time_weeks != null && (
-                          <span>~{r.publication_time_weeks}wk to publish</span>
-                        )}
-                      </div>
-                    )}
+                    <JournalResultChips journal={r} indent />
                     {expanded && (
                       <div className="mt-3 rounded-sm border border-line bg-paper-alt p-4 pl-6">
                         <JournalDetail journal={r} />

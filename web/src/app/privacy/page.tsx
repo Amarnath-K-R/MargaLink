@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import PageHeader from "@/components/PageHeader";
 
 export const metadata: Metadata = {
   title: "How privacy works — MargaLink",
@@ -9,21 +10,12 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <main className="mx-auto w-full max-w-2xl px-6 py-14 sm:py-20">
-      <div className="mb-8 flex items-baseline justify-between">
-        <Link href="/" className="font-serif text-lg font-medium">
-          MargaLink
-        </Link>
-        <Link href="/match" className="text-sm text-ink-soft hover:text-ink">
-          ← Back to matching
-        </Link>
-      </div>
-
-      <h1 className="font-serif text-3xl font-medium sm:text-4xl">
-        How privacy works
-      </h1>
-      <p className="mt-3 text-lg text-ink-soft">
-        Three rules, and one diagram of what actually happens.
-      </p>
+      <PageHeader
+        width="2xl"
+        links={[{ href: "/match", label: "← Back to matching" }]}
+        title="How privacy works"
+        subtitle={<p className="mt-3 text-lg text-ink-soft">Three rules, and one diagram of what actually happens.</p>}
+      />
 
       <ol className="mt-10 space-y-4">
         <li className="border-t border-line pt-4">
