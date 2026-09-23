@@ -145,7 +145,8 @@ export default function ReviewPage() {
           <p className="mt-1 text-sm text-ink-soft">
             An LLM review from Claude — checking for inconsistencies, statistical reporting
             gaps, and journal fit. The one feature on MargaLink that sends your paper&apos;s
-            text off this device.
+            text off this device (the figure generator is the other opt-in exception, and it
+            only ever sends a spreadsheet&apos;s schema, never its values).
           </p>
 
           <TierPicker tier={tier} onSelect={setTier} />
@@ -187,7 +188,7 @@ export default function ReviewPage() {
           <Link href="/privacy" className="text-accent hover:underline">
             How privacy works
           </Link>{" "}
-          — including the one exception this page relies on.
+          — including the exception this page relies on.
         </p>
       </footer>
     </main>

@@ -1,5 +1,7 @@
-// Client side of the LLM review feature — the one feature in the app that
-// sends paper text off the device (see CLAUDE.md's privacy rules). Callers
+// Client side of the LLM review feature — one of two features in the app
+// that send something off the device (see CLAUDE.md's privacy rules), and
+// the one that sends actual paper text; the other, figure.ts, sends only a
+// spreadsheet's schema, never its values. Callers
 // MUST get explicit consent (see components/ReviewConsent.tsx) before
 // calling requestReview(); this module doesn't enforce that itself, it just
 // does the sending, limiting, and response validation once consent exists.

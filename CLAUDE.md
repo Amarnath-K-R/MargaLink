@@ -19,14 +19,30 @@ instruments `fetch()` for the whole page lifetime (not just one run) and
 shows every request made, so this is checkable on the page itself, not just
 asserted here.
 
-**The one disclosed exception (rule 3):** the LLM pre-submission review
-(`functions/api/review.ts`) sends paper text to Anthropic's Claude API —
-opt-in only, behind an explicit consent step (`ReviewConsent.tsx`) that
-names exactly what happens before anything is sent, never a default-on
-path. This is the project's only server-side code and the only feature
-where "never leaves your device" doesn't hold. Every other feature keeps
-rule 1 absolutely; this one is rule 3's carve-out, not a quiet exception to
-rule 1.
+**The two disclosed exceptions (rule 3):** two features send something to
+Anthropic's Claude API. Both are opt-in, both sit behind an explicit
+consent step that names exactly what happens before anything is sent, and
+neither has a default-on path.
+
+1. **The LLM pre-submission review** (`functions/api/review.ts`, consent
+   in `ReviewConsent.tsx`) sends the paper's text. This is the only
+   feature where "never leaves your device" doesn't hold for a paper's
+   content.
+2. **The figure generator** (`functions/api/figure.ts`, consent in
+   `FigureConsent.tsx`) sends a *description* of a spreadsheet — column
+   names, inferred types, row count, the chart type chosen, and an
+   optional style note — and asks Claude for Python plotting code. It
+   never sends a single cell value. `src/lib/figureSchema.ts` is the only
+   thing permitted to build that payload, and `figureSchema.selfcheck.ts`
+   proves no value can ride along; the Function re-validates server-side
+   and rejects unknown keys, so a tampered client can't widen it either.
+   The returned code runs locally in a Web Worker (Pyodide); the data
+   never leaves the device.
+
+These two Pages Functions are the project's only server-side code, and
+they share one credential (`ANTHROPIC_API_KEY`) — no new environment
+variable. Every other feature keeps rule 1 absolutely; these two are rule
+3's carve-outs, not quiet exceptions to rule 1.
 
 ## Layout
 
@@ -34,9 +50,10 @@ rule 1.
   journal/paper data, builds the journal index. Never runs in production;
   its output (`web/public/index/*`) is static files the browser fetches.
 - `web/` — Next.js app, static export (`output: "export"` in
-  `next.config.ts`) — no backend, **except** `web/functions/api/review.ts`
-  (a Cloudflare Pages Function, holding the Anthropic API key server-side
-  since the browser must never see it — see the disclosed exception above).
+  `next.config.ts`) — no backend, **except** the two Cloudflare Pages
+  Functions in `web/functions/api/` (`review.ts`, `figure.ts`), holding the
+  Anthropic API key server-side since the browser must never see it — see
+  the disclosed exceptions above.
 
 ## Frozen decisions (Phase 0)
 
@@ -72,7 +89,7 @@ Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
 | Variable | Where | Purpose |
 |---|---|---|
 | `OPENALEX_API_KEY` | `pipeline/.env` | Raises OpenAlex's rate limit; the fetchers work without it, just slower. |
-| `ANTHROPIC_API_KEY` | `web/.dev.vars` locally, the Cloudflare Pages dashboard in prod | The AI review's only credential — server-side only, `functions/api/review.ts`. |
+| `ANTHROPIC_API_KEY` | `web/.dev.vars` locally, the Cloudflare Pages dashboard in prod | The credential for both server-side features — `functions/api/review.ts` and `functions/api/figure.ts`. Server-side only. |
 | `NEXT_PUBLIC_SITE_URL` | `web/`, build-time | Absolute URL for `sitemap.ts`/`robots.ts`/OG tags. Unset in dev; no domain registered yet (see `journal-finder-plan.md` §13). |
 
 ## Verification

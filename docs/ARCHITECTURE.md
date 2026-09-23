@@ -24,9 +24,10 @@ This isn't an optimization on top of a server design — it's the direct
 consequence of the project's privacy rules (`CLAUDE.md`). A server that
 ranks journals necessarily sees the paper's embedding at minimum; keeping
 rule 1 (the paper never leaves the device) absolute meant removing the
-server from that path entirely, not trusting it to behave. The one place
-where text *does* leave the device (the AI review) is deliberately built
-as the exception, not the default — see below.
+server from that path entirely, not trusting it to behave. The two places
+where something *does* leave the device (the AI review, the figure
+generator) are deliberately built as disclosed exceptions, not the
+default — see below.
 
 **Current numbers** (`web/public/index/manifest.json`): 18,125 journals,
 384-dimension embeddings (`thenlper/gte-small` server-side /
@@ -65,11 +66,12 @@ instead of a local one for exactly this reason (see its comment); the
 `rm -f` in the deploy script is a defensive second layer in case Next's
 bundler still copies a local copy into the export regardless.
 
-The one exception to "no backend": `web/functions/api/review.ts`, a
-single Cloudflare Pages Function. It exists only because the AI review
-needs somewhere to hold the Anthropic API key that the browser must never
-see — see `CLAUDE.md`'s "one disclosed exception." Everything else in
-`web/` is static files served from Cloudflare's edge, no server involved.
+The exceptions to "no backend": two Cloudflare Pages Functions,
+`web/functions/api/review.ts` and `web/functions/api/figure.ts`. Both
+exist only because their feature needs somewhere to hold the Anthropic
+API key that the browser must never see — see `CLAUDE.md`'s "two
+disclosed exceptions." Everything else in `web/` is static files served
+from Cloudflare's edge, no server involved.
 
 ### The AI review: what it defends against, and why
 
@@ -118,6 +120,71 @@ project.
 back to this section rather than repeating it — see there for where each
 of these defenses actually lives in code.)
 
+### The figure generator: what leaves the device, and what doesn't
+
+The figure generator (`/figures`) has the same shape as the AI review —
+an opt-in, consent-gated call to Claude — but a narrower privacy problem
+to solve. A researcher's raw spreadsheet is individual-level data, more
+sensitive than a manuscript draft, so "upload your data, we compute
+stats server-side" was never on the table. The design instead splits
+**code generation** from **code execution**: Claude only ever sees a
+*description* of the data (column names, inferred dtypes, row count, the
+chosen chart type, an optional style note) and generates Python plotting
+code from that description; the code then runs against the real data
+locally, in a Web Worker running Pyodide (Python compiled to WASM). The
+two round trips in the whole feature are the schema-only POST to
+`/api/figure` and the worker's own bodyless GETs to jsDelivr for
+Pyodide's runtime and wheels — a cell value appears in neither.
+
+`src/lib/figureSchema.ts` is this feature's `reviewGrounding.ts`: the one
+piece of previously-untested logic sitting directly behind a network
+call, and the one file this feature's safety actually rests on.
+`buildFigurePayload()` is the *only* function permitted to construct the
+outbound payload — it always builds a fresh object literal, never spreads
+a `Dataset` — and `figureSchema.selfcheck.ts` proves the payload is safe
+rather than asserting it: it plants sentinel values in a fixture dataset,
+confirms they never appear anywhere in the built payload, and asserts the
+payload's key set exactly matches five known keys. That last assertion is
+the one that actually protects the future — it fails the moment someone
+adds a field like `sampleRows` "to help Claude produce better code,"
+turning a quiet leak into a deliberate, reviewed change. The Function
+re-validates the same shape server-side and rejects unknown keys, so a
+tampered client can't widen the payload either.
+
+Three things are deliberately never sent, each for its own reason:
+
+- **Cell values** — the point of the whole design.
+- **Category levels** — a column's distinct values (a site name, a
+  patient ID, a group label) are themselves data, not schema, even
+  though they look like metadata.
+- **Python tracebacks** — a traceback from the generated code running
+  against real data can quote a cell value verbatim in its error message
+  (`KeyError: 'ZZQQ-SENTINEL-0042'`, for instance). This is why
+  auto-repair-from-error (sending a failure back to Claude to fix its own
+  code) isn't built: it isn't just unbuilt, it's a privacy problem this
+  design specifically avoids creating. Errors are shown to the
+  researcher, who can edit their note and regenerate — they never leave
+  the device.
+
+The generated code is always shown, not hidden behind a "trust us" figure
+— the same transparency the payload preview on the page already gives
+the request.
+
+The ~28-30MB Pyodide download (wasm runtime, stdlib, pandas/matplotlib
+wheels) sounds large in isolation, but it's the same order of magnitude
+as the embedding model `/match` already downloads for local matching, and
+it's cached by the browser for a year afterward — this isn't a new class
+of tradeoff for the project, just the second time it's made.
+
+One honest caveat: `useNetworkTrace()` patches `fetch` on the main
+thread, so `/match` and `/review`'s "every request this page makes" claim
+is literally complete. The figure worker's CDN fetches happen inside the
+worker, off the main thread, so they don't appear in that trace panel.
+The privacy property still holds — those fetches are bodyless GETs for
+public, versioned assets, never anything from the dataset — but the trace
+panel's completeness guarantee doesn't extend there, and `/figures`
+doesn't claim it does.
+
 ## The invariant that keeps `src/lib/` and `functions/` from duplicating types
 
 `functions/api/review.ts` already imports directly from `src/lib/`
@@ -164,6 +231,10 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `review/_components/JournalPicker.tsx` | The hand-verified-journal grid. |
 | `review/_components/TierPicker.tsx` | The quick/standard/thorough grid; owns `TIER_OPTIONS`. |
 | `review/layout.tsx` | Route metadata shim. |
+| `figures/page.tsx` | Orchestrates upload → chart/role spec → consent → code-gen → local Pyodide render. |
+| `figures/_components/FigureSpecForm.tsx` | Chart-type grid + dtype-filtered role selects; owns `CHART_OPTIONS` and the live `[data-testid="figure-payload"]` preview. |
+| `figures/_components/FigurePanel.tsx` | The rendered figure, PNG/SVG/PDF download links, the always-visible generated-code panel, Regenerate. |
+| `figures/layout.tsx` | Route metadata shim. |
 
 **`src/app/_home/`** — homepage-only, a Next "private folder" (excluded
 from routing; nothing outside `app/page.tsx` imports from it).
@@ -175,7 +246,7 @@ from routing; nothing outside `app/page.tsx` imports from it).
 | `motion.ts` | `localProgress`, `stagger`, `motionStyle`, `countUp`, `decodeText` — the homepage's own animation-math kit (builds on `lib/easing.ts`'s `between`). |
 | `demoData.ts` | Illustrative marketing content (`journalCards`, `requestRows`, `reviewTiersData`, `privacyMetrics`) — never real data. |
 | `atoms.tsx` | `StageLabel`, `PrivacyPill`, `scrollToId` — small pieces shared by 3+ sections. |
-| `SiteHeader.tsx`, `HeroSection.tsx`, `PathwaysSection.tsx`, `JournalsSection.tsx`, `MatchingSection.tsx`, `ReviewSection.tsx`, `PrivacySection.tsx`, `FinalSection.tsx` | One component per homepage section, each taking only the progress values it uses. `JournalsSection.tsx` fetches the real journal count via `loadManifest()` rather than a hardcoded number. |
+| `SiteHeader.tsx`, `HeroSection.tsx`, `PathwaysSection.tsx`, `JournalsSection.tsx`, `MatchingSection.tsx`, `ReviewSection.tsx`, `PrivacySection.tsx`, `FinalSection.tsx` | One component per homepage section, each taking only the progress values it uses. `JournalsSection.tsx` fetches the real journal count via `loadManifest()` rather than a hardcoded number. `PathwaysSection.tsx`'s workflow list has a 4th row linking to `/figures` (a real `<Link>`, unlike the other three rows' `scrollToId` buttons) — a full scroll-narrative section for figures, like the other three tools get, is explicitly deferred. |
 
 **`src/components/`** — shared across routes.
 
@@ -187,7 +258,7 @@ from routing; nothing outside `app/page.tsx` imports from it).
 | `ErrorText.tsx` | The one `role="alert"` error paragraph. |
 | `IntroSequence.tsx` | The first-visit overlay: timing, dismissal, `sessionStorage` memory. |
 | `ThreeIntroScene.tsx`, `ThreePaperScene.tsx` | Thin shells over `components/three/` — see below. |
-| `JournalDetail.tsx`, `PaperDropzone.tsx`, `RulesCheckPanel.tsx`, `ReviewConsent.tsx`, `ReviewResultPanel.tsx`, `CheckRow.tsx` | Single-purpose presentational pieces. |
+| `JournalDetail.tsx`, `PaperDropzone.tsx`, `RulesCheckPanel.tsx`, `ReviewConsent.tsx`, `ReviewResultPanel.tsx`, `CheckRow.tsx`, `FigureConsent.tsx` | Single-purpose presentational pieces. `PaperDropzone.tsx` takes optional `accept`/`title`/`hint`/`ariaLabel` props (defaulting to its original PDF/DOCX copy) so `/figures` reuses it for CSV/XLSX instead of a second dropzone component. `FigureConsent.tsx` is a deliberately separate sibling of `ReviewConsent.tsx`, not a shared generalization — see `CLAUDE.md`'s exceptions paragraph for why each consent notice stays independently readable. |
 
 **`src/components/three/`** — the one domain subfolder in `components/`
 (see "Design decisions" in the reorg plan for why: 5 files sharing one
@@ -223,6 +294,11 @@ real technical concern, not a speculative grouping).
 | `reviewGrounding.ts` | `filterGrounded()` and the quote-verification it depends on — the anti-fabrication check, imported by `functions/`. |
 | `reviewPrompt.ts` | `buildPrompt()`, `TIER_CONFIG` — imported by `functions/`. |
 | `reviewTool.ts` | The Claude tool-call JSON Schema + the `ReviewResult` drift guard — imported by `functions/`. |
+| `spreadsheet.ts` | CSV/XLSX → `Dataset` (columns, inferred dtypes, row count). Mirrors `extract.ts`'s shape. |
+| `figureSchema.ts` | The safety-critical file: `buildFigurePayload()` is the only function allowed to construct the outbound figure-generation payload. See "The figure generator" above. |
+| `figurePrompt.ts` | `buildFigurePrompt()`, `extractPythonCode()` — imported by `functions/api/figure.ts`. |
+| `figure.ts` | Client side of figure generation: `requestFigureCode()`, the per-device usage counter, session-scoped consent. Mirrors `review.ts`. |
+| `figureRunner.ts` | The Pyodide worker lifecycle: `warmUp()`, `runFigureCode()`, `isCodeSafeToRun()`. Talks to `public/figureWorker.mjs`. |
 
 **`functions/`** — Cloudflare Pages Functions; every file here is routed
 as an endpoint, so shared logic lives in `src/lib/` instead (imported via
@@ -230,7 +306,8 @@ relative paths) and only genuinely server-specific code stays here.
 
 | File | What |
 |---|---|
-| `api/review.ts` | The only server-side file in the project. `Env`, `UpstreamError`, `callAnthropicStreaming` (streaming transport — Workers-specific, doesn't belong in `lib/`), the KV daily cap, and request validation. |
+| `api/review.ts` | One of the two server-side files in the project. `Env`, `UpstreamError`, `callAnthropicStreaming` (streaming transport — Workers-specific, doesn't belong in `lib/`), the KV daily cap, and request validation. |
+| `api/figure.ts` | The other. Plain (non-streaming) `fetch` to Anthropic, no tool call, `isValidFigurePayload`/`validateSpec` request validation, its own KV daily cap. Simpler than `review.ts` — see "The figure generator" above for why. |
 
 ## `lib/` conventions
 
@@ -238,7 +315,14 @@ relative paths) and only genuinely server-specific code stays here.
   `formatCheck.ts` serves both a "format" concern and a "review" concern;
   `journalUrl.ts` serves journals, match, and the sitemap. Domain folders
   would strand files in a `shared/` bucket for no comprehension gain at
-  this file count. Revisit if `lib/` crosses ~30 files.
+  this file count. Revisit if `lib/` crosses ~30 files — the figure
+  generator's five new files (`spreadsheet.ts`, `figureSchema.ts`,
+  `figurePrompt.ts`, `figure.ts`, `figureRunner.ts`) cross that number,
+  but the recommendation is to stay flat anyway: the `figure*` filename
+  prefix is already doing the grouping work a folder would, and carving
+  out `lib/figure/` while everything else stays flat buys inconsistency,
+  not clarity. The next feature after this one is the one that should
+  force the real decision.
 - **camelCase filenames** (`journalUrl.ts`, not `journal-url.ts`) —
   consistent with `components/`'s PascalCase, one casing convention for
   the whole `src/` tree.
@@ -261,8 +345,9 @@ If you're new to this codebase, in this order:
 2. `src/lib/match.ts` — the entire client-side ranking engine.
 3. `pipeline/build_index.py` — how the static index those rankings run
    against gets built.
-4. `functions/api/review.ts` — the one exception to "nothing leaves the
-   browser," and why it's built the way it is (see above).
+4. `functions/api/review.ts` — one of the two exceptions to "nothing
+   leaves the browser," and why it's built the way it is (see above).
+   `functions/api/figure.ts` is the other, narrower one.
 5. `src/app/page.tsx` and `src/app/_home/` — the homepage. One scroll-driven
    narrative split into one file per section; `useScrollProgress.ts` is
    the single source of every value the sections animate against.

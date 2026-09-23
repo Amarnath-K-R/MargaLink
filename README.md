@@ -18,9 +18,11 @@ version, including how each is checkable):
 3. Any feature that sends text out of the browser is opt-in, with a plain
    language notice first.
 
-The one disclosed exception: an opt-in AI review sends paper text to
-Anthropic's API, behind an explicit consent step that names exactly what
-happens before anything is sent. See `docs/ARCHITECTURE.md`.
+Two disclosed exceptions: an opt-in AI review sends paper text to
+Anthropic's API, and an opt-in figure generator sends a spreadsheet's
+schema (never its values). Both sit behind an explicit consent step that
+names exactly what happens before anything is sent. See
+`docs/ARCHITECTURE.md`.
 
 ## Layout
 
@@ -30,8 +32,8 @@ happens before anything is sent. See `docs/ARCHITECTURE.md`.
 | `web/` | Next.js app, static export, deployed to Cloudflare Pages. See `web/README.md`. |
 | `web/src/app/` | Routes — one folder per URL, `_home/` holds the homepage's own sections. |
 | `web/src/components/` | Shared UI, including `components/three/` for the two scroll-driven 3D scenes. |
-| `web/src/lib/` | Framework-agnostic logic — matching, format checks, the AI review's prompt/grounding/tool-schema. Kept flat by design. |
-| `web/functions/api/review.ts` | The one server-side file — a Cloudflare Pages Function holding the Anthropic API key for the opt-in AI review. |
+| `web/src/lib/` | Framework-agnostic logic — matching, format checks, the AI review's prompt/grounding/tool-schema, the figure generator's schema/prompt. Kept flat by design. |
+| `web/functions/api/review.ts`, `web/functions/api/figure.ts` | The two server-side files — Cloudflare Pages Functions holding the Anthropic API key for the opt-in AI review and the opt-in figure generator. |
 | `docs/ARCHITECTURE.md` | Why the system is built this way, plus a one-line-per-file map of everything above — start here after this file. |
 
 ## Quickstart

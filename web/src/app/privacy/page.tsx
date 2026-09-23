@@ -14,7 +14,7 @@ export default function PrivacyPage() {
         width="2xl"
         links={[{ href: "/match", label: "← Back to matching" }]}
         title="How privacy works"
-        subtitle={<p className="mt-3 text-lg text-ink-soft">Three rules, and one diagram of what actually happens.</p>}
+        subtitle={<p className="mt-3 text-lg text-ink-soft">Three rules, two disclosed exceptions, and one diagram of what actually happens.</p>}
       />
 
       <ol className="mt-10 space-y-4">
@@ -38,13 +38,17 @@ export default function PrivacyPage() {
           </p>
           <p className="mt-1 text-ink-soft">
             Matching, the format check, and the journal rules check never do.
-            One feature is the exception:{" "}
+            Two features are the exceptions:{" "}
             <Link href="#review-exception" className="text-accent hover:underline">
               getting a paper reviewed
             </Link>{" "}
-            uses a large language model, which can&apos;t run in a browser —
-            it asks first, in plain language, exactly what it&apos;s about to
-            send, before sending anything.
+            and{" "}
+            <Link href="#figures-exception" className="text-accent hover:underline">
+              making figures from a spreadsheet
+            </Link>
+            . Both use a large language model, which can&apos;t run in a
+            browser — each asks first, in plain language, exactly what
+            it&apos;s about to send, before sending anything.
           </p>
         </li>
       </ol>
@@ -83,15 +87,14 @@ export default function PrivacyPage() {
       </p>
 
       <h2 id="review-exception" className="mt-12 font-serif text-xl font-medium">
-        The one exception: getting a paper reviewed
+        The first exception: getting a paper reviewed
       </h2>
       <p className="mt-3 text-ink-soft">
         Everything above — matching, the format check, the journal rules check — runs
         entirely on your device. Getting a paper reviewed is different: it sends your
         paper&apos;s text to Anthropic&apos;s Claude API, because that kind of review needs a
-        large language model, and no model capable of it runs in a browser today. This is
-        the only feature in MargaLink that works this way, and it only runs if you
-        explicitly ask for it:
+        large language model, and no model capable of it runs in a browser today. It only
+        runs if you explicitly ask for it:
       </p>
       <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
         <li>
@@ -110,6 +113,40 @@ export default function PrivacyPage() {
           Like every other request in MargaLink, this one shows up in the network-request
           log on the matching page when it happens — it isn&apos;t hidden from the same
           transparency check the rest of the site relies on.
+        </li>
+      </ul>
+
+      <h2 id="figures-exception" className="mt-12 font-serif text-xl font-medium">
+        The second exception: making figures from a spreadsheet
+      </h2>
+      <p className="mt-3 text-ink-soft">
+        The figure generator lets you upload a CSV or Excel file and get a publication-style
+        chart back, drawn with real Python plotting libraries. Real statistical figures need
+        real computation — but your raw spreadsheet is more sensitive than a manuscript
+        draft, so it never leaves your device. What leaves instead is a description: your
+        column names, their inferred types, how many rows you have, the chart type you
+        picked, and an optional short note — never a single cell value. Claude reads that
+        description and writes Python code; that code then runs locally, in your browser, and
+        only there does it ever touch your real data.
+      </p>
+      <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
+        <li>
+          Nothing is sent until you confirm a plain-language notice, once per browser
+          session, naming exactly what&apos;s about to happen.
+        </li>
+        <li>
+          The exact data sent — the schema, nothing else — is shown on the page before every
+          generation, whether or not the consent notice appears that time.
+        </li>
+        <li>
+          The Python code Claude writes is always shown, never hidden behind the figure it
+          produces.
+        </li>
+        <li>
+          The one honest caveat: the figure runs inside a Web Worker that downloads its own
+          Python runtime from a public CDN. Those downloads are public files, never anything
+          from your data, but they happen off the main thread and so don&apos;t appear in the
+          network-request log the rest of this page points to.
         </li>
       </ul>
 

@@ -1,7 +1,9 @@
 // Shared between the client (review.ts, ReviewConsent.tsx, ReviewResultPanel.tsx,
 // app/review/page.tsx) and the Cloudflare Pages Function that actually calls
 // Claude (functions/api/review.ts) — the only src/lib/ module functions/
-// imports purely for its type contract. Pure types + one const array, no
+// imports purely for its type contract (figureSchema.ts/figurePrompt.ts, the
+// figure generator's equivalents, carry real logic alongside their types, so
+// they don't count as "purely"). Pure types + one const array, no
 // window/localStorage/fetch, so it's safe to bundle into the Worker. See
 // docs/ARCHITECTURE.md's note on the invariant this depends on: functions/
 // may only import src/lib/ modules that are pure/isomorphic like this one.
