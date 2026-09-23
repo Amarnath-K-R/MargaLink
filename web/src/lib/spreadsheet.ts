@@ -3,7 +3,8 @@
 // figureSchema.ts, which is the only thing allowed to describe this data to
 // anyone, and does so without ever touching a real cell value.
 
-export type Dtype = "numeric" | "categorical" | "date";
+export const DTYPES = ["numeric", "categorical", "date"] as const;
+export type Dtype = (typeof DTYPES)[number];
 export type ColumnSchema = { name: string; dtype: Dtype };
 
 export type Dataset = {
