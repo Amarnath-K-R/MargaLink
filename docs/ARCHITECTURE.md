@@ -138,9 +138,11 @@ references and supplementary material; thorough: everything but
 references), the claims cap per chunk (20/30/40) and the synthesis effort
 (low/medium/high). Verification rigor is identical at every tier. `max`
 effort stays off-limits: it was confirmed to be effectively unbounded in
-cost and time on a real paper. Estimated cost for a 400k-character paper
-on thorough is about $1.2 (typical) to $1.7 (every chunk table-dense); the
-knobs are `CHUNK_CHARS` and the thorough claims cap.
+cost and time on a real paper. Measured on three real papers (39k–103k
+characters) across all tiers: every review completed with no failed
+section, costing $0.12–0.32 and taking 41–142 s. Projected for a
+400k-character paper on thorough: about $1.2 typical, $1.7 if every chunk
+is table-dense; the knobs are `CHUNK_CHARS` and the thorough claims cap.
 
 ### The figure generator: what leaves the device, and what doesn't
 
