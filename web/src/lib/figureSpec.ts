@@ -393,6 +393,32 @@ function toIndexRef(ref: string, levels: string[] | null | undefined): string | 
   return i >= 0 ? `#${i}` : null;
 }
 
+// Every group reference in a panel, with where it sits.
+function groupRefs(p: Panel): string[] {
+  return [
+    ...p.order.explicit,
+    ...p.stats.explicit.flatMap((e) => [e.a, e.b]),
+    ...(p.stats.reference === null ? [] : [p.stats.reference]),
+    ...p.annotations.flatMap((a) => (a.xGroup === null ? [] : [a.xGroup])),
+  ];
+}
+
+// The label gate for Claude's output: a group reference must be "#n" — or,
+// only when labels were sent, one of the labels sent for that column. So a
+// spec can never carry a label Claude wasn't given (a guessed one would be a
+// hallucination at best, a value at worst).
+export function checkLabels(spec: FigureSpec, levels: Record<string, string[]> | null): string | null {
+  for (const [i, p] of spec.panels.entries()) {
+    const col = refColumn(p);
+    for (const ref of groupRefs(p)) {
+      if (REF.test(ref)) continue;
+      if (levels && col && levels[col]?.includes(ref)) continue;
+      return `Panel ${i + 1} refers to a group label it wasn't given.`;
+    }
+  }
+  return null;
+}
+
 // --- The outbound copy --------------------------------------------------------
 
 function pick(v: unknown, schema: Schema): unknown {

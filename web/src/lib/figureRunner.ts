@@ -179,27 +179,6 @@ export async function exportFigure(req: RenderRequest, onProgress?: (stage: Prog
   return (await renderOnce(req, EXPORT_TIMEOUT_MS, onProgress))!;
 }
 
-// Defense in depth for custom-code tweaks, screened before anything runs —
-// the real isolation is the Worker itself (no DOM, no filesystem access,
-// terminated on timeout regardless of what it's doing), so this exists to
-// reject an obviously out-of-bounds tweak early with a clear message, not to
-// be the only thing standing between generated code and the sandbox.
-const DENYLIST: { pattern: RegExp; reason: string }[] = [
-  { pattern: /\b(import|from)\s+os\b/, reason: "file/OS access (os)" },
-  { pattern: /\b(import|from)\s+sys\b/, reason: "system access (sys)" },
-  { pattern: /\b(import|from)\s+subprocess\b/, reason: "process execution (subprocess)" },
-  { pattern: /\b(import|from)\s+socket\b/, reason: "network access (socket)" },
-  { pattern: /\b(import|from)\s+urllib\b/, reason: "network access (urllib)" },
-  { pattern: /\b(import|from)\s+(pyodide|js)\b/, reason: "reaching out of the sandbox (pyodide/js)" },
-  { pattern: /\brequests\b/, reason: "network access (requests)" },
-  { pattern: /\bopen\s*\(/, reason: "file access (open)" },
-  { pattern: /\b(__import__|eval|exec|compile|globals|getattr)\s*\(/, reason: "dynamic code (eval/exec/__import__)" },
-  { pattern: /\.(savefig|show)\s*\(/, reason: "saving or showing the figure (the app does that)" },
-];
-
-export function isCodeSafeToRun(code: string): string | null {
-  for (const { pattern, reason } of DENYLIST) {
-    if (pattern.test(code)) return `Generated code was rejected before running: ${reason}.`;
-  }
-  return null;
-}
+// The custom-code denylist lives with the hook prompt (pure, so the server
+// enforces the same rules); re-exported for the page and the worker path.
+export { isCodeSafeToRun } from "./figurePrompt.ts";

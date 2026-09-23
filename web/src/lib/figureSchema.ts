@@ -3,149 +3,107 @@
 // device for /api/figure — nothing else may hand-assemble one. It is to
 // this feature what reviewGrounding.ts is to the AI review: the one file
 // where a mistake becomes a privacy failure instead of a bug.
-// figureSchema.selfcheck.ts proves what this file's own doc comments
-// claim, rather than asserting it.
+// figureSchema.selfcheck.ts proves what these comments claim, with planted
+// sentinels, rather than asserting it.
 //
-// Three things are deliberately never included here, each of which would
-// genuinely improve the generated code:
-//   - cell values (the entire point);
-//   - category LEVELS (a group label is itself a value — a site name, a
-//     patient ID — not just its dtype);
-//   - sample rows, ever, "to help the model."
-// If a future change wants to send any of those, it has to touch this
-// file's shape, which is exactly what isValidFigurePayload's exact-key-set
-// check and the selfcheck's whitelist walk are built to make expensive to
-// do by accident.
+// What leaves, always: column names and inferred types, the row count, the
+// user's own request text, and the current figure description with every
+// typed text field blanked and every group reference as "#n" (scrubSpec).
+// What leaves only when the user ticks the labels box: the category labels
+// of categorical columns with ≤ MAX_LEVELS_PER_COLUMN distinct values (a
+// label is itself a value — a site name, a patient ID — hence opt-in, and
+// hence the cap, which keeps ID-like columns out entirely).
+// What never leaves: any cell value, sample rows, titles/axis labels/
+// annotation text the user typed, Python tracebacks.
+import { LIMITS, scrubSpec, validateFigureSpec, type FigureSpec } from "./figureSpec.ts";
 import { DTYPES, type ColumnSchema, type Dataset, type Dtype } from "./spreadsheet.ts";
 
-export const CHART_TYPES = ["bar-error", "box", "scatter", "line", "histogram", "grouped-bar", "stacked-bar"] as const;
-export type ChartType = (typeof CHART_TYPES)[number];
-
-export const COLUMN_ROLES = ["x", "y", "group", "error"] as const;
-export type ColumnRole = (typeof COLUMN_ROLES)[number];
-
-export const NOTE_MAX_CHARS = 200;
-
-export type FigureSpec = {
-  chartType: ChartType;
-  roles: Partial<Record<ColumnRole, string>>; // role -> column NAME
-  note: string; // user-typed style note; "" if none
-};
+export const REQUEST_MAX_CHARS = 1000;
+export const MAX_LEVELS_PER_COLUMN = 30;
+export const MAX_LEVEL_COLUMNS = 12;
+export const MAX_COLUMNS = 500;
+export const MODES = ["spec", "hook"] as const;
+export type FigureMode = (typeof MODES)[number];
 
 export type FigurePayload = {
   columns: ColumnSchema[];
   rowCount: number;
-  chartType: ChartType;
-  roles: Partial<Record<ColumnRole, string>>;
-  note: string;
+  request: string;
+  spec: FigureSpec | null;
+  levels: Record<string, string[]> | null;
+  mode: FigureMode;
 };
 
-// Which roles a chart type accepts, which are required, and which column
-// dtypes each role makes sense for. Drives three things off one table: the
-// form's role dropdowns (only offer columns whose dtype fits), client-side
-// validation, and the server's re-validation of the same spec.
-export const CHART_ROLES: Record<ChartType, { role: ColumnRole; dtypes: Dtype[]; required: boolean }[]> = {
-  "bar-error": [
-    { role: "x", dtypes: ["categorical", "date"], required: true },
-    { role: "y", dtypes: ["numeric"], required: true },
-    { role: "error", dtypes: ["numeric"], required: false },
-    { role: "group", dtypes: ["categorical"], required: false },
-  ],
-  box: [
-    { role: "x", dtypes: ["categorical", "date"], required: true },
-    { role: "y", dtypes: ["numeric"], required: true },
-    { role: "group", dtypes: ["categorical"], required: false },
-  ],
-  scatter: [
-    { role: "x", dtypes: ["numeric", "date"], required: true },
-    { role: "y", dtypes: ["numeric"], required: true },
-    { role: "group", dtypes: ["categorical"], required: false },
-  ],
-  line: [
-    { role: "x", dtypes: ["numeric", "date"], required: true },
-    { role: "y", dtypes: ["numeric"], required: true },
-    { role: "group", dtypes: ["categorical"], required: false },
-  ],
-  histogram: [
-    { role: "x", dtypes: ["numeric"], required: true },
-    { role: "group", dtypes: ["categorical"], required: false },
-  ],
-  "grouped-bar": [
-    { role: "x", dtypes: ["categorical", "date"], required: true },
-    { role: "y", dtypes: ["numeric"], required: true },
-    { role: "group", dtypes: ["categorical"], required: true },
-  ],
-  "stacked-bar": [
-    { role: "x", dtypes: ["categorical", "date"], required: true },
-    { role: "y", dtypes: ["numeric"], required: true },
-    { role: "group", dtypes: ["categorical"], required: true },
-  ],
-};
+// The labels the opt-in would add — also what the consent dialog lists, so
+// the notice and the request can't disagree.
+export function levelsToSend(dataset: Dataset): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const c of dataset.columns) {
+    if (Object.keys(out).length >= MAX_LEVEL_COLUMNS) break;
+    const lv = dataset.levels[c.name];
+    if (c.dtype !== "categorical" || !lv || lv.length > MAX_LEVELS_PER_COLUMN) continue;
+    if (lv.some((l) => l.length > LIMITS.text)) continue; // free text, not a category
+    out[c.name] = [...lv];
+  }
+  return out;
+}
 
-// Builds a FRESH literal — deliberately never `{...dataset}` or any other
-// spread of caller data — so adding a field to Dataset can never silently
-// widen what this function sends.
-export function buildFigurePayload(dataset: Dataset, spec: FigureSpec): FigurePayload {
+// Builds a FRESH literal — never a spread of caller data — so adding a field
+// to Dataset or FigureSpec can never silently widen what this sends. Group
+// references are always sent as "#n", even when labels are opted in: the
+// labels block is the only place a label appears.
+export function buildFigurePayload(
+  dataset: Dataset,
+  spec: FigureSpec | null,
+  request: string,
+  opts: { sendLevels: boolean; mode: FigureMode },
+): FigurePayload {
   return {
     columns: dataset.columns.map((c) => ({ name: c.name, dtype: c.dtype })),
     rowCount: dataset.rowCount,
-    chartType: spec.chartType,
-    roles: { ...spec.roles },
-    note: spec.note.slice(0, NOTE_MAX_CHARS),
+    request: request.slice(0, REQUEST_MAX_CHARS),
+    spec: spec ? scrubSpec(spec, dataset.levels, false) : null,
+    levels: opts.sendLevels ? levelsToSend(dataset) : null,
+    mode: opts.mode,
   };
 }
 
-// Server-side re-validation of the same shape a well-behaved client would
-// have sent — so a tampered/hand-crafted request can't smuggle extra keys
-// (e.g. sample values) through the endpoint either. Rejects unknown keys
-// at every level, not just checks the ones it expects are present.
+const exactKeys = (o: object, keys: string[]) => {
+  const k = Object.keys(o);
+  return k.length === keys.length && k.every((x) => keys.includes(x));
+};
+const isShortString = (v: unknown, max = LIMITS.text) => typeof v === "string" && v.length <= max;
+
+// Server-side re-validation of the shape a well-behaved client sends — so a
+// tampered request can't smuggle extra keys (sample values, say) through the
+// endpoint either. Exact key sets at every level; levels only for declared
+// categorical columns, within the caps; the spec through the schema walk,
+// which rejects unknown keys.
 export function isValidFigurePayload(v: unknown): v is FigurePayload {
-  if (!v || typeof v !== "object") return false;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   const p = v as Record<string, unknown>;
+  if (!exactKeys(p, ["columns", "rowCount", "request", "spec", "levels", "mode"])) return false;
 
-  const allowedKeys = ["columns", "rowCount", "chartType", "roles", "note"];
-  const keys = Object.keys(p);
-  if (keys.length !== allowedKeys.length || !keys.every((k) => allowedKeys.includes(k))) return false;
-
-  if (!Array.isArray(p.columns)) return false;
-  const columnsValid = p.columns.every((c) => {
-    if (!c || typeof c !== "object") return false;
-    const cKeys = Object.keys(c);
-    if (cKeys.length !== 2 || !cKeys.includes("name") || !cKeys.includes("dtype")) return false;
+  if (!Array.isArray(p.columns) || p.columns.length === 0 || p.columns.length > MAX_COLUMNS) return false;
+  for (const c of p.columns) {
+    if (!c || typeof c !== "object" || !exactKeys(c, ["name", "dtype"])) return false;
     const { name, dtype } = c as Record<string, unknown>;
-    return typeof name === "string" && DTYPES.includes(dtype as Dtype);
-  });
-  if (!columnsValid) return false;
+    if (!isShortString(name) || !DTYPES.includes(dtype as Dtype)) return false;
+  }
+  if (typeof p.rowCount !== "number" || !Number.isInteger(p.rowCount) || p.rowCount < 0) return false;
+  if (!isShortString(p.request, REQUEST_MAX_CHARS)) return false;
+  if (!MODES.includes(p.mode as FigureMode)) return false;
+  if (p.spec !== null && typeof validateFigureSpec(p.spec) === "string") return false;
 
-  if (typeof p.rowCount !== "number") return false;
-  if (!CHART_TYPES.includes(p.chartType as ChartType)) return false;
-
-  if (!p.roles || typeof p.roles !== "object") return false;
-  const roleKeys = Object.keys(p.roles as object);
-  const rolesValid = roleKeys.every(
-    (k) => COLUMN_ROLES.includes(k as ColumnRole) && typeof (p.roles as Record<string, unknown>)[k] === "string"
-  );
-  if (!rolesValid) return false;
-
-  return typeof p.note === "string";
-}
-
-// Human-readable validation of the actual chart choice against the actual
-// columns — used both client-side (before the request is even built) and
-// server-side (before the request is spent on Claude).
-export function validateSpec(columns: ColumnSchema[], spec: FigureSpec): string | null {
-  const dtypeByName = new Map(columns.map((c) => [c.name, c.dtype]));
-  for (const def of CHART_ROLES[spec.chartType]) {
-    const columnName = spec.roles[def.role];
-    if (!columnName) {
-      if (def.required) return `Pick a column for "${def.role}".`;
-      continue;
-    }
-    const dtype = dtypeByName.get(columnName);
-    if (dtype === undefined) return `Column "${columnName}" doesn't exist in this dataset.`;
-    if (!def.dtypes.includes(dtype)) {
-      return `"${columnName}" is ${dtype}, but ${def.role} needs ${def.dtypes.join(" or ")}.`;
+  if (p.levels !== null) {
+    if (!p.levels || typeof p.levels !== "object" || Array.isArray(p.levels)) return false;
+    const dtype = new Map((p.columns as ColumnSchema[]).map((c) => [c.name, c.dtype]));
+    const entries = Object.entries(p.levels as Record<string, unknown>);
+    if (entries.length > MAX_LEVEL_COLUMNS) return false;
+    for (const [col, lv] of entries) {
+      if (dtype.get(col) !== "categorical") return false;
+      if (!Array.isArray(lv) || lv.length > MAX_LEVELS_PER_COLUMN || !lv.every((l) => isShortString(l))) return false;
     }
   }
-  return null;
+  return true;
 }

@@ -15,6 +15,7 @@ import {
   STATS_KEYS,
   TESTS,
   TICK_FORMATS,
+  checkLabels,
   checkSpecAgainstColumns,
   defaultPanel,
   mergeTextFields,
@@ -168,6 +169,21 @@ assert.match(String(checkSpecAgainstColumns(COLUMNS, withPanel("heatmap", { x: "
   assert.equal(merged.panels[0].title, "My title", "empty returned text keeps the local text");
   assert.equal(merged.panels[0].y.unit, "mmHg");
   assert.equal(merged.panels[0].y.label, "Change from baseline", "non-empty returned text wins");
+}
+
+// 7. the label gate on Claude's output
+{
+  const s = withPanel("box", { x: "arm", y: "change" });
+  s.panels[0].stats = { test: "welch", pairs: "explicit", explicit: [{ a: "#0", b: "#2" }], display: "stars", reference: null };
+  assert.equal(checkLabels(s, null), null, "#n refs always pass");
+  s.panels[0].stats.explicit = [{ a: "Placebo", b: "#2" }];
+  assert.match(String(checkLabels(s, null)), /label it wasn't given/, "a literal without levels is refused");
+  assert.equal(checkLabels(s, { arm: ["Placebo", "Low"] }), null, "a literal that was sent passes");
+  assert.match(String(checkLabels(s, { arm: ["Low"] })), /label it wasn't given/, "a literal not among those sent is refused");
+  assert.match(String(checkLabels(s, { site: ["Placebo"] })), /label it wasn't given/, "sent for another column doesn't count");
+  s.panels[0].stats.explicit = [];
+  s.panels[0].annotations = [{ kind: "vline", text: "", x: null, y: null, x2: null, y2: null, xGroup: "Guessed" }];
+  assert.match(String(checkLabels(s, null)), /label/, "annotation refs are gated too");
 }
 
 console.log("figureSpec.selfcheck: OK");
