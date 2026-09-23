@@ -5,10 +5,62 @@
 // split, despite being the one thing standing between a model hallucinating
 // a quote and that quote reaching the client. See docs/ARCHITECTURE.md's
 // "The AI review: what it defends against, and why."
-import type { Citation, ReviewResult } from "./reviewTypes.ts";
+import type { Citation, ExtractResponse, ReviewResult } from "./reviewTypes.ts";
+
+// Applied once client-side before sectioning (review.ts's prepareForReview)
+// AND again at match time here — idempotent, so both sides agree, and
+// models re-introduce curly quotes on their own. Keeps newlines: sectioning
+// depends on them. ponytail: the de-hyphenation also joins a genuine
+// compound split at a line end ("well-\nknown" → "wellknown"); it happens on
+// both sides identically, so grounding is unaffected — cosmetic only.
+export function normalizeText(s: string): string {
+  return s
+    .normalize("NFKC")
+    .replace(/[‘’‚]/g, "'")
+    .replace(/[“”„]/g, '"')
+    .replace(/[–—−]/g, "-")
+    .replace(/­/g, "")
+    .replace(/([a-z])-\n([a-z])/g, "$1$2")
+    .replace(/[ \t]+/g, " ");
+}
 
 export function normalize(s: string): string {
-  return s.toLowerCase().replace(/\s+/g, " ").trim();
+  return normalizeText(s).toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+type Loose = Record<string, unknown>;
+const isObj = (v: unknown): v is Loose => !!v && typeof v === "object" && !Array.isArray(v);
+const isValue = (v: unknown) =>
+  isObj(v) && typeof v.value === "number" && Number.isFinite(v.value) && (typeof v.unit === "string" || v.unit === null);
+
+// Strict tool use already guarantees the shape on the wire, but the Function
+// must never trust that: a defensive walk is cheap, and a wrong assumption
+// here reaches the user as a citation. Quotes are checked against THIS chunk
+// only, so a claim is guaranteed to come from the section it's labelled with.
+export function groundExtractOutput(output: unknown, chunkText: string, claimsCap: number): ExtractResponse {
+  if (!isObj(output) || !Array.isArray(output.claims) || !Array.isArray(output.statisticalReporting) || !Array.isArray(output.notes)) {
+    throw new Error("malformed extract output");
+  }
+  const source = normalize(chunkText);
+  const grounded = (q: unknown): q is string => typeof q === "string" && normalize(q).length >= 8 && source.includes(normalize(q));
+
+  const claims: ExtractResponse["claims"] = [];
+  for (const c of output.claims) {
+    if (claims.length >= claimsCap) break;
+    if (!isObj(c) || !grounded(c.quote) || typeof c.measure !== "string" || !Array.isArray(c.values) || c.values.length === 0 || !c.values.every(isValue)) continue;
+    claims.push({ quote: c.quote, measure: c.measure, values: c.values as ExtractResponse["claims"][number]["values"] });
+  }
+  const statisticalReporting: ExtractResponse["statisticalReporting"] = [];
+  for (const s of output.statisticalReporting) {
+    if (!isObj(s) || typeof s.description !== "string" || (s.severity !== "minor" && s.severity !== "major") || !grounded(s.quote)) continue;
+    statisticalReporting.push({ description: s.description, severity: s.severity, quote: s.quote });
+  }
+  const notes: ExtractResponse["notes"] = [];
+  for (const n of output.notes) {
+    if (!isObj(n) || typeof n.description !== "string") continue;
+    notes.push({ description: n.description, quote: grounded(n.quote) ? n.quote : null });
+  }
+  return { claims, statisticalReporting, notes };
 }
 
 // Real, deterministic check — never trust the model's own claim that a

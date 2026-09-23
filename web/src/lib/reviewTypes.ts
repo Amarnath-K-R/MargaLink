@@ -27,6 +27,14 @@ export type Section = { id: string; title: string; kind: SectionKind; text: stri
 export type Chunk = { id: string; sectionId: string; title: string; kind: SectionKind; part: number; parts: number; text: string };
 export type PaperMap = { title: string | null; totalWords: number; sections: { id: string; title: string; kind: SectionKind; words: number }[] };
 
+export type ClaimValue = { value: number; unit: string | null };
+export type ExtractRequest = { pass: "extract"; tier: ReviewTier; claimsCap: number; chunk: Omit<Chunk, "sectionId"> };
+export type ExtractResponse = {
+  claims: { quote: string; measure: string; values: ClaimValue[] }[];
+  statisticalReporting: { description: string; severity: "minor" | "major"; quote: string }[];
+  notes: { description: string; quote: string | null }[];
+};
+
 export type ReviewResult = {
   journalFit: { assessment: "good" | "possible" | "poor"; explanation: string };
   inconsistencies: { description: string; citations: Citation[] }[];
