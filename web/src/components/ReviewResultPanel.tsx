@@ -18,17 +18,19 @@ function CitationList({ citations }: { citations: Citation[] }) {
 }
 
 export default function ReviewResultPanel({ result }: { result: ReviewResult }) {
-  const fitColor =
-    result.journalFit.assessment === "good"
-      ? "text-accent"
-      : result.journalFit.assessment === "poor"
-        ? "text-away"
-        : "text-ink-soft";
+  const fit = result.journalFit;
+  const fitColor = fit?.assessment === "good" ? "text-accent" : fit?.assessment === "poor" ? "text-away" : "text-ink-soft";
   return (
     <div className="mt-2 rounded-sm border border-line bg-paper-alt p-4 text-sm">
       <p>
         <span className="font-medium">Journal fit: </span>
-        <span className={fitColor}>{result.journalFit.assessment}</span> — {result.journalFit.explanation}
+        {fit ? (
+          <>
+            <span className={fitColor}>{fit.assessment}</span> — {fit.explanation}
+          </>
+        ) : (
+          <span className="text-ink-soft">pending cross-check</span>
+        )}
       </p>
 
       {result.inconsistencies.length > 0 && (

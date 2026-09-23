@@ -1,0 +1,270 @@
+// Client-side orchestration of a review: plan chunks from the prepared text,
+// run one bounded extract pass per chunk (a small worker pool), build the
+// claims ledger, run one synthesize pass, assemble the ReviewResult. Every
+// pass is an independent request to the stateless Function, so any pass can
+// fail, be retried, or be resumed alone, and partial results render on the way.
+// Callers MUST have consent before calling runReview() (ReviewConsent.tsx).
+// `fetch` is resolved at call time, never captured at import — NetworkTrace's
+// window.fetch patch must see every request.
+import { FREE_REVIEWS_PER_DEVICE, ReviewCapacityError, ReviewLimitError, recordReviewUsed, reviewsRemaining } from "./review.ts";
+import { TIER_PLAN } from "./reviewPrompt.ts";
+import { buildPaperMap, chunkSections, splitIntoSections } from "./reviewSections.ts";
+import type {
+  Chunk,
+  Citation,
+  ExtractRequest,
+  ExtractResponse,
+  PaperMap,
+  ReviewProgress,
+  ReviewResult,
+  ReviewTier,
+  SynthesizeRequest,
+  SynthesizeResponse,
+} from "./reviewTypes.ts";
+
+export type RunReviewOptions = {
+  text: string; // output of prepareForReview()
+  journalId: string;
+  tier: ReviewTier;
+  endpoint?: string;
+  onProgress?: (p: ReviewProgress) => void;
+  signal?: AbortSignal;
+  concurrency?: number;
+  timeoutMs?: { extract: number; synthesize: number };
+  retryDelaysMs?: number[];
+};
+export type ReviewState = {
+  chunks: Chunk[];
+  paperMap: PaperMap;
+  abstractText: string | null;
+  extracted: Record<string, ExtractResponse>;
+  failed: Record<string, string>;
+};
+export type ReviewRun = { result: ReviewResult; state: ReviewState };
+export class ReviewSynthesisError extends Error {
+  partial: ReviewResult;
+  state: ReviewState;
+  constructor(message: string, partial: ReviewResult, state: ReviewState) {
+    super(message);
+    this.partial = partial;
+    this.state = state;
+  }
+}
+
+// Mirrors reviewPasses.ts's server-side cap; trimming here keeps a huge
+// paper's synthesis request valid instead of letting the server reject it.
+const MAX_LEDGER = 1_000;
+class FatalPassError extends Error {}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const abortError = (signal: AbortSignal) =>
+  signal.reason instanceof Error ? signal.reason : new DOMException("Review cancelled", "AbortError");
+
+export function planChunks(chunks: Chunk[], tier: ReviewTier): { run: Chunk[]; skipped: Chunk[] } {
+  const kinds = TIER_PLAN[tier].kinds;
+  return { run: chunks.filter((c) => kinds.includes(c.kind)), skipped: chunks.filter((c) => !kinds.includes(c.kind)) };
+}
+
+function planState(text: string): ReviewState {
+  const sections = splitIntoSections(text);
+  return {
+    chunks: chunkSections(sections),
+    paperMap: buildPaperMap(text, sections),
+    abstractText: sections.find((s) => s.kind === "abstract")?.text ?? null,
+    extracted: {},
+    failed: {},
+  };
+}
+
+// Builds the wire ledger and an id → citation map in document order. Ids are
+// deterministic (chunkId-cN) so a retried pass regenerates identical ids.
+function buildLedger(state: ReviewState) {
+  const ledger: SynthesizeRequest["ledger"] = [];
+  const statsFindings: SynthesizeRequest["statsFindings"] = [];
+  const notes: SynthesizeRequest["notes"] = [];
+  const cite = new Map<string, Citation>();
+  const stats: ReviewResult["statisticalReporting"] = [];
+  const extractedCount = Object.keys(state.extracted).length;
+  // A ledger past MAX_LEDGER (≈25 dense chunks) keeps each chunk's first N claims.
+  const perChunk = extractedCount > 0 ? Math.floor(MAX_LEDGER / extractedCount) : 0;
+  const total = Object.values(state.extracted).reduce((n, ex) => n + ex.claims.length, 0);
+  for (const chunk of state.chunks) {
+    const ex = state.extracted[chunk.id];
+    if (!ex) continue;
+    const section = chunk.title;
+    ex.claims.forEach((c, i) => {
+      if (total > MAX_LEDGER && i >= perChunk) return;
+      const id = `${chunk.id}-c${i}`;
+      ledger.push({ id, section, quote: c.quote, measure: c.measure, values: c.values });
+      cite.set(id, { quote: c.quote, section });
+    });
+    ex.statisticalReporting.forEach((s, i) => {
+      const id = `${chunk.id}-st${i}`;
+      statsFindings.push({ id, section, description: s.description, severity: s.severity });
+      cite.set(id, { quote: s.quote, section });
+      stats.push({ description: s.description, severity: s.severity, citations: [{ quote: s.quote, section }] });
+    });
+    ex.notes.forEach((n, i) => {
+      const id = `${chunk.id}-n${i}`;
+      notes.push({ id, section, description: n.description });
+      if (n.quote) cite.set(id, { quote: n.quote, section });
+    });
+  }
+  return { ledger, statsFindings, notes, cite, stats };
+}
+
+function assemble(state: ReviewState, skipped: Chunk[], synth: SynthesizeResponse | null): ReviewResult {
+  const { cite, stats } = buildLedger(state);
+  const resolve = (ids: string[]) => ids.map((id) => cite.get(id)).filter((c): c is Citation => !!c);
+  return {
+    journalFit: synth?.journalFit ?? null,
+    summary: synth?.summary.map((s) => ({ text: s.text, severity: s.severity, citations: resolve(s.refs) })) ?? [],
+    inconsistencies: synth?.inconsistencies.map((f) => ({ description: f.description, citations: resolve(f.claimIds) })) ?? [],
+    statisticalReporting: stats,
+    otherObservations: synth?.otherObservations ?? [],
+    coverage: {
+      reviewed: state.chunks.filter((c) => c.id in state.extracted).map((c) => ({ id: c.id, title: c.title })),
+      failed: state.chunks.filter((c) => c.id in state.failed).map((c) => ({ id: c.id, title: c.title, reason: state.failed[c.id] })),
+      skipped: skipped.map((c) => ({ id: c.id, title: c.title })),
+    },
+  };
+}
+
+type Attempt = { ok: true; res: Response } | { ok: false; reason: string; retryable: boolean };
+
+// One POST. Throws for outcomes that end the whole review (caller abort,
+// 429 capacity, a 4xx contract error every pass would hit); returns a
+// failure for outcomes worth retrying or recording against one chunk.
+async function attempt(endpoint: string, body: Req, timeoutMs: number, outer: AbortSignal): Promise<Attempt> {
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.any([outer, AbortSignal.timeout(timeoutMs)]),
+    });
+    if (res.ok) return { ok: true, res };
+    const detail = await res.text().catch(() => "");
+    if (res.status === 429) throw new ReviewCapacityError("This pilot is fully booked for today — try again tomorrow.");
+    if (res.status === 400 || res.status === 404 || res.status === 413) throw new FatalPassError(`Review request rejected (${res.status}): ${detail}`);
+    // 422 = the model's output was truncated; not worth a same-size retry.
+    return { ok: false, reason: `server error ${res.status}${detail ? `: ${detail}` : ""}`, retryable: res.status !== 422 };
+  } catch (err) {
+    if (outer.aborted) throw abortError(outer);
+    if (err instanceof ReviewCapacityError || err instanceof FatalPassError) throw err;
+    if (err instanceof Error && err.name === "TimeoutError") return { ok: false, reason: "timed out", retryable: true };
+    return { ok: false, reason: err instanceof Error ? err.message : String(err), retryable: true };
+  }
+}
+type Req = ExtractRequest | SynthesizeRequest;
+
+// Runs a review, or — given `resume` (from a previous run's state or a
+// ReviewSynthesisError) — re-runs only the failed chunks plus synthesis.
+// A resume never counts a second device use.
+export async function runReview(opts: RunReviewOptions, resume?: ReviewState): Promise<ReviewRun> {
+  const endpoint = opts.endpoint ?? "/api/review";
+  const concurrency = opts.concurrency ?? 3;
+  const timeoutMs = opts.timeoutMs ?? { extract: 120_000, synthesize: 300_000 };
+  const delays = opts.retryDelaysMs ?? [1000, 3000];
+  if (!resume && reviewsRemaining() <= 0) {
+    throw new ReviewLimitError(`You've used all ${FREE_REVIEWS_PER_DEVICE} free pilot reviews on this device.`);
+  }
+
+  const state = resume ?? planState(opts.text);
+  const { run, skipped } = planChunks(state.chunks, opts.tier);
+  const queue = run.filter((c) => !(c.id in state.extracted));
+  for (const c of queue) delete state.failed[c.id];
+  let done = run.length - queue.length;
+
+  // One controller for the whole run: the caller's abort, or a fatal outcome
+  // in any worker, stops every in-flight pass and the queue at once.
+  const controller = new AbortController();
+  const onOuterAbort = () => controller.abort(opts.signal?.reason);
+  if (opts.signal?.aborted) onOuterAbort();
+  opts.signal?.addEventListener("abort", onOuterAbort, { once: true });
+  const emit = (phase: ReviewProgress["phase"], current: string | null) =>
+    opts.onProgress?.({ phase, done, total: run.length, current, partial: assemble(state, skipped, null) });
+
+  const runExtract = async (chunk: Chunk) => {
+    const fullCap = TIER_PLAN[opts.tier].claimsCap;
+    let cap = fullCap;
+    let reason = "";
+    for (let i = 0; i <= delays.length; i++) {
+      const body: ExtractRequest = {
+        pass: "extract",
+        tier: opts.tier,
+        claimsCap: cap,
+        chunk: { id: chunk.id, title: chunk.title, kind: chunk.kind, part: chunk.part, parts: chunk.parts, text: chunk.text },
+      };
+      const a = await attempt(endpoint, body, timeoutMs.extract, controller.signal);
+      if (a.ok) {
+        state.extracted[chunk.id] = (await a.res.json()) as ExtractResponse;
+        return;
+      }
+      reason = a.reason;
+      if (!a.retryable) {
+        // Truncated output: one retry asking for half as many claims, then give up.
+        if (cap === fullCap) {
+          cap = Math.max(1, Math.floor(cap / 2));
+          continue;
+        }
+        reason = "section too dense for one pass";
+        break;
+      }
+      if (i < delays.length) await sleep(delays[i]);
+    }
+    state.failed[chunk.id] = reason;
+  };
+
+  const worker = async () => {
+    for (let chunk = queue.shift(); chunk && !controller.signal.aborted; chunk = queue.shift()) {
+      try {
+        await runExtract(chunk);
+      } catch (err) {
+        controller.abort();
+        throw err;
+      }
+      done++;
+      emit("extract", queue[0]?.title ?? null);
+    }
+  };
+
+  try {
+    const settled = await Promise.allSettled(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
+    // A sibling's AbortError is a consequence, not the cause — surface the cause.
+    const failure = settled.find(
+      (s): s is PromiseRejectedResult => s.status === "rejected" && !(s.reason instanceof Error && s.reason.name === "AbortError")
+    );
+    if (failure) throw failure.reason;
+    if (controller.signal.aborted) throw abortError(opts.signal ?? controller.signal);
+
+    const { ledger, statsFindings, notes } = buildLedger(state);
+    emit("synthesize", `Cross-checking ${ledger.length} claims`);
+    const synthBody: SynthesizeRequest = {
+      pass: "synthesize",
+      journalId: opts.journalId,
+      tier: opts.tier,
+      paperMap: state.paperMap,
+      abstractText: state.abstractText,
+      ledger,
+      statsFindings,
+      notes,
+    };
+    let synth: SynthesizeResponse | null = null;
+    let reason = "";
+    for (let i = 0; i < 2 && !synth; i++) {
+      const a = await attempt(endpoint, synthBody, timeoutMs.synthesize, controller.signal);
+      if (a.ok) {
+        synth = (await a.res.json()) as SynthesizeResponse;
+        break;
+      }
+      reason = a.reason;
+      if (!a.retryable) break;
+      if (i === 0) await sleep(delays[0] ?? 0);
+    }
+    if (!synth) throw new ReviewSynthesisError(`The cross-check didn't finish (${reason}).`, assemble(state, skipped, null), state);
+    if (!resume) recordReviewUsed();
+    return { result: assemble(state, skipped, synth), state };
+  } finally {
+    opts.signal?.removeEventListener("abort", onOuterAbort);
+  }
+}

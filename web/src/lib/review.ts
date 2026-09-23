@@ -1,13 +1,24 @@
 // Client side of the LLM review feature — one of two features in the app
 // that send something off the device (see CLAUDE.md's privacy rules), and
 // the one that sends actual paper text; the other, figure.ts, sends only a
-// spreadsheet's schema, never its values. Callers
-// MUST get explicit consent (see components/ReviewConsent.tsx) before
-// calling requestReview(); this module doesn't enforce that itself, it just
-// does the sending, limiting, and response validation once consent exists.
-// Types live in reviewTypes.ts — the one file both this client module and
-// functions/api/review.ts import from. Import the types you need from
-// @/lib/reviewTypes directly rather than through here.
+// spreadsheet's schema, never its values. This module owns what happens to
+// the text before anything is sent (stripping, normalization, the size
+// ceiling) and the per-device limit; reviewOrchestrator.ts does the sending.
+// Callers MUST get explicit consent (components/ReviewConsent.tsx) before
+// calling runReview() — neither module enforces that itself.
+import { normalizeText } from "./reviewGrounding.ts";
+
+// Refused before consent, never truncated: past this a paper is almost
+// always carrying supplementary material that should be split off.
+export const MAX_REVIEW_CHARS = 400_000;
+
+// Strip author lines, then normalize (ligatures, hyphenation, quotes) once,
+// so the model's verbatim quotes come back in the same alphabet the server's
+// grounding check reads. Newlines survive — sectioning needs them.
+export function prepareForReview(fullText: string): string {
+  return normalizeText(stripIdentifyingInfo(fullText));
+}
+
 const USAGE_KEY = "margalink-review-uses";
 export const FREE_REVIEWS_PER_DEVICE = 3;
 
@@ -23,7 +34,7 @@ export function reviewsRemaining(): number {
   return Math.max(0, FREE_REVIEWS_PER_DEVICE - reviewsUsed());
 }
 
-function recordReviewUsed(): void {
+export function recordReviewUsed(): void {
   try {
     localStorage.setItem(USAGE_KEY, String(reviewsUsed() + 1));
   } catch {
