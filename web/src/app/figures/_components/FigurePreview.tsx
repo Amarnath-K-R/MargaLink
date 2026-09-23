@@ -9,6 +9,7 @@ export type PreviewState = {
   error: { message: string; traceback: string } | null;
   stage: ProgressStage | null;
   busy: boolean;
+  hookWarning: string | null;
 };
 
 const STAGE_LABEL: Record<ProgressStage, string> = {
@@ -38,6 +39,7 @@ export default function FigurePreview({ state, problem }: { state: PreviewState;
       </div>
       <p className="mt-2 text-xs text-ink-soft">Rendered on this device — no request is made for previews or exports.</p>
       {problem && <ErrorText>{problem}</ErrorText>}
+      {state.hookWarning && <p className="mt-2 text-sm text-ink-soft" data-testid="hook-warning">{state.hookWarning}</p>}
       {state.error && (
         <div data-testid="render-error">
           <ErrorText>{state.error.message}</ErrorText>

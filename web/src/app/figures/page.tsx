@@ -13,6 +13,8 @@ import PaperDropzone from "@/components/PaperDropzone";
 import ErrorText from "@/components/ErrorText";
 import DataPrep from "./_components/DataPrep";
 import Gallery from "./_components/Gallery";
+import Describe from "./_components/Describe";
+import type { ClaudeResult } from "@/lib/figure";
 import FigurePreview, { type PreviewState } from "./_components/FigurePreview";
 import ExportBar from "./_components/ExportBar";
 import PanelEditor from "./_components/PanelEditor";
@@ -21,7 +23,7 @@ import RecipeImportExport, { type Recipe } from "./_components/RecipeImportExpor
 
 const PREVIEW_DPI = 144;
 const DEBOUNCE_MS = 250;
-const IDLE: PreviewState = { png: null, meta: null, error: null, stage: null, busy: false };
+const IDLE: PreviewState = { png: null, meta: null, error: null, stage: null, busy: false, hookWarning: null };
 
 function prepare(workbook: Workbook | null, options: PrepOptions | null): { dataset: Dataset | null; error: string | null } {
   if (!workbook || !options) return { dataset: null, error: null };
@@ -84,7 +86,7 @@ export default function FiguresPage() {
       setPreview((p) => ({ ...p, busy: true }));
       renderFigure(req, (stage) => setPreview((p) => ({ ...p, stage }))).then(
         (result) => {
-          if (result) setPreview({ png: result.images.png ?? null, meta: result.meta, error: null, stage: null, busy: false });
+          if (result) setPreview({ png: result.images.png ?? null, meta: result.meta, error: null, stage: null, busy: false, hookWarning: result.hookWarning });
         },
         (err: unknown) => {
           const error = err instanceof FigureRenderError ? { message: err.message, traceback: err.traceback } : { message: errorMessage(err), traceback: "" };
@@ -139,6 +141,16 @@ export default function FiguresPage() {
     if (!spec || spec.panels.length <= 1) return;
     setSpec({ ...spec, panels: spec.panels.filter((_, j) => j !== i) });
     setSelected(Math.max(0, Math.min(selected, spec.panels.length - 2)));
+  }
+  function onClaude(r: ClaudeResult) {
+    if (r.kind === "hook") {
+      setHook(r.hook);
+      return;
+    }
+    setSpec(r.spec);
+    setTemplateId(null);
+    setSelected((i) => Math.min(i, r.spec.panels.length - 1));
+    setSpecKey((k) => k + 1);
   }
   function loadRecipe(r: Recipe) {
     setSpec(r.spec);
@@ -198,7 +210,11 @@ export default function FiguresPage() {
         <div className="mt-12 grid gap-10 border-t border-line pt-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           <div>
             <section>
-              <p className="mb-3 text-sm font-medium text-accent">3. Start from</p>
+              <p className="mb-3 text-sm font-medium text-accent">3. Describe it to Claude…</p>
+              <Describe dataset={dataset} spec={spec} onResult={onClaude} />
+            </section>
+            <section className="mt-10">
+              <p className="mb-3 text-sm font-medium text-accent">…or start from a template</p>
               <Gallery templates={templates} selected={templateId} onPick={pick} />
             </section>
             {spec && (
@@ -230,6 +246,15 @@ export default function FiguresPage() {
                 <div className="mt-4">
                   <PanelEditor key={selected} panel={spec.panels[selected]} onChange={(p) => setPanel(selected, p)} dataset={dataset} />
                 </div>
+                {hook && (
+                  <details className="mt-6 border-t border-line pt-4 text-sm" data-testid="hook">
+                    <summary className="cursor-pointer font-medium">Custom tweak (Python, runs after the figure is drawn)</summary>
+                    <pre className="mt-2 max-h-60 overflow-auto rounded-sm border border-line bg-paper-alt p-2 text-xs">{hook}</pre>
+                    <button type="button" onClick={() => setHook(null)} className="mt-2 text-accent hover:underline">
+                      Remove tweak
+                    </button>
+                  </details>
+                )}
                 <div className="mt-6 border-t border-line pt-4">
                   <RecipeImportExport spec={spec} hook={hook} columns={dataset.columns} onLoad={loadRecipe} />
                 </div>
@@ -248,8 +273,8 @@ export default function FiguresPage() {
 
       <NetworkTracePanel calls={calls}>
         {calls.filter((c) => c.hadBody).length === 0
-          ? "None of these carried your data — previews and exports are drawn on this device. The requests above only fetch the public figure engine, fonts and template pictures."
-          : "A request with a body only happens after you confirm the Ask Claude notice."}
+          ? "Live previews and exports make no request — they're drawn on this device. The figure engine, fonts and template pictures are fetched without any of your data."
+          : "Live previews and exports make no request. The one request with a body is the Ask Claude call you confirmed — its exact contents are shown above."}
       </NetworkTracePanel>
 
       <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">

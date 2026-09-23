@@ -6,6 +6,11 @@
 //   Part 2 — the editors: a second panel (scatter), a title and unit, Welch
 //   brackets against the first group (loads SciPy once), and a recipe that
 //   round-trips to the identical image; a recipe for other data is refused.
+//   Part 3 — Ask Claude (mocked; a real call is a manual gate): consent, the
+//   exact body (no values, no labels by default; only the listed labels when
+//   opted in, with the notice shown again), the returned spec renders.
+//   Part 4 — custom tweak (mocked): "import os" is refused before anything
+//   runs; a benign customize() runs and shows in the exported SVG.
 //
 // First run downloads Pyodide (~30MB, from jsDelivr) into this profile's
 // HTTP cache — later runs reuse it. That's why this uses a persistent
@@ -135,7 +140,70 @@ await page.getByLabel("Recipe file").setInputFiles(`${SCRATCH}/foreign.json`);
 await page.waitForSelector('[data-testid="recipe"] >> text=doesn\'t fit this data');
 check("a recipe for other data is refused with a reason", true);
 
-check(`zero body-carrying requests (${bodyRequests.join("; ") || "none"})`, bodyRequests.length === 0);
+// --- part 3: Ask Claude (mocked) ---
+const bodies = [];
+let nextReply = null;
+await page.route("**/api/figure", async (route) => {
+  bodies.push(JSON.parse(route.request().postData()));
+  await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(nextReply) });
+});
+const twoPanel = structuredClone(recipe.spec);
+twoPanel.panels[0].layers = [{ kind: "points", ci: false, alpha: 0.5, size: null, jitter: null }];
+twoPanel.panels[0].title = "";
+nextReply = { spec: twoPanel, summary: "Week 1 by arm with points, beside dose against week 1." };
+const describe = page.locator('[data-testid="describe"]');
+await describe.getByLabel("Describe the figure").fill("Add the individual points to panel a");
+const preview1 = await page.locator('[data-testid="figure-payload"]').textContent();
+check("payload preview: no labels, no values by default", preview1.includes('"levels": null') && !/Nordklinik|S01|Placebo|1081/.test(preview1));
+await describe.getByRole("button", { name: "Ask Claude for a figure" }).click();
+await page.waitForSelector('[role="alertdialog"]');
+check("consent does not list labels when not opted in", (await page.locator('[data-testid="consent-labels"]').count()) === 0);
+await page.getByRole("button", { name: "Send it and ask Claude" }).click();
+await page.waitForSelector('[data-testid="claude-summary"]');
+await settled();
+const sent1 = JSON.stringify(bodies[0]);
+check("request body: levels null, no cell value or label", bodies[0].levels === null && !/Nordklinik|S01|Placebo|1081/.test(sent1));
+check("request body keeps typed text local (title not sent)", !sent1.includes("Week 1 score by arm"));
+check("request body equals the on-page preview", sent1 === JSON.stringify(JSON.parse(preview1)));
+check("Claude's spec rendered (2 panels, no error)", (await preview.getAttribute("data-panels")) === "2" && (await page.locator('[data-testid="render-error"]').count()) === 0);
+check("the user's own title survived Claude's empty one", (await editor.getByLabel("Panel title").inputValue()) === "Week 1 score by arm");
+
+await describe.getByLabel(/Also send group labels/).check();
+await describe.getByRole("button", { name: "Ask Claude for a figure" }).click();
+await page.waitForSelector('[data-testid="consent-labels"]');
+const consentText = await page.locator('[data-testid="consent-labels"]').innerText();
+check("with labels ticked, the notice shows again and lists them", consentText.includes("Nordklinik") && consentText.includes("Placebo"));
+await page.getByRole("button", { name: "Send it and ask Claude" }).click();
+await page.waitForFunction(() => document.querySelectorAll('[data-testid="claude-summary"]').length > 0);
+await settled();
+check(
+  `opted-in body carries exactly the small categorical columns (${Object.keys(bodies[1].levels ?? {}).join(", ")})`,
+  JSON.stringify(bodies[1].levels) === JSON.stringify({ subject: ["S01", "S02", "S03", "S04", "S05", "S06"], site: ["Nordklinik", "Südhaus", "Østby"], arm: ["Placebo", "Low", "High"] }),
+);
+check("opted-in body still has no numeric values", !JSON.stringify(bodies[1]).includes("1081"));
+await describe.getByLabel(/Also send group labels/).uncheck();
+
+// --- part 4: custom tweak (mocked) ---
+nextReply = { hook: "import os\ndef customize(fig, axes, df):\n    os.listdir('/')", summary: "Lists files." };
+await describe.getByLabel("Describe the figure").fill("Put HOOKED as the first panel's title");
+await describe.getByRole("button", { name: "Ask for a custom tweak (code)" }).click();
+await page.waitForSelector('[data-testid="describe"] >> text=rejected before running');
+check("a tweak importing os is refused before it runs", (await page.locator('[data-testid="hook"]').count()) === 0);
+nextReply = { hook: "def customize(fig, axes, df):\n    axes[0].set_title('HOOKED')\n", summary: "Sets the first panel's title." };
+await describe.getByRole("button", { name: "Ask for a custom tweak (code)" }).click();
+await page.waitForSelector('[data-testid="hook"]');
+await settled();
+check("the tweak ran without a warning", (await page.locator('[data-testid="hook-warning"]').count()) === 0 && (await page.locator('[data-testid="render-error"]').count()) === 0);
+for (const f of ["PNG", "TIFF", "PDF"]) await bar.getByLabel(f).uncheck();
+await bar.getByLabel("SVG").check();
+await bar.getByRole("button", { name: "Export" }).click();
+await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="export-bar"] a[download]')].length === 1);
+const svg = await page.evaluate(async () => (await fetch(document.querySelector('[data-testid="export-bar"] a[download]').href)).text());
+check("the exported SVG carries the tweak's title", svg.includes("HOOKED"));
+check("every body-carrying request was a confirmed /api/figure call", bodies.length === 4);
+bodyRequests.splice(0, bodyRequests.length, ...bodyRequests.filter((r) => !r.endsWith("/api/figure")));
+
+check(`zero other body-carrying requests (${bodyRequests.join("; ") || "none"})`, bodyRequests.length === 0);
 check(`no console errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
 
 await page.screenshot({ path: `${SCRATCH}/figures.png`, fullPage: true });
