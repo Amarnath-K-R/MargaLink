@@ -3,8 +3,7 @@
 // the client. Run directly:
 //   node src/lib/reviewGrounding.selfcheck.ts
 import assert from "node:assert/strict";
-import { quoteAppearsInSource, filterGrounded, groundExtractOutput, normalizeText } from "./reviewGrounding.ts";
-import type { ReviewResult } from "./reviewTypes.ts";
+import { quoteAppearsInSource, groundExtractOutput, normalizeText } from "./reviewGrounding.ts";
 
 const SOURCE = "The sample included 71 patients. No significant difference was found between groups (p=0.34).";
 
@@ -28,37 +27,13 @@ assert.equal(
   "a fabricated (unsupported) quote should never ground"
 );
 
-const RESULT: ReviewResult = {
-  journalFit: { assessment: "good", explanation: "fits" },
-  inconsistencies: [
-    {
-      description: "real, grounded finding",
-      citations: [{ quote: "The sample included 71 patients.", section: "Methods" }],
-    },
-    {
-      description: "fabricated finding — should be dropped entirely",
-      citations: [{ quote: "The sample included 9000 patients.", section: "Methods" }],
-    },
-  ],
-  statisticalReporting: [],
-  otherObservations: [],
-};
-
-const filtered = filterGrounded(RESULT, SOURCE);
-assert.equal(filtered.inconsistencies.length, 1, "a finding whose only citation fails grounding is dropped entirely");
-assert.equal(
-  filtered.inconsistencies[0].description,
-  "real, grounded finding",
-  "the surviving finding is the grounded one, not the fabricated one"
-);
-
 // Normalization: what real PDF extraction produces vs what the model quotes back.
 assert.equal(quoteAppearsInSource("significant findings", "signiﬁcant ﬁndings were seen"), true, "ligatures in the source fold");
 assert.equal(quoteAppearsInSource("signiﬁcant ﬁndings", "significant findings were seen"), true, "ligatures in the quote fold");
 assert.equal(quoteAppearsInSource("treatment effect was", "the treat-\nment effect was large"), true, "line-end hyphenation is joined");
 assert.equal(quoteAppearsInSource('"n = 71" was', "the “n = 71” was stated"), true, "curly quotes fold to straight");
 assert.equal(quoteAppearsInSource("12 m2 per", "12 m² per plot"), true, "NFKC folds superscripts");
-assert.equal(quoteAppearsInSource("soft hyphen word", "soft hy­phen word"), true, "soft hyphens and NBSP fold");
+assert.equal(quoteAppearsInSource("soft hyphen word", "soft hy\u00ADphen\u00A0word"), true, "soft hyphens and NBSP fold");
 assert.equal(normalizeText(normalizeText("signiﬁcant “x” – y")), normalizeText("signiﬁcant “x” – y"), "normalizeText is idempotent");
 assert.equal(normalizeText("a\n\nb"), "a\n\nb", "normalizeText keeps newlines (sectioning runs after it)");
 // Pinned, deliberate: numbers the model 'tidies' do not ground (Task 11 measures how often).

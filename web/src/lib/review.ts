@@ -8,8 +8,6 @@
 // Types live in reviewTypes.ts — the one file both this client module and
 // functions/api/review.ts import from. Import the types you need from
 // @/lib/reviewTypes directly rather than through here.
-import type { ReviewResult, ReviewTier } from "./reviewTypes.ts";
-
 const USAGE_KEY = "margalink-review-uses";
 export const FREE_REVIEWS_PER_DEVICE = 3;
 
@@ -60,53 +58,3 @@ export function stripIdentifyingInfo(text: string): string {
 
 export class ReviewLimitError extends Error {}
 export class ReviewCapacityError extends Error {}
-
-function isValidReviewResult(v: unknown): v is ReviewResult {
-  if (!v || typeof v !== "object") return false;
-  const r = v as Record<string, unknown>;
-  return (
-    typeof r.journalFit === "object" &&
-    r.journalFit !== null &&
-    ["good", "possible", "poor"].includes((r.journalFit as Record<string, unknown>).assessment as string) &&
-    Array.isArray(r.inconsistencies) &&
-    r.inconsistencies.every((f) => Array.isArray((f as { citations?: unknown }).citations)) &&
-    Array.isArray(r.statisticalReporting) &&
-    r.statisticalReporting.every((f) => Array.isArray((f as { citations?: unknown }).citations)) &&
-    Array.isArray(r.otherObservations)
-  );
-}
-
-// `endpoint` is overridable for testing against a local mock instead of the
-// real Cloudflare Pages Function.
-export async function requestReview(
-  fullText: string,
-  journalId: string,
-  tier: ReviewTier = "standard",
-  endpoint = "/api/review"
-): Promise<ReviewResult> {
-  if (reviewsRemaining() <= 0) {
-    throw new ReviewLimitError(`You've used all ${FREE_REVIEWS_PER_DEVICE} free pilot reviews on this device.`);
-  }
-
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: stripIdentifyingInfo(fullText), journalId, tier }),
-  });
-
-  if (res.status === 429) {
-    throw new ReviewCapacityError("This pilot is fully booked for today — try again tomorrow.");
-  }
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Review request failed (${res.status})${detail ? `: ${detail}` : ""}`);
-  }
-
-  const data: unknown = await res.json();
-  if (!isValidReviewResult(data)) {
-    throw new Error("Review response didn't match the expected shape");
-  }
-
-  recordReviewUsed();
-  return data;
-}

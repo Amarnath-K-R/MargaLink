@@ -5,7 +5,7 @@ import { useCallback, useState } from "react";
 import { extractFromFile } from "@/lib/extract";
 import { findJournalRules } from "@/lib/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
-import { requestReview, reviewsRemaining } from "@/lib/review";
+import { reviewsRemaining } from "@/lib/review";
 import type { ReviewResult, ReviewTier } from "@/lib/reviewTypes";
 import { errorMessage } from "@/lib/errorMessage";
 import ErrorText from "@/components/ErrorText";
@@ -86,8 +86,8 @@ export default function ReviewPage() {
     setReviewLoading(true);
     setReviewError(null);
     try {
-      const result = await requestReview(paperText, selectedJournalId, tier);
-      setReviewResult(result);
+      // ponytail: migration placeholder — replaced by runReview() in the next commit.
+      throw new Error("Review temporarily unavailable during migration");
     } catch (err) {
       // Surface the real error (the Function returns descriptive text on
       // failure, e.g. an Anthropic error or a stop_reason) rather than a

@@ -16,8 +16,8 @@
 // the paper before returning anything.
 export type Citation = { quote: string; section: string };
 
-// Three review depths, mapped to Anthropic's output_config.effort levels in
-// functions/api/review.ts's TIER_CONFIG.
+// Three review depths — see TIER_PLAN in reviewPrompt.ts for what each one
+// extracts and how hard synthesis reasons.
 export const REVIEW_TIERS = ["quick", "standard", "thorough"] as const;
 export type ReviewTier = (typeof REVIEW_TIERS)[number];
 

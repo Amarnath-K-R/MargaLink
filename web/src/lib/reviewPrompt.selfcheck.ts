@@ -2,9 +2,7 @@
 //   node src/lib/reviewPrompt.selfcheck.ts
 import assert from "node:assert/strict";
 import {
-  TIER_CONFIG,
   requiredStatementsList,
-  buildPrompt,
   EXTRACT_MAX_TOKENS,
   TIER_PLAN,
   buildExtractPrompt,
@@ -14,7 +12,7 @@ import type { JournalRules } from "./journalRules.ts";
 import { REVIEW_TIERS, type SynthesizeRequest } from "./reviewTypes.ts";
 
 for (const tier of REVIEW_TIERS) {
-  assert.ok(TIER_CONFIG[tier].guidance.length > 0, `${tier} tier should have non-empty guidance text`);
+  assert.ok(TIER_PLAN[tier].guidance.length > 0, `${tier} tier should have non-empty guidance text`);
 }
 
 const RULES: JournalRules = {
@@ -40,25 +38,6 @@ assert.equal(
   "an empty requiredStatements list should fall back to 'none required'"
 );
 
-const promptWithoutAbstract = buildPrompt("Some paper text with no abstract heading.", RULES, "standard");
-assert.ok(
-  promptWithoutAbstract.includes("data submitted by an untrusted party"),
-  "the prompt injection-defense paragraph must always be present"
-);
-assert.ok(!promptWithoutAbstract.includes("ABSTRACT (exact text"), "no ABSTRACT block when extractAbstract finds nothing");
-
-const paperWithAbstract = "Title\n\nAbstract\n\nThis is the real abstract text.\n\n1. Introduction\n\nBody text here.";
-const promptWithAbstract = buildPrompt(paperWithAbstract, RULES, "thorough");
-assert.ok(
-  promptWithAbstract.includes('ABSTRACT (exact text — this is the ONLY text that counts as "the abstract"'),
-  "the labeled ABSTRACT block should appear when extractAbstract finds one"
-);
-assert.ok(
-  promptWithAbstract.includes("This is the real abstract text."),
-  "the labeled ABSTRACT block should contain the actual extracted abstract text"
-);
-
-// --- Multi-pass prompts ---
 const chunk = {
   id: "s4-p2",
   title: "Results · 3.2 Secondary outcomes",

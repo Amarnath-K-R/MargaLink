@@ -1,25 +1,25 @@
 // The security-relevant anti-fabrication check behind functions/api/review.ts
-// (imported there via a relative path — Cloudflare Pages routes every file
+// (imported there via a relative path \u2014 Cloudflare Pages routes every file
 // inside functions/ as an endpoint, so shared code has to live outside it).
 // Pulled out specifically because this had zero test coverage before this
 // split, despite being the one thing standing between a model hallucinating
 // a quote and that quote reaching the client. See docs/ARCHITECTURE.md's
 // "The AI review: what it defends against, and why."
-import type { Citation, ExtractResponse, ReviewResult } from "./reviewTypes.ts";
+import type { ExtractResponse } from "./reviewTypes.ts";
 
 // Applied once client-side before sectioning (review.ts's prepareForReview)
-// AND again at match time here — idempotent, so both sides agree, and
+// AND again at match time here \u2014 idempotent, so both sides agree, and
 // models re-introduce curly quotes on their own. Keeps newlines: sectioning
 // depends on them. ponytail: the de-hyphenation also joins a genuine
 // compound split at a line end ("well-\nknown" → "wellknown"); it happens on
-// both sides identically, so grounding is unaffected — cosmetic only.
+// both sides identically, so grounding is unaffected \u2014 cosmetic only.
 export function normalizeText(s: string): string {
   return s
     .normalize("NFKC")
-    .replace(/[‘’‚]/g, "'")
-    .replace(/[“”„]/g, '"')
-    .replace(/[–—−]/g, "-")
-    .replace(/­/g, "")
+    .replace(/[\u2018\u2019\u201A]/g, "'")
+    .replace(/[\u201C\u201D\u201E]/g, '"')
+    .replace(/[\u2013\u2014\u2212]/g, "-")
+    .replace(/\u00AD/g, "")
     .replace(/([a-z])-\n([a-z])/g, "$1$2")
     .replace(/[ \t]+/g, " ");
 }
@@ -63,7 +63,7 @@ export function groundExtractOutput(output: unknown, chunkText: string, claimsCa
   return { claims, statisticalReporting, notes };
 }
 
-// Real, deterministic check — never trust the model's own claim that a
+// Real, deterministic check \u2014 never trust the model's own claim that a
 // quote is verbatim. Fuzzy on whitespace/case only; the substance must
 // actually appear in the source, or the finding is dropped before it ever
 // reaches the client, not just flagged as suspicious.
@@ -71,18 +71,4 @@ export function quoteAppearsInSource(quote: string, source: string): boolean {
   const q = normalize(quote);
   if (q.length < 8) return false; // too short to be a meaningful citation
   return normalize(source).includes(q);
-}
-
-export function filterGrounded(result: ReviewResult, sourceText: string): ReviewResult {
-  const groundCitations = (citations: Citation[]) => citations.filter((c) => quoteAppearsInSource(c.quote, sourceText));
-
-  return {
-    ...result,
-    inconsistencies: result.inconsistencies
-      .map((f) => ({ ...f, citations: groundCitations(f.citations) }))
-      .filter((f) => f.citations.length > 0),
-    statisticalReporting: result.statisticalReporting
-      .map((f) => ({ ...f, citations: groundCitations(f.citations) }))
-      .filter((f) => f.citations.length > 0),
-  };
 }
