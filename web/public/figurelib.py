@@ -658,6 +658,9 @@ def pairwise_p(a: np.ndarray, b: np.ndarray, test: str) -> tuple[float, str]:
     st = _scipy_stats()
     name = "welch" if test == "auto" else test
     a, b = np.asarray(a, float), np.asarray(b, float)
+    a, b = a[~np.isnan(a)], b[~np.isnan(b)]
+    if min(len(a), len(b)) < 2:
+        raise FigureError("too_few_groups", reason="each compared group needs at least two values")
     if name == "t":
         return float(st.ttest_ind(a, b).pvalue), name
     if name == "welch":
@@ -1145,6 +1148,10 @@ def run_request(spec: dict, df: pd.DataFrame, formats: list[str], dpi: int, hook
             images = export(fig, formats, dpi)
         except Exception:  # noqa: BLE001
             return {"error": {"code": "render_failed", "detail": {"stage": "export"}, "traceback": _tb.format_exc()}}
+        # A degenerate test (constant data) gives p = NaN, which JSON can't carry.
+        for panel_meta in meta["panels"]:
+            for t in panel_meta["tests"]:
+                t["p"] = t["p"] if np.isfinite(t["p"]) else None
         return {"images": images, "meta": meta, "hookWarning": warning}
     except FigureError as err:
         return {"error": {"code": err.code, "detail": err.detail, "traceback": err.traceback or ""}}

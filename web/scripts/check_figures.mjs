@@ -3,12 +3,15 @@
 //   decimal commas, thousands dots, NA tokens) is read correctly, the
 //   number-format control really matters, a template renders on this device,
 //   all four export formats come back, and no request carries a body.
+//   Part 2 — the editors: a second panel (scatter), a title and unit, Welch
+//   brackets against the first group (loads SciPy once), and a recipe that
+//   round-trips to the identical image; a recipe for other data is refused.
 //
 // First run downloads Pyodide (~30MB, from jsDelivr) into this profile's
 // HTTP cache — later runs reuse it. That's why this uses a persistent
 // context instead of chromium.launch()'s throwaway one.
 import { chromium } from "playwright";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../.smoke/", import.meta.url).pathname;
 mkdirSync(SCRATCH, { recursive: true });
@@ -76,6 +79,61 @@ await bar.getByRole("button", { name: "Export" }).click();
 await page.waitForSelector('[data-testid="export-bar"] a[download]', { timeout: 60000 });
 const names = await bar.locator("a[download]").evaluateAll((as) => as.map((a) => a.getAttribute("download")));
 check(`four downloads (${names.join(", ")})`, ["figure.png", "figure.tiff", "figure.svg", "figure.pdf"].every((n) => names.includes(n)));
+
+// --- part 2: editors ---
+const preview = page.locator('[data-testid="figure-preview"]');
+async function settled() {
+  await page.waitForTimeout(400); // past the 250 ms debounce
+  await page.waitForFunction(() => document.querySelector('[data-testid="figure-preview"]')?.getAttribute("data-busy") === "false", null, { timeout: 120000 });
+}
+const editor = page.locator('[data-testid="panel-editor"]');
+await editor.getByLabel("Panel title").fill("Week 1 score by arm");
+await editor.getByLabel("Y unit").fill("points");
+await editor.getByLabel("Column for y").selectOption("week1");
+await settled();
+
+await page.getByRole("button", { name: "Add panel" }).click();
+await page.getByRole("tab", { name: /Panel b/ }).waitFor();
+await editor.getByRole("button", { name: "Scatter" }).click();
+await editor.getByLabel("Column for x").selectOption("dose_mg");
+await editor.getByLabel("Column for y").selectOption("week1");
+await settled();
+check("two panels rendered", (await preview.getAttribute("data-panels")) === "2");
+
+await page.getByRole("tab", { name: /Panel a/ }).click();
+await editor.locator("summary", { hasText: "Statistics" }).click();
+const stages = [];
+const seen = setInterval(async () => {
+  const t = await preview.innerText().catch(() => "");
+  if (t.includes("statistics library")) stages.push("scipy");
+}, 100);
+await editor.getByLabel("Test").selectOption("welch");
+await editor.getByLabel("Comparisons").selectOption("vs-first");
+await settled();
+clearInterval(seen);
+const tests = await page.locator('[data-testid="test-results"] tr').count();
+check(`Welch vs-first gives 2 comparisons for 3 arms (${tests})`, tests === 2);
+const statErr = await page.locator('[data-testid="render-error"]').innerText().catch(() => "");
+check(`no render error after adding statistics ${statErr}`, !statErr);
+
+const before = await page.locator('[data-testid="figure-image"]').getAttribute("src");
+const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Save recipe" }).click()]);
+const recipePath = `${SCRATCH}/recipe.json`;
+await dl.saveAs(recipePath);
+const recipe = JSON.parse(readFileSync(recipePath, "utf8"));
+check("recipe carries the spec, no data", recipe.version === 1 && recipe.spec.panels.length === 2 && !JSON.stringify(recipe).includes("Nordklinik"));
+await page.click('[data-template="histogram"]'); // replace the figure…
+await settled();
+await page.getByLabel("Recipe file").setInputFiles(recipePath); // …then bring it back
+await settled();
+const after = await page.locator('[data-testid="figure-image"]').getAttribute("src");
+check("re-imported recipe redraws the identical image", before === after);
+
+const foreign = { ...recipe, spec: { ...recipe.spec, panels: [{ ...recipe.spec.panels[0], roles: { ...recipe.spec.panels[0].roles, y: "not_here" } }] } };
+writeFileSync(`${SCRATCH}/foreign.json`, JSON.stringify(foreign));
+await page.getByLabel("Recipe file").setInputFiles(`${SCRATCH}/foreign.json`);
+await page.waitForSelector('[data-testid="recipe"] >> text=doesn\'t fit this data');
+check("a recipe for other data is refused with a reason", true);
 
 check(`zero body-carrying requests (${bodyRequests.join("; ") || "none"})`, bodyRequests.length === 0);
 check(`no console errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);

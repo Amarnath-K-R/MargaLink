@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { prepareDataset, readWorkbook, suggestPrepOptions, type Dataset, type PrepOptions, type Workbook } from "@/lib/spreadsheet";
 import { exportFigure, renderFigure, warmUp, FigureRenderError, type ImageFormat, type RenderRequest } from "@/lib/figureRunner";
-import { checkSpecAgainstColumns, type FigureSpec } from "@/lib/figureSpec";
+import { LIMITS, checkSpecAgainstColumns, validateFigureSpec, type FigureSpec, type Panel } from "@/lib/figureSpec";
 import { bindTemplate, loadTemplates, type Template } from "@/lib/figureTemplates";
 import { errorMessage } from "@/lib/errorMessage";
 import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
@@ -15,6 +15,9 @@ import DataPrep from "./_components/DataPrep";
 import Gallery from "./_components/Gallery";
 import FigurePreview, { type PreviewState } from "./_components/FigurePreview";
 import ExportBar from "./_components/ExportBar";
+import PanelEditor from "./_components/PanelEditor";
+import StyleBar from "./_components/StyleBar";
+import RecipeImportExport, { type Recipe } from "./_components/RecipeImportExport";
 
 const PREVIEW_DPI = 144;
 const DEBOUNCE_MS = 250;
@@ -41,6 +44,11 @@ export default function FiguresPage() {
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [spec, setSpec] = useState<FigureSpec | null>(null);
   const [preview, setPreview] = useState<PreviewState>(IDLE);
+  const [selected, setSelected] = useState(0);
+  // Bumped whenever the spec is replaced wholesale, so editors with
+  // uncontrolled inputs (typed-on-blur fields) start fresh.
+  const [specKey, setSpecKey] = useState(0);
+  const [hook, setHook] = useState<string | null>(null);
   const { calls } = useNetworkTrace();
 
   useEffect(() => {
@@ -53,14 +61,18 @@ export default function FiguresPage() {
     () => prepare(workbook, prep && { ...prep, reshape: null, typeOverrides: {} }).dataset?.columns.map((c) => c.name) ?? [],
     [workbook, prep],
   );
-  const problem = dataset && spec ? checkSpecAgainstColumns(dataset.columns, spec) : null;
+  const problem = useMemo(() => {
+    if (!dataset || !spec) return null;
+    const valid = validateFigureSpec(spec);
+    return typeof valid === "string" ? `The figure settings aren't valid: ${valid}` : checkSpecAgainstColumns(dataset.columns, spec);
+  }, [dataset, spec]);
 
   const request = useCallback(
     (formats: ImageFormat[], dpi: number): RenderRequest | null =>
       dataset && spec
-        ? { spec, csv: dataset.csv, dtypes: Object.fromEntries(dataset.columns.map((c) => [c.name, c.dtype])), formats, dpi, hook: null }
+        ? { spec, csv: dataset.csv, dtypes: Object.fromEntries(dataset.columns.map((c) => [c.name, c.dtype])), formats, dpi, hook }
         : null,
-    [dataset, spec],
+    [dataset, spec, hook],
   );
 
   // Live preview: debounced; renderFigure resolves null for a superseded
@@ -88,6 +100,7 @@ export default function FiguresPage() {
     setPreview(IDLE);
     setSpec(null);
     setTemplateId(null);
+    setHook(null);
     try {
       const wb = await readWorkbook(file);
       setWorkbook(wb);
@@ -104,9 +117,36 @@ export default function FiguresPage() {
       if (!dataset) return;
       setTemplateId(t.id);
       setSpec(bindTemplate(t, dataset.columns));
+      setSelected(0);
+      setSpecKey((k) => k + 1);
     },
     [dataset],
   );
+
+  const setPanel = (i: number, p: Panel) => spec && setSpec({ ...spec, panels: spec.panels.map((q, j) => (j === i ? p : q)) });
+  function addPanel() {
+    if (!spec || spec.panels.length >= LIMITS.panels) return;
+    const panels = [...spec.panels, { ...structuredClone(spec.panels[selected]), title: "" }];
+    let { rows, cols } = spec.layout;
+    while (rows * cols < panels.length) {
+      if (cols <= rows) cols++;
+      else rows++;
+    }
+    setSpec({ ...spec, panels, layout: { ...spec.layout, rows, cols } });
+    setSelected(panels.length - 1);
+  }
+  function removePanel(i: number) {
+    if (!spec || spec.panels.length <= 1) return;
+    setSpec({ ...spec, panels: spec.panels.filter((_, j) => j !== i) });
+    setSelected(Math.max(0, Math.min(selected, spec.panels.length - 2)));
+  }
+  function loadRecipe(r: Recipe) {
+    setSpec(r.spec);
+    setHook(r.hook);
+    setTemplateId(null);
+    setSelected(0);
+    setSpecKey((k) => k + 1);
+  }
 
   const onExport = useCallback(
     async (formats: ImageFormat[], dpi: number) => {
@@ -156,10 +196,46 @@ export default function FiguresPage() {
 
       {dataset && (
         <div className="mt-12 grid gap-10 border-t border-line pt-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-          <section>
-            <p className="mb-3 text-sm font-medium text-accent">3. Start from</p>
-            <Gallery templates={templates} selected={templateId} onPick={pick} />
-          </section>
+          <div>
+            <section>
+              <p className="mb-3 text-sm font-medium text-accent">3. Start from</p>
+              <Gallery templates={templates} selected={templateId} onPick={pick} />
+            </section>
+            {spec && (
+              <section className="mt-10 border-t border-line pt-8" key={specKey}>
+                <p className="mb-3 text-sm font-medium text-accent">4. Adjust</p>
+                <StyleBar spec={spec} onChange={setSpec} />
+                <div className="mt-6 flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Panels">
+                  {spec.panels.map((p, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected === i}
+                      onClick={() => setSelected(i)}
+                      className={`rounded-sm border px-3 py-1 text-sm ${selected === i ? "border-accent bg-accent-soft" : "border-line bg-paper-alt hover:border-accent"}`}
+                    >
+                      Panel {String.fromCharCode(97 + i)} · {p.family}
+                    </button>
+                  ))}
+                  <button type="button" onClick={addPanel} disabled={spec.panels.length >= LIMITS.panels} className="px-2 py-1 text-sm text-accent disabled:opacity-40">
+                    Add panel
+                  </button>
+                  {spec.panels.length > 1 && (
+                    <button type="button" onClick={() => removePanel(selected)} className="px-2 py-1 text-sm text-accent">
+                      Remove panel {String.fromCharCode(97 + selected)}
+                    </button>
+                  )}
+                </div>
+                <div className="mt-4">
+                  <PanelEditor key={selected} panel={spec.panels[selected]} onChange={(p) => setPanel(selected, p)} dataset={dataset} />
+                </div>
+                <div className="mt-6 border-t border-line pt-4">
+                  <RecipeImportExport spec={spec} hook={hook} columns={dataset.columns} onLoad={loadRecipe} />
+                </div>
+              </section>
+            )}
+          </div>
           <section className="lg:sticky lg:top-6 lg:self-start">
             <p className="mb-3 text-sm font-medium text-accent">Your figure</p>
             <FigurePreview state={preview} problem={problem} />

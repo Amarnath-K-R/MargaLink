@@ -7,6 +7,7 @@ import io
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from PIL import Image
 
 import specs
@@ -338,5 +339,18 @@ assert [t["pair"] for t in meta["panels"][0]["tests"]] == ["Placebo vs High"], m
 vline = next(ln for ln in fig.axes[0].lines if ln.get_gid() == "annotation-vline")
 assert vline.get_xdata()[0] == 2.0, "#0 = Placebo, drawn third under alpha order"
 fl.close(fig)
+
+# 24. a group left with one value can't be tested: a named error, not NaN
+try:
+    fl.pairwise_p(np.array([1.0, np.nan]), np.array([2.0, 3.0]), "welch")
+    raise AssertionError("expected too_few_groups")
+except fl.FigureError as e:
+    assert e.code == "too_few_groups"
+flat = pd.DataFrame({"g": ["a", "a", "b", "b"], "y": [1.0, 1.0, 1.0, 1.0]})
+anova = panel("box", x="g", y="y")
+anova["stats"] = {"test": "anova", "pairs": "all", "explicit": [], "display": "p", "reference": None}
+out = fl.run_request(spec([anova]), flat, ["png"], 72)
+assert out["meta"]["panels"][0]["tests"][0]["p"] is None, "NaN p crosses as null"
+json.dumps(out, allow_nan=False)
 
 print("figurelib.selfcheck: OK")

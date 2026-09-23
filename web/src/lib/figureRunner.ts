@@ -13,7 +13,7 @@ export const LOAD_TIMEOUT_MS = 90_000;
 
 export type ImageFormat = "png" | "tiff" | "svg" | "pdf";
 export type ProgressStage = "loading-runtime" | "loading-packages" | "loading-scipy" | "loading-fonts" | "rendering" | "exporting";
-export type TestResult = { pair: string; p: number; test: string };
+export type TestResult = { pair: string; p: number | null; test: string }; // p null: the test was undefined (e.g. constant data)
 export type RenderMeta = { font: string; panels: { n: Record<string, number>; tests: TestResult[] }[] };
 export type RenderResult = { images: Partial<Record<ImageFormat, string>>; meta: RenderMeta; hookWarning: string | null };
 export type RenderRequest = { spec: FigureSpec; csv: string; dtypes: Record<string, Dtype>; formats: ImageFormat[]; dpi: number; hook: string | null };
@@ -62,7 +62,7 @@ export function describeRenderError(code: string, d: Record<string, unknown>): s
   }
 }
 
-type Outgoing = { type: "warmup"; scipy: boolean; fonts: boolean } | ({ type: "render" } & RenderRequest) | { type: "run"; code: string; csv: string };
+type Outgoing = { type: "warmup"; scipy: boolean; fonts: boolean } | ({ type: "render" } & RenderRequest);
 type Incoming = {
   type: "progress" | "ready" | "result" | "error";
   id: number;
@@ -177,18 +177,6 @@ export function renderFigure(req: RenderRequest, onProgress?: (stage: ProgressSt
 // Publication export — never superseded by a preview.
 export async function exportFigure(req: RenderRequest, onProgress?: (stage: ProgressStage) => void): Promise<RenderResult> {
   return (await renderOnce(req, EXPORT_TIMEOUT_MS, onProgress))!;
-}
-
-// Legacy whole-script path for the pre-spec page; removed with it.
-export type FigureImages = { png: string; svg: string; pdf: string };
-export async function runFigureCode(code: string, csv: string, onProgress?: (stage: ProgressStage) => void): Promise<FigureImages> {
-  await warmUp({}, onProgress);
-  try {
-    const m = await send({ type: "run", code, csv }, 15_000, onProgress).done;
-    return m.images as FigureImages;
-  } catch (err) {
-    throw err instanceof FigureRenderError && err.code !== "timeout" ? new Error(err.traceback) : err;
-  }
 }
 
 // Defense in depth for custom-code tweaks, screened before anything runs —

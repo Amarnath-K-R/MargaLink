@@ -17,13 +17,19 @@
 // Protocol (every message carries the caller's id):
 //   → {type:"warmup", id, scipy, fonts}
 //   → {type:"render", id, spec, csv, dtypes, formats, dpi, hook}
-//   → {type:"run", id, code, csv}            legacy script path, removed with the old page
 //   ← {type:"progress", id, stage} … {type:"ready", id}
 //   ← {type:"result", id, images, meta, hookWarning}
 //   ← {type:"error", id, code, detail, traceback}
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs";
 
 let pyodidePromise = null;
+
+// Marks a failure as "couldn't load" (network, CDN) rather than a render bug.
+function asLoadError(err) {
+  const e = err instanceof Error ? err : new Error(String(err));
+  e.isLoad = true;
+  throw e;
+}
 let scipyPromise = null;
 const fontsLoaded = new Set();
 let frameCsv = null;
@@ -43,7 +49,7 @@ function getPyodide(report) {
       pyodide.FS.writeFile("/home/pyodide/figurelib.py", await res.text());
       pyodide.runPython("import json, figurelib");
       return pyodide;
-    })();
+    })().catch(asLoadError);
     // A failed load shouldn't wedge every later message on the same rejection.
     pyodidePromise.catch(() => (pyodidePromise = null));
   }
@@ -53,7 +59,7 @@ function getPyodide(report) {
 async function ensureScipy(pyodide, report) {
   if (!scipyPromise) {
     report("loading-scipy");
-    scipyPromise = pyodide.loadPackage(["scipy"]);
+    scipyPromise = pyodide.loadPackage(["scipy"]).catch(asLoadError);
     scipyPromise.catch(() => (scipyPromise = null));
   }
   await scipyPromise;
@@ -63,6 +69,14 @@ async function ensureScipy(pyodide, report) {
 async function ensureFonts(pyodide, files, report) {
   const missing = files.filter((f) => !fontsLoaded.has(f));
   if (missing.length === 0) return;
+  try {
+    await fetchFonts(pyodide, missing, report);
+  } catch (err) {
+    asLoadError(err);
+  }
+}
+
+async function fetchFonts(pyodide, missing, report) {
   report("loading-fonts");
   pyodide.FS.mkdirTree("/fonts");
   for (const file of missing) {
@@ -111,23 +125,6 @@ async function render(msg, report) {
   return { type: "result", id, images: out.images, meta: out.meta, hookWarning: out.hookWarning };
 }
 
-// Legacy: runs a whole Claude-written script (the pre-spec page). Removed
-// together with that page.
-async function runScript({ id, code, csv }, report) {
-  const pyodide = await getPyodide(report);
-  pyodide.globals.set("__csv__", csv);
-  report("rendering");
-  await pyodide.runPythonAsync(
-    'import io, base64\nimport pandas as pd\nimport matplotlib.pyplot as plt\nplt.close("all")\ndf = pd.read_csv(io.StringIO(__csv__))',
-  );
-  await pyodide.runPythonAsync(code);
-  await pyodide.runPythonAsync(
-    '__out__ = {}\nfor __fmt__ in ("png", "svg", "pdf"):\n    __buf__ = io.BytesIO()\n    plt.gcf().savefig(__buf__, format=__fmt__, dpi=200, bbox_inches="tight")\n    __out__[__fmt__] = base64.b64encode(__buf__.getvalue()).decode()',
-  );
-  const images = pyodide.globals.get("__out__").toJs({ dict_converter: Object.fromEntries });
-  return { type: "result", id, images, meta: null, hookWarning: null };
-}
-
 async function handle(msg) {
   const report = (stage) => self.postMessage({ type: "progress", id: msg.id, stage });
   try {
@@ -138,12 +135,11 @@ async function handle(msg) {
       self.postMessage({ type: "ready", id: msg.id });
     } else if (msg.type === "render") {
       self.postMessage(await render(msg, report));
-    } else if (msg.type === "run") {
-      self.postMessage(await runScript(msg, report));
     }
   } catch (err) {
-    // Loading failures (network, CDN) — no Python traceback involved.
-    self.postMessage({ type: "error", id: msg.id, code: "load_failed", detail: {}, traceback: String(err?.message ?? err) });
+    // Loading failures (network, CDN) vs. anything else going wrong mid-render.
+    const code = err?.isLoad ? "load_failed" : "render_failed";
+    self.postMessage({ type: "error", id: msg.id, code, detail: code === "render_failed" ? { stage: "worker" } : {}, traceback: String(err?.message ?? err) });
   }
 }
 

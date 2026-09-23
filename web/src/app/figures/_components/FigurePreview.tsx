@@ -26,7 +26,7 @@ const STAGE_LABEL: Record<ProgressStage, string> = {
 export default function FigurePreview({ state, problem }: { state: PreviewState; problem: string | null }) {
   const tests = state.meta?.panels.flatMap((p, i) => p.tests.map((t) => ({ ...t, panel: i }))) ?? [];
   return (
-    <div data-testid="figure-preview">
+    <div data-testid="figure-preview" data-busy={state.busy} data-panels={state.meta?.panels.length ?? 0}>
       <div className="relative min-h-40 rounded-sm border border-line bg-white p-2">
         {state.png ? (
           // eslint-disable-next-line @next/next/no-img-element -- a runtime data: URI; images are unoptimized in this static export
@@ -57,7 +57,7 @@ export default function FigurePreview({ state, problem }: { state: PreviewState;
                 {state.meta!.panels.length > 1 && <td className="pr-3 text-ink-soft">Panel {t.panel + 1}</td>}
                 <td className="pr-3">{t.pair}</td>
                 <td className="pr-3 text-ink-soft">{t.test}</td>
-                <td className="tabular-nums">p = {t.p < 0.001 ? t.p.toExponential(1) : t.p.toFixed(3)}</td>
+                <td className="tabular-nums">p = {t.p === null ? "n/a" : t.p < 0.001 ? t.p.toExponential(1) : t.p.toFixed(3)}</td>
               </tr>
             ))}
           </tbody>
