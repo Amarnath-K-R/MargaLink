@@ -1,0 +1,9 @@
+Exported from LabSystem v4.2
+Study: DOSE-01;;;;;;
+subject;site;arm;dose_mg;weight_kg;week1;week2;week3
+S01;Nordklinik;Placebo;0;72,5;1,2;NA;0,8
+S02;Nordklinik;Low;10;1.081,0;2,4;2,1;-
+S03;Südhaus;High;20;68,25;3,1;3,4;3,9
+S04;Südhaus;Placebo;0;NA;0,9;1,1;1,0
+S05;Østby;Low;10;90;2,2;2,6;2,9
+S06;Østby;High;20;77,4;3,3;;4,1

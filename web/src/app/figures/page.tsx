@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { parseSpreadsheet, type Dataset } from "@/lib/spreadsheet";
+import { prepareDataset, readWorkbook, suggestPrepOptions, type Dataset } from "@/lib/spreadsheet";
 import { requestFigureCode, figuresRemaining, figureConsentGiven, recordFigureConsent } from "@/lib/figure";
 import { runFigureCode, warmUp, type FigureImages, type ProgressStage } from "@/lib/figureRunner";
 import { validateSpec, type FigureSpec } from "@/lib/figureSchema";
@@ -42,7 +42,8 @@ export default function FiguresPage() {
     setGenError(null);
     setSpec(DEFAULT_SPEC);
     try {
-      const ds = await parseSpreadsheet(file);
+      const workbook = await readWorkbook(file);
+      const ds = prepareDataset(workbook, suggestPrepOptions(workbook));
       setDataset(ds);
       // Start loading Pyodide the moment we have real data, so it's
       // usually ready by the time generated code comes back.

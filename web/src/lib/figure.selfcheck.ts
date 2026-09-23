@@ -32,6 +32,9 @@ const FIXTURE_DATASET: Dataset = {
   rowCount: 6,
   csv: `group,response_mean\n${SENTINEL},1.5\n`,
   previewRows: [[SENTINEL, "1.5"]],
+  sheetName: "patients.csv",
+  levels: { group: [SENTINEL] },
+  coerced: { response_mean: 0 },
 };
 const SPEC: FigureSpec = { chartType: "bar-error", roles: { x: "group", y: "response_mean" }, note: "" };
 

@@ -28,6 +28,9 @@ const FIXTURE_DATASET: Dataset = {
   rowCount: 42,
   csv: `subject_id,group,response_mean\n${SENTINEL_STRING},treatment,${SENTINEL_NUMBER}\n`,
   previewRows: [[SENTINEL_STRING, "treatment", SENTINEL_NUMBER]],
+  sheetName: "patients.csv",
+  levels: { subject_id: [SENTINEL_STRING], group: ["treatment"] },
+  coerced: { response_mean: 0 },
 };
 
 const SPEC = {
