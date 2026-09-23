@@ -45,6 +45,7 @@ export default function ReviewPage() {
   const [tier, setTier] = useState<ReviewTier>("standard");
   const [resumeState, setResumeState] = useState<ReviewState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const runStateRef = useRef<ReviewState | null>(null); // the in-flight run's state, so a cancel can resume
   const { calls } = useNetworkTrace();
 
   const resetReview = useCallback(() => {
@@ -134,6 +135,7 @@ export default function ReviewPage() {
             journalId: selectedJournalId,
             tier,
             signal: ac.signal,
+            onState: (st) => (runStateRef.current = st),
             onProgress: (p) => {
               setProgress(p);
               setReviewResult(p.partial);
@@ -144,7 +146,12 @@ export default function ReviewPage() {
         setResumeState(run.state);
         setReviewResult(run.result);
       } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") return;
+        if (err instanceof Error && err.name === "AbortError") {
+          // Cancelled by the user (not by a re-upload/journal/tier change, which
+          // replaced abortRef): keep what finished so "Retry" resumes from there.
+          if (abortRef.current === ac) setResumeState(runStateRef.current);
+          return;
+        }
         if (err instanceof ReviewSynthesisError) {
           setResumeState(err.state);
           setReviewResult(err.partial);
@@ -161,8 +168,11 @@ export default function ReviewPage() {
   );
 
   const selectedRules = selectedJournalId ? findJournalRules(selectedJournalId) : undefined;
+  const coverage = reviewResult?.coverage;
+  // Cancelled before any section finished → no partial result yet, but still resumable.
+  const unfinished = reviewResult === null || (coverage?.pending.length ?? 0) > 0;
   const canRetry =
-    !reviewLoading && resumeState !== null && ((reviewResult?.coverage.failed.length ?? 0) > 0 || reviewResult?.journalFit === null);
+    !reviewLoading && resumeState !== null && (unfinished || (coverage?.failed.length ?? 0) > 0 || reviewResult?.journalFit === null);
 
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-14 sm:py-20">
@@ -234,7 +244,7 @@ export default function ReviewPage() {
             )}
             {canRetry && resumeState && (
               <button type="button" onClick={() => void startReview(resumeState)} className="text-sm text-accent hover:underline">
-                Retry failed sections
+                {unfinished ? "Resume review" : "Retry failed sections"}
               </button>
             )}
           </div>

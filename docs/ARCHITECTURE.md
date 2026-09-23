@@ -129,8 +129,8 @@ upstream call so client retries can't spend uncounted), calls Anthropic
 through the selfchecked `anthropicStream.ts` (streaming, because long
 non-streaming requests with thinking hit 524s at Anthropic's edge), and
 grounds/validates the output. It never holds paper text between
-requests. Anthropic's prompt cache may retain a chunk for about five
-minutes after a pass; MargaLink itself stores nothing.
+requests. No prompt caching is used; Anthropic retains API data only
+under its own API data policy, and MargaLink itself stores nothing.
 
 Tiers (`TIER_PLAN` in `reviewPrompt.ts`) decide which section kinds are
 extracted (quick: abstract/results/discussion; standard: everything but

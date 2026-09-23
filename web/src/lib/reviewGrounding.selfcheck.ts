@@ -63,4 +63,31 @@ assert.deepEqual(g.notes.map((n) => n.quote), [null, null], "a note whose quote 
 assert.equal(groundExtractOutput(raw, CHUNK, 5).claims.length, 2, "cap 5 keeps both grounded claims");
 assert.throws(() => groundExtractOutput({ claims: "nope" }, CHUNK, 5), /malformed/i, "a non-array field is rejected, never trusted");
 
+// Clamps: nothing grounded here may later break the synthesis request's caps.
+{
+  const long = "Of the 71 patients enrolled " + "x".repeat(420);
+  const wide = "row 1 2 3 4 5 6 7 8 9 10 11 12 13 14 values";
+  const src = `${long}\n${wide}\n${"n".repeat(10)}`;
+  const g2 = groundExtractOutput(
+    {
+      claims: [
+        { quote: long, measure: "too long", values: [{ value: 71, unit: null }] },
+        { quote: wide, measure: "m".repeat(200), values: Array.from({ length: 14 }, (_, i) => ({ value: i + 1, unit: "u".repeat(60) })) },
+      ],
+      statisticalReporting: Array.from({ length: 30 }, () => ({ description: "d".repeat(600), severity: "minor", quote: wide })),
+      notes: Array.from({ length: 9 }, () => ({ description: "n".repeat(600), quote: null })),
+    },
+    src,
+    40
+  );
+  assert.equal(g2.claims.length, 1, "a quote over 400 chars is dropped");
+  assert.equal(g2.claims[0].values.length, 12, "values are capped at 12");
+  assert.ok(g2.claims[0].values.every((v) => (v.unit ?? "").length <= 40), "units are capped at 40 chars");
+  assert.equal(g2.claims[0].measure.length, 120, "measure is capped at 120 chars");
+  assert.equal(g2.statisticalReporting.length, 20, "at most 20 stats findings per chunk");
+  assert.ok(g2.statisticalReporting.every((s) => s.description.length <= 400));
+  assert.equal(g2.notes.length, 5, "at most 5 notes per chunk");
+  assert.ok(g2.notes.every((n) => n.description.length <= 400));
+}
+
 console.log("reviewGrounding.selfcheck: OK");

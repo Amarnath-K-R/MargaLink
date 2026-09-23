@@ -18,9 +18,10 @@ function CitationList({ citations }: { citations: Citation[] }) {
   );
 }
 
-function coverageLine({ reviewed, failed, skipped }: ReviewResult["coverage"]): string {
-  let line = `Reviewed ${reviewed.length} of ${reviewed.length + failed.length} sections`;
+function coverageLine({ reviewed, failed, pending, skipped }: ReviewResult["coverage"]): string {
+  let line = `Reviewed ${reviewed.length} of ${reviewed.length + failed.length + pending.length} sections`;
   if (failed.length) line += ` — ${failed.map((f) => `${f.title} couldn't be checked (${f.reason})`).join("; ")}`;
+  if (pending.length) line += ` — ${pending.length} not reviewed yet`;
   if (skipped.length) line += `. Not reviewed at this depth: ${skipped.map((s) => s.title).join(", ")}`;
   return `${line}.`;
 }

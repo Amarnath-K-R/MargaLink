@@ -2,9 +2,10 @@
 // policy, failure isolation, resume and usage counting, against a stubbed
 // fetch. Run directly:  node src/lib/reviewOrchestrator.selfcheck.ts
 import assert from "node:assert/strict";
-import { ReviewSynthesisError, planChunks, runReview } from "./reviewOrchestrator.ts";
+import { ReviewSynthesisError, planChunks, runReview, type ReviewState } from "./reviewOrchestrator.ts";
 import { chunkSections, splitIntoSections } from "./reviewSections.ts";
 import { FREE_REVIEWS_PER_DEVICE, ReviewCapacityError, reviewsRemaining } from "./review.ts";
+import { parsePassRequest } from "./reviewPasses.ts";
 import type { ExtractRequest, ReviewProgress, SynthesizeRequest, SynthesizeResponse } from "./reviewTypes.ts";
 
 class MemoryStorage {
@@ -165,6 +166,7 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   stub(happy);
   await runReview(base, err.state);
   assert.deepEqual(calls.map((c) => c.pass), ["synthesize"]);
+  assert.equal(reviewsRemaining(), FREE_REVIEWS_PER_DEVICE - 1, "the resume that completes the review counts it, once");
 }
 // 8. quick tier extracts only abstract/results/discussion
 {
@@ -232,6 +234,90 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s1" ? text("chunk kind is not a known section kind", 400) : happy(req, attempt, null)));
   await assert.rejects(runReview(base), /chunk kind is not a known section kind/);
   assert.ok(!calls.some((c) => c.pass === "synthesize"));
+}
+
+// --- Fixes from the whole-branch review ---
+// R1. a very long paper: every chunk maxes out notes and stats, and the synthesis body still passes the server's gates
+{
+  storage.clear();
+  const busy: Handler = (req, attempt) =>
+    req.pass === "extract"
+      ? json({
+          claims: [{ quote: firstSentence(req.chunk.text), measure: "m", values: [{ value: 1, unit: null }] }],
+          statisticalReporting: Array.from({ length: 20 }, (_, i) => ({ description: `s${i}`, severity: "minor", quote: firstSentence(req.chunk.text) })),
+          notes: Array.from({ length: 5 }, (_, i) => ({ description: `n${i}`, quote: null })),
+        })
+      : happy(req, attempt, null);
+  stub(busy);
+  await runReview({ ...base, text: para(10_000, "Long") }); // ≈ 390k chars → ~25 chunks → 125 notes, 500 stats before clamping
+  const body = synthCall();
+  assert.ok(extracts().length >= 20, `${extracts().length} chunks`);
+  assert.equal(typeof parsePassRequest(JSON.parse(JSON.stringify(body))), "object", String(parsePassRequest(JSON.parse(JSON.stringify(body)))));
+}
+// R1b. a 400 on synthesis keeps the state (retryable), not a dead end
+{
+  storage.clear();
+  stub((req, attempt) => (req.pass === "synthesize" ? text("notes must be an array of at most 100 entries", 400) : happy(req, attempt, null)));
+  const err = await runReview(base).catch((e: unknown) => e);
+  assert.ok(err instanceof ReviewSynthesisError, String(err));
+  assert.match((err as Error).message, /at most 100/);
+  assert.equal(Object.keys((err as ReviewSynthesisError).state.extracted).length, 6, "every paid extract pass is kept");
+}
+// R2. quick tier on a paper with no recognizable headings still reviews it
+{
+  storage.clear();
+  stub(happy);
+  const { result } = await runReview({ ...base, tier: "quick", text: para(900, "Flat") });
+  assert.ok(extracts().length >= 2, "headless text is reviewed on quick too");
+  assert.ok(result.coverage.reviewed.length >= 2);
+}
+// R5. cancel mid-run: coverage names what wasn't reached, and onState lets it resume
+{
+  storage.clear();
+  const ac = new AbortController();
+  const seen: { state: ReviewState | null; partial: ReviewProgress["partial"] | null } = { state: null, partial: null };
+  stub((req, attempt) => {
+    if (req.pass === "extract" && req.chunk.id === "s2") ac.abort();
+    return happy(req, attempt, null);
+  });
+  await runReview({ ...base, signal: ac.signal, concurrency: 1, onState: (st) => (seen.state = st), onProgress: (p) => (seen.partial = p.partial) }).catch(() => {});
+  const saved = seen.state;
+  assert.ok(saved, "onState delivered the state");
+  assert.ok(seen.partial === null || seen.partial.coverage.pending.length > 0, "a cancelled partial reports pending sections");
+  const finishedBefore = new Set(Object.keys(saved.extracted));
+  assert.ok(finishedBefore.size < 6, "the cancel stopped the run early");
+  stub(happy);
+  const resumed = await runReview(base, saved);
+  assert.ok(extracts().every((e) => !finishedBefore.has(e.chunk.id)), "the resume never re-sends a finished section");
+  assert.equal(extracts().length, 6 - finishedBefore.size, "and sends every unfinished one");
+  assert.equal(resumed.result.coverage.reviewed.length, 6);
+  assert.equal(resumed.result.coverage.pending.length, 0);
+  assert.equal(reviewsRemaining(), FREE_REVIEWS_PER_DEVICE - 1, "the resumed review counts one use");
+}
+// R6. a cancel during a retry delay settles immediately, not after the delay
+{
+  storage.clear();
+  const ac = new AbortController();
+  stub((req, attempt) => {
+    if (req.pass === "extract" && req.chunk.id === "s1") {
+      setTimeout(() => ac.abort(), 20);
+      return text("boom", 502);
+    }
+    return happy(req, attempt, null);
+  });
+  const t0 = Date.now();
+  await runReview({ ...base, signal: ac.signal, retryDelaysMs: [5000, 5000] }).catch(() => {});
+  assert.ok(Date.now() - t0 < 1000, `settled in ${Date.now() - t0} ms`);
+}
+// R9. a 200 with a non-JSON body fails just that pass (retried), not the whole run
+{
+  storage.clear();
+  stub((req, attempt) =>
+    req.pass === "extract" && req.chunk.id === "s3" && attempt === 1 ? new Response("<html>oops</html>", { status: 200 }) : happy(req, attempt, null)
+  );
+  const { result } = await runReview(base);
+  assert.equal(attempts.get("s3"), 2, "retried once, then succeeded");
+  assert.equal(result.coverage.failed.length, 0);
 }
 
 console.log("reviewOrchestrator.selfcheck: OK");

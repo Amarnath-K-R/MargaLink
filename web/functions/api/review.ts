@@ -20,10 +20,13 @@ type Env = { ANTHROPIC_API_KEY: string; REVIEWS_KV: KVNamespace };
 
 const MODEL = "claude-sonnet-5";
 // Counts passes, not reviews: a typical review is 4-8 passes, a 400k-char
-// thorough one ~27, so 1,500 ≈ 200-300 reviews/day and bounds worst-case
-// spend at ~1,500 × $0.10. Incremented BEFORE the upstream call — with
-// client-side retries, counting only successes would let failures spend
-// money uncounted.
+// thorough one ~27, so 1,500 ≈ 200-300 reviews/day. Honest clients average
+// ~$0.03/pass (measured); a tampered client sending maximal thorough
+// synthesis bodies could reach ~$0.5/pass, so the true worst case is several
+// hundred dollars a day — a per-IP rate-limit rule in the Cloudflare
+// dashboard is the next guard if this is ever abused. Incremented BEFORE the
+// upstream call — with client-side retries, counting only successes would
+// let failures spend money uncounted.
 const DAILY_PASS_CAP = 1500;
 // A synthesize body carries up to 1,000 ledger entries (~500 KB); an extract
 // body one ≤24k-char chunk. Anything larger can't be a legitimate pass.

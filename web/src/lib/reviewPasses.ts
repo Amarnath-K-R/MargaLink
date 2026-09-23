@@ -20,6 +20,14 @@ import {
 export const CHUNK_TEXT_MAX = 24_000;
 export const MAX_LEDGER = 1_000;
 export const MAX_ABSTRACT_CHARS = 8_000;
+export const MAX_STATS_FINDINGS = 200;
+export const MAX_NOTES = 100;
+export const MAX_PAPER_SECTIONS = 200;
+export const MAX_QUOTE_CHARS = 400;
+export const MAX_MEASURE_CHARS = 120;
+export const MAX_DESCRIPTION_CHARS = 400;
+export const MAX_VALUES = 12;
+export const MAX_UNIT_CHARS = 40;
 export const CHUNK_ID = /^s\d+(?:-p\d+)?$/;
 export const ITEM_ID = /^s\d+(?:-p\d+)?-(?:c|st|n)\d+$/;
 
@@ -31,8 +39,15 @@ const isInt = (v: unknown): v is number => Number.isInteger(v);
 const shortString = (v: unknown, max: number): v is string => typeof v === "string" && v.length <= max;
 const isValues = (v: unknown) =>
   Array.isArray(v) &&
-  v.length <= 12 &&
-  v.every((x) => isObj(x) && Object.keys(x).length === 2 && typeof x.value === "number" && Number.isFinite(x.value) && (typeof x.unit === "string" || x.unit === null));
+  v.length <= MAX_VALUES &&
+  v.every(
+    (x) =>
+      isObj(x) &&
+      Object.keys(x).length === 2 &&
+      typeof x.value === "number" &&
+      Number.isFinite(x.value) &&
+      ((typeof x.unit === "string" && x.unit.length <= MAX_UNIT_CHARS) || x.unit === null)
+  );
 
 function keysExactly(o: Loose, keys: string[], where: string): string | null {
   const extra = Object.keys(o).filter((k) => !keys.includes(k));
@@ -73,7 +88,7 @@ function parseSynthesize(body: Loose): SynthesizeRequest | string {
   if (!isInt(pm.totalWords)) return "paperMap.totalWords must be an integer";
   const sectionOk = (s: unknown) =>
     isObj(s) && !keysExactly(s, ["id", "title", "kind", "words"], "section") && typeof s.id === "string" && /^s\d+$/.test(s.id) && shortString(s.title, 200) && isKind(s.kind) && isInt(s.words);
-  if (!Array.isArray(pm.sections) || pm.sections.length > 200 || !pm.sections.every(sectionOk)) return "paperMap.sections is malformed";
+  if (!Array.isArray(pm.sections) || pm.sections.length > MAX_PAPER_SECTIONS || !pm.sections.every(sectionOk)) return "paperMap.sections is malformed";
 
   if (!(body.abstractText === null || shortString(body.abstractText, MAX_ABSTRACT_CHARS))) return `abstractText must be null or at most ${MAX_ABSTRACT_CHARS} characters`;
 
@@ -91,22 +106,22 @@ function parseSynthesize(body: Loose): SynthesizeRequest | string {
     if (!isObj(x) || keysExactly(x, ["id", "section", "quote", "measure", "values"], "ledger entry")) return "each ledger entry must have exactly id, section, quote, measure, values";
     const idErr = claimId(x.id);
     if (idErr) return `ledger ${idErr}`;
-    if (!shortString(x.section, 200) || !shortString(x.quote, 400) || !shortString(x.measure, 120)) return "ledger entry strings exceed their limits";
-    if (!isValues(x.values)) return "ledger entry values must be up to 12 { value: finite number, unit: string | null }";
+    if (!shortString(x.section, 200) || !shortString(x.quote, MAX_QUOTE_CHARS) || !shortString(x.measure, MAX_MEASURE_CHARS)) return "ledger entry strings exceed their limits";
+    if (!isValues(x.values)) return `ledger entry values must be up to ${MAX_VALUES} { value: finite number, unit: string of at most ${MAX_UNIT_CHARS} characters | null }`;
   }
-  if (!Array.isArray(body.statsFindings) || body.statsFindings.length > 200) return "statsFindings must be an array of at most 200 entries";
+  if (!Array.isArray(body.statsFindings) || body.statsFindings.length > MAX_STATS_FINDINGS) return `statsFindings must be an array of at most ${MAX_STATS_FINDINGS} entries`;
   for (const x of body.statsFindings) {
     if (!isObj(x) || keysExactly(x, ["id", "section", "description", "severity"], "stats finding")) return "each stats finding must have exactly id, section, description, severity";
     const idErr = claimId(x.id);
     if (idErr) return `stats finding ${idErr}`;
-    if (!shortString(x.section, 200) || !shortString(x.description, 400) || (x.severity !== "minor" && x.severity !== "major")) return "stats finding fields are malformed";
+    if (!shortString(x.section, 200) || !shortString(x.description, MAX_DESCRIPTION_CHARS) || (x.severity !== "minor" && x.severity !== "major")) return "stats finding fields are malformed";
   }
-  if (!Array.isArray(body.notes) || body.notes.length > 100) return "notes must be an array of at most 100 entries";
+  if (!Array.isArray(body.notes) || body.notes.length > MAX_NOTES) return `notes must be an array of at most ${MAX_NOTES} entries`;
   for (const x of body.notes) {
     if (!isObj(x) || keysExactly(x, ["id", "section", "description"], "note")) return "each note must have exactly id, section, description";
     const idErr = claimId(x.id);
     if (idErr) return `note ${idErr}`;
-    if (!shortString(x.section, 200) || !shortString(x.description, 400)) return "note fields are malformed";
+    if (!shortString(x.section, 200) || !shortString(x.description, MAX_DESCRIPTION_CHARS)) return "note fields are malformed";
   }
   return body as unknown as SynthesizeRequest;
 }

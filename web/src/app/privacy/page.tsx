@@ -112,8 +112,8 @@ export default function PrivacyPage() {
         </li>
         <li>
           Each request carries one section; the server reviews it and forgets it — MargaLink
-          keeps nothing between requests. Anthropic may hold a section for a few minutes to
-          serve a retry.
+          keeps nothing between requests. Anthropic retains API data only under its own API
+          data policy.
         </li>
         <li>
           Like every other request in MargaLink, these show up in the network-request log

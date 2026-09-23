@@ -8,6 +8,7 @@
 // window.fetch patch must see every request.
 import { FREE_REVIEWS_PER_DEVICE, ReviewCapacityError, ReviewLimitError, recordReviewUsed, reviewsRemaining } from "./review.ts";
 import { TIER_PLAN } from "./reviewPrompt.ts";
+import { MAX_ABSTRACT_CHARS, MAX_LEDGER, MAX_NOTES, MAX_PAPER_SECTIONS, MAX_STATS_FINDINGS } from "./reviewPasses.ts";
 import { buildPaperMap, chunkSections, splitIntoSections } from "./reviewSections.ts";
 import type {
   Chunk,
@@ -28,6 +29,9 @@ export type RunReviewOptions = {
   tier: ReviewTier;
   endpoint?: string;
   onProgress?: (p: ReviewProgress) => void;
+  // Called once with the run's state before any request: lets a caller that
+  // cancels mid-run resume later without re-sending finished sections.
+  onState?: (state: ReviewState) => void;
   signal?: AbortSignal;
   concurrency?: number;
   timeoutMs?: { extract: number; synthesize: number };
@@ -39,6 +43,7 @@ export type ReviewState = {
   abstractText: string | null;
   extracted: Record<string, ExtractResponse>;
   failed: Record<string, string>;
+  counted: boolean; // set the first time synthesis succeeds — a device use is recorded exactly once per review
 };
 export type ReviewRun = { result: ReviewResult; state: ReviewState };
 export class ReviewSynthesisError extends Error {
@@ -51,17 +56,32 @@ export class ReviewSynthesisError extends Error {
   }
 }
 
-// Mirrors reviewPasses.ts's server-side cap; trimming here keeps a huge
-// paper's synthesis request valid instead of letting the server reject it.
-const MAX_LEDGER = 1_000;
 class FatalPassError extends Error {}
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const abortError = (signal: AbortSignal) =>
   signal.reason instanceof Error ? signal.reason : new DOMException("Review cancelled", "AbortError");
+// A retry delay that ends immediately on cancel, so a cancelled run settles now, not seconds later.
+const sleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    if (signal.aborted) return reject(abortError(signal));
+    const onAbort = () => {
+      clearTimeout(t);
+      reject(abortError(signal));
+    };
+    const t = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 
 export function planChunks(chunks: Chunk[], tier: ReviewTier): { run: Chunk[]; skipped: Chunk[] } {
   const kinds = TIER_PLAN[tier].kinds;
-  return { run: chunks.filter((c) => kinds.includes(c.kind)), skipped: chunks.filter((c) => !kinds.includes(c.kind)) };
+  const run = chunks.filter((c) => kinds.includes(c.kind));
+  // No section the tier asks for was recognized (e.g. a PDF with no detectable
+  // headings, which is all "other" — quick skips "other"): review every
+  // non-reference chunk rather than nothing.
+  if (run.length === 0) return { run: chunks.filter((c) => c.kind !== "references"), skipped: chunks.filter((c) => c.kind === "references") };
+  return { run, skipped: chunks.filter((c) => !kinds.includes(c.kind)) };
 }
 
 function planState(text: string): ReviewState {
@@ -72,6 +92,7 @@ function planState(text: string): ReviewState {
     abstractText: sections.find((s) => s.kind === "abstract")?.text ?? null,
     extracted: {},
     failed: {},
+    counted: false,
   };
 }
 
@@ -99,20 +120,21 @@ function buildLedger(state: ReviewState) {
     });
     ex.statisticalReporting.forEach((s, i) => {
       const id = `${chunk.id}-st${i}`;
-      statsFindings.push({ id, section, description: s.description, severity: s.severity });
+      // Every finding is shown to the user; only the first MAX_STATS_FINDINGS go to synthesis.
+      if (statsFindings.length < MAX_STATS_FINDINGS) statsFindings.push({ id, section, description: s.description, severity: s.severity });
       cite.set(id, { quote: s.quote, section });
       stats.push({ description: s.description, severity: s.severity, citations: [{ quote: s.quote, section }] });
     });
     ex.notes.forEach((n, i) => {
       const id = `${chunk.id}-n${i}`;
-      notes.push({ id, section, description: n.description });
+      if (notes.length < MAX_NOTES) notes.push({ id, section, description: n.description });
       if (n.quote) cite.set(id, { quote: n.quote, section });
     });
   }
   return { ledger, statsFindings, notes, cite, stats };
 }
 
-function assemble(state: ReviewState, skipped: Chunk[], synth: SynthesizeResponse | null): ReviewResult {
+function assemble(state: ReviewState, run: Chunk[], skipped: Chunk[], synth: SynthesizeResponse | null): ReviewResult {
   const { cite, stats } = buildLedger(state);
   const resolve = (ids: string[]) => ids.map((id) => cite.get(id)).filter((c): c is Citation => !!c);
   return {
@@ -124,12 +146,13 @@ function assemble(state: ReviewState, skipped: Chunk[], synth: SynthesizeRespons
     coverage: {
       reviewed: state.chunks.filter((c) => c.id in state.extracted).map((c) => ({ id: c.id, title: c.title })),
       failed: state.chunks.filter((c) => c.id in state.failed).map((c) => ({ id: c.id, title: c.title, reason: state.failed[c.id] })),
+      pending: run.filter((c) => !(c.id in state.extracted) && !(c.id in state.failed)).map((c) => ({ id: c.id, title: c.title })),
       skipped: skipped.map((c) => ({ id: c.id, title: c.title })),
     },
   };
 }
 
-type Attempt = { ok: true; res: Response } | { ok: false; reason: string; retryable: boolean };
+type Attempt = { ok: true; data: unknown } | { ok: false; reason: string; retryable: boolean };
 
 // One POST. Throws for outcomes that end the whole review (caller abort,
 // 429 capacity, a 4xx contract error every pass would hit); returns a
@@ -142,7 +165,8 @@ async function attempt(endpoint: string, body: Req, timeoutMs: number, outer: Ab
       body: JSON.stringify(body),
       signal: AbortSignal.any([outer, AbortSignal.timeout(timeoutMs)]),
     });
-    if (res.ok) return { ok: true, res };
+    // Parsed here so a malformed 200 is a retryable failure for this pass, not a crash of the whole run.
+    if (res.ok) return { ok: true, data: await res.json() };
     const detail = await res.text().catch(() => "");
     if (res.status === 429) throw new ReviewCapacityError("This pilot is fully booked for today — try again tomorrow.");
     if (res.status === 400 || res.status === 404 || res.status === 413) throw new FatalPassError(`Review request rejected (${res.status}): ${detail}`);
@@ -158,8 +182,8 @@ async function attempt(endpoint: string, body: Req, timeoutMs: number, outer: Ab
 type Req = ExtractRequest | SynthesizeRequest;
 
 // Runs a review, or — given `resume` (from a previous run's state or a
-// ReviewSynthesisError) — re-runs only the failed chunks plus synthesis.
-// A resume never counts a second device use.
+// ReviewSynthesisError, or onState after a cancel) — re-runs only the chunks
+// not yet extracted plus synthesis. A review counts one device use, once.
 export async function runReview(opts: RunReviewOptions, resume?: ReviewState): Promise<ReviewRun> {
   const endpoint = opts.endpoint ?? "/api/review";
   const concurrency = opts.concurrency ?? 3;
@@ -170,6 +194,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
   }
 
   const state = resume ?? planState(opts.text);
+  opts.onState?.(state);
   const { run, skipped } = planChunks(state.chunks, opts.tier);
   const queue = run.filter((c) => !(c.id in state.extracted));
   for (const c of queue) delete state.failed[c.id];
@@ -182,7 +207,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
   if (opts.signal?.aborted) onOuterAbort();
   opts.signal?.addEventListener("abort", onOuterAbort, { once: true });
   const emit = (phase: ReviewProgress["phase"], current: string | null) =>
-    opts.onProgress?.({ phase, done, total: run.length, current, partial: assemble(state, skipped, null) });
+    opts.onProgress?.({ phase, done, total: run.length, current, partial: assemble(state, run, skipped, null) });
 
   const runExtract = async (chunk: Chunk) => {
     const fullCap = TIER_PLAN[opts.tier].claimsCap;
@@ -197,7 +222,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
       };
       const a = await attempt(endpoint, body, timeoutMs.extract, controller.signal);
       if (a.ok) {
-        state.extracted[chunk.id] = (await a.res.json()) as ExtractResponse;
+        state.extracted[chunk.id] = a.data as ExtractResponse;
         return;
       }
       reason = a.reason;
@@ -210,7 +235,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
         reason = "section too dense for one pass";
         break;
       }
-      if (i < delays.length) await sleep(delays[i]);
+      if (i < delays.length) await sleep(delays[i], controller.signal);
     }
     state.failed[chunk.id] = reason;
   };
@@ -239,31 +264,43 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
 
     const { ledger, statsFindings, notes } = buildLedger(state);
     emit("synthesize", `Cross-checking ${ledger.length} claims`);
+    // Clamped to the server's caps (reviewPasses.ts) so a very long paper
+    // can't turn the final, most expensive step into a 400.
     const synthBody: SynthesizeRequest = {
       pass: "synthesize",
       journalId: opts.journalId,
       tier: opts.tier,
-      paperMap: state.paperMap,
-      abstractText: state.abstractText,
+      paperMap: { ...state.paperMap, sections: state.paperMap.sections.slice(0, MAX_PAPER_SECTIONS) },
+      abstractText: state.abstractText?.slice(0, MAX_ABSTRACT_CHARS) ?? null,
       ledger,
       statsFindings,
       notes,
     };
     let synth: SynthesizeResponse | null = null;
     let reason = "";
-    for (let i = 0; i < 2 && !synth; i++) {
-      const a = await attempt(endpoint, synthBody, timeoutMs.synthesize, controller.signal);
-      if (a.ok) {
-        synth = (await a.res.json()) as SynthesizeResponse;
-        break;
+    try {
+      for (let i = 0; i < 2 && !synth; i++) {
+        const a = await attempt(endpoint, synthBody, timeoutMs.synthesize, controller.signal);
+        if (a.ok) {
+          synth = a.data as SynthesizeResponse;
+          break;
+        }
+        reason = a.reason;
+        if (!a.retryable) break;
+        if (i === 0) await sleep(delays[0] ?? 0, controller.signal);
       }
-      reason = a.reason;
-      if (!a.retryable) break;
-      if (i === 0) await sleep(delays[0] ?? 0);
+    } catch (err) {
+      // Every extract pass is already paid for: any synthesis-phase failure
+      // except a cancel keeps the state so the user can retry just this step.
+      if (err instanceof Error && err.name === "AbortError") throw err;
+      reason = err instanceof Error ? err.message : String(err);
     }
-    if (!synth) throw new ReviewSynthesisError(`The cross-check didn't finish (${reason}).`, assemble(state, skipped, null), state);
-    if (!resume) recordReviewUsed();
-    return { result: assemble(state, skipped, synth), state };
+    if (!synth) throw new ReviewSynthesisError(`The cross-check didn't finish (${reason}).`, assemble(state, run, skipped, null), state);
+    if (!state.counted) {
+      recordReviewUsed();
+      state.counted = true;
+    }
+    return { result: assemble(state, run, skipped, synth), state };
   } finally {
     opts.signal?.removeEventListener("abort", onOuterAbort);
   }

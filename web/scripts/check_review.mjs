@@ -117,6 +117,7 @@ await page.click("text=Send it and review");
 await page.getByRole("button", { name: "Cancel" }).click();
 await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
 check("cancel stops the run without counting a use", (await uses()) === "1");
+check("a cancelled run can be resumed", await page.getByRole("button", { name: "Resume review" }).isVisible());
 slow = false;
 
 // Capacity: a 429 on any pass stops the run and counts nothing.

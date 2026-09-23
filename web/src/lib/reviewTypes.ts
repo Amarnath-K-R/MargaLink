@@ -57,6 +57,7 @@ export type PassRequest = ExtractRequest | SynthesizeRequest;
 export type Coverage = {
   reviewed: { id: string; title: string }[];
   failed: { id: string; title: string; reason: string }[];
+  pending: { id: string; title: string }[]; // planned but not reached (cancelled or stopped)
   skipped: { id: string; title: string }[];
 };
 export type ReviewResult = {

@@ -5,7 +5,14 @@
 // split, despite being the one thing standing between a model hallucinating
 // a quote and that quote reaching the client. See docs/ARCHITECTURE.md's
 // "The AI review: what it defends against, and why."
+import { MAX_DESCRIPTION_CHARS, MAX_MEASURE_CHARS, MAX_QUOTE_CHARS, MAX_UNIT_CHARS, MAX_VALUES } from "./reviewPasses.ts";
 import type { ExtractResponse } from "./reviewTypes.ts";
+
+// Per-chunk ceilings on what one extract pass may contribute. Everything is
+// also clamped to the synthesis request's field caps (reviewPasses.ts), so a
+// grounded-but-oversized item can never make the final step fail with a 400.
+const MAX_STATS_PER_CHUNK = 20;
+const MAX_NOTES_PER_CHUNK = 5;
 
 // Applied once client-side before sectioning (review.ts's prepareForReview)
 // AND again at match time here \u2014 idempotent, so both sides agree, and
@@ -47,18 +54,23 @@ export function groundExtractOutput(output: unknown, chunkText: string, claimsCa
   const claims: ExtractResponse["claims"] = [];
   for (const c of output.claims) {
     if (claims.length >= claimsCap) break;
-    if (!isObj(c) || !grounded(c.quote) || typeof c.measure !== "string" || !Array.isArray(c.values) || c.values.length === 0 || !c.values.every(isValue)) continue;
-    claims.push({ quote: c.quote, measure: c.measure, values: c.values as ExtractResponse["claims"][number]["values"] });
+    if (!isObj(c) || !grounded(c.quote) || c.quote.length > MAX_QUOTE_CHARS || typeof c.measure !== "string" || !Array.isArray(c.values) || c.values.length === 0 || !c.values.every(isValue)) continue;
+    const values = (c.values as ExtractResponse["claims"][number]["values"])
+      .slice(0, MAX_VALUES)
+      .map((v) => ({ value: v.value, unit: v.unit === null ? null : v.unit.slice(0, MAX_UNIT_CHARS) }));
+    claims.push({ quote: c.quote, measure: c.measure.slice(0, MAX_MEASURE_CHARS), values });
   }
   const statisticalReporting: ExtractResponse["statisticalReporting"] = [];
   for (const s of output.statisticalReporting) {
+    if (statisticalReporting.length >= MAX_STATS_PER_CHUNK) break;
     if (!isObj(s) || typeof s.description !== "string" || (s.severity !== "minor" && s.severity !== "major") || !grounded(s.quote)) continue;
-    statisticalReporting.push({ description: s.description, severity: s.severity, quote: s.quote });
+    statisticalReporting.push({ description: s.description.slice(0, MAX_DESCRIPTION_CHARS), severity: s.severity, quote: s.quote });
   }
   const notes: ExtractResponse["notes"] = [];
   for (const n of output.notes) {
+    if (notes.length >= MAX_NOTES_PER_CHUNK) break;
     if (!isObj(n) || typeof n.description !== "string") continue;
-    notes.push({ description: n.description, quote: grounded(n.quote) ? n.quote : null });
+    notes.push({ description: n.description.slice(0, MAX_DESCRIPTION_CHARS), quote: grounded(n.quote) ? n.quote : null });
   }
   return { claims, statisticalReporting, notes };
 }
