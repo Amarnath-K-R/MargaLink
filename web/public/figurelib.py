@@ -925,6 +925,8 @@ def apply_axes(ax, panel: dict, ctx: Ctx) -> None:
         return
     x_fallback = roles.get("time") if family == "km" else roles.get("x")
     y_fallback = {"histogram": "Count", "km": "Survival probability"}.get(family, roles.get("y"))
+    if panel.get("stat") == "count" and family in ("bar", "line"):
+        y_fallback = "Count"
     horizontal = ctx.categorical and panel.get("horizontal", False)
     cat_spec, val_spec = panel["x"], panel["y"]
     if horizontal:

@@ -1,0 +1,1412 @@
+{
+ "samples": {
+  "trial": [
+   {
+    "name": "subject_id",
+    "dtype": "categorical"
+   },
+   {
+    "name": "arm",
+    "dtype": "categorical"
+   },
+   {
+    "name": "sex",
+    "dtype": "categorical"
+   },
+   {
+    "name": "dose",
+    "dtype": "numeric"
+   },
+   {
+    "name": "baseline",
+    "dtype": "numeric"
+   },
+   {
+    "name": "week12",
+    "dtype": "numeric"
+   },
+   {
+    "name": "change",
+    "dtype": "numeric"
+   },
+   {
+    "name": "visit_date",
+    "dtype": "date"
+   }
+  ],
+  "survival": [
+   {
+    "name": "id",
+    "dtype": "numeric"
+   },
+   {
+    "name": "arm",
+    "dtype": "categorical"
+   },
+   {
+    "name": "time_months",
+    "dtype": "numeric"
+   },
+   {
+    "name": "event",
+    "dtype": "numeric"
+   },
+   {
+    "name": "age",
+    "dtype": "numeric"
+   }
+  ],
+  "meta": [
+   {
+    "name": "study",
+    "dtype": "categorical"
+   },
+   {
+    "name": "year",
+    "dtype": "numeric"
+   },
+   {
+    "name": "hr",
+    "dtype": "numeric"
+   },
+   {
+    "name": "ci_low",
+    "dtype": "numeric"
+   },
+   {
+    "name": "ci_high",
+    "dtype": "numeric"
+   },
+   {
+    "name": "weight",
+    "dtype": "numeric"
+   }
+  ]
+ },
+ "templates": [
+  {
+   "id": "bar-error",
+   "title": "Bar with error bars",
+   "description": "Group means with SEM and the individual points.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "bar",
+      "roles": {
+       "x": "arm",
+       "y": "change",
+       "group": null,
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "sem",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [
+       {
+        "kind": "points",
+        "ci": false,
+        "alpha": 0.6,
+        "size": null,
+        "jitter": null
+       }
+      ],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "box",
+   "title": "Box plot",
+   "description": "Median, spread and every observation per group.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "box",
+      "roles": {
+       "x": "arm",
+       "y": "change",
+       "group": null,
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [
+       {
+        "kind": "points",
+        "ci": false,
+        "alpha": 0.5,
+        "size": null,
+        "jitter": null
+       }
+      ],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "scatter",
+   "title": "Scatter with regression",
+   "description": "Relationship between two measures, with a 95% CI band.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "scatter",
+      "roles": {
+       "x": "baseline",
+       "y": "week12",
+       "group": null,
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [
+       {
+        "kind": "regression",
+        "ci": true,
+        "alpha": null,
+        "size": null,
+        "jitter": null
+       }
+      ],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "line",
+   "title": "Dose-response line",
+   "description": "Mean at each level of a numeric x, by group, with an SEM band.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "line",
+      "roles": {
+       "x": "dose",
+       "y": "change",
+       "group": "sex",
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "sem",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "histogram",
+   "title": "Histogram",
+   "description": "Distribution of one measure, overlaid by group.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "histogram",
+      "roles": {
+       "x": "change",
+       "y": null,
+       "group": "arm",
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "grouped-bar",
+   "title": "Grouped bar",
+   "description": "Two factors side by side.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "bar",
+      "roles": {
+       "x": "arm",
+       "y": "change",
+       "group": "sex",
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "sem",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "stacked-bar",
+   "title": "Stacked bar",
+   "description": "Counts of one factor within another.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "bar",
+      "roles": {
+       "x": "arm",
+       "y": "dose",
+       "group": "sex",
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "count",
+      "errorType": "none",
+      "stacked": true,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "violin",
+   "title": "Violin with brackets",
+   "description": "Distribution shapes with Welch tests against the first group.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "violin",
+      "roles": {
+       "x": "arm",
+       "y": "change",
+       "group": null,
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": "welch",
+       "pairs": "vs-first",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "strip",
+   "title": "Strip plot",
+   "description": "Every observation, with the group mean.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "strip",
+      "roles": {
+       "x": "arm",
+       "y": "change",
+       "group": null,
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "heatmap",
+   "title": "Correlation matrix",
+   "description": "Pairwise correlations between every numeric column.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "heatmap",
+      "roles": {
+       "x": null,
+       "y": null,
+       "group": null,
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "forest",
+   "title": "Forest plot",
+   "description": "Effect sizes with confidence intervals, one row per study.",
+   "sample": "meta",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "forest",
+      "roles": {
+       "x": "hr",
+       "y": "study",
+       "group": null,
+       "error": null,
+       "lower": "ci_low",
+       "upper": "ci_high",
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": true,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "km",
+   "title": "Kaplan-Meier survival",
+   "description": "Survival by group with censoring, numbers at risk and a log-rank test.",
+   "sample": "survival",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "single",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 1,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "km",
+      "roles": {
+       "x": null,
+       "y": null,
+       "group": "arm",
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": "time_months",
+       "event": "event"
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": "logrank",
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": true,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "compound-2",
+   "title": "Two-panel figure",
+   "description": "Group comparison with brackets beside a dose-response scatter.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "double",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 1,
+     "cols": 2,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "bar",
+      "roles": {
+       "x": "arm",
+       "y": "change",
+       "group": null,
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "sem",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [
+       {
+        "kind": "points",
+        "ci": false,
+        "alpha": 0.6,
+        "size": null,
+        "jitter": null
+       }
+      ],
+      "annotations": [],
+      "stats": {
+       "test": "welch",
+       "pairs": "vs-first",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     },
+     {
+      "title": "",
+      "family": "scatter",
+      "roles": {
+       "x": "dose",
+       "y": "change",
+       "group": null,
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [
+       {
+        "kind": "regression",
+        "ci": true,
+        "alpha": null,
+        "size": null,
+        "jitter": null
+       }
+      ],
+      "annotations": [],
+      "stats": {
+       "test": "pearson",
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "grid-2x2",
+   "title": "Four-panel grid",
+   "description": "A 2x2 overview of one dataset.",
+   "sample": "trial",
+   "spec": {
+    "version": 1,
+    "style": "nature",
+    "size": "double",
+    "widthMm": null,
+    "heightMm": null,
+    "palette": "okabe-ito",
+    "colors": [],
+    "layout": {
+     "rows": 2,
+     "cols": 2,
+     "letters": true,
+     "sharedLegend": false
+    },
+    "panels": [
+     {
+      "title": "",
+      "family": "bar",
+      "roles": {
+       "x": "arm",
+       "y": "change",
+       "group": null,
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "sem",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     },
+     {
+      "title": "",
+      "family": "box",
+      "roles": {
+       "x": "arm",
+       "y": "change",
+       "group": null,
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [
+       {
+        "kind": "points",
+        "ci": false,
+        "alpha": 0.5,
+        "size": null,
+        "jitter": null
+       }
+      ],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     },
+     {
+      "title": "",
+      "family": "scatter",
+      "roles": {
+       "x": "dose",
+       "y": "change",
+       "group": "arm",
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     },
+     {
+      "title": "",
+      "family": "histogram",
+      "roles": {
+       "x": "change",
+       "y": null,
+       "group": "arm",
+       "error": null,
+       "lower": null,
+       "upper": null,
+       "value": null,
+       "time": null,
+       "event": null
+      },
+      "x": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "y": {
+       "label": "",
+       "unit": "",
+       "min": null,
+       "max": null,
+       "log": false,
+       "tickFormat": "auto"
+      },
+      "stat": "mean",
+      "errorType": "none",
+      "stacked": false,
+      "horizontal": false,
+      "bins": null,
+      "order": {
+       "mode": "as-is",
+       "explicit": []
+      },
+      "layers": [],
+      "annotations": [],
+      "stats": {
+       "test": null,
+       "pairs": "all",
+       "explicit": [],
+       "display": "stars",
+       "reference": null
+      },
+      "atRiskTable": false,
+      "censorTicks": true,
+      "colSpan": 1,
+      "legend": true
+     }
+    ]
+   }
+  }
+ ]
+}

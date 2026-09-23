@@ -24,6 +24,22 @@ jobs:
       - run: npm ci
       - run: npm run check
 
+  # The figure renderer (web/public/figurelib.py) under CPython with the same
+  # library versions Pyodide ships; also proves every gallery template renders.
+  figurelib:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/figurelib
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - run: uv sync
+      - run: uv run selfcheck.py
+      - run: uv run ruff check . ../public/figurelib.py
+
   pipeline:
     runs-on: ubuntu-latest
     defaults:

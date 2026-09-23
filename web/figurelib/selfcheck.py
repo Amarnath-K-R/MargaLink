@@ -4,53 +4,31 @@ Run:  uv run selfcheck.py"""
 
 import base64
 import io
-import sys
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "public"))
-import figurelib as fl
-
-SAMPLES = Path(__file__).parent / "samples"
-DTYPES = {
-    "trial": {
-        "subject_id": "categorical", "arm": "categorical", "sex": "categorical", "dose": "numeric",
-        "baseline": "numeric", "week12": "numeric", "change": "numeric", "visit_date": "date",
-    },
-    "survival": {"id": "numeric", "arm": "categorical", "time_months": "numeric", "event": "numeric", "age": "numeric"},
-    "meta": {"study": "categorical", "year": "numeric", "hr": "numeric", "ci_low": "numeric", "ci_high": "numeric", "weight": "numeric"},
-}
-
-
-def frame(name: str):
-    return fl.load_frame((SAMPLES / f"{name}.csv").read_text(), DTYPES[name])
+import specs
+from specs import DTYPES, SAMPLES, fl, frame  # noqa: F401 - re-exported for readability below
 
 
 def axis(**kw):
-    return {"label": "", "unit": "", "min": None, "max": None, "log": False, "tickFormat": "auto", **kw}
+    return specs.axis(**kw)
 
 
 def panel(family: str, **roles):
-    base = {r: None for r in ["x", "y", "group", "error", "lower", "upper", "value", "time", "event"]}
-    base.update(roles)
-    return {
-        "title": "", "family": family, "roles": base, "x": axis(), "y": axis(),
-        "stat": "mean", "errorType": "none", "stacked": False, "horizontal": False, "bins": None,
-        "order": {"mode": "as-is", "explicit": []}, "layers": [], "annotations": [],
-        "stats": {"test": None, "pairs": "all", "explicit": [], "display": "stars", "reference": None},
-        "atRiskTable": False, "censorTicks": True, "colSpan": 1, "legend": True,
-    }
+    # The tests were written against errorType "none" / no at-risk table defaults.
+    p = specs.panel(family, **roles)
+    p["errorType"] = "none"
+    p["atRiskTable"] = False
+    return p
 
 
 def spec(panels, rows=1, cols=None, **kw):
-    return {
-        "version": 1, "style": "nature", "size": "single", "widthMm": None, "heightMm": None,
-        "palette": "okabe-ito", "colors": [],
-        "layout": {"rows": rows, "cols": cols or len(panels), "letters": False, "sharedLegend": False},
-        "panels": panels, **kw,
-    }
+    s = specs.spec(panels, rows=rows, cols=cols, **kw)
+    s["layout"]["letters"] = False
+    return s
 
 
 def png_size(b64: str):
@@ -315,5 +293,19 @@ assert fl.needs_scipy(spec([tested]))
 ci_bar = panel("bar", x="arm", y="change")
 ci_bar["errorType"] = "ci95"
 assert fl.needs_scipy(spec([ci_bar]))
+
+# 21. every gallery template renders on its sample (the "all families work on real specs" proof)
+import json
+
+gallery = json.loads((Path(__file__).parent.parent / "public" / "figure-gallery" / "templates.json").read_text())
+sample_frames = {name: frame(name) for name in gallery["samples"]}
+for t in gallery["templates"]:
+    fig, meta = fl.render(t["spec"], sample_frames[t["sample"]])
+    assert len(meta["panels"]) == len(t["spec"]["panels"]), t["id"]
+    fl.close(fig)
+stacked = next(t for t in gallery["templates"] if t["id"] == "stacked-bar")
+fig, _ = fl.render(stacked["spec"], sample_frames["trial"])
+assert fig.axes[0].get_ylabel() == "Count", "a count aggregate labels its axis Count"
+fl.close(fig)
 
 print("figurelib.selfcheck: OK")
