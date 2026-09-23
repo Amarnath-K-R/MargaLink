@@ -35,6 +35,25 @@ export type ExtractResponse = {
   notes: { description: string; quote: string | null }[];
 };
 
+export type LedgerEntry = { id: string; section: string; quote: string; measure: string; values: ClaimValue[] };
+export type SynthesizeRequest = {
+  pass: "synthesize";
+  journalId: string;
+  tier: ReviewTier;
+  paperMap: PaperMap;
+  abstractText: string | null;
+  ledger: LedgerEntry[];
+  statsFindings: { id: string; section: string; description: string; severity: "minor" | "major" }[];
+  notes: { id: string; section: string; description: string }[];
+};
+export type SynthesizeResponse = {
+  journalFit: { assessment: "good" | "possible" | "poor"; explanation: string };
+  inconsistencies: { description: string; claimIds: string[] }[];
+  summary: { text: string; severity: "major" | "minor"; refs: string[] }[];
+  otherObservations: string[];
+};
+export type PassRequest = ExtractRequest | SynthesizeRequest;
+
 export type ReviewResult = {
   journalFit: { assessment: "good" | "possible" | "poor"; explanation: string };
   inconsistencies: { description: string; citations: Citation[] }[];
