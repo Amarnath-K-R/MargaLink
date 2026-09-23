@@ -159,6 +159,10 @@ assert.equal(long.rowCount, 18, "3 rows per subject");
 assert.deepEqual(long.previewRows.slice(0, 3), [["S01", "Placebo", "week1", "1.2"], ["S01", "Placebo", "week2", ""], ["S01", "Placebo", "week3", "0.8"]]);
 assert.equal(long.columns.find((c) => c.name === "score")!.dtype, "numeric");
 assert.throws(() => reshapeWideToLong(["a"], [], { ...reshape, idColumns: ["nope"] }), /no column "nope"/);
+const clash = prepareDataset(messy, { ...guess, reshape: { ...reshape, varName: "arm", valueName: "subject" } });
+assert.deepEqual(clash.columns.map((c) => c.name), ["subject", "arm", "arm_2", "subject_2"], "stacked names can't collide with id columns");
+const dated = prepareDataset({ fileName: "d.csv", sheets: [{ name: "d", rows: [["when", "g"], ["2024-01-01", "a"], ["1/1/2024", "b"]] }] }, { ...guess, headerRow: 0, decimal: ".", thousands: "" });
+assert.ok(!("when" in dated.levels) && "g" in dated.levels, "levels only for categorical columns");
 
 // --- prep edge cases ---
 const wb = (rows: string[][]): Workbook => ({ fileName: "t.csv", sheets: [{ name: "Sheet A", rows }, { name: "Sheet B", rows: [["x"], ["1"]] }] });

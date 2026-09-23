@@ -16,6 +16,8 @@ import {
   TESTS,
   TICK_FORMATS,
   checkLabels,
+  layersFor,
+  testsFor,
   checkSpecAgainstColumns,
   defaultPanel,
   mergeTextFields,
@@ -184,6 +186,42 @@ assert.match(String(checkSpecAgainstColumns(COLUMNS, withPanel("heatmap", { x: "
   s.panels[0].stats.explicit = [];
   s.panels[0].annotations = [{ kind: "vline", text: "", x: null, y: null, x2: null, y2: null, xGroup: "Guessed" }];
   assert.match(String(checkLabels(s, null)), /label/, "annotation refs are gated too");
+}
+
+// 8. review fixes
+{
+  // prototype-named keys are not schema keys
+  const proto = { ...clone(DEFAULT_SPEC), ...JSON.parse('{"constructor":"SECRET"}') };
+  assert.match(String(validateFigureSpec(proto)), /constructor: unexpected key/);
+  // text follows the panel it belongs to, not its position
+  const local = withPanel("bar", { x: "arm", y: "change" });
+  local.panels.push({ ...defaultPanel("scatter"), roles: { ...defaultPanel("scatter").roles, x: "dose", y: "change" }, title: "Safety" });
+  local.panels[0].title = "Efficacy";
+  local.layout = { rows: 1, cols: 2, letters: true, sharedLegend: false };
+  const dropped = clone(local);
+  dropped.panels = [{ ...clone(local.panels[1]), title: "" }];
+  dropped.layout = { rows: 1, cols: 1, letters: true, sharedLegend: false };
+  assert.equal(mergeTextFields(local, dropped).panels[0].title, "Safety", "dropping panel a keeps b's own title");
+  const rebound = clone(dropped);
+  rebound.panels[0].roles.y = "hr";
+  rebound.panels[0].title = "";
+  assert.equal(mergeTextFields(local, rebound).panels[0].title, "", "a panel showing something else gets no stale title");
+  // combinations the renderer refuses are refused here too
+  const withLayer = (family: (typeof FAMILIES)[number], roles: Record<string, string>, mutate: (p: FigureSpec["panels"][number]) => void) => {
+    const s = withPanel(family, roles);
+    mutate(s.panels[0]);
+    return checkSpecAgainstColumns(COLUMNS, s);
+  };
+  assert.match(String(withLayer("scatter", { x: "dose", y: "change" }, (p) => (p.layers = [{ kind: "points", ci: false, alpha: null, size: null, jitter: null }]))), /can't have a "points" overlay/);
+  assert.match(String(withLayer("forest", { x: "hr", y: "study", lower: "lo", upper: "hi" }, (p) => (p.stats.test = "welch"))), /can't use the welch test/);
+  assert.match(String(withLayer("bar", { x: "arm", y: "change" }, (p) => ((p.horizontal = true), (p.stats.test = "welch")))), /horizontal bars/);
+  assert.match(String(withLayer("bar", { x: "arm", y: "change" }, (p) => (p.annotations = [{ kind: "hline", text: "", x: null, y: null, x2: null, y2: null, xGroup: null }]))), /needs y/);
+  assert.equal(withLayer("bar", { x: "arm", y: "change" }, (p) => (p.annotations = [{ kind: "vline", text: "", x: null, y: null, x2: null, y2: null, xGroup: "#0" }])), null, "xGroup stands in for x");
+  const dated = [...COLUMNS, { name: "when", dtype: "date" as const }];
+  const reg = withPanel("scatter", { x: "when", y: "change" });
+  reg.panels[0].stats.test = "pearson";
+  assert.match(String(checkSpecAgainstColumns(dated, reg)), /numeric x, not a date/);
+  assert.ok(testsFor("heatmap").includes("spearman") && layersFor("km").length === 0);
 }
 
 console.log("figureSpec.selfcheck: OK");

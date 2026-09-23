@@ -32,17 +32,19 @@ const text = (body: string, status: number) => new Response(body, { status });
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (Number(request.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) return text("Request body too large", 413);
 
+  // content-length can be absent (chunked); the read itself is capped too.
+  const raw = await request.text();
+  if (raw.length > MAX_BODY_BYTES) return text("Request body too large", 413);
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(raw);
   } catch {
     return text("Invalid JSON body", 400);
   }
   if (!isValidFigurePayload(body)) return text("Expected { columns, rowCount, request, spec, levels, mode }", 400);
-  if (body.spec) {
-    const fit = checkSpecAgainstColumns(body.columns, body.spec);
-    if (fit) return text(fit, 400);
-  }
+  // A current spec that doesn't fit the data isn't refused — fixing it is
+  // exactly what Claude is for — it's passed on with the problem named.
+  const problem = body.spec ? checkSpecAgainstColumns(body.columns, body.spec) : null;
   if (!body.request.trim()) return text("Describe the figure you want first.", 400);
 
   // Global daily cap, counted before the upstream call (a failed call still
@@ -67,7 +69,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         system: hook ? HOOK_SYSTEM_PROMPT : SPEC_SYSTEM_PROMPT,
         tools: [tool],
         // No tool_choice — incompatible with thinking; the prompt's closing line carries it.
-        messages: [{ role: "user", content: buildFigurePrompt(body) }],
+        messages: [{ role: "user", content: buildFigurePrompt(body, problem) }],
       },
       { toolName: tool.name, timeoutMs: UPSTREAM_TIMEOUT_MS },
     ));
@@ -93,7 +95,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
   const spec = validateFigureSpec(out.spec);
   if (typeof spec === "string") return text(`Claude's figure description wasn't valid: ${spec}`, 422);
-  const problem = checkSpecAgainstColumns(body.columns, spec) ?? checkLabels(spec, body.levels);
-  if (problem) return text(`Claude's figure description didn't fit your data: ${problem}`, 422);
+  const unfit = checkSpecAgainstColumns(body.columns, spec) ?? checkLabels(spec, body.levels);
+  if (unfit) return text(`Claude's figure description didn't fit your data: ${unfit}`, 422);
   return Response.json({ spec, summary });
 };

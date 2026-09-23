@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { prepareDataset, readWorkbook, suggestPrepOptions, type Dataset, type PrepOptions, type Workbook } from "@/lib/spreadsheet";
-import { exportFigure, renderFigure, warmUp, FigureRenderError, type ImageFormat, type RenderRequest } from "@/lib/figureRunner";
+import { cancelPreviews, exportFigure, renderFigure, warmUp, FigureRenderError, type ImageFormat, type RenderRequest } from "@/lib/figureRunner";
 import { LIMITS, checkSpecAgainstColumns, validateFigureSpec, type FigureSpec, type Panel } from "@/lib/figureSpec";
 import { bindTemplate, loadTemplates, type Template } from "@/lib/figureTemplates";
 import { errorMessage } from "@/lib/errorMessage";
@@ -51,6 +51,10 @@ export default function FiguresPage() {
   // uncontrolled inputs (typed-on-blur fields) start fresh.
   const [specKey, setSpecKey] = useState(0);
   const [hook, setHook] = useState<string | null>(null);
+  // A tweak (from Claude or an imported recipe) never runs until the user
+  // has seen the code and clicked Run — the first of three layers (see
+  // figurePrompt.ts isCodeSafeToRun and figureWorker.mjs lockNetwork).
+  const [hookApproved, setHookApproved] = useState(false);
   const { calls } = useNetworkTrace();
 
   useEffect(() => {
@@ -72,16 +76,19 @@ export default function FiguresPage() {
   const request = useCallback(
     (formats: ImageFormat[], dpi: number): RenderRequest | null =>
       dataset && spec
-        ? { spec, csv: dataset.csv, dtypes: Object.fromEntries(dataset.columns.map((c) => [c.name, c.dtype])), formats, dpi, hook }
+        ? { spec, csv: dataset.csv, dtypes: Object.fromEntries(dataset.columns.map((c) => [c.name, c.dtype])), formats, dpi, hook: hookApproved ? hook : null }
         : null,
-    [dataset, spec, hook],
+    [dataset, spec, hook, hookApproved],
   );
 
   // Live preview: debounced; renderFigure resolves null for a superseded
   // render, so a slow early render can never overwrite a newer one.
   useEffect(() => {
     const req = request(["png"], PREVIEW_DPI);
-    if (!req || problem) return;
+    if (!req || problem) {
+      cancelPreviews(); // a render still in flight must not land over the problem message
+      return;
+    }
     const timer = setTimeout(() => {
       setPreview((p) => ({ ...p, busy: true }));
       renderFigure(req, (stage) => setPreview((p) => ({ ...p, stage }))).then(
@@ -99,10 +106,12 @@ export default function FiguresPage() {
 
   const onFile = useCallback(async (file: File) => {
     setUploadError(null);
+    cancelPreviews();
     setPreview(IDLE);
     setSpec(null);
     setTemplateId(null);
     setHook(null);
+    setHookApproved(false);
     try {
       const wb = await readWorkbook(file);
       setWorkbook(wb);
@@ -145,6 +154,7 @@ export default function FiguresPage() {
   function onClaude(r: ClaudeResult) {
     if (r.kind === "hook") {
       setHook(r.hook);
+      setHookApproved(false);
       return;
     }
     setSpec(r.spec);
@@ -155,6 +165,7 @@ export default function FiguresPage() {
   function loadRecipe(r: Recipe) {
     setSpec(r.spec);
     setHook(r.hook);
+    setHookApproved(false);
     setTemplateId(null);
     setSelected(0);
     setSpecKey((k) => k + 1);
@@ -211,7 +222,7 @@ export default function FiguresPage() {
           <div>
             <section>
               <p className="mb-3 text-sm font-medium text-accent">3. Describe it to Claude…</p>
-              <Describe dataset={dataset} spec={spec} onResult={onClaude} />
+              <Describe dataset={dataset} spec={spec && typeof validateFigureSpec(spec) !== "string" ? spec : null} onResult={onClaude} />
             </section>
             <section className="mt-10">
               <p className="mb-3 text-sm font-medium text-accent">…or start from a template</p>
@@ -247,12 +258,34 @@ export default function FiguresPage() {
                   <PanelEditor key={selected} panel={spec.panels[selected]} onChange={(p) => setPanel(selected, p)} dataset={dataset} />
                 </div>
                 {hook && (
-                  <details className="mt-6 border-t border-line pt-4 text-sm" data-testid="hook">
-                    <summary className="cursor-pointer font-medium">Custom tweak (Python, runs after the figure is drawn)</summary>
+                  <details className="mt-6 border-t border-line pt-4 text-sm" data-testid="hook" open={!hookApproved}>
+                    <summary className="cursor-pointer font-medium">
+                      Custom tweak (Python){hookApproved ? " — running" : " — not running yet"}
+                    </summary>
                     <pre className="mt-2 max-h-60 overflow-auto rounded-sm border border-line bg-paper-alt p-2 text-xs">{hook}</pre>
-                    <button type="button" onClick={() => setHook(null)} className="mt-2 text-accent hover:underline">
-                      Remove tweak
-                    </button>
+                    {!hookApproved && (
+                      <p className="mt-2 text-ink-soft">
+                        Read it before running: it runs on this device, after the figure is drawn, with network access switched off. Only
+                        run code you understand or got from someone you trust.
+                      </p>
+                    )}
+                    <div className="mt-2 flex gap-4">
+                      {!hookApproved && (
+                        <button type="button" onClick={() => setHookApproved(true)} className="text-accent hover:underline">
+                          Run this tweak
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHook(null);
+                          setHookApproved(false);
+                        }}
+                        className="text-accent hover:underline"
+                      >
+                        Remove tweak
+                      </button>
+                    </div>
                   </details>
                 )}
                 <div className="mt-6 border-t border-line pt-4">
@@ -263,7 +296,7 @@ export default function FiguresPage() {
           </div>
           <section className="lg:sticky lg:top-6 lg:self-start">
             <p className="mb-3 text-sm font-medium text-accent">Your figure</p>
-            <FigurePreview state={preview} problem={problem} />
+            <FigurePreview state={problem ? { ...preview, busy: false, stage: null } : preview} problem={problem} />
             <div className="mt-6">
               <ExportBar disabled={!spec || !!problem} onExport={onExport} />
             </div>

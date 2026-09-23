@@ -353,4 +353,32 @@ out = fl.run_request(spec([anova]), flat, ["png"], 72)
 assert out["meta"]["panels"][0]["tests"][0]["p"] is None, "NaN p crosses as null"
 json.dumps(out, allow_nan=False)
 
+# 25. review fixes: "#n" in a custom order counts every row, even when a y cell is empty
+gaps = pd.DataFrame({"g": ["B", "A", "B", "A", "C", "C"], "y": [np.nan, 1.0, 2.0, 3.0, 4.0, 5.0]})
+ordered = panel("box", x="g", y="y")
+ordered["order"] = {"mode": "explicit", "explicit": ["#1", "#0", "#2"]}  # A, B, C by first appearance over all rows
+fig, _ = fl.render(spec([ordered]), gaps)
+assert [t.get_text() for t in fig.axes[0].get_xticklabels()] == ["A", "B", "C"]
+fl.close(fig)
+
+# horizontal bars refuse overlays/tests/group anchors with a named reason instead of drawing them on the wrong axis
+hbar = panel("bar", x="arm", y="change")
+hbar["horizontal"] = True
+hbar["layers"] = [specs.layer("points")]
+err = fl.run_request(spec([hbar]), df, ["png"], 72)["error"]
+assert err["code"] == "unsupported_combo" and "horizontal" in err["detail"]["reason"], err
+
+# stacked bars: brackets start just above the stack, not above stack + a hidden error bar
+stack = panel("bar", x="arm", y="change", group="sex")
+stack["stacked"], stack["errorType"], stack["stat"] = True, "sem", "count"
+fig = fl.plt.figure()
+ctx = fl.draw_bar(fig.add_subplot(), stack, df, spec([stack]))
+assert ctx.top == df.groupby("arm").size().max(), ctx.top
+fl.close(fig)
+
+# heatmap: the test only picks the correlation method
+hm = panel("heatmap")
+hm["stats"] = {"test": "spearman", "pairs": "all", "explicit": [], "display": "p", "reference": None}
+assert fl.run_request(spec([hm]), df, ["png"], 72).get("error") is None
+
 print("figurelib.selfcheck: OK")

@@ -154,8 +154,9 @@ export default function PrivacyPage() {
           and never sent anywhere.
         </li>
         <li>
-          A custom tweak Claude writes is shown to you, checked before it runs, and runs only in
-          your browser.
+          A custom tweak (written by Claude, or inside a recipe someone shares) is shown to you and
+          never runs until you click Run. It&apos;s checked first, and it runs only in your browser,
+          in a worker whose network access is switched off before any tweak can run.
         </li>
         <li>
           The one honest caveat: drawing happens in a Web Worker that downloads its Python runtime,

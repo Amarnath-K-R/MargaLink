@@ -3,6 +3,9 @@
 import { useState } from "react";
 import {
   ANNOTATION_KINDS,
+  CATEGORY_FAMILIES,
+  layersFor,
+  testsFor,
   ERROR_TYPES,
   FAMILIES,
   FAMILY_ROLES,
@@ -22,19 +25,6 @@ import {
   type Test,
 } from "@/lib/figureSpec";
 import type { Dataset } from "@/lib/spreadsheet";
-
-const CATEGORY: Family[] = ["bar", "box", "violin", "strip"];
-// What public/figurelib.py accepts per family (apply_layers / draw_stats).
-const LAYERS_FOR = (f: Family): LayerKind[] =>
-  CATEGORY.includes(f) ? ["points", "mean", "median", "n"] : f === "scatter" || f === "line" ? ["regression"] : [];
-const TESTS_FOR = (f: Family): Test[] =>
-  CATEGORY.includes(f)
-    ? ["auto", "t", "welch", "mannwhitney", "wilcoxon", "anova", "kruskal"]
-    : f === "scatter" || f === "line"
-      ? ["pearson", "spearman"]
-      : f === "km"
-        ? ["logrank"]
-        : [];
 
 const FAMILY_LABEL: Record<Family, string> = {
   bar: "Bar", box: "Box", violin: "Violin", strip: "Strip", scatter: "Scatter",
@@ -110,9 +100,11 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
   const set = (patch: Partial<Panel>) => onChange({ ...panel, ...patch });
   const f = panel.family;
   const refCol = refColumn(panel);
-  const groups = (refCol && dataset.levels[refCol]) || [];
-  const layerKinds = LAYERS_FOR(f);
-  const tests = TESTS_FOR(f);
+  // Group pickers only where groups sit on the category axis figurelib draws.
+  const horizontal = f === "bar" && panel.horizontal;
+  const groups = (CATEGORY_FAMILIES.includes(f) && !horizontal && refCol && dataset.levels[refCol]) || [];
+  const layerKinds = horizontal ? [] : layersFor(f);
+  const tests = horizontal ? [] : testsFor(f);
   const [pairA, setPairA] = useState("#0");
   const [pairB, setPairB] = useState("#1");
 
@@ -129,8 +121,8 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
       x: panel.x,
       y: panel.y,
       colSpan: panel.colSpan,
-      layers: panel.layers.filter((l) => LAYERS_FOR(next).includes(l.kind)),
-      stats: panel.stats.test && TESTS_FOR(next).includes(panel.stats.test) ? panel.stats : fresh.stats,
+      layers: panel.layers.filter((l) => layersFor(next).includes(l.kind)),
+      stats: panel.stats.test && testsFor(next).includes(panel.stats.test) ? panel.stats : fresh.stats,
       annotations: panel.annotations,
     });
   }
@@ -234,8 +226,18 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
                     Stacked
                   </label>
                   <label className="flex items-center gap-1.5 text-sm">
-                    <input type="checkbox" checked={panel.horizontal} onChange={(e) => set({ horizontal: e.target.checked })} />
-                    Horizontal
+                    <input
+                      type="checkbox"
+                      checked={panel.horizontal}
+                      onChange={(e) =>
+                        set(
+                          e.target.checked
+                            ? { horizontal: true, layers: [], stats: { ...panel.stats, test: null }, annotations: panel.annotations.map((a) => ({ ...a, xGroup: null })) }
+                            : { horizontal: false },
+                        )
+                      }
+                    />
+                    Horizontal (no overlays or tests)
                   </label>
                 </>
               )}
@@ -244,7 +246,7 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
           </Section>
         )}
 
-        {CATEGORY.includes(f) && (
+        {CATEGORY_FAMILIES.includes(f) && (
           <Section title="Group order">
             <label className={label}>
               Order
@@ -323,7 +325,7 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
                   ))}
                 </select>
               </label>
-              {CATEGORY.includes(f) && panel.stats.test && !["anova", "kruskal"].includes(panel.stats.test) && (
+              {CATEGORY_FAMILIES.includes(f) && panel.stats.test && !["anova", "kruskal"].includes(panel.stats.test) && (
                 <>
                   <label className={label}>
                     Compare
@@ -360,7 +362,7 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
                 </>
               )}
             </div>
-            {CATEGORY.includes(f) && panel.stats.test && panel.stats.pairs === "explicit" && (
+            {CATEGORY_FAMILIES.includes(f) && panel.stats.test && panel.stats.pairs === "explicit" && (
               <div className="text-sm">
                 <ul className="flex flex-col gap-1">
                   {panel.stats.explicit.map((p, i) => (

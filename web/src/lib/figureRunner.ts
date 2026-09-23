@@ -8,7 +8,8 @@ import type { Dtype } from "./spreadsheet.ts";
 
 export const PREVIEW_TIMEOUT_MS = 20_000;
 export const EXPORT_TIMEOUT_MS = 45_000;
-// A render that has to fetch SciPy or fonts first gets this long instead.
+// A render that has to fetch SciPy or fonts first gets this long instead —
+// and so does the wait in the worker's queue, before a job has started.
 export const LOAD_TIMEOUT_MS = 90_000;
 
 export type ImageFormat = "png" | "tiff" | "svg" | "pdf";
@@ -62,9 +63,9 @@ export function describeRenderError(code: string, d: Record<string, unknown>): s
   }
 }
 
-type Outgoing = { type: "warmup"; scipy: boolean; fonts: boolean } | ({ type: "render" } & RenderRequest);
+type Outgoing = { type: "warmup"; scipy: boolean; fonts: boolean } | ({ type: "render"; preview: boolean } & RenderRequest);
 type Incoming = {
-  type: "progress" | "ready" | "result" | "error";
+  type: "started" | "progress" | "ready" | "result" | "error";
   id: number;
   stage?: ProgressStage;
   images?: RenderResult["images"];
@@ -74,7 +75,13 @@ type Incoming = {
   detail?: Record<string, unknown>;
   traceback?: string;
 };
-type Pending = { resolve: (m: Incoming) => void; reject: (e: Error) => void; onProgress?: (s: ProgressStage) => void; timer?: ReturnType<typeof setTimeout> };
+type Pending = {
+  resolve: (m: Incoming) => void;
+  reject: (e: Error) => void;
+  onProgress?: (s: ProgressStage) => void;
+  timer?: ReturnType<typeof setTimeout>;
+  timeoutMs: number | null; // armed when the worker starts the job, not when it's queued
+};
 
 let worker: Worker | null = null;
 let seq = 0;
@@ -96,6 +103,10 @@ function getWorker(): Worker {
     const m = e.data;
     const p = pending.get(m.id);
     if (!p) return;
+    if (m.type === "started") {
+      if (p.timeoutMs !== null) rearm(m.id, p.timeoutMs);
+      return;
+    }
     if (m.type === "progress") {
       p.onProgress?.(m.stage!);
       if (m.stage === "loading-scipy" || m.stage === "loading-fonts") rearm(m.id, LOAD_TIMEOUT_MS);
@@ -134,8 +145,8 @@ function rearm(id: number, ms: number): void {
 function send(msg: Outgoing, timeoutMs: number | null, onProgress?: (s: ProgressStage) => void): { id: number; done: Promise<Incoming> } {
   const w = getWorker();
   const id = ++seq;
-  const done = new Promise<Incoming>((resolve, reject) => pending.set(id, { resolve, reject, onProgress }));
-  if (timeoutMs !== null) rearm(id, timeoutMs);
+  const done = new Promise<Incoming>((resolve, reject) => pending.set(id, { resolve, reject, onProgress, timeoutMs }));
+  if (timeoutMs !== null) rearm(id, LOAD_TIMEOUT_MS); // queue wait; the real deadline starts on "started"
   w.postMessage({ ...msg, id });
   return { id, done };
 }
@@ -156,7 +167,7 @@ export function warmUp(opts: { scipy?: boolean; fonts?: boolean } = {}, onProgre
 
 async function renderOnce(req: RenderRequest, timeoutMs: number, onProgress?: (s: ProgressStage) => void, preview = false): Promise<RenderResult | null> {
   await warmUp({}, onProgress);
-  const { id, done } = send({ type: "render", ...req }, timeoutMs, onProgress);
+  const { id, done } = send({ type: "render", ...req, preview }, timeoutMs, onProgress);
   if (preview) latestPreview = id;
   try {
     const m = await done;
@@ -166,6 +177,13 @@ async function renderOnce(req: RenderRequest, timeoutMs: number, onProgress?: (s
     if (preview && id !== latestPreview) return null;
     throw err;
   }
+}
+
+// Makes every preview still in flight stale (resolves null) — for when the
+// preview is cleared or the figure became invalid, so a late result can't
+// reappear over it.
+export function cancelPreviews(): void {
+  latestPreview = 0;
 }
 
 // Live preview. Resolves null when a newer preview was requested meanwhile

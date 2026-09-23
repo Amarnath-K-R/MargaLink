@@ -203,9 +203,24 @@ and that opting in adds only the small columns' labels. The Function
 re-validates the exact shape (`isValidFigurePayload`) and gates Claude's
 output before returning it: the spec must validate, fit the columns, and
 pass `checkLabels()` — a literal group label is accepted only if it was
-among the labels sent; a hook must define `customize()` and pass the
-denylist (`isCodeSafeToRun`, checked again in the browser before it runs;
-the Worker is the real sandbox). `figureEndpoint.selfcheck.ts` drives the
+among the labels sent; a hook must define `customize()` and pass `isCodeSafeToRun`.
+
+**Custom-code tweaks have three layers**, because a hook runs next to the
+user's data and one can arrive in a shared recipe, not only from Claude:
+(1) `isCodeSafeToRun` (`figurePrompt.ts`) is an allowlist — imports only
+from matplotlib/numpy/pandas/math, no double-underscore names, no names that
+reach JavaScript (`js`, `pyodide*`), no file reads/writes — checked on the
+server and again in the browser; (2) a tweak never runs until the user has
+seen the code and clicked **Run this tweak**; (3) before running any tweak
+the worker preloads everything it could still need and then permanently
+replaces every network API (`fetch`, XHR, WebSocket, EventSource,
+`importScripts`, nested workers, `caches`…) and everything that turns a
+string into code (`eval`, the function constructors, string timers — so
+dynamic `import()` can't be built) with non-configurable throwing stubs
+(`lockNetwork`). `scripts/check_figure_sandbox.mjs` posts tweaks straight
+to the worker, bypassing layer 1, and asserts every escape fails with zero
+requests leaving. The upgrade path, if these JS-level locks ever prove
+thin, is a CSP header on `figureWorker.mjs`. `figureEndpoint.selfcheck.ts` drives the
 real handler with a stubbed upstream.
 
 **Why labels are opt-in, and why tracebacks never leave.** A category

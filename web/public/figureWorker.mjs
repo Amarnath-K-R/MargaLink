@@ -16,7 +16,8 @@
 //
 // Protocol (every message carries the caller's id):
 //   → {type:"warmup", id, scipy, fonts}
-//   → {type:"render", id, spec, csv, dtypes, formats, dpi, hook}
+//   → {type:"render", id, spec, csv, dtypes, formats, dpi, hook, preview}
+//   ← {type:"started", id}                    the job left the queue (the caller's timeout starts here)
 //   ← {type:"progress", id, stage} … {type:"ready", id}
 //   ← {type:"result", id, images, meta, hookWarning}
 //   ← {type:"error", id, code, detail, traceback}
@@ -89,6 +90,68 @@ async function fetchFonts(pyodide, missing, report) {
   for (const f of missing) fontsLoaded.add(f);
 }
 
+// Before any custom-code tweak runs, this worker loads everything it could
+// still need (SciPy, every bundled font) and then removes every way to reach
+// the network, for the rest of its life: non-configurable, non-writable
+// throwing stubs on the global object and on its prototypes, so a tweak can't
+// delete its way back to the original. This is the enforcement layer behind
+// isCodeSafeToRun (which keeps a tweak from reaching JavaScript at all) and
+// the user's explicit "Run this tweak" click.
+// Dynamic import() can't be stubbed, so everything that turns a string into
+// code is closed too. ponytail: a CSP header on this file (connect-src /
+// script-src limited to self + the Pyodide CDN path) is the upgrade if these
+// JS-level locks ever prove thin.
+let networkLocked = false;
+const NETWORK_APIS = ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "importScripts", "Worker", "SharedWorker", "WebTransport", "BroadcastChannel", "caches"];
+async function lockNetwork(pyodide, report) {
+  if (networkLocked) return;
+  await ensureScipy(pyodide, report);
+  await ensureFonts(pyodide, pyJson(pyodide, "[f for fs in figurelib.FONT_FILES.values() for f in fs]"), report);
+  const deny = () => {
+    throw new Error("Network access is disabled once custom code can run.");
+  };
+  const scopes = [];
+  for (let o = self; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) scopes.push(o);
+  for (const scope of scopes) {
+    for (const name of NETWORK_APIS) {
+      try {
+        Object.defineProperty(scope, name, { value: deny, writable: false, configurable: false });
+      } catch {
+        // already non-configurable on this scope — the own stub on `self` still shadows it
+      }
+    }
+  }
+  // import() can't be stubbed, but it needs code built from a string: close
+  // eval, every function constructor, and string-form timers.
+  Object.defineProperty(self, "eval", { value: deny, writable: false, configurable: false });
+  // Stand-ins keep each constructor's `prototype`, so `x instanceof Function`
+  // (which Pyodide's glue relies on) still works; calling them throws.
+  const standIn = (proto) => {
+    const f = function () {
+      deny();
+    };
+    Object.defineProperty(f, "prototype", { value: proto, writable: false });
+    return f;
+  };
+  for (const fn of [function () {}, async function () {}, function* () {}, async function* () {}]) {
+    const proto = Object.getPrototypeOf(fn);
+    Object.defineProperty(proto, "constructor", { value: standIn(proto), writable: false, configurable: false });
+  }
+  Object.defineProperty(self, "Function", { value: standIn(Function.prototype), writable: false, configurable: false });
+  for (const name of ["setTimeout", "setInterval"]) {
+    const original = self[name].bind(self);
+    const guarded = (handler, ...rest) => (typeof handler === "function" ? original(handler, ...rest) : deny());
+    for (const scope of scopes) {
+      try {
+        Object.defineProperty(scope, name, { value: guarded, writable: false, configurable: false });
+      } catch {
+        // see above
+      }
+    }
+  }
+  networkLocked = true;
+}
+
 const pyJson = (pyodide, expr) => JSON.parse(pyodide.runPython(`json.dumps(${expr})`));
 
 async function render(msg, report) {
@@ -116,6 +179,7 @@ async function render(msg, report) {
   pyodide.runPython("__spec_obj__ = json.loads(__spec__)");
   if (pyJson(pyodide, "figurelib.needs_scipy(__spec_obj__)")) await ensureScipy(pyodide, report);
   await ensureFonts(pyodide, pyJson(pyodide, "figurelib.fonts_for(__spec_obj__)"), report);
+  if (hook) await lockNetwork(pyodide, report);
   report(formats.length === 1 && formats[0] === "png" ? "rendering" : "exporting");
   pyodide.globals.set("__formats__", JSON.stringify(formats));
   pyodide.globals.set("__dpi__", dpi);
@@ -143,9 +207,33 @@ async function handle(msg) {
   }
 }
 
-// One message at a time: renders share the cached frame and Python globals,
-// so interleaving two at an await point would render one against the other's data.
-let queue = Promise.resolve();
+// One job at a time: renders share the cached frame and Python globals, so
+// interleaving two at an await point would render one against the other's
+// data. A new preview replaces any preview still waiting (only the newest
+// matters; the replaced ones answer "superseded"), so dragging a control
+// can't pile up a queue of stale renders.
+const jobs = [];
+let running = false;
 self.onmessage = (event) => {
-  queue = queue.then(() => handle(event.data));
+  const msg = event.data;
+  if (msg.type === "render" && msg.preview) {
+    for (let i = jobs.length - 1; i >= 0; i--) {
+      if (jobs[i].type === "render" && jobs[i].preview) {
+        self.postMessage({ type: "error", id: jobs[i].id, code: "superseded", detail: {}, traceback: "" });
+        jobs.splice(i, 1);
+      }
+    }
+  }
+  jobs.push(msg);
+  void pump();
 };
+async function pump() {
+  if (running) return;
+  running = true;
+  while (jobs.length) {
+    const msg = jobs.shift();
+    self.postMessage({ type: "started", id: msg.id });
+    await handle(msg);
+  }
+  running = false;
+}

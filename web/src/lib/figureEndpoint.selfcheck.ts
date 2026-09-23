@@ -55,7 +55,15 @@ toolJson = JSON.stringify({ code: "def customize(fig, axes, df):\n  axes[0].set_
 r = await call(buildFigurePayload(ds, spec, "x", { sendLevels: false, mode: "hook" }));
 assert.equal(r.status, 200); assert.ok(JSON.parse(r.text).hook.includes("customize"));
 
+// a current spec that doesn't fit is passed on with its problem, not refused
+const unfit = structuredClone(spec);
+unfit.panels[0].roles.x = null;
+toolJson = JSON.stringify({ spec, summary: "fixed" });
+r = await call(buildFigurePayload(ds, unfit, "fix it", { sendLevels: false, mode: "spec" }));
+assert.equal(r.status, 200, r.text);
+assert.ok(JSON.stringify(upstreamBody).includes("PROBLEM WITH THE CURRENT SPEC"));
+
 assert.equal((await call({ ...buildFigurePayload(ds, null, "x", { sendLevels: false, mode: "spec" }), rows: [[1]] })).status, 400);
 assert.equal((await call(buildFigurePayload(ds, null, "   ", { sendLevels: false, mode: "spec" }))).status, 400);
-assert.deepEqual([...kv.values()], ["6"], "every call that reached Claude was counted, rejected-input calls weren't");
+assert.deepEqual([...kv.values()], ["7"], "every call that reached Claude was counted, rejected-input calls weren't");
 console.log("figureEndpoint.selfcheck: OK");

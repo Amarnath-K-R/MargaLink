@@ -7,7 +7,8 @@ CPython selfcheck in web/figurelib/ imports it unchanged. It never touches the
 network and never sees anything but the spec and the user's own data.
 
 Errors are FigureError(code, **detail). `detail` holds column names, roles,
-enum values and indices only — never a cell value — so it's safe to show and
+enum values and indices only — never a cell value (except `unknown_group`'s
+`ref`, a group label the spec itself named) — so it's safe to show and
 to log. The full Python traceback is attached as `.traceback` for local
 display only; it can quote a value, so it must never leave the device.
 """
@@ -197,7 +198,9 @@ def usable(df: pd.DataFrame, cols: list[str | None]) -> pd.DataFrame:
     return out
 
 
-def ordered_levels(df: pd.DataFrame, panel: dict, col: str, value_col: str | None = None) -> list[str]:
+def ordered_levels(df: pd.DataFrame, panel: dict, col: str, value_col: str | None = None, full: pd.DataFrame | None = None) -> list[str]:
+    """Drawn order of `col`'s levels in `df` (the rows being drawn). "#n" in an
+    explicit order counts over `full` — every row, the numbering the UI shows."""
     lv = levels(df, col)
     order = panel.get("order") or {"mode": "as-is", "explicit": []}
     mode = order.get("mode", "as-is")
@@ -207,7 +210,8 @@ def ordered_levels(df: pd.DataFrame, panel: dict, col: str, value_col: str | Non
         means = df.groupby(_as_labels(df[col]))[value_col].mean()
         return sorted(lv, key=lambda k: means.get(k, np.nan), reverse=mode == "value-desc")
     if mode == "explicit" and order.get("explicit"):
-        first = [resolve_ref(r, lv) for r in order["explicit"]]
+        numbering = levels(full, col) if full is not None else lv
+        first = [k for k in (resolve_ref(r, numbering) for r in order["explicit"]) if k in lv]
         return first + [k for k in lv if k not in first]
     return lv
 
@@ -270,7 +274,7 @@ def draw_bar(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
     g = column(panel, df, "group", ["categorical"], required=False)
     err_col = column(panel, df, "error", ["numeric"], required=False) if panel["errorType"] == "column" else None
     d = usable(df, [x, y, g, err_col])
-    lv = ordered_levels(d, panel, x, y)
+    lv = ordered_levels(d, panel, x, y, full=df)
     labels = _as_labels(d[x])
     ctx = Ctx(categorical=True)
     horizontal = panel.get("horizontal", False)
@@ -305,8 +309,10 @@ def draw_bar(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
             error_kw={"elinewidth": 0.8, "capsize": 2}, **err_kw, **kw)
         if panel.get("stacked") and g:
             bottoms = bottoms + np.nan_to_num(np.array(centers))
-        tops = np.nan_to_num(np.array(centers)) + np.array(errs)
-        ctx.top = max(ctx.top, float(np.nanmax(tops + (bottoms if panel.get("stacked") and g else 0))) if len(tops) else 0.0)
+            tops = bottoms  # stacked: no error bars drawn, the stack's top is the top
+        else:
+            tops = np.nan_to_num(np.array(centers)) + (np.array(errs) if show_err else 0.0)
+        ctx.top = max(ctx.top, float(np.nanmax(tops)) if len(tops) else 0.0)
     for i, level in enumerate(lv):
         ctx.positions[level] = float(i)
         ctx.values[level] = d.loc[labels == level, y].to_numpy(dtype=float)
@@ -331,7 +337,7 @@ def draw_box(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
     y = column(panel, df, "y", ["numeric"])
     g = column(panel, df, "group", ["categorical"], required=False)
     d = usable(df, [x, y, g])
-    lv = ordered_levels(d, panel, x, y)
+    lv = ordered_levels(d, panel, x, y, full=df)
     labels = _as_labels(d[x])
     groups = levels(d, g) if g else [None]
     offsets, width = _dodge(len(groups)) if g else ([0.0], 0.6)
@@ -439,7 +445,7 @@ def draw_violin(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
     x = column(panel, df, "x", ["categorical", "date"])
     y = column(panel, df, "y", ["numeric"])
     d = usable(df, [x, y])
-    lv = ordered_levels(d, panel, x, y)
+    lv = ordered_levels(d, panel, x, y, full=df)
     labels = _as_labels(d[x])
     colors = palette_colors(spec, len(lv))
     ctx = Ctx(categorical=True)
@@ -472,7 +478,7 @@ def draw_strip(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
     x = column(panel, df, "x", ["categorical", "date"])
     y = column(panel, df, "y", ["numeric"])
     d = usable(df, [x, y])
-    lv = ordered_levels(d, panel, x, y)
+    lv = ordered_levels(d, panel, x, y, full=df)
     labels = _as_labels(d[x])
     colors = palette_colors(spec, len(lv))
     ctx = Ctx(categorical=True)
@@ -747,6 +753,9 @@ def draw_stats(ax, panel: dict, df: pd.DataFrame, ctx: Ctx) -> list[dict]:
         return []
     display = stats.get("display", "stars")
     family = panel["family"]
+    if family == "heatmap":
+        return []  # the test only picks the correlation method (draw_heatmap)
+    _no_horizontal(panel, "significance tests")
     if family == "km":
         t, e, g = panel["roles"].get("time"), panel["roles"].get("event"), panel["roles"].get("group")
         if not g:
@@ -850,7 +859,15 @@ OVERLAYS = {
 CATEGORY_LAYERS = {"points", "mean", "median", "n"}
 
 
+def _no_horizontal(panel: dict, what: str) -> None:
+    # ponytail: overlays/brackets/group annotations assume categories on x; swap axes if horizontal ones are wanted.
+    if panel.get("horizontal") and panel["family"] == "bar":
+        raise FigureError("unsupported_combo", reason=f"{what} aren't available on horizontal bars")
+
+
 def apply_layers(ax, panel: dict, df: pd.DataFrame, ctx: Ctx) -> None:
+    if panel.get("layers"):
+        _no_horizontal(panel, "overlays")
     for layer in panel.get("layers", []):
         kind = layer["kind"]
         if kind in CATEGORY_LAYERS and not ctx.categorical:
@@ -1044,6 +1061,8 @@ def _render(spec: dict, df: pd.DataFrame, where: dict):
             tests = draw_stats(ax, panel, df, ctx)
             where.update(stage="annotations")
             for ann in panel.get("annotations", []):
+                if ann.get("xGroup"):
+                    _no_horizontal(panel, "group-anchored annotations")
                 draw_annotation(ax, ann, ctx)
             where.update(stage="axes")
             apply_axes(ax, panel, ctx)

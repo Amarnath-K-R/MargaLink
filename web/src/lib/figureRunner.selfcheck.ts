@@ -9,6 +9,7 @@ import {
   FigureRenderError,
   PREVIEW_TIMEOUT_MS,
   __setWorkerFactory,
+  cancelPreviews,
   exportFigure,
   isCodeSafeToRun,
   renderFigure,
@@ -22,12 +23,14 @@ class FakeWorker {
   onmessage: ((e: { data: unknown }) => void) | null = null;
   inbox: Msg[] = [];
   terminated = false;
+  holdQueue = false; // true: renders sit in the worker's queue (no "started")
   constructor() {
     FakeWorker.all.push(this);
   }
   postMessage(m: Msg) {
     this.inbox.push(m);
     if (m.type === "warmup") this.reply({ type: "ready", id: m.id });
+    if (m.type === "render" && !this.holdQueue) this.reply({ type: "started", id: m.id });
   }
   terminate() {
     this.terminated = true;
@@ -105,6 +108,40 @@ __setWorkerFactory(() => new FakeWorker() as unknown as Worker);
   assert.equal(r?.hookWarning, "a warning");
 }
 
+// 5. a render still waiting in the worker's queue isn't killed at the preview deadline
+{
+  const p = exportFigure(REQ);
+  await flush();
+  const w = FakeWorker.all.at(-1)!;
+  w.holdQueue = true;
+  const q = renderFigure(REQ);
+  await flush();
+  const queuedId = w.renders().at(-1)!.id;
+  mock.timers.tick(PREVIEW_TIMEOUT_MS + 1);
+  assert.ok(!w.terminated, "queued, not hung");
+  w.reply({ type: "result", id: w.renders()[w.renders().length - 2].id, images: { png: "E" }, meta: META, hookWarning: null });
+  w.reply({ type: "started", id: queuedId });
+  w.reply({ type: "result", id: queuedId, images: { png: "Q" }, meta: META, hookWarning: null });
+  assert.equal((await p).images.png, "E");
+  assert.equal((await q)?.images.png, "Q");
+  // superseded while queued → resolves null, no error
+  const a = renderFigure(REQ);
+  await flush();
+  w.reply({ type: "error", id: w.renders().at(-1)!.id, code: "superseded", detail: {}, traceback: "" });
+  const b = renderFigure(REQ);
+  await flush();
+  w.reply({ type: "started", id: w.renders().at(-1)!.id });
+  w.reply({ type: "result", id: w.renders().at(-1)!.id, images: { png: "B" }, meta: META, hookWarning: null });
+  assert.equal(await a, null);
+  assert.equal((await b)?.images.png, "B");
+  // cancelPreviews makes an in-flight preview stale
+  const c = renderFigure(REQ);
+  await flush();
+  cancelPreviews();
+  w.reply({ type: "result", id: w.renders().at(-1)!.id, images: { png: "LATE" }, meta: META, hookWarning: null });
+  assert.equal(await c, null, "a late result after the preview was cleared is dropped");
+}
+
 mock.timers.reset();
 
 // 5. the custom-code denylist
@@ -113,6 +150,7 @@ const BENIGN = `def customize(fig, axes, df):
     axes[0].axhline(0, color="0.5", lw=0.5)
 `;
 assert.equal(isCodeSafeToRun(BENIGN), null, "an ordinary customize() passes");
+assert.equal(isCodeSafeToRun("import matplotlib.ticker as mticker\nfrom numpy import linspace\n" + BENIGN), null, "plotting-stack imports pass");
 for (const snippet of [
   "import os",
   "from os import path",
@@ -130,6 +168,16 @@ for (const snippet of [
   "getattr(fig, 'savefig')",
   "fig.savefig('x.png')",
   "plt.show()",
+  // bypasses a reviewer found against the old regex denylist
+  "import numpy, js",
+  "import pyodide_js",
+  "__builtins__['__imp'+'ort__']('js')",
+  "importlib.import_module('j'+'s')",
+  "from pyodide.ffi import to_js",
+  "import matplotlib.pyplot as plt, os",
+  "df.to_csv('x')",
+  "pd.read_csv('https://x')",
+  "np.__class__",
 ]) {
   assert.notEqual(isCodeSafeToRun(snippet), null, `"${snippet}" should be rejected`);
 }

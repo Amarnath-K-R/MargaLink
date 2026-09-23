@@ -13,7 +13,7 @@ assert.ok(SPEC_SYSTEM_PROMPT.includes("Never invent a label"));
 assert.ok(SPEC_SYSTEM_PROMPT.includes("return the full spec"));
 assert.ok(SPEC_SYSTEM_PROMPT.includes("untrusted"), "the request is untrusted");
 assert.ok(SPEC_SYSTEM_PROMPT.includes('as "" unless'), "text fields stay empty so local text survives");
-for (const banned of ["os", "subprocess", "socket", "open()", "savefig", "import anything"]) {
+for (const banned of ["os", "subprocess", "socket", "open()", "savefig", "Import only from matplotlib, numpy, pandas or math", "double underscore"]) {
   assert.ok(HOOK_SYSTEM_PROMPT.includes(banned), `hook prompt forbids ${banned}`);
 }
 assert.ok(HOOK_SYSTEM_PROMPT.includes("def customize(fig, axes, df):"));
@@ -47,5 +47,8 @@ const full = buildFigurePrompt({ ...base, spec: DEFAULT_SPEC, levels: { arm: ["P
 assert.ok(full.includes('- arm: ["Placebo","Low"]'), "levels block when sent");
 assert.ok(full.includes(`CURRENT SPEC:\n${JSON.stringify(DEFAULT_SPEC)}`), "the scrubbed spec when present");
 assert.ok(full.trim().endsWith("Call submit_figure_hook now."));
+
+assert.ok(buildFigurePrompt({ ...base, spec: DEFAULT_SPEC }, 'choose a column for "x".').includes('PROBLEM WITH THE CURRENT SPEC (fix it as part of the request): choose a column for "x".'));
+assert.ok(!buildFigurePrompt(base, "ignored without a spec").includes("PROBLEM"));
 
 console.log("figurePrompt.selfcheck: OK");

@@ -223,9 +223,10 @@ function walk(v: unknown, schema: Schema, path: string): string | null {
   if (t === "number" && !Number.isFinite(v as number)) return `${path}: must be a finite number`;
   if (t === "object" && schema.properties) {
     const o = v as Record<string, unknown>;
-    for (const key of Object.keys(o)) if (!(key in schema.properties)) return `${path}.${key}: unexpected key`;
+    // Object.hasOwn, not `in`: "constructor" or "__proto__" must not pass as schema keys.
+    for (const key of Object.keys(o)) if (!Object.hasOwn(schema.properties, key)) return `${path}.${key}: unexpected key`;
     for (const key of schema.required ?? []) {
-      if (!(key in o)) return `${path}.${key}: missing`;
+      if (!Object.hasOwn(o, key)) return `${path}.${key}: missing`;
       const err = walk(o[key], schema.properties[key], `${path}.${key}`);
       if (err) return err;
     }
@@ -318,8 +319,9 @@ const CATEGORY_FAMILY: RoleRule[] = [
 export const FAMILY_ROLES: Record<Family, RoleRule[]> = {
   bar: [...CATEGORY_FAMILY, { role: "error", dtypes: num, required: false }],
   box: CATEGORY_FAMILY,
-  violin: CATEGORY_FAMILY,
-  strip: CATEGORY_FAMILY,
+  // figurelib draws violins and strips per x level only — no group split.
+  violin: CATEGORY_FAMILY.filter((r) => r.role !== "group"),
+  strip: CATEGORY_FAMILY.filter((r) => r.role !== "group"),
   scatter: [
     { role: "x", dtypes: numOrDate, required: true },
     { role: "y", dtypes: num, required: true },
@@ -353,7 +355,29 @@ export const FAMILY_ROLES: Record<Family, RoleRule[]> = {
   ],
 };
 
-// A plain message for the first binding that can't work, or null.
+// What public/figurelib.py accepts per family (apply_layers / draw_stats) —
+// used by the panel editor to offer only these, and below to refuse the rest.
+export const CATEGORY_FAMILIES: readonly Family[] = ["bar", "box", "violin", "strip"];
+export function layersFor(f: Family): LayerKind[] {
+  return CATEGORY_FAMILIES.includes(f) ? ["points", "mean", "median", "n"] : f === "scatter" || f === "line" ? ["regression"] : [];
+}
+export function testsFor(f: Family): Test[] {
+  if (CATEGORY_FAMILIES.includes(f)) return ["auto", "t", "welch", "mannwhitney", "wilcoxon", "anova", "kruskal"];
+  if (f === "scatter" || f === "line" || f === "heatmap") return ["pearson", "spearman"];
+  return f === "km" ? ["logrank"] : [];
+}
+
+// Coordinates each annotation kind needs (x may come from xGroup instead).
+const ANNOTATION_NEEDS: Record<AnnotationKind, ("x" | "y" | "x2" | "y2")[]> = {
+  hline: ["y"],
+  vline: ["x"],
+  hspan: ["y", "y2"],
+  vspan: ["x", "x2"],
+  text: ["x", "y"],
+  arrow: ["x", "y", "x2", "y2"],
+};
+
+// A plain message for the first binding or combination that can't work, or null.
 export function checkSpecAgainstColumns(columns: ColumnSchema[], spec: FigureSpec): string | null {
   const dtypeOf = new Map(columns.map((c) => [c.name, c.dtype]));
   for (const [i, p] of spec.panels.entries()) {
@@ -371,6 +395,21 @@ export function checkSpecAgainstColumns(columns: ColumnSchema[], spec: FigureSpe
     if (p.family === "heatmap") {
       const set = [p.roles.x, p.roles.y, p.roles.value].filter(Boolean).length;
       if (set !== 0 && set !== 3) return `${where}a heatmap needs all of x, y and value — or none, for a correlation matrix.`;
+    }
+    const layer = p.layers.find((l) => !layersFor(p.family).includes(l.kind));
+    if (layer) return `${where}a ${p.family} panel can't have a "${layer.kind}" overlay.`;
+    if (p.stats.test && !testsFor(p.family).includes(p.stats.test)) return `${where}a ${p.family} panel can't use the ${p.stats.test} test.`;
+    const horizontalBar = p.family === "bar" && p.horizontal;
+    if (horizontalBar && (p.layers.length || p.stats.test || p.annotations.some((a) => a.xGroup))) {
+      return `${where}overlays, significance tests and group-anchored notes aren't available on horizontal bars.`;
+    }
+    const numericNeeded = p.stats.test === "pearson" || p.stats.test === "spearman" || p.layers.some((l) => l.kind === "regression");
+    if (numericNeeded && (p.family === "scatter" || p.family === "line") && p.roles.x && dtypeOf.get(p.roles.x) === "date") {
+      return `${where}correlation and regression need a numeric x, not a date.`;
+    }
+    for (const [j, a] of p.annotations.entries()) {
+      const missing = ANNOTATION_NEEDS[a.kind].filter((k) => a[k] === null && !(k === "x" && a.xGroup));
+      if (missing.length) return `${where}note ${j + 1} (${a.kind}) needs ${missing.join(", ")}.`;
     }
   }
   return null;
@@ -455,19 +494,24 @@ export function scrubSpec(spec: FigureSpec, levels: Record<string, string[] | nu
 }
 
 // Merges Claude's spec with the user's local text: a text field Claude
-// returns empty keeps the user's text; a non-empty one wins.
+// returns empty keeps the user's text; a non-empty one wins. Local text is
+// matched to a returned panel by what it shows (family + columns), never by
+// position — "drop the first panel" must not move panel a's title onto b.
 export function mergeTextFields(local: FigureSpec, returned: FigureSpec): FigureSpec {
   const keep = (mine: string | undefined, theirs: string) => (theirs === "" && mine !== undefined ? mine : theirs);
+  const identity = (p: Panel) => JSON.stringify([p.family, ROLES.map((r) => p.roles[r])]);
+  const unused = [...local.panels];
   return {
     ...returned,
-    panels: returned.panels.map((p, i) => {
-      const lp = local.panels[i];
+    panels: returned.panels.map((p) => {
+      const at = unused.findIndex((lp) => identity(lp) === identity(p));
+      const lp = at >= 0 ? unused.splice(at, 1)[0] : undefined;
       return {
         ...p,
         title: keep(lp?.title, p.title),
         x: { ...p.x, label: keep(lp?.x.label, p.x.label), unit: keep(lp?.x.unit, p.x.unit) },
         y: { ...p.y, label: keep(lp?.y.label, p.y.label), unit: keep(lp?.y.unit, p.y.unit) },
-        annotations: p.annotations.map((a, j) => ({ ...a, text: keep(lp?.annotations[j]?.text, a.text) })),
+        annotations: p.annotations.map((a, j) => ({ ...a, text: keep(lp?.annotations[j]?.kind === a.kind ? lp.annotations[j].text : undefined, a.text) })),
       };
     }),
   };

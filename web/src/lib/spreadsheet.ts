@@ -21,9 +21,11 @@ export type Dataset = {
   // NA tokens as empty cells, so pandas types the frame the way the UI does.
   csv: string;
   previewRows: string[][]; // first 5 prepared rows, for an on-page "did it parse right?" table
-  // Categorical/date columns' distinct values in first-appearance order (the
-  // order "#n" group references index into); null when a column has more
-  // than MAX_LEVELS distinct values (an ID-like column). Numeric columns absent.
+  // Categorical columns' distinct values in first-appearance order (the order
+  // "#n" group references index into); null when a column has more than
+  // MAX_LEVELS distinct values (an ID-like column). Numeric and date columns
+  // are absent: pandas normalizes date spellings, so their raw strings
+  // wouldn't number groups the way the renderer does.
   levels: Record<string, string[] | null>;
   // Per numeric column: non-empty cells that weren't numbers and became empty.
   coerced: Record<string, number>;
@@ -166,7 +168,10 @@ export function prepareDataset(workbook: Workbook, opts: PrepOptions): Dataset {
   const keep = headers.map((h, i) => (body[0][i] ?? "").trim() !== "" || rows.some((r) => r[i].trim() !== ""));
   headers = headers.filter((_, i) => keep[i]);
   rows = rows.map((r) => r.filter((_, i) => keep[i]));
-  if (opts.reshape) ({ headers, rows } = reshapeWideToLong(headers, rows, opts.reshape));
+  if (opts.reshape) {
+    ({ headers, rows } = reshapeWideToLong(headers, rows, opts.reshape));
+    headers = normalizeHeaders(headers); // a stacked name may repeat an id column's
+  }
   if (rows.length > MAX_ROWS) {
     throw new Error(`That's more than ${MAX_ROWS.toLocaleString()} rows — try a summarized version.`);
   }
@@ -187,7 +192,7 @@ export function prepareDataset(workbook: Workbook, opts: PrepOptions): Dataset {
         r[i] = n === null ? "" : String(n);
       }
       coerced[name] = bad;
-    } else {
+    } else if (dtype === "categorical") {
       const seen = new Set<string>();
       for (const r of rows) if (r[i] !== "" && seen.size <= MAX_LEVELS) seen.add(r[i]);
       levels[name] = seen.size > MAX_LEVELS ? null : [...seen];

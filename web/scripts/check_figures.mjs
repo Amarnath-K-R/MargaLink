@@ -193,6 +193,9 @@ nextReply = { hook: "def customize(fig, axes, df):\n    axes[0].set_title('HOOKE
 await describe.getByRole("button", { name: "Ask for a custom tweak (code)" }).click();
 await page.waitForSelector('[data-testid="hook"]');
 await settled();
+check("a returned tweak doesn't run until the user clicks Run", !(await page.locator('[data-testid="figure-image"]').getAttribute("src")).length || (await page.locator('[data-testid="hook"] summary').innerText()).includes("not running yet"));
+await page.getByRole("button", { name: "Run this tweak" }).click();
+await settled();
 check("the tweak ran without a warning", (await page.locator('[data-testid="hook-warning"]').count()) === 0 && (await page.locator('[data-testid="render-error"]').count()) === 0);
 for (const f of ["PNG", "TIFF", "PDF"]) await bar.getByLabel(f).uncheck();
 await bar.getByLabel("SVG").check();
