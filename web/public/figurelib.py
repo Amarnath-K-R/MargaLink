@@ -426,12 +426,200 @@ def draw_histogram(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
     return ctx
 
 
+def draw_violin(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
+    x = column(panel, df, "x", ["categorical", "date"])
+    y = column(panel, df, "y", ["numeric"])
+    d = usable(df, [x, y])
+    lv = ordered_levels(d, panel, x, y)
+    labels = _as_labels(d[x])
+    colors = palette_colors(spec, len(lv))
+    ctx = Ctx(categorical=True)
+    data = [d.loc[labels == level, y].to_numpy(dtype=float) for level in lv]
+    keep = [i for i, v in enumerate(data) if len(v) > 1]
+    parts = ax.violinplot([data[i] for i in keep], positions=keep, widths=0.75, showextrema=False, showmedians=True,
+                          vert=not panel.get("horizontal", False))
+    for j, body in enumerate(parts["bodies"]):
+        body.set_facecolor(colors[keep[j]])
+        body.set_edgecolor("black")
+        body.set_linewidth(0.4)
+        body.set_alpha(0.75)
+    parts["cmedians"].set_color("black")
+    for i, level in enumerate(lv):
+        ctx.positions[level] = float(i)
+        ctx.values[level] = data[i]
+        ctx.colors[level] = colors[i]
+        ctx.n[level] = len(data[i])
+    ctx.top = float(d[y].max())
+    _category_ticks(ax, lv, panel.get("horizontal", False))
+    return ctx
+
+
+def _jitter(n: int, width: float, seed: int = 0) -> np.ndarray:
+    # ponytail: jittered strip, not a true beeswarm; deterministic so a re-render is pixel-identical
+    return np.random.default_rng(seed).uniform(-width, width, n)
+
+
+def draw_strip(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
+    x = column(panel, df, "x", ["categorical", "date"])
+    y = column(panel, df, "y", ["numeric"])
+    d = usable(df, [x, y])
+    lv = ordered_levels(d, panel, x, y)
+    labels = _as_labels(d[x])
+    colors = palette_colors(spec, len(lv))
+    ctx = Ctx(categorical=True)
+    for i, level in enumerate(lv):
+        vals = d.loc[labels == level, y].to_numpy(dtype=float)
+        ax.scatter(i + _jitter(len(vals), 0.15, seed=i), vals, s=10, color=colors[i], alpha=0.85, linewidths=0)
+        ax.hlines(np.mean(vals), i - 0.25, i + 0.25, color="black", linewidth=1.0)
+        ctx.positions[level], ctx.values[level], ctx.colors[level], ctx.n[level] = float(i), vals, colors[i], len(vals)
+    ctx.top = float(d[y].max())
+    _category_ticks(ax, lv)
+    return ctx
+
+
+def draw_heatmap(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
+    """No roles: correlation matrix of every numeric column (Pearson, or
+    Spearman when the panel's test says so). x/y/value roles: a pivot of the
+    value's mean by x (columns) and y (rows)."""
+    ctx = Ctx()
+    xr, yr, vr = panel["roles"].get("x"), panel["roles"].get("y"), panel["roles"].get("value")
+    if xr or yr or vr:
+        x = column(panel, df, "x", ["categorical", "date"])
+        y = column(panel, df, "y", ["categorical", "date"])
+        v = column(panel, df, "value", ["numeric"])
+        d = usable(df, [x, y, v])
+        cols, rows = levels(d, x), levels(d, y)
+        table = d.assign(_x=_as_labels(d[x]), _y=_as_labels(d[y])).pivot_table(index="_y", columns="_x", values=v, aggfunc="mean")
+        matrix = table.reindex(index=rows, columns=cols).to_numpy(dtype=float)
+        cmap, vmin, vmax, xlabels, ylabels = "viridis", None, None, cols, rows
+    else:
+        numeric = [c for c in df.columns if _KINDS["numeric"](df[c])]
+        if len(numeric) < 2:
+            raise FigureError("too_few_groups", reason="a correlation matrix needs at least two numeric columns")
+        method = "spearman" if (panel.get("stats") or {}).get("test") == "spearman" else "pearson"
+        matrix = df[numeric].corr(method=method).to_numpy(dtype=float)
+        cmap, vmin, vmax, xlabels, ylabels = "RdBu_r", -1, 1, numeric, numeric
+    im = ax.imshow(matrix, cmap=cmap, vmin=vmin, vmax=vmax, aspect="auto")
+    ax.set_xticks(range(len(xlabels)), xlabels, rotation=45, ha="right")
+    ax.set_yticks(range(len(ylabels)), ylabels)
+    ax.spines[:].set_visible(False)
+    ax.tick_params(length=0)
+    bar = ax.figure.colorbar(im, ax=ax, shrink=0.8)
+    bar.outline.set_linewidth(0.4)
+    if matrix.shape[0] <= 12 and matrix.shape[1] <= 12:
+        span = (vmax - vmin) if vmax is not None else (np.nanmax(matrix) - np.nanmin(matrix) or 1)
+        mid = 0 if vmax is not None else np.nanmin(matrix) + span / 2
+        for (r, c), val in np.ndenumerate(matrix):
+            if np.isnan(val):
+                continue
+            dark = abs(val - mid) > span * 0.3
+            ax.text(c, r, f"{val:.2f}", ha="center", va="center", fontsize=matplotlib.rcParams["font.size"] - 1,
+                    color="white" if dark else "black", gid="cell")
+    return ctx
+
+
+def draw_forest(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
+    x = column(panel, df, "x", ["numeric"])
+    y = column(panel, df, "y", ["categorical", "date"])
+    lo = column(panel, df, "lower", ["numeric"])
+    hi = column(panel, df, "upper", ["numeric"])
+    g = column(panel, df, "group", ["categorical"], required=False)
+    d = usable(df, [x, y, lo, hi, g])
+    colors = palette_colors(spec, len(levels(d, g)) if g else 1)
+    color_of = {k: colors[i] for i, k in enumerate(levels(d, g))} if g else {}
+    labels = _as_labels(d[y]).tolist()
+    for i, (_, row) in enumerate(d.iterrows()):
+        color = color_of.get(str(row[g]), "black") if g else "black"
+        ax.hlines(i, row[lo], row[hi], color=color, linewidth=1.0)
+        ax.plot(row[x], i, "s", color=color, markersize=4)
+    ratios = bool((d[[x, lo, hi]] > 0).all().all())
+    ref = 1 if ratios else 0
+    ax.axvline(ref, color="0.4", linestyle="--", linewidth=0.8, gid="reference")
+    ax.set_yticks(range(len(labels)), labels)
+    ax.invert_yaxis()
+    ax.spines["left"].set_visible(False)
+    ax.tick_params(axis="y", length=0)
+    if g:
+        for k, c in color_of.items():
+            ax.plot([], [], "s", color=c, label=k)
+    return Ctx(n={"rows": len(d)}, colors=color_of)
+
+
+def km_estimate(time: np.ndarray, event: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Kaplan-Meier: (distinct times, S(t) after each, number at risk just before each)."""
+    time = np.asarray(time, dtype=float)
+    event = np.asarray(event).astype(bool)
+    times = np.unique(time)
+    at_risk = np.array([(time >= t).sum() for t in times])
+    deaths = np.array([((time == t) & event).sum() for t in times])
+    surv = np.cumprod(1 - deaths / at_risk)
+    return times, surv, at_risk
+
+
+def draw_km(ax, panel: dict, df: pd.DataFrame, spec: dict) -> Ctx:
+    t = column(panel, df, "time", ["numeric"])
+    e = column(panel, df, "event", ["numeric"])
+    g = column(panel, df, "group", ["categorical"], required=False)
+    d = usable(df, [t, e, g])
+    if not set(np.unique(d[e])).issubset({0, 1}):
+        raise FigureError("wrong_dtype", role="event", column=e, expected=["0/1"])
+    parts = _by_group(d, g)
+    colors = palette_colors(spec, len(parts))
+    ctx = Ctx()
+    for i, (name, sub) in enumerate(parts):
+        times, surv, _ = km_estimate(sub[t].to_numpy(), sub[e].to_numpy())
+        xs = np.concatenate([[0.0], times])
+        ys = np.concatenate([[1.0], surv])
+        ax.step(xs, ys, where="post", color=colors[i], label=name)
+        if panel.get("censorTicks", True):
+            cens = sub.loc[sub[e] == 0, t].to_numpy(dtype=float)
+            if len(cens):
+                s_at = ys[np.searchsorted(xs, cens, side="right") - 1]
+                (line,) = ax.plot(cens, s_at, "|", color=colors[i], markersize=5, markeredgewidth=0.8)
+                line.set_gid("censor")
+        key = name or "all"
+        ctx.colors[key], ctx.n[key] = colors[i], len(sub)
+    ax.set_ylim(0, 1.02)
+    ax.set_xlim(left=0)
+    table = getattr(ax, "at_risk_axes", None)
+    if table is not None:
+        _at_risk_table(ax, table, parts, t)
+    return ctx
+
+
+def _at_risk_table(ax, table, parts: list, tcol: str) -> None:
+    # Fix the tick positions now so the axis and the table columns can't diverge
+    # when matplotlib re-picks ticks at draw time.
+    lo, hi = ax.get_xlim()
+    ticks = [v for v in mticker.MaxNLocator(nbins=6, steps=[1, 2, 2.5, 5, 10]).tick_values(lo, hi) if lo <= v <= hi]
+    ax.set_xticks(ticks)
+    k = len(parts)
+    table.set_xlim(ax.get_xlim())
+    table.set_ylim(-0.5, k - 0.5)
+    table.invert_yaxis()
+    for row, (_name, sub) in enumerate(parts):
+        times = sub[tcol].to_numpy(dtype=float)
+        for v in ticks:
+            table.text(v, row, str(int((times >= v).sum())), ha="center", va="center")
+    table.set_yticks(range(k), [n or "All" for n, _ in parts])
+    table.set_xticks([])
+    table.tick_params(length=0, axis="both")
+    table.tick_params(axis="y", pad=10)  # keep row labels clear of the first column's counts
+    table.spines[:].set_visible(False)
+    table.set_title("Number at risk", fontsize=matplotlib.rcParams["font.size"], loc="left")
+
+
 RENDERERS = {
     "bar": draw_bar,
     "box": draw_box,
+    "violin": draw_violin,
+    "strip": draw_strip,
     "scatter": draw_scatter,
     "line": draw_line,
     "histogram": draw_histogram,
+    "heatmap": draw_heatmap,
+    "forest": draw_forest,
+    "km": draw_km,
 }
 
 
@@ -456,6 +644,10 @@ def _apply_axis(axis_obj, setter_label, setter_lim, setter_scale, ax_spec: dict,
     setter_label(_axis_text(ax_spec, fallback))
     if ax_spec.get("log") and value_axis:
         setter_scale("log")
+        if ax_spec.get("tickFormat", "auto") == "auto":  # 0.5, 1, 2 — not 5x10^-1
+            axis_obj.set_major_locator(mticker.LogLocator(subs=(1.0, 2.0, 5.0)))
+            axis_obj.set_major_formatter(mticker.FormatStrFormatter("%g"))
+            axis_obj.set_minor_formatter(mticker.NullFormatter())
     lo, hi = ax_spec.get("min"), ax_spec.get("max")
     if lo is not None or hi is not None:
         setter_lim(lo, hi)
@@ -467,8 +659,15 @@ def _apply_axis(axis_obj, setter_label, setter_lim, setter_scale, ax_spec: dict,
 def apply_axes(ax, panel: dict, ctx: Ctx) -> None:
     roles = panel["roles"]
     family = panel["family"]
-    x_fallback = roles.get("x")
-    y_fallback = "Count" if family == "histogram" else roles.get("y")
+    if panel.get("title"):
+        ax.set_title(panel["title"])
+    if family == "heatmap":  # labelled by its own row/column ticks
+        return
+    if family == "forest":  # one value axis (x); rows are labelled by ticks
+        _apply_axis(ax.xaxis, ax.set_xlabel, ax.set_xlim, ax.set_xscale, panel["x"], roles.get("x"), value_axis=True)
+        return
+    x_fallback = roles.get("time") if family == "km" else roles.get("x")
+    y_fallback = {"histogram": "Count", "km": "Survival probability"}.get(family, roles.get("y"))
     horizontal = ctx.categorical and panel.get("horizontal", False)
     cat_spec, val_spec = panel["x"], panel["y"]
     if horizontal:
@@ -477,11 +676,9 @@ def apply_axes(ax, panel: dict, ctx: Ctx) -> None:
     else:
         _apply_axis(ax.xaxis, ax.set_xlabel, ax.set_xlim, ax.set_xscale, cat_spec, x_fallback, value_axis=not ctx.categorical)
         _apply_axis(ax.yaxis, ax.set_ylabel, ax.set_ylim, ax.set_yscale, val_spec, y_fallback, value_axis=True)
-    if panel.get("title"):
-        ax.set_title(panel["title"])
 
 
-def build_axes(fig, spec: dict) -> list:
+def build_axes(fig, spec: dict, df: pd.DataFrame | None = None) -> list:
     rows, cols = spec["layout"]["rows"], spec["layout"]["cols"]
     grid = fig.add_gridspec(rows, cols)
     axes, r, c = [], 0, 0
@@ -491,7 +688,19 @@ def build_axes(fig, spec: dict) -> list:
             r, c = r + 1, 0
         if r >= rows:
             raise FigureError("unsupported_combo", reason="more panels than the layout has cells")
-        ax = fig.add_subplot(grid[r, c : c + span])
+        cell = grid[r, c : c + span]
+        if panel.get("family") == "km" and panel.get("atRiskTable"):
+            # A real grid row under the curves (not an inset), so the layout
+            # engine reserves room for it; _at_risk_table matches its x limits.
+            g = panel["roles"].get("group")
+            k = len(levels(df, g)) if df is not None and g and g in df.columns else 1
+            inner = cell.subgridspec(2, 1, height_ratios=[4, 0.45 * k + 0.5], hspace=0.05)
+            ax = fig.add_subplot(inner[0])
+            table = fig.add_subplot(inner[1])  # not sharex: hiding its ticks would hide the curves' too
+            table.set_label("at-risk")
+            ax.at_risk_axes = table
+        else:
+            ax = fig.add_subplot(cell)
         ax.set_label("panel")
         axes.append(ax)
         c += span
@@ -547,7 +756,7 @@ def _render(spec: dict, df: pd.DataFrame, where: dict):
     style = PRESETS.get(spec.get("style", "nature"), PRESETS["nature"])
     with matplotlib.rc_context(rc_for(style)):
         fig = plt.figure(figsize=figure_size(spec), layout="constrained")
-        axes = build_axes(fig, spec)
+        axes = build_axes(fig, spec, df)
         meta = {"font": resolved_font(style), "panels": []}
         for ax, panel in zip(axes, spec["panels"]):
             where.update(stage="draw", family=panel["family"])

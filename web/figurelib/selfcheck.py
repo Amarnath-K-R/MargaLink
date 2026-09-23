@@ -136,4 +136,68 @@ assert abs(e - 0.6454972) < 1e-6
 _, e = fl.summarize(np.array([1.0, 2, 3, 4]), "mean", "ci95")
 assert abs(e - 2.0542) < 1e-3, e
 
+# --- Task 2: violin, strip, heatmap, forest, Kaplan-Meier ---
+
+# 9. KM estimator against a hand-computed table (one row per distinct time)
+t, s, at_risk = fl.km_estimate(np.array([1, 2, 2, 3, 5, 6.0]), np.array([1, 1, 0, 1, 0, 1]))
+assert list(t) == [1, 2, 3, 5, 6], t
+assert np.allclose(s, [5 / 6, 2 / 3, 4 / 9, 4 / 9, 0.0]), s
+assert list(at_risk) == [6, 5, 3, 2, 1], at_risk
+
+survival = frame("survival")
+meta_df = frame("meta")
+
+# 10. KM curves by arm with censor ticks and an at-risk table under the axes
+p = panel("km", time="time_months", event="event", group="arm")
+p["atRiskTable"] = True
+fig, meta = fl.render(spec([p]), survival)
+ax = next(a for a in fig.axes if a.get_label() == "panel")
+tables = [a for a in fig.axes if a.get_label() == "at-risk"]
+assert len(tables) == 1, "one at-risk table"
+assert [t.get_text() for t in tables[0].get_yticklabels()] == ["Control", "Treatment"], "one row per arm"
+assert any(line.get_gid() == "censor" for line in ax.lines), "censor ticks drawn"
+assert [t.get_text() for t in ax.get_xticklabels() if t.get_text()], "the curves keep their time-axis tick labels"
+assert tables[0].get_xlim() == ax.get_xlim(), "the table's columns line up with the time axis"
+columns = sorted({round(t.get_position()[0], 6) for t in tables[0].texts})
+assert columns == [round(v, 6) for v in ax.get_xticks()], (columns, list(ax.get_xticks()))
+assert meta["panels"][0]["n"] == {"Control": 40, "Treatment": 40}
+fl.close(fig)
+
+# 11. forest: reference line at 1 for ratios, at 0 when estimates go negative
+fig, _ = fl.render(spec([panel("forest", x="hr", y="study", lower="ci_low", upper="ci_high")]), meta_df)
+ax = fig.axes[0]
+ref = [ln for ln in ax.lines if ln.get_gid() == "reference"]
+assert len(ref) == 1 and list(ref[0].get_xdata()) == [1, 1], "ratio reference at 1"
+labels = [t.get_text() for t in ax.get_yticklabels()]
+assert labels[0] == "Adams 2015" and labels[-1] == "Hughes 2022" and ax.yaxis_inverted(), "rows read top-down in data order"
+fl.close(fig)
+diff = meta_df.assign(hr=meta_df["hr"] - 1, ci_low=meta_df["ci_low"] - 1, ci_high=meta_df["ci_high"] - 1)
+fig, _ = fl.render(spec([panel("forest", x="hr", y="study", lower="ci_low", upper="ci_high")]), diff)
+ref = [ln for ln in fig.axes[0].lines if ln.get_gid() == "reference"]
+assert list(ref[0].get_xdata()) == [0, 0], "difference reference at 0"
+fl.close(fig)
+
+# 12. heatmap: correlation matrix of the numeric columns (symmetric, colorbar, cell labels); pivot with roles
+fig, _ = fl.render(spec([panel("heatmap")]), trial)
+ax = next(a for a in fig.axes if a.get_label() == "panel")
+m = np.asarray(ax.images[0].get_array())
+assert m.shape == (4, 4) and np.allclose(m, m.T) and np.allclose(np.diag(m), 1), m.shape
+assert any(a.get_label() == "<colorbar>" for a in fig.axes), "colorbar"
+assert sum(1 for t in ax.texts if t.get_gid() == "cell") == 16, "cell labels on a small matrix (4 numeric columns)"
+fl.close(fig)
+fig, _ = fl.render(spec([panel("heatmap", x="arm", y="sex", value="change")]), trial)
+m = np.asarray(next(a for a in fig.axes if a.get_label() == "panel").images[0].get_array())
+assert m.shape == (2, 3), "pivot: sex rows x arm columns"
+fl.close(fig)
+
+# 13. violin and strip render; strip jitter is deterministic
+fig, _ = fl.render(spec([panel("violin", x="arm", y="change")]), trial)
+fl.close(fig)
+strip = spec([panel("strip", x="arm", y="change")])
+a = fl.export(fl.render(strip, trial)[0], ["png"], 150)["png"]
+fl.close()
+b = fl.export(fl.render(strip, trial)[0], ["png"], 150)["png"]
+fl.close()
+assert a == b, "strip jitter must be deterministic (identical renders)"
+
 print("figurelib.selfcheck: OK")
