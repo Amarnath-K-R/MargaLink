@@ -67,6 +67,7 @@ export default function MatchPage() {
       setPaperText(null);
       setRulesChecks({});
       setOpenRulesCheckId(null);
+      setExpandedResultId(null);
 
       try {
         log(`Reading ${file.name} (${(file.size / 1024).toFixed(0)} KB)`);
