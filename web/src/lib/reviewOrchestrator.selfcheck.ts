@@ -3,7 +3,7 @@
 // fetch. Run directly:  node src/lib/reviewOrchestrator.selfcheck.ts
 import assert from "node:assert/strict";
 import { ReviewSynthesisError, planChunks, runReview, type ReviewState } from "./reviewOrchestrator.ts";
-import { chunkSections, splitIntoSections } from "./reviewSections.ts";
+import { NO_EDITS, buildOutline, chunkSections, splitIntoSections } from "./reviewSections.ts";
 import { FREE_REVIEWS_PER_DEVICE, ReviewCapacityError, reviewsRemaining } from "./review.ts";
 import { parsePassRequest } from "./reviewPasses.ts";
 import type { ExtractRequest, ReviewProgress, SynthesizeRequest, SynthesizeResponse } from "./reviewTypes.ts";
@@ -318,6 +318,33 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   const { result } = await runReview(base);
   assert.equal(attempts.get("s3"), 2, "retried once, then succeeded");
   assert.equal(result.coverage.failed.length, 0);
+}
+
+// O1. the user's outline: an excluded section's text is in no request body at all, and coverage says why it was skipped
+{
+  storage.clear();
+  stub(happy);
+  const results = splitIntoSections(PAPER).find((x) => x.kind === "results")!;
+  const outline = buildOutline(PAPER, [], { ...NO_EDITS, kinds: { [results.charStart]: "excluded" } });
+  const bodies: string[] = [];
+  const inner = (globalThis as unknown as { fetch: typeof fetch }).fetch;
+  (globalThis as unknown as { fetch: typeof fetch }).fetch = ((url: string, init?: RequestInit) => {
+    bodies.push(init!.body as string);
+    return inner(url, init);
+  }) as typeof fetch;
+  const { result } = await runReview({ ...base, outline });
+  assert.ok(bodies.length > 0 && bodies.every((b) => !b.includes("R sentence 0") && !b.includes("3. Results")), "excluded text and title never leave");
+  assert.ok(result.coverage.skipped.some((x) => x.title === "3. Results (excluded by you)"));
+  assert.equal(result.coverage.reviewed.length, 5);
+}
+// O2. a kind override changes what a tier extracts
+{
+  storage.clear();
+  stub(happy);
+  const methods = splitIntoSections(PAPER).find((x) => x.kind === "methods")!;
+  const outline = buildOutline(PAPER, [], { ...NO_EDITS, kinds: { [methods.charStart]: "results" } });
+  await runReview({ ...base, tier: "quick", outline });
+  assert.ok(extracts().some((e) => e.chunk.title === "2. Methods"), "quick now reviews the section the user marked as Results");
 }
 
 console.log("reviewOrchestrator.selfcheck: OK");

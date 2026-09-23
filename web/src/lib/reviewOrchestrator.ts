@@ -17,6 +17,7 @@ import type {
   HeadingHint,
   ExtractResponse,
   PaperMap,
+  Section,
   ReviewProgress,
   ReviewResult,
   ReviewTier,
@@ -27,6 +28,9 @@ import type {
 export type RunReviewOptions = {
   text: string; // output of prepareForReview()
   hints?: HeadingHint[]; // the document's own headings (extract.ts), when it has them
+  // The user-confirmed outline (reviewSections.ts buildOutline). Excluded
+  // sections are never sent — not as a chunk, not in the paper map.
+  outline?: { sections: Section[]; excluded: Section[] };
   journalId: string;
   tier: ReviewTier;
   endpoint?: string;
@@ -45,6 +49,7 @@ export type ReviewState = {
   abstractText: string | null;
   extracted: Record<string, ExtractResponse>;
   failed: Record<string, string>;
+  excluded: { id: string; title: string }[];
   counted: boolean; // set the first time synthesis succeeds — a device use is recorded exactly once per review
 };
 export type ReviewRun = { result: ReviewResult; state: ReviewState };
@@ -86,14 +91,15 @@ export function planChunks(chunks: Chunk[], tier: ReviewTier): { run: Chunk[]; s
   return { run, skipped: chunks.filter((c) => !kinds.includes(c.kind)) };
 }
 
-function planState(text: string, hints: HeadingHint[]): ReviewState {
-  const sections = splitIntoSections(text, hints);
+function planState(text: string, hints: HeadingHint[], outline?: RunReviewOptions["outline"]): ReviewState {
+  const sections = outline?.sections ?? splitIntoSections(text, hints);
   return {
     chunks: chunkSections(sections, hints),
-    paperMap: buildPaperMap(text, sections),
+    paperMap: buildPaperMap(sections),
     abstractText: sections.find((s) => s.kind === "abstract")?.text ?? null,
     extracted: {},
     failed: {},
+    excluded: (outline?.excluded ?? []).map((s) => ({ id: s.id, title: s.title })),
     counted: false,
   };
 }
@@ -149,7 +155,10 @@ function assemble(state: ReviewState, run: Chunk[], skipped: Chunk[], synth: Syn
       reviewed: state.chunks.filter((c) => c.id in state.extracted).map((c) => ({ id: c.id, title: c.title })),
       failed: state.chunks.filter((c) => c.id in state.failed).map((c) => ({ id: c.id, title: c.title, reason: state.failed[c.id] })),
       pending: run.filter((c) => !(c.id in state.extracted) && !(c.id in state.failed)).map((c) => ({ id: c.id, title: c.title })),
-      skipped: skipped.map((c) => ({ id: c.id, title: c.title })),
+      skipped: [
+        ...skipped.map((c) => ({ id: c.id, title: c.title })),
+        ...state.excluded.map((s) => ({ id: s.id, title: `${s.title} (excluded by you)` })),
+      ],
     },
   };
 }
@@ -195,7 +204,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
     throw new ReviewLimitError(`You've used all ${FREE_REVIEWS_PER_DEVICE} free pilot reviews on this device.`);
   }
 
-  const state = resume ?? planState(opts.text, opts.hints ?? []);
+  const state = resume ?? planState(opts.text, opts.hints ?? [], opts.outline);
   opts.onState?.(state);
   const { run, skipped } = planChunks(state.chunks, opts.tier);
   const queue = run.filter((c) => !(c.id in state.extracted));

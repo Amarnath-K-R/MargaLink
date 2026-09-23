@@ -211,11 +211,80 @@ export function chunkSections(sections: Section[], hints: HeadingHint[] = []): C
   return chunks;
 }
 
-export function buildPaperMap(text: string, sections: Section[]): PaperMap {
-  const firstLine = text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? null;
+// Built from the sections that will be sent only: an excluded section's title
+// and length are content too. The title is the paper's first line only when
+// the section holding it (the front matter) is included.
+export function buildPaperMap(sections: Section[]): PaperMap {
+  const first = sections[0];
+  const firstLine = first?.charStart === 0 ? (first.text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? null) : null;
+  const mapped = sections.map((s) => ({ id: s.id, title: s.title, kind: s.kind, words: countWords(s.text) }));
   return {
     title: firstLine && firstLine.length <= 200 ? firstLine : null,
-    totalWords: countWords(text),
-    sections: sections.map((s) => ({ id: s.id, title: s.title, kind: s.kind, words: countWords(s.text) })),
+    totalWords: mapped.reduce((n, s) => n + s.words, 0),
+    sections: mapped,
+  };
+}
+
+// --- The user's edits to the detected outline (all local; nothing is sent) ---
+
+export type OutlineEdits = {
+  kinds: Record<number, SectionKind | "excluded">; // keyed by Section.charStart, stable across re-splits
+  merged: number[]; // charStarts of sections merged into the section before them
+  addedHeadings: string[]; // heading lines the user typed, exactly as they appear
+};
+export const NO_EDITS: OutlineEdits = { kinds: {}, merged: [], addedHeadings: [] };
+
+// Detected outline + edits → the sections to review, the ones the user
+// excluded, and any typed heading that isn't a line in the paper. Ids are
+// assigned after edits, over included and excluded sections alike.
+export function buildOutline(
+  text: string,
+  hints: HeadingHint[],
+  edits: OutlineEdits
+): { sections: Section[]; excluded: Section[]; unmatchedHeadings: string[] } {
+  let sections = splitIntoSections(text, hints);
+
+  const lineStarts = new Map<string, number>();
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    const key = lineKey(line);
+    if (key && !lineStarts.has(key)) lineStarts.set(key, offset);
+    offset += line.length + 1;
+  }
+  const unmatchedHeadings: string[] = [];
+  for (const heading of edits.addedHeadings) {
+    const at = lineStarts.get(lineKey(heading));
+    if (at === undefined) {
+      unmatchedHeadings.push(heading);
+      continue;
+    }
+    const i = sections.findIndex((s) => s.charStart < at && at < s.charEnd);
+    if (i < 0) continue; // already a section boundary
+    const s = sections[i];
+    const title = text.slice(at, text.indexOf("\n", at) === -1 ? text.length : text.indexOf("\n", at)).trim();
+    const head = { ...s, charEnd: at, text: text.slice(s.charStart, at) };
+    const tail = { ...s, title, kind: vocabKind(title, { prefix: true }) ?? ("body" as const), charStart: at, text: text.slice(at, s.charEnd) };
+    sections = [...sections.slice(0, i), head, tail, ...sections.slice(i + 1)];
+  }
+
+  for (let i = 1; i < sections.length; ) {
+    if (!edits.merged.includes(sections[i].charStart)) {
+      i++;
+      continue;
+    }
+    const prev = sections[i - 1];
+    sections[i - 1] = { ...prev, charEnd: sections[i].charEnd, text: text.slice(prev.charStart, sections[i].charEnd) };
+    sections.splice(i, 1);
+  }
+
+  const withIds = sections.map((s, i) => {
+    const override = edits.kinds[s.charStart];
+    return { ...s, id: `s${i + 1}`, kind: override && override !== "excluded" ? override : s.kind, excluded: override === "excluded" };
+  });
+  const strip = ({ excluded: _excluded, ...s }: Section & { excluded: boolean }): Section => s;
+  return {
+    sections: withIds.filter((s) => !s.excluded).map(strip),
+    excluded: withIds.filter((s) => s.excluded).map(strip),
+    unmatchedHeadings,
   };
 }

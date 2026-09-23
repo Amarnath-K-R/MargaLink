@@ -2,7 +2,7 @@
 // merging, chunk packing. Run directly:
 //   node src/lib/reviewSections.selfcheck.ts
 import assert from "node:assert/strict";
-import { CHUNK_CHARS, buildPaperMap, chunkSections, splitIntoSections } from "./reviewSections.ts";
+import { CHUNK_CHARS, NO_EDITS, buildOutline, buildPaperMap, chunkSections, splitIntoSections } from "./reviewSections.ts";
 import { countWords } from "./formatCheck.ts";
 
 const para = (n: number, seed: string) => Array.from({ length: n }, (_, i) => `${seed} sentence ${i} with enough words to count.`).join(" ");
@@ -108,7 +108,7 @@ ${REFS}
   const text = `Abstract\n\n${para(6, "A")}\n\nReferences\n\n${REFS}\n\nSupplementary Material\n\n${para(12, "Supp")}\n`;
   const s = splitIntoSections(text);
   assert.deepEqual(s.map((x) => x.kind), ["abstract", "references", "supplement"]);
-  const map = buildPaperMap(text, s);
+  const map = buildPaperMap(s);
   assert.equal(map.totalWords, countWords(text));
   assert.equal(map.sections.length, s.length);
   assert.equal(map.title, "Abstract"); // first non-empty line — fine for a test text; real papers start with the title
@@ -180,6 +180,43 @@ ${REFS}
   const hints = [{ level: 1 as const, text: "Signiﬁcance of ﬁndings" }, { level: 1 as const, text: "Discussion" }];
   const s = splitIntoSections(`Significance of findings\n\n${para(10, "S")}\n\nDiscussion\n\n${para(10, "D")}\n`, hints);
   assert.deepEqual(s.map((x) => `${x.kind}:${x.title}`), ["body:Significance of findings", "discussion:Discussion"]);
+}
+
+// 16-21: the user's outline edits (buildOutline).
+{
+  const base = splitIntoSections(NUMBERED);
+  const same = buildOutline(NUMBERED, [], NO_EDITS);
+  assert.deepEqual(same.sections, base, "no edits → exactly the detected outline");
+  assert.deepEqual(same.excluded, []);
+
+  const methods = base.find((x) => x.kind === "methods")!;
+  const results = base.find((x) => x.kind === "results")!;
+  const refs = base.find((x) => x.kind === "references")!;
+
+  const kinded = buildOutline(NUMBERED, [], { ...NO_EDITS, kinds: { [methods.charStart]: "results" } });
+  assert.equal(kinded.sections.find((x) => x.charStart === methods.charStart)!.kind, "results", "kind override applies");
+
+  const merged = buildOutline(NUMBERED, [], { ...NO_EDITS, merged: [results.charStart] });
+  const m = merged.sections.find((x) => x.charStart === methods.charStart)!;
+  assert.equal(m.charEnd, results.charEnd, "merge joins a section into the one before it");
+  assert.ok(m.text.includes("Results sentence 0"), "and carries its text");
+  assert.equal(merged.sections.length, base.length - 1);
+  assert.deepEqual(merged.sections.map((x) => x.id), merged.sections.map((_, i) => `s${i + 1}`), "ids renumbered");
+
+  const excl = buildOutline(NUMBERED, [], { ...NO_EDITS, kinds: { [results.charStart]: "excluded", [refs.charStart]: "excluded" } });
+  assert.deepEqual(excl.excluded.map((x) => x.title), ["3. Results", "5. References"]);
+  assert.ok(!excl.sections.some((x) => x.text.includes("Results sentence 0")), "excluded text is in no included section");
+  const map = buildPaperMap(excl.sections);
+  assert.ok(!map.sections.some((x) => x.title === "3. Results"), "excluded sections are not in the paper map either");
+
+  const added = buildOutline(NUMBERED, [], { ...NO_EDITS, addedHeadings: ["Keywords: deep learning, agriculture", "No such heading line"] });
+  assert.deepEqual(added.unmatchedHeadings, ["No such heading line"]);
+  const kw = added.sections.find((x) => x.title === "Keywords: deep learning, agriculture");
+  assert.ok(kw && kw.kind === "other", "a typed heading splits its section (kind from the word list, else body)");
+  assert.ok(!added.sections.find((x) => x.kind === "abstract")!.text.includes("Keywords"), "the abstract ends where the new heading starts");
+
+  const again = buildOutline(NUMBERED, [], { ...NO_EDITS, addedHeadings: ["Keywords: deep learning, agriculture"], kinds: { [results.charStart]: "excluded" } });
+  assert.deepEqual(again.excluded.map((x) => x.title), ["3. Results"], "edits keyed by charStart survive a re-split");
 }
 
 console.log("reviewSections.selfcheck: OK");
