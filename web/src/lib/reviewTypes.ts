@@ -54,11 +54,6 @@ export type SynthesizeResponse = {
 };
 export type PassRequest = ExtractRequest | SynthesizeRequest;
 
-  inconsistencies: { description: string; citations: Citation[] }[];
-  statisticalReporting: { description: string; severity: "minor" | "major"; citations: Citation[] }[];
-  otherObservations: string[];
-};
-
 export type Coverage = {
   reviewed: { id: string; title: string }[];
   failed: { id: string; title: string; reason: string }[];
