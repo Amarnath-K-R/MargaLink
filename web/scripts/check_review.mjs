@@ -130,6 +130,36 @@ await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…
 check("capacity error stops the run without counting a use", (await uses()) === "1");
 check("a fresh run doesn't leave the previous review's results on screen", (await page.locator('[data-testid="review-summary"]').count()) === 0);
 
+// Outline: visible, a section marked "Don't send" lowers the request count and its text is never sent.
+const bodies = [];
+page.on("request", (r) => {
+  if (r.url().includes("/api/review") && r.method() === "POST") bodies.push(r.postData() ?? "");
+});
+await page.locator('[data-testid="review-outline"] summary').click();
+const rows = page.locator('[data-testid="review-outline"] li');
+check("outline lists the paper's sections", (await rows.count()) >= 3);
+const countIn = async () => {
+  await getReview().click();
+  const m = (await page.locator('[role="alertdialog"]').innerText()).match(/in (\d+) short requests/);
+  return Number(m?.[1]);
+};
+const before = await countIn();
+await page.getByRole("button", { name: "Cancel" }).last().click(); // close the consent box
+const lastRow = rows.last();
+const excludedTitle = (await lastRow.locator("span").first().innerText()).split("\n")[0].replace(/\s*[\d,]+ words.*$/, "").trim();
+await lastRow.locator("select").selectOption("excluded");
+const after = await countIn();
+check(`excluding a section lowers the request count (${before} → ${after})`, after === before - 1);
+check("consent says the excluded section won't be sent", /won't be sent at all/.test(await page.locator('[role="alertdialog"]').innerText()));
+await page.click("text=Send it and review");
+await page.waitForSelector('[data-testid="review-summary"]', { timeout: 30000 });
+check(`no request carried the excluded section "${excludedTitle}"`, bodies.length > 0 && bodies.every((b) => !b.includes(excludedTitle)));
+check("coverage names the exclusion", /excluded by you/.test(await page.locator('[data-testid="review-coverage"]').innerText()));
+await page.locator('[data-testid="review-outline"] summary').click({ trial: true }).catch(() => {});
+await page.fill("#outline-add-heading", "A heading that is not in this paper");
+await page.getByRole("button", { name: "Add heading" }).click();
+check("an unknown typed heading is reported", await page.locator("text=Couldn't find").isVisible());
+
 await page.screenshot({ path: `${SCRATCH}/review-final.png`, fullPage: true });
 console.log("console errors:", consoleErrors.length ? consoleErrors.join("\n") : "(none)");
 console.log("PASS");

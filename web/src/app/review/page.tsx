@@ -7,8 +7,8 @@ import { findJournalRules } from "@/lib/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
 import { MAX_REVIEW_CHARS, prepareForReview, reviewsRemaining } from "@/lib/review";
 import { ReviewSynthesisError, planChunks, runReview, type ReviewState } from "@/lib/reviewOrchestrator";
-import { chunkSections, splitIntoSections } from "@/lib/reviewSections";
-import type { HeadingHint, ReviewProgress, ReviewResult, ReviewTier } from "@/lib/reviewTypes";
+import { NO_EDITS, buildOutline, chunkSections, type OutlineEdits } from "@/lib/reviewSections";
+import type { HeadingHint, ReviewProgress, ReviewResult, ReviewTier, SectionKind } from "@/lib/reviewTypes";
 import { errorMessage } from "@/lib/errorMessage";
 import ErrorText from "@/components/ErrorText";
 import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
@@ -19,6 +19,7 @@ import ReviewResultPanel from "@/components/ReviewResultPanel";
 import RulesCheckPanel from "@/components/RulesCheckPanel";
 import JournalPicker from "./_components/JournalPicker.tsx";
 import TierPicker from "./_components/TierPicker.tsx";
+import OutlineEditor from "./_components/OutlineEditor.tsx";
 
 const TOO_LONG =
   "This paper is over 400,000 characters of text — split off supplementary material and try again.";
@@ -34,6 +35,7 @@ export default function ReviewPage() {
   const [paperText, setPaperText] = useState<string | null>(null);
   const [reviewText, setReviewText] = useState<string | null>(null); // stripped + normalized — what gets sent
   const [headings, setHeadings] = useState<HeadingHint[]>([]); // the document's own heading structure
+  const [edits, setEdits] = useState<OutlineEdits>(NO_EDITS); // the user's corrections to the detected outline
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedJournalId, setSelectedJournalId] = useState<string | null>(null);
@@ -67,6 +69,7 @@ export default function ReviewPage() {
       setPaperText(null);
       setReviewText(null);
       setHeadings([]);
+      setEdits(NO_EDITS);
       setFileName(null);
       setSelectedJournalId(null);
       setRulesResult(null);
@@ -112,10 +115,29 @@ export default function ReviewPage() {
     [resetReview]
   );
 
+  const outline = useMemo(() => (reviewText ? buildOutline(reviewText, headings, edits) : null), [reviewText, headings, edits]);
+  const plannedRun = useMemo(
+    () => (outline ? planChunks(chunkSections(outline.sections, headings), tier).run : []),
+    [outline, headings, tier]
+  );
   // How many requests the consent notice names: one per planned chunk + the cross-check.
-  const passCount = useMemo(
-    () => (reviewText ? planChunks(chunkSections(splitIntoSections(reviewText, headings), headings), tier).run.length + 1 : 0),
-    [reviewText, headings, tier]
+  const passCount = plannedRun.length + 1;
+  const outlineRows = useMemo(() => {
+    if (!outline) return [];
+    const reviewed = new Set(plannedRun.map((c) => c.sectionId));
+    return [
+      ...outline.sections.map((s) => ({ ...s, excluded: false, reviewedAtTier: reviewed.has(s.id) })),
+      ...outline.excluded.map((s) => ({ ...s, excluded: true, reviewedAtTier: false })),
+    ].sort((a, b) => a.charStart - b.charStart);
+  }, [outline, plannedRun]);
+
+  // Any outline change invalidates a result computed from the old outline.
+  const editOutline = useCallback(
+    (change: (e: OutlineEdits) => OutlineEdits) => {
+      resetReview();
+      setEdits((e) => change(e));
+    },
+    [resetReview]
   );
 
   const startReview = useCallback(
@@ -136,6 +158,7 @@ export default function ReviewPage() {
           {
             text: reviewText,
             hints: headings,
+            outline: outline ?? undefined,
             journalId: selectedJournalId,
             tier,
             signal: ac.signal,
@@ -168,7 +191,7 @@ export default function ReviewPage() {
         setProgress(null);
       }
     },
-    [reviewText, headings, selectedJournalId, tier]
+    [reviewText, headings, outline, selectedJournalId, tier]
   );
 
   const selectedRules = selectedJournalId ? findJournalRules(selectedJournalId) : undefined;
@@ -228,6 +251,18 @@ export default function ReviewPage() {
 
           <TierPicker tier={tier} onSelect={selectTier} />
 
+          {outline && (
+            <OutlineEditor
+              rows={outlineRows}
+              unmatchedHeadings={outline.unmatchedHeadings}
+              edited={edits !== NO_EDITS}
+              onKind={(charStart, kind: SectionKind | "excluded") => editOutline((e) => ({ ...e, kinds: { ...e.kinds, [charStart]: kind } }))}
+              onMerge={(charStart) => editOutline((e) => ({ ...e, merged: [...e.merged, charStart] }))}
+              onAddHeading={(h) => editOutline((e) => ({ ...e, addedHeadings: [...e.addedHeadings, h] }))}
+              onReset={() => editOutline(() => NO_EDITS)}
+            />
+          )}
+
           <div className="mt-4 flex flex-wrap items-center gap-4">
             <button
               type="button"
@@ -264,6 +299,7 @@ export default function ReviewPage() {
               journalName={selectedRules.journalName}
               tier={tier}
               passCount={passCount}
+              excludedCount={outline?.excluded.length ?? 0}
               reviewsRemaining={reviewsRemaining()}
               onConfirm={() => void startReview()}
               onCancel={() => setConsentOpen(false)}

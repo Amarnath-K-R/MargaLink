@@ -11,6 +11,7 @@ export default function ReviewConsent({
   journalName,
   tier,
   passCount,
+  excludedCount,
   reviewsRemaining,
   onConfirm,
   onCancel,
@@ -18,6 +19,7 @@ export default function ReviewConsent({
   journalName: string;
   tier: ReviewTier;
   passCount: number;
+  excludedCount: number;
   reviewsRemaining: number;
   onConfirm: () => void;
   onCancel: () => void;
@@ -34,6 +36,8 @@ export default function ReviewConsent({
         API data to train models and retains it only under its API data policy; MargaLink
         doesn&apos;t store it. This is the one feature in MargaLink that sends
         your paper&apos;s text off your device.
+        {excludedCount > 0 &&
+          ` The ${excludedCount} section${excludedCount === 1 ? "" : "s"} you marked "Don't send" won't be sent at all.`}
       </p>
       <p className="mt-2 text-xs text-ink-soft">
         {reviewsRemaining} of {FREE_REVIEWS_PER_DEVICE} free pilot review
