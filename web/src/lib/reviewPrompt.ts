@@ -33,6 +33,14 @@ export const TIER_CONFIG: Record<ReviewTier, { effort: "low" | "medium" | "high"
     // must stay controlled (every review is a real API charge with no
     // revenue behind it) — "high" is the level already proven to work
     // earlier in this project (the real-paper truncation fix used it).
+    // A real ~7,000+ word, table-heavy paper hit this ceiling (stop_reason:
+    // max_tokens, 502 to the user, no partial result) — extended thinking
+    // and the final structured JSON share this one budget, and a longer,
+    // more data-dense paper produces more findings, so more output tokens.
+    // Fixed on the prompt side (the one-sentence-per-finding rule below),
+    // not by raising this ceiling: a bigger budget just delays the same
+    // failure on an even longer paper and costs more per call, where a
+    // concise finding is exactly as useful as a verbose one.
     effort: "high",
     maxTokens: 16000,
     guidance:
@@ -73,6 +81,12 @@ Find real, verifiable issues in these categories:
 Each specific issue belongs in exactly ONE category, as ONE finding. Do not restate the same
 observation in more than one place, and do not bundle two unrelated issues (e.g. a rounding
 question and a blank/missing figure caption) into a single finding — split them.
+
+Keep every finding's description, journalFit's explanation, and each otherObservations entry to
+ONE concise sentence — state the issue plainly and stop. The citation is the evidence; the
+description doesn't need to restate, explain, or hedge it further. This matters most on a long,
+table-heavy paper: thorough coverage means finding every real issue, not writing a paragraph about
+each one.
 
 Before finalizing ANY inconsistency or statisticalReporting finding, verify it carefully — a wrong
 finding is worse than a missing one:
