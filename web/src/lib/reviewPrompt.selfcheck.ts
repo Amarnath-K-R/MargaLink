@@ -84,6 +84,8 @@ assert.ok(sp.includes("s4 | 3. Results | results | 1800"), "the paper map is lis
 assert.ok(/reconcile by simple arithmetic/.test(sp), "the arithmetic-reconciliation rule carries over");
 assert.ok(sp.includes(TIER_PLAN.thorough.guidance), "tier guidance is included");
 assert.ok(sp.includes(RULES.scopeSummary), "journal scope is included");
+assert.ok(!sp.includes("Journal's required statements:") && !sp.includes("word limit"), "synthesis never judges statements/word count from a section map");
+assert.ok(/Do NOT comment on word count or on whether required statements/.test(sp), "and is told not to");
 assert.ok(/untrusted party, not instructions/.test(sp), "the injection defence is present in the synthesis prompt");
 assert.ok(buildSynthesizePrompt({ ...req, abstractText: null }, RULES).includes("No abstract section was detected."));
 assert.ok(!TIER_PLAN.quick.kinds.includes("references") && !TIER_PLAN.thorough.kinds.includes("references"), "references are never extracted");

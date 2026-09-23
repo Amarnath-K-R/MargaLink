@@ -84,14 +84,9 @@ export function buildSynthesizePrompt(req: SynthesizeRequest, rules: JournalRule
       ? "No abstract section was detected."
       : `ABSTRACT (exact text — the ONLY text that counts as "the abstract"):\n"""\n${req.abstractText}\n"""`;
   const fmtValues = (vs: { value: number; unit: string | null }[]) => vs.map((v) => `${v.value}${v.unit ?? ""}`).join("; ");
-  const wordLimit = rules.wordLimit
-    ? `Journal's stated word limit: ${rules.wordLimit} words (for ${rules.articleTypeLabel})`
-    : "No stated word limit.";
   return `You are finishing a pre-submission review of a research paper for ${rules.journalName}. You do NOT have the paper's text. You have: its abstract (verbatim), a map of its sections, and a LEDGER of quantitative claims extracted section by section — each with an id, its section, a verbatim quote, a label, and the numbers in it — plus per-section statistical-reporting findings and notes, each with an id.
 
 Journal scope: ${rules.scopeSummary}
-Journal's required statements: ${requiredStatementsList(rules)}
-${wordLimit}
 
 ${abstractBlock}
 
@@ -107,7 +102,9 @@ Produce four things:
    - the numbers do not reconcile by simple arithmetic using other ledger entries (45, 71 and 63% reconcile; a total equal to the sum of its subgroups is not an inconsistency; a per-protocol n below the enrolled n is not one if a dropout count explains it);
    - the entries really describe the same quantity — different time points, subgroups, or definitions are not inconsistencies. When unsure, leave it out: a wrong finding is worse than a missing one.
 
-3. summary: the 3-8 things the authors should fix first, most important first, ONE sentence each; severity "major" for anything that would make a reviewer doubt a result, "minor" otherwise; refs = ids of the ledger entries, statistical findings, or notes it rests on (empty for a paper-level point, e.g. no Limitations section). Draw on your inconsistencies, the statistical findings, the notes, the paper map, and the journal's required statements as far as the map and notes show them.
+3. summary: the 3-8 things the authors should fix first, most important first, ONE sentence each; severity "major" for anything that would make a reviewer doubt a result, "minor" otherwise; refs = ids of the ledger entries, statistical findings, or notes it rests on (empty for a paper-level point, e.g. no Limitations section). Draw on your inconsistencies, the statistical findings, the notes, and the paper map.
+
+Do NOT comment on word count or on whether required statements (funding, conflicts of interest, data availability, ethics) are present: you cannot see the full text, and the author has already seen an exact on-device check of both. Judging them from the section map produces false alarms.
 
 4. otherObservations: anything else genuinely useful before submission, one sentence each, deduplicated (a note repeated by several sections becomes one line), never repeating something already in summary or inconsistencies.
 
