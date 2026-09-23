@@ -248,6 +248,15 @@ class Ctx:
     top: float = 0.0  # highest drawn data value, for stacking brackets above it
     categorical: bool = False  # categories on the x (or y, when horizontal) axis
     n: dict[str, int] = field(default_factory=dict)
+    first: list[str] = field(default_factory=list)  # first-appearance levels: what "#n" indexes
+
+    def ref(self, ref: str) -> str:
+        """A group reference -> the drawn level it names. "#n" always counts in
+        first-appearance order, whatever order the groups are drawn in."""
+        label = resolve_ref(ref, self.first or list(self.positions))
+        if label not in self.positions:
+            raise FigureError("unknown_group", ref=ref)
+        return label
 
 
 def _dodge(k: int, width: float = 0.8) -> tuple[list[float], float]:
@@ -715,16 +724,16 @@ def draw_bracket(ax, x1: float, x2: float, y: float, h: float, text: str) -> Non
     ax.text((x1 + x2) / 2, y + h, text, ha="center", va="bottom", gid="bracket-label")
 
 
-def _pairs(panel: dict, lv: list[str]) -> list[tuple[str, str]]:
+def _pairs(panel: dict, lv: list[str], ctx: Ctx) -> list[tuple[str, str]]:
     stats = panel["stats"]
     mode = stats.get("pairs", "all")
     if mode == "vs-first":
         return [(lv[0], k) for k in lv[1:]]
     if mode == "vs-reference":
-        ref = resolve_ref(stats["reference"], lv) if stats.get("reference") else lv[0]
+        ref = ctx.ref(stats["reference"]) if stats.get("reference") else lv[0]
         return [(ref, k) for k in lv if k != ref]
     if mode == "explicit":
-        return [(resolve_ref(p["a"], lv), resolve_ref(p["b"], lv)) for p in stats.get("explicit", [])]
+        return [(ctx.ref(p["a"]), ctx.ref(p["b"])) for p in stats.get("explicit", [])]
     return [(lv[i], lv[j]) for i in range(len(lv)) for j in range(i + 1, len(lv))]
 
 
@@ -762,7 +771,7 @@ def draw_stats(ax, panel: dict, df: pd.DataFrame, ctx: Ctx) -> list[dict]:
     span = hi - lo
     y, step, h = ctx.top + 0.06 * span, 0.1 * span, 0.025 * span
     results = []
-    for a, b in _pairs(panel, lv):
+    for a, b in _pairs(panel, lv, ctx):
         p, name = pairwise_p(ctx.values[a], ctx.values[b], test)
         draw_bracket(ax, ctx.positions[a], ctx.positions[b], y, h, p_label(p, display))
         results.append({"pair": f"{a} vs {b}", "p": p, "test": name})
@@ -853,7 +862,7 @@ def apply_layers(ax, panel: dict, df: pd.DataFrame, ctx: Ctx) -> None:
 
 def _ann_x(ann: dict, ctx: Ctx, key: str = "x") -> float | None:
     if key == "x" and ann.get("xGroup"):
-        return ctx.positions[resolve_ref(ann["xGroup"], list(ctx.positions))]
+        return ctx.positions[ctx.ref(ann["xGroup"])]
     return ann.get(key)
 
 
@@ -1023,6 +1032,9 @@ def _render(spec: dict, df: pd.DataFrame, where: dict):
             if renderer is None:
                 raise FigureError("unsupported_combo", family=panel["family"])
             ctx = renderer(ax, panel, df, spec)
+            ref_col = panel["roles"].get("y" if panel["family"] == "forest" else "x")
+            if ctx.categorical and ref_col in df.columns:
+                ctx.first = levels(df, ref_col)
             where.update(stage="layers")
             apply_layers(ax, panel, df, ctx)
             where.update(stage="stats")
@@ -1107,7 +1119,7 @@ def apply_hook(fig, axes, df: pd.DataFrame, code: str) -> str | None:
     message, which can quote a value); the caller then re-renders without it."""
     namespace = {"plt": plt, "np": np, "pd": pd, "matplotlib": matplotlib}
     try:
-        exec(code, namespace)  # screened by isCodeSafeToRun, runs in the sandboxed worker
+        exec(code, namespace)  # noqa: S102 - screened by isCodeSafeToRun, runs in the sandboxed worker
         customize = namespace.get("customize")
         if not callable(customize):
             return "The custom tweak doesn't define customize(fig, axes, df), so it was skipped."

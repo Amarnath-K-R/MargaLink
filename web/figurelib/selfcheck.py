@@ -328,4 +328,15 @@ assert err["code"] == "missing_column" and err["detail"] == {"role": "x", "colum
 json.dumps(out), json.dumps(err)  # both cross the worker boundary as JSON
 assert not fl.plt.get_fignums(), "run_request leaves no open figures"
 
+# 23. "#n" counts in first-appearance order even when groups are drawn in another order
+reordered = panel("box", x="arm", y="change")
+reordered["order"] = {"mode": "alpha", "explicit": []}  # draws High, Low, Placebo
+reordered["stats"] = {"test": "welch", "pairs": "explicit", "explicit": [{"a": "#0", "b": "#2"}], "display": "p", "reference": None}
+reordered["annotations"] = [{"kind": "vline", "text": "", "x": None, "y": None, "x2": None, "y2": None, "xGroup": "#0"}]
+fig, meta = fl.render(spec([reordered]), df)
+assert [t["pair"] for t in meta["panels"][0]["tests"]] == ["Placebo vs High"], meta["panels"][0]["tests"]
+vline = next(ln for ln in fig.axes[0].lines if ln.get_gid() == "annotation-vline")
+assert vline.get_xdata()[0] == 2.0, "#0 = Placebo, drawn third under alpha order"
+fl.close(fig)
+
 print("figurelib.selfcheck: OK")
