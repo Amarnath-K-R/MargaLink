@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { between } from "@/lib/easing";
 import { useScrollProgress } from "./_home/useScrollProgress.ts";
 import SiteHeader from "./_home/SiteHeader.tsx";
+import ToolsOverlay from "./_home/ToolsOverlay.tsx";
 import HeroSection from "./_home/HeroSection.tsx";
 import PathwaysSection from "./_home/PathwaysSection.tsx";
 import JournalsSection from "./_home/JournalsSection.tsx";
@@ -35,13 +36,15 @@ function Home() {
 
   const screenDive = useMemo(() => (reducedMotion ? 0 : between(progress, 0.12, 0.2)), [progress, reducedMotion]);
   const featureEntry = useMemo(() => (reducedMotion ? 1 : between(progress, 0.13, 0.21)), [progress, reducedMotion]);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   return (
     <div className="margalink-page">
       <ThreePaperScene progress={progress} heroProgress={heroProgress} reducedMotion={reducedMotion} />
       <div className="grain" aria-hidden="true" />
 
-      <SiteHeader />
+      <SiteHeader onOpenTools={() => setToolsOpen(true)} />
+      <ToolsOverlay open={toolsOpen} onClose={() => setToolsOpen(false)} />
 
       <main>
         <HeroSection heroRef={heroRef} heroProgress={heroProgress} screenDive={screenDive} />
