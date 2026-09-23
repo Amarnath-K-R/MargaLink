@@ -11,6 +11,11 @@ export const CHUNK_CHARS = 16_000;
 export const MIN_SECTION_CHARS = 300;
 export const HEAD_CHARS = 6_000; // an abstract heading past this is a later "Summary", not the abstract
 const MAX_HEADING_CHARS = 90;
+// The review Function caps every section/chunk title at 200 characters
+// (reviewPasses.ts) and a rejected pass aborts the whole review, so titles
+// are clipped here — a typed heading or a long Word heading can exceed it.
+export const MAX_TITLE_CHARS = 200;
+const clip = (title: string, max = MAX_TITLE_CHARS) => (title.length <= max ? title : `${title.slice(0, max - 1).trimEnd()}…`);
 
 // Same optional numbering prefix formatCheck.ts uses three times (1./I./A.).
 const NUMBERING = String.raw`(?:[ivx]+\.|[a-z]\.|\d+\.?)?`;
@@ -192,7 +197,7 @@ export function chunkSections(sections: Section[], hints: HeadingHint[] = []): C
   const chunks: Chunk[] = [];
   for (const s of sections) {
     if (s.text.length <= CHUNK_CHARS) {
-      chunks.push({ id: s.id, sectionId: s.id, title: s.title, kind: s.kind, part: 1, parts: 1, text: s.text });
+      chunks.push({ id: s.id, sectionId: s.id, title: clip(s.title), kind: s.kind, part: 1, parts: 1, text: s.text });
       continue;
     }
     const parts = pack(splitAtSubsections(s.text, subheads));
@@ -200,7 +205,7 @@ export function chunkSections(sections: Section[], hints: HeadingHint[] = []): C
       chunks.push({
         id: `${s.id}-p${i + 1}`,
         sectionId: s.id,
-        title: p.title ? `${s.title} · ${p.title}` : `${s.title} (part ${i + 1}/${parts.length})`,
+        title: clip(p.title ? `${clip(s.title, 120)} · ${p.title}` : `${clip(s.title, 180)} (part ${i + 1}/${parts.length})`),
         kind: s.kind,
         part: i + 1,
         parts: parts.length,
@@ -217,7 +222,7 @@ export function chunkSections(sections: Section[], hints: HeadingHint[] = []): C
 export function buildPaperMap(sections: Section[]): PaperMap {
   const first = sections[0];
   const firstLine = first?.charStart === 0 ? (first.text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? null) : null;
-  const mapped = sections.map((s) => ({ id: s.id, title: s.title, kind: s.kind, words: countWords(s.text) }));
+  const mapped = sections.map((s) => ({ id: s.id, title: clip(s.title), kind: s.kind, words: countWords(s.text) }));
   return {
     title: firstLine && firstLine.length <= 200 ? firstLine : null,
     totalWords: mapped.reduce((n, s) => n + s.words, 0),
@@ -252,6 +257,9 @@ export function buildOutline(
     offset += line.length + 1;
   }
   const unmatchedHeadings: string[] = [];
+  // A heading added inside a section the user excluded splits it — both
+  // halves stay excluded unless the user changes the new half themselves.
+  const inherited: Record<number, "excluded"> = {};
   for (const heading of edits.addedHeadings) {
     const at = lineStarts.get(lineKey(heading));
     if (at === undefined) {
@@ -262,6 +270,7 @@ export function buildOutline(
     if (i < 0) continue; // already a section boundary
     const s = sections[i];
     const title = text.slice(at, text.indexOf("\n", at) === -1 ? text.length : text.indexOf("\n", at)).trim();
+    if ((edits.kinds[s.charStart] ?? inherited[s.charStart]) === "excluded") inherited[at] = "excluded";
     const head = { ...s, charEnd: at, text: text.slice(s.charStart, at) };
     const tail = { ...s, title, kind: vocabKind(title, { prefix: true }) ?? ("body" as const), charStart: at, text: text.slice(at, s.charEnd) };
     sections = [...sections.slice(0, i), head, tail, ...sections.slice(i + 1)];
@@ -278,7 +287,7 @@ export function buildOutline(
   }
 
   const withIds = sections.map((s, i) => {
-    const override = edits.kinds[s.charStart];
+    const override = edits.kinds[s.charStart] ?? inherited[s.charStart];
     return { ...s, id: `s${i + 1}`, kind: override && override !== "excluded" ? override : s.kind, excluded: override === "excluded" };
   });
   const strip = ({ excluded: _excluded, ...s }: Section & { excluded: boolean }): Section => s;

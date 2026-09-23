@@ -651,7 +651,8 @@ def _scipy_stats():
 
 def needs_scipy(spec: dict) -> bool:
     for panel in spec.get("panels", []):
-        if (panel.get("stats") or {}).get("test"):
+        # a heatmap's test only picks pandas' correlation method — no SciPy
+        if (panel.get("stats") or {}).get("test") and panel.get("family") != "heatmap":
             return True
         if panel.get("errorType") == "ci95":
             return True

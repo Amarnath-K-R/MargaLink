@@ -2,7 +2,7 @@
 // merging, chunk packing. Run directly:
 //   node src/lib/reviewSections.selfcheck.ts
 import assert from "node:assert/strict";
-import { CHUNK_CHARS, NO_EDITS, buildOutline, buildPaperMap, chunkSections, splitIntoSections } from "./reviewSections.ts";
+import { CHUNK_CHARS, MAX_TITLE_CHARS, NO_EDITS, buildOutline, buildPaperMap, chunkSections, splitIntoSections } from "./reviewSections.ts";
 import { countWords } from "./formatCheck.ts";
 
 const para = (n: number, seed: string) => Array.from({ length: n }, (_, i) => `${seed} sentence ${i} with enough words to count.`).join(" ");
@@ -217,6 +217,21 @@ ${REFS}
 
   const again = buildOutline(NUMBERED, [], { ...NO_EDITS, addedHeadings: ["Keywords: deep learning, agriculture"], kinds: { [results.charStart]: "excluded" } });
   assert.deepEqual(again.excluded.map((x) => x.title), ["3. Results"], "edits keyed by charStart survive a re-split");
+}
+
+// --- review of the outline step: exclusion survives a split; titles fit the server's cap ---
+{
+  const long = "Supplementary analyses of long-term outcomes in the extended follow-up cohort stratified by baseline risk, prior treatment exposure, and region, including sensitivity analyses excluding early dropouts";
+  const body = "word ".repeat(4000);
+  const text = `Title\nAbstract\n${"a ".repeat(400)}\nMethods\n${body}\n${long}\n${body}${body}${body}\n`;
+  const methods = buildOutline(text, [], NO_EDITS).sections.find((s) => s.title === "Methods")!;
+  const split = buildOutline(text, [], { kinds: { [methods.charStart]: "excluded" }, merged: [], addedHeadings: [long] });
+  assert.deepEqual(split.sections.map((s) => s.title), ["Front matter", "Abstract"], "a heading added inside an excluded section doesn't un-exclude its second half");
+  assert.equal(split.excluded.length, 2);
+  const kept = buildOutline(text, [], { kinds: {}, merged: [], addedHeadings: [long] });
+  const chunks = chunkSections(kept.sections, []);
+  assert.ok(chunks.every((c) => c.title.length <= MAX_TITLE_CHARS), "every chunk title fits the review Function's cap");
+  assert.ok(buildPaperMap(kept.sections).sections.every((s) => s.title.length <= MAX_TITLE_CHARS));
 }
 
 console.log("reviewSections.selfcheck: OK");

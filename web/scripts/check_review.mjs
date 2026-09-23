@@ -160,6 +160,18 @@ await page.fill("#outline-add-heading", "A heading that is not in this paper");
 await page.getByRole("button", { name: "Add heading" }).click();
 check("an unknown typed heading is reported", await page.locator("text=Couldn't find").isVisible());
 
+// Editing the outline mid-run discards that run: no "Resume" that would
+// replay the old outline (which could include a section just excluded).
+slow = true;
+await getReview().click();
+await page.click("text=Send it and review");
+await page.waitForSelector('[data-testid="review-progress"]');
+await rows.first().locator("select").selectOption("excluded");
+await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
+await page.waitForTimeout(300);
+check("an outline edit mid-run offers no stale resume", !(await page.getByRole("button", { name: /Resume review|Retry failed sections/ }).isVisible().catch(() => false)));
+slow = false;
+
 await page.screenshot({ path: `${SCRATCH}/review-final.png`, fullPage: true });
 console.log("console errors:", consoleErrors.length ? consoleErrors.join("\n") : "(none)");
 console.log("PASS");

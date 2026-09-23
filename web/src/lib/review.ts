@@ -1,7 +1,7 @@
 // Client side of the LLM review feature — one of two features in the app
 // that send something off the device (see CLAUDE.md's privacy rules), and
-// the one that sends actual paper text; the other, figure.ts, sends only a
-// spreadsheet's schema, never its values. This module owns what happens to
+// the one that sends actual paper text; the other, figure.ts, sends a
+// spreadsheet's column names/types and the user's request, never its values. This module owns what happens to
 // the text before anything is sent (stripping, normalization, the size
 // ceiling) and the per-device limit; reviewOrchestrator.ts does the sending.
 // Callers MUST get explicit consent (components/ReviewConsent.tsx) before

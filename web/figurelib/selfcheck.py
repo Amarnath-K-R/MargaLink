@@ -380,5 +380,6 @@ fl.close(fig)
 hm = panel("heatmap")
 hm["stats"] = {"test": "spearman", "pairs": "all", "explicit": [], "display": "p", "reference": None}
 assert fl.run_request(spec([hm]), df, ["png"], 72).get("error") is None
+assert not fl.needs_scipy(spec([hm])), "a heatmap's correlation method doesn't pull in SciPy"
 
 print("figurelib.selfcheck: OK")

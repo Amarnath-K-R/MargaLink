@@ -52,7 +52,12 @@ export default function ReviewPage() {
   const { calls } = useNetworkTrace();
 
   const resetReview = useCallback(() => {
-    abortRef.current?.abort();
+    // Detach before aborting: the aborted run's catch checks abortRef to tell
+    // a user Cancel (resumable) from a reset (not). Resuming after a reset
+    // would replay the old outline — including a section just marked "Don't send".
+    const running = abortRef.current;
+    abortRef.current = null;
+    running?.abort();
     setConsentOpen(false);
     setReviewResult(null);
     setReviewError(null);
@@ -245,8 +250,8 @@ export default function ReviewPage() {
           <p className="mt-1 text-sm text-ink-soft">
             An LLM review from Claude — checking for inconsistencies, statistical reporting
             gaps, and journal fit. The one feature on MargaLink that sends your paper&apos;s
-            text off this device (the figure generator is the other opt-in exception, and it
-            only ever sends a spreadsheet&apos;s schema, never its values).
+            text off this device (the figure studio&apos;s &ldquo;Ask Claude&rdquo; is the other opt-in
+            exception, and it never sends a spreadsheet&apos;s values).
           </p>
 
           <TierPicker tier={tier} onSelect={selectTier} />

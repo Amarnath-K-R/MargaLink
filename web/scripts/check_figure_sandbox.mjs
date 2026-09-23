@@ -31,7 +31,7 @@ const hooks = [
 const out = await page.evaluate(async ({ hooks, csv, scsv, d1, d2, spec, km }) => {
   const w = new Worker("/figureWorker.mjs", { type: "module" });
   let id = 0;
-  const call = (msg) => new Promise((res) => { const h = (e) => { if (e.data.id !== msg.id || e.data.type === "progress") return; w.removeEventListener("message", h); res(e.data); }; w.addEventListener("message", h); w.postMessage(msg); });
+  const call = (msg) => new Promise((res) => { const h = (e) => { if (e.data.id !== msg.id || e.data.type === "progress" || e.data.type === "started") return; w.removeEventListener("message", h); res(e.data); }; w.addEventListener("message", h); w.postMessage(msg); });
   const res = [];
   for (const hook of hooks) {
     const r = await call({ type: "render", id: ++id, spec, csv, dtypes: d1, formats: ["svg"], dpi: 72, hook });
