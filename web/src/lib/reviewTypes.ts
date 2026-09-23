@@ -21,8 +21,13 @@ export type Citation = { quote: string; section: string };
 export const REVIEW_TIERS = ["quick", "standard", "thorough"] as const;
 export type ReviewTier = (typeof REVIEW_TIERS)[number];
 
-export const SECTION_KINDS = ["abstract", "introduction", "methods", "results", "discussion", "references", "supplement", "other"] as const;
+// "body" = a section the document itself marks with a heading that isn't one
+// of the standard ones (e.g. "Wave III: Hard Clinical Outcomes" in a review).
+export const SECTION_KINDS = ["abstract", "introduction", "methods", "results", "discussion", "body", "references", "supplement", "other"] as const;
 export type SectionKind = (typeof SECTION_KINDS)[number];
+// A heading line the document's own structure marks (DOCX heading styles,
+// PDF heading fonts): level 1 starts a section, level 2 is a subsection.
+export type HeadingHint = { text: string; level: 1 | 2 };
 export type Section = { id: string; title: string; kind: SectionKind; text: string; charStart: number; charEnd: number };
 export type Chunk = { id: string; sectionId: string; title: string; kind: SectionKind; part: number; parts: number; text: string };
 export type PaperMap = { title: string | null; totalWords: number; sections: { id: string; title: string; kind: SectionKind; words: number }[] };

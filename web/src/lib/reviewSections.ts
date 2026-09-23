@@ -24,6 +24,15 @@ const HEADING_VOCAB: [SectionKind, string][] = [
   ["other", String.raw`keywords?|key words?|acknowledge?ments?|funding|conflicts? of interest|competing interests?|declarations?(?: of interest)?|data availability|availability of data and materials|author contributions|ethics (?:statement|approval)|consent for publication|abbreviations|highlights`],
 ];
 const HEADING_RES = HEADING_VOCAB.map(([kind, vocab]) => [kind, new RegExp(String.raw`^\s*${NUMBERING}\s*(?:${vocab})\s*:?\s*$`, "i")] as const);
+// For lines already known to be headings (hints): the vocab word may start a
+// longer title — "Appendix: All 54 Papers", "Discussion and implications".
+const HEADING_PREFIX_RES = HEADING_VOCAB.map(([kind, vocab]) => [kind, new RegExp(String.raw`^\s*${NUMBERING}\s*(?:${vocab})\b`, "i")] as const);
+
+export function vocabKind(heading: string, opts: { prefix: boolean }): SectionKind | null {
+  const line = LETTER_SPACED.test(heading) ? heading.replace(/ /g, "") : heading;
+  for (const [kind, re] of opts.prefix ? HEADING_PREFIX_RES : HEADING_RES) if (re.test(line)) return kind;
+  return null;
+}
 // "3.2 Secondary outcomes" — a subsection line, used only to pick chunk
 // boundaries. Capital start and no commas/parens/colons: a wrapped prose line
 // like "79.3 years), with equal numbers of men and women," (seen in a real
