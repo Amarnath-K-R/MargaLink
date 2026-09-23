@@ -100,3 +100,36 @@ export function pickDocxHeadings(html: string): HeadingHint[] {
   });
   return hints;
 }
+
+// pdf.js text items for one page → one LineFontInfo per extracted line, built
+// with the same item joining extract.ts uses for fullText (so hint text
+// matches the lines the sectioner later reads). `realFont` maps pdf.js's
+// internal font id to the embedded font's real name ("GillSans-Bold").
+type TextItemLike = { str: string; hasEOL: boolean; fontName: string; transform: number[] };
+export function linesFromTextItems(items: TextItemLike[], realFont: (id: string) => string): LineFontInfo[] {
+  const lines: LineFontInfo[] = [];
+  let text = "";
+  let size = 0;
+  let fonts = new Map<string, number>();
+  const flush = () => {
+    const dominant = [...fonts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+    lines.push({ text: text.replace(/[ \t]+/g, " "), font: dominant, size, wholeLine: fonts.size <= 1 });
+    text = "";
+    size = 0;
+    fonts = new Map();
+  };
+  for (const it of items) {
+    text += it.str + (it.hasEOL ? "" : " ");
+    const n = it.str.replace(/\s/g, "").length;
+    if (n) {
+      // Drop the per-subset tag ("PNOJNK+GillSans-Bold"): the same face is
+      // re-subset per page, and one heading style must stay one signature.
+      const font = realFont(it.fontName).replace(/^[A-Z]{6}\+/, "");
+      fonts.set(font, (fonts.get(font) ?? 0) + n);
+      size = Math.max(size, Math.round(Math.hypot(it.transform[2], it.transform[3]) * 10) / 10);
+    }
+    if (it.hasEOL) flush();
+  }
+  if (text.trim()) flush();
+  return lines;
+}
