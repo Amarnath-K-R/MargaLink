@@ -623,6 +623,263 @@ RENDERERS = {
 }
 
 
+# --- Statistics (SciPy, imported lazily: the worker loads it only when needed) ---
+
+
+def _scipy_stats():
+    try:
+        from scipy import stats as _st
+    except ImportError as exc:  # the worker hasn't loaded SciPy (or the device couldn't)
+        raise FigureError("scipy_required") from exc
+    return _st
+
+
+def needs_scipy(spec: dict) -> bool:
+    for panel in spec.get("panels", []):
+        if (panel.get("stats") or {}).get("test"):
+            return True
+        if panel.get("errorType") == "ci95":
+            return True
+        if any(layer.get("kind") == "regression" and layer.get("ci") for layer in panel.get("layers", [])):
+            return True
+    return False
+
+
+def pairwise_p(a: np.ndarray, b: np.ndarray, test: str) -> tuple[float, str]:
+    st = _scipy_stats()
+    name = "welch" if test == "auto" else test
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    if name == "t":
+        return float(st.ttest_ind(a, b).pvalue), name
+    if name == "welch":
+        return float(st.ttest_ind(a, b, equal_var=False).pvalue), name
+    if name == "mannwhitney":
+        return float(st.mannwhitneyu(a, b, alternative="two-sided").pvalue), name
+    if name == "wilcoxon":
+        if len(a) != len(b):
+            raise FigureError("unsupported_combo", reason="wilcoxon compares paired groups of equal size")
+        return float(st.wilcoxon(a, b).pvalue), name
+    raise FigureError("unsupported_combo", test=test)
+
+
+def omnibus_p(groups: list[np.ndarray], test: str) -> float:
+    st = _scipy_stats()
+    groups = [np.asarray(g, float) for g in groups]
+    return float((st.kruskal if test == "kruskal" else st.f_oneway)(*groups).pvalue)
+
+
+def correlation(x: np.ndarray, y: np.ndarray, test: str) -> tuple[float, float]:
+    st = _scipy_stats()
+    res = (st.spearmanr if test == "spearman" else st.pearsonr)(np.asarray(x, float), np.asarray(y, float))
+    return float(res.statistic), float(res.pvalue)
+
+
+def logrank(times: np.ndarray, events: np.ndarray, labels: np.ndarray) -> tuple[float, float]:
+    """k-group log-rank test: chi-square on k-1 df."""
+    st = _scipy_stats()
+    times, events, labels = np.asarray(times, float), np.asarray(events).astype(bool), np.asarray(labels)
+    groups = list(pd.unique(labels))
+    k = len(groups)
+    if k < 2:
+        raise FigureError("too_few_groups", reason="log-rank needs at least two groups")
+    o_minus_e = np.zeros(k)
+    cov = np.zeros((k, k))
+    for t in np.unique(times[events]):
+        at_risk = times >= t
+        n = at_risk.sum()
+        d = (at_risk & (times == t) & events).sum()
+        n_g = np.array([(at_risk & (labels == g)).sum() for g in groups], float)
+        d_g = np.array([((times == t) & events & (labels == g)).sum() for g in groups], float)
+        o_minus_e += d_g - d * n_g / n
+        if n > 1:
+            frac = n_g / n
+            cov += d * (n - d) / (n - 1) * (np.diag(frac) - np.outer(frac, frac))
+    stat = float(o_minus_e[:-1] @ np.linalg.solve(cov[:-1, :-1], o_minus_e[:-1]))
+    return stat, float(st.chi2.sf(stat, k - 1))
+
+
+def p_label(p: float, display: str) -> str:
+    stars = "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "ns"
+    text = "p < 0.001" if p < 0.001 else f"p = {p:.3f}" if p < 0.1 else f"p = {p:.2f}"
+    return {"stars": stars, "p": text, "both": f"{stars} ({text})"}[display]
+
+
+def _stat_text(ax, text: str) -> None:
+    # Above the plot area, right-aligned: a result label must never sit on the data.
+    ax.text(1.0, 1.01, text, transform=ax.transAxes, ha="right", va="bottom", gid="stat-text")
+
+
+def draw_bracket(ax, x1: float, x2: float, y: float, h: float, text: str) -> None:
+    (line,) = ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], color="black", linewidth=0.7)
+    line.set_gid("bracket")
+    ax.text((x1 + x2) / 2, y + h, text, ha="center", va="bottom", gid="bracket-label")
+
+
+def _pairs(panel: dict, lv: list[str]) -> list[tuple[str, str]]:
+    stats = panel["stats"]
+    mode = stats.get("pairs", "all")
+    if mode == "vs-first":
+        return [(lv[0], k) for k in lv[1:]]
+    if mode == "vs-reference":
+        ref = resolve_ref(stats["reference"], lv) if stats.get("reference") else lv[0]
+        return [(ref, k) for k in lv if k != ref]
+    if mode == "explicit":
+        return [(resolve_ref(p["a"], lv), resolve_ref(p["b"], lv)) for p in stats.get("explicit", [])]
+    return [(lv[i], lv[j]) for i in range(len(lv)) for j in range(i + 1, len(lv))]
+
+
+def draw_stats(ax, panel: dict, df: pd.DataFrame, ctx: Ctx) -> list[dict]:
+    stats = panel.get("stats") or {}
+    test = stats.get("test")
+    if not test:
+        return []
+    display = stats.get("display", "stars")
+    family = panel["family"]
+    if family == "km":
+        t, e, g = panel["roles"].get("time"), panel["roles"].get("event"), panel["roles"].get("group")
+        if not g:
+            raise FigureError("too_few_groups", reason="log-rank needs a group column")
+        d = usable(df, [t, e, g])
+        _, p = logrank(d[t].to_numpy(), d[e].to_numpy(), _as_labels(d[g]).to_numpy())
+        _stat_text(ax, f"Log-rank {p_label(p, 'p')}")
+        return [{"pair": "all groups", "p": p, "test": "logrank"}]
+    if family in ("scatter", "line"):
+        x, y = panel["roles"].get("x"), panel["roles"].get("y")
+        d = usable(df, [x, y])
+        r, p = correlation(d[x].to_numpy(float), d[y].to_numpy(float), test)
+        sym = "\u03c1" if test == "spearman" else "r"
+        _stat_text(ax, f"{sym} = {r:.2f}, {p_label(p, 'p')}")
+        return [{"pair": f"{x} ~ {y}", "p": p, "test": "spearman" if test == "spearman" else "pearson"}]
+    if not ctx.categorical:
+        raise FigureError("unsupported_combo", family=family, test=test)
+    lv = list(ctx.positions)
+    if test in ("anova", "kruskal"):
+        p = omnibus_p([ctx.values[k] for k in lv], test)
+        name = "ANOVA" if test == "anova" else "Kruskal-Wallis"
+        _stat_text(ax, f"{name} {p_label(p, 'p')}")
+        return [{"pair": "all groups", "p": p, "test": test}]
+    lo, hi = ax.get_ylim()
+    span = hi - lo
+    y, step, h = ctx.top + 0.06 * span, 0.1 * span, 0.025 * span
+    results = []
+    for a, b in _pairs(panel, lv):
+        p, name = pairwise_p(ctx.values[a], ctx.values[b], test)
+        draw_bracket(ax, ctx.positions[a], ctx.positions[b], y, h, p_label(p, display))
+        results.append({"pair": f"{a} vs {b}", "p": p, "test": name})
+        y += step
+    return results
+
+
+# --- Overlays -----------------------------------------------------------------
+
+
+def _layer_opts(layer: dict, alpha: float, size: float) -> tuple[float, float]:
+    a = layer.get("alpha")
+    sz = layer.get("size")
+    return (alpha if a is None else float(a)), (size if sz is None else float(sz))
+
+
+def overlay_points(ax, panel: dict, df: pd.DataFrame, ctx: Ctx, layer: dict) -> None:
+    alpha, size = _layer_opts(layer, 0.6, 8)
+    width = layer.get("jitter") if layer.get("jitter") is not None else 0.12
+    for i, (level, vals) in enumerate(ctx.values.items()):
+        xs = ctx.positions[level] + _jitter(len(vals), width, seed=100 + i)
+        coll = ax.scatter(xs, vals, s=size, color="black", alpha=alpha, linewidths=0, zorder=3)
+        coll.set_gid("points")
+
+
+def overlay_mean(ax, panel: dict, df: pd.DataFrame, ctx: Ctx, layer: dict, fn=np.mean, gid: str = "mean") -> None:
+    for level, vals in ctx.values.items():
+        if len(vals):
+            (m,) = ax.plot([ctx.positions[level]], [fn(vals)], marker="D" if gid == "mean" else "_", markersize=4 if gid == "mean" else 10,
+                           color="black", zorder=4, linestyle="none")
+            m.set_gid(gid)
+
+
+def overlay_regression(ax, panel: dict, df: pd.DataFrame, ctx: Ctx, layer: dict) -> None:
+    x, y, g = panel["roles"].get("x"), panel["roles"].get("y"), panel["roles"].get("group")
+    d = usable(df, [x, y, g])
+    for name, sub in _by_group(d, g):
+        xv = sub[x].to_numpy(float)
+        yv = sub[y].to_numpy(float)
+        if len(xv) < 3:
+            continue
+        slope, intercept = np.polyfit(xv, yv, 1)
+        grid = np.linspace(xv.min(), xv.max(), 50)
+        color = ctx.colors.get(name or "all", "black")
+        (line,) = ax.plot(grid, slope * grid + intercept, color=color, linewidth=1.0)
+        line.set_gid("regression")
+        if layer.get("ci"):
+            st = _scipy_stats()
+            n = len(xv)
+            resid = yv - (slope * xv + intercept)
+            s_err = np.sqrt(np.sum(resid**2) / (n - 2))
+            se = s_err * np.sqrt(1 / n + (grid - xv.mean()) ** 2 / np.sum((xv - xv.mean()) ** 2))
+            half = st.t.ppf(0.975, n - 2) * se
+            band = ax.fill_between(grid, slope * grid + intercept - half, slope * grid + intercept + half, color=color,
+                                   alpha=0.18, linewidth=0)
+            band.set_gid("regression-ci")
+
+
+def overlay_n(ax, panel: dict, df: pd.DataFrame, ctx: Ctx, layer: dict) -> None:
+    trans = matplotlib.transforms.blended_transform_factory(ax.transData, ax.transAxes)
+    for level, pos in ctx.positions.items():
+        ax.text(pos, 0.01, f"n = {len(ctx.values.get(level, []))}", transform=trans, ha="center", va="bottom",
+                fontsize=matplotlib.rcParams["font.size"] - 1, color="0.35", gid="n-label")
+
+
+OVERLAYS = {
+    "points": overlay_points,
+    "mean": overlay_mean,
+    "median": lambda ax, panel, df, ctx, layer: overlay_mean(ax, panel, df, ctx, layer, fn=np.median, gid="median"),
+    "regression": overlay_regression,
+    "n": overlay_n,
+}
+CATEGORY_LAYERS = {"points", "mean", "median", "n"}
+
+
+def apply_layers(ax, panel: dict, df: pd.DataFrame, ctx: Ctx) -> None:
+    for layer in panel.get("layers", []):
+        kind = layer["kind"]
+        if kind in CATEGORY_LAYERS and not ctx.categorical:
+            raise FigureError("unsupported_combo", family=panel["family"], layer=kind)
+        if kind == "regression" and panel["family"] not in ("scatter", "line"):
+            raise FigureError("unsupported_combo", family=panel["family"], layer=kind)
+        OVERLAYS[kind](ax, panel, df, ctx, layer)
+
+
+# --- Annotations --------------------------------------------------------------
+
+
+def _ann_x(ann: dict, ctx: Ctx, key: str = "x") -> float | None:
+    if key == "x" and ann.get("xGroup"):
+        return ctx.positions[resolve_ref(ann["xGroup"], list(ctx.positions))]
+    return ann.get(key)
+
+
+def draw_annotation(ax, ann: dict, ctx: Ctx) -> None:
+    kind = ann["kind"]
+    gid = f"annotation-{kind}"
+    style = {"color": "0.3", "linewidth": 0.8}
+    if kind == "hline":
+        ax.axhline(ann["y"], linestyle="--", gid=gid, **style)
+    elif kind == "vline":
+        ax.axvline(_ann_x(ann, ctx), linestyle="--", gid=gid, **style)
+    elif kind == "hspan":
+        ax.axhspan(ann["y"], ann["y2"], color="0.85", alpha=0.6, linewidth=0, zorder=0, gid=gid)
+    elif kind == "vspan":
+        x1 = _ann_x(ann, ctx)
+        x2 = ann.get("x2") if ann.get("x2") is not None else x1 + 0.8
+        if ann.get("xGroup") and ann.get("x2") is None:
+            x1, x2 = x1 - 0.4, x1 + 0.4
+        ax.axvspan(x1, x2, color="0.85", alpha=0.6, linewidth=0, zorder=0, gid=gid)
+    elif kind == "text":
+        ax.text(_ann_x(ann, ctx), ann["y"], ann.get("text", ""), ha="center", va="center", gid=gid)
+    elif kind == "arrow":
+        ax.annotate(ann.get("text", ""), xy=(ann["x2"], ann["y2"]), xytext=(_ann_x(ann, ctx), ann["y"]),
+                    arrowprops={"arrowstyle": "->", "linewidth": 0.8, "color": "0.2"}, ha="center", va="center", gid=gid)
+
+
 # --- Axes, layout, letters, legends ------------------------------------------
 
 
@@ -764,11 +1021,18 @@ def _render(spec: dict, df: pd.DataFrame, where: dict):
             if renderer is None:
                 raise FigureError("unsupported_combo", family=panel["family"])
             ctx = renderer(ax, panel, df, spec)
+            where.update(stage="layers")
+            apply_layers(ax, panel, df, ctx)
+            where.update(stage="stats")
+            tests = draw_stats(ax, panel, df, ctx)
+            where.update(stage="annotations")
+            for ann in panel.get("annotations", []):
+                draw_annotation(ax, ann, ctx)
             where.update(stage="axes")
             apply_axes(ax, panel, ctx)
             if panel.get("legend") and panel["roles"].get("group") and not spec["layout"].get("sharedLegend"):
                 ax.legend(loc="best")
-            meta["panels"].append({"n": dict(ctx.n), "tests": []})
+            meta["panels"].append({"n": dict(ctx.n), "tests": tests})
         where.update(stage="layout", family=None)
         if spec["layout"].get("letters") and len(axes) > 1:
             letter_panels(axes, style)

@@ -200,4 +200,120 @@ b = fl.export(fl.render(strip, trial)[0], ["png"], 150)["png"]
 fl.close()
 assert a == b, "strip jitter must be deterministic (identical renders)"
 
+# --- Task 3: overlays, statistics, brackets, annotations ---
+import itertools
+
+from scipy import stats as st
+
+a_arr = np.array([5.1, 4.9, 6.2, 5.8, 6.0, 5.5, 5.2])
+b_arr = np.array([6.4, 6.8, 7.1, 6.0, 7.4, 6.9, 7.0])
+
+# 14. pairwise tests agree with scipy; "auto" = Welch for two groups
+assert abs(fl.pairwise_p(a_arr, b_arr, "t")[0] - st.ttest_ind(a_arr, b_arr).pvalue) < 1e-12
+assert abs(fl.pairwise_p(a_arr, b_arr, "welch")[0] - st.ttest_ind(a_arr, b_arr, equal_var=False).pvalue) < 1e-12
+assert abs(fl.pairwise_p(a_arr, b_arr, "mannwhitney")[0] - st.mannwhitneyu(a_arr, b_arr, alternative="two-sided").pvalue) < 1e-12
+assert abs(fl.pairwise_p(a_arr, b_arr, "wilcoxon")[0] - st.wilcoxon(a_arr, b_arr).pvalue) < 1e-12
+assert fl.pairwise_p(a_arr, b_arr, "auto")[1] == "welch"
+
+# 15. omnibus tests agree with scipy
+three = [a_arr, b_arr, a_arr + 2]
+assert abs(fl.omnibus_p(three, "anova") - st.f_oneway(*three).pvalue) < 1e-12
+assert abs(fl.omnibus_p(three, "kruskal") - st.kruskal(*three).pvalue) < 1e-12
+r, p_r = fl.correlation(a_arr, b_arr, "spearman")
+assert abs(r - st.spearmanr(a_arr, b_arr).statistic) < 1e-12
+
+# 16. log-rank: Freireich 6-MP vs placebo (R survdiff: chi-square 16.8 on 1 df), and the k-group
+#     implementation equals the independent two-group scalar formula
+mp_t = [6, 6, 6, 6, 7, 9, 10, 10, 11, 13, 16, 17, 19, 20, 22, 23, 25, 32, 32, 34, 35]
+mp_e = [1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0]
+pl_t = [1, 1, 2, 2, 3, 4, 4, 5, 5, 8, 8, 8, 8, 11, 11, 12, 12, 15, 17, 22, 23]
+times = np.array(mp_t + pl_t, dtype=float)
+events = np.array(mp_e + [1] * len(pl_t))
+labels = np.array(["6-MP"] * len(mp_t) + ["placebo"] * len(pl_t))
+chi2, p_lr = fl.logrank(times, events, labels)
+assert abs(chi2 - 16.79) < 0.01, chi2
+o_minus_e, var = 0.0, 0.0
+for t_ in np.unique(times[events == 1]):
+    n = (times >= t_).sum()
+    n1 = ((times >= t_) & (labels == "6-MP")).sum()
+    d = ((times == t_) & (events == 1)).sum()
+    d1 = ((times == t_) & (events == 1) & (labels == "6-MP")).sum()
+    o_minus_e += d1 - d * n1 / n
+    var += d * (n1 / n) * (1 - n1 / n) * (n - d) / max(n - 1, 1)
+assert abs(chi2 - o_minus_e**2 / var) < 1e-9, "k-group log-rank equals the 2-group formula"
+
+# 17. brackets: all pairs on 4 groups = 6, stacked upward; vs-first = 3; explicit = exactly those; stars thresholds
+four_arm = trial.copy()
+extra = trial[trial["arm"] == "High"].assign(arm="Max", change=lambda d: d["change"] - 3)
+four_arm = __import__("pandas").concat([four_arm, extra], ignore_index=True)
+
+
+def brackets(pairs, explicit=(), test="welch"):
+    p = panel("box", x="arm", y="change")
+    p["stats"] = {"test": test, "pairs": pairs, "explicit": [{"a": a, "b": b} for a, b in explicit], "display": "stars", "reference": None}
+    fig, meta = fl.render(spec([p]), four_arm)
+    ax = next(a for a in fig.axes if a.get_label() == "panel")
+    lines = [ln for ln in ax.lines if ln.get_gid() == "bracket"]
+    ys = [max(ln.get_ydata()) for ln in lines]
+    fl.close(fig)
+    return lines, ys, meta["panels"][0]["tests"]
+
+
+lines, ys, tests = brackets("all")
+assert len(lines) == 6 and all(b > a for a, b in itertools.pairwise(ys)), ys
+assert len(tests) == 6 and all(0 <= t["p"] <= 1 and t["test"] == "welch" for t in tests)
+assert len(brackets("vs-first")[0]) == 3
+lines, _, tests = brackets("explicit", explicit=[("#0", "#3"), ("Low", "High")])
+assert len(lines) == 2 and [t["pair"] for t in tests] == ["Placebo vs Max", "Low vs High"], tests
+assert [fl.p_label(p, "stars") for p in (0.2, 0.04, 0.009, 0.0004)] == ["ns", "*", "**", "***"]
+assert fl.p_label(0.0004, "p") == "p < 0.001" and fl.p_label(0.0123, "p") == "p = 0.012"
+_, _, tests = brackets("all", test="anova")
+assert len(tests) == 1 and tests[0]["test"] == "anova", "an omnibus test is one result, not brackets"
+
+# 18. overlays: points (one collection per group), regression slope = polyfit, n labels
+p = panel("bar", x="arm", y="change")
+p["layers"] = [{"kind": "points", "ci": False, "alpha": 0.5, "size": None, "jitter": None},
+               {"kind": "n", "ci": False, "alpha": None, "size": None, "jitter": None}]
+fig, _ = fl.render(spec([p]), trial)
+ax = next(a for a in fig.axes if a.get_label() == "panel")
+pts = [c for c in ax.collections if c.get_gid() == "points"]
+assert len(pts) == 3 and all(abs(c.get_alpha() - 0.5) < 1e-9 for c in pts)
+assert sorted(t.get_text() for t in ax.texts if t.get_gid() == "n-label") == ["n = 20"] * 3
+fl.close(fig)
+p = panel("scatter", x="dose", y="change")
+p["layers"] = [{"kind": "regression", "ci": True, "alpha": None, "size": None, "jitter": None}]
+fig, _ = fl.render(spec([p]), trial)
+ax = next(a for a in fig.axes if a.get_label() == "panel")
+line = next(ln for ln in ax.lines if ln.get_gid() == "regression")
+xd, yd = np.asarray(line.get_xdata(), float), np.asarray(line.get_ydata(), float)
+slope = (yd[-1] - yd[0]) / (xd[-1] - xd[0])
+assert abs(slope - np.polyfit(trial["dose"], trial["change"], 1)[0]) < 1e-9
+assert any(c.get_gid() == "regression-ci" for c in ax.collections), "CI band"
+fl.close(fig)
+
+# 19. annotations, including one placed by group reference
+p = panel("bar", x="arm", y="change")
+p["annotations"] = [
+    {"kind": "hline", "text": "", "x": None, "y": -5.0, "x2": None, "y2": None, "xGroup": None},
+    {"kind": "text", "text": "target", "x": None, "y": -9.5, "x2": None, "y2": None, "xGroup": "#1"},
+    {"kind": "hspan", "text": "", "x": None, "y": -2.0, "x2": None, "y2": -1.0, "xGroup": None},
+    {"kind": "arrow", "text": "biggest drop", "x": 0.0, "y": -12.0, "x2": 2.0, "y2": -9.0, "xGroup": None},
+]
+fig, _ = fl.render(spec([p]), trial)
+ax = next(a for a in fig.axes if a.get_label() == "panel")
+gids = sorted(a.get_gid() for a in [*ax.lines, *ax.patches, *ax.texts] if (a.get_gid() or "").startswith("annotation-"))
+assert gids == ["annotation-arrow", "annotation-hline", "annotation-hspan", "annotation-text"], gids
+txt = next(t for t in ax.texts if t.get_gid() == "annotation-text")
+assert txt.get_position()[0] == 1.0, "xGroup '#1' is the second category's position"
+fl.close(fig)
+
+# 20. needs_scipy: only tests, a CI regression, or a ci95 error bar
+assert not fl.needs_scipy(spec([panel("bar", x="arm", y="change")]))
+tested = panel("box", x="arm", y="change")
+tested["stats"]["test"] = "auto"
+assert fl.needs_scipy(spec([tested]))
+ci_bar = panel("bar", x="arm", y="change")
+ci_bar["errorType"] = "ci95"
+assert fl.needs_scipy(spec([ci_bar]))
+
 print("figurelib.selfcheck: OK")
