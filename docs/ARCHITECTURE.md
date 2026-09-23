@@ -75,50 +75,72 @@ from Cloudflare's edge, no server involved.
 
 ### The AI review: what it defends against, and why
 
-A real manuscript fact-check against an early version of this feature's
-prompt turned up three real failure modes, which is why the current
-implementation looks the way it does:
+A real manuscript fact-check against an early version of this feature
+turned up three failure modes that still shape it: (1) the model
+attributed numbers to the abstract that only appeared in Results — so the
+abstract is handed over as its own labeled block, never inferred; (2) it
+flagged "inconsistencies" that reconciled once the arithmetic was checked
+— so the prompts require reconciliation before a finding is reported; (3)
+a model can state a quote confidently that appears nowhere in the source —
+so every quote is verified server-side, never trusted.
 
-1. The model attributed numbers to the abstract that only appeared in
-   Results/Tables — it was inferring section boundaries from raw text
-   instead of reading real ones. Fix: the abstract is extracted and
-   handed over as its own labeled block (`formatCheck.ts`'s
-   `extractAbstract`, already proven correct against real PDFs), so "is
-   this in the abstract" stops being an inference the model has to make.
-2. It flagged "inconsistencies" that actually reconciled once the
-   arithmetic was checked. Fix: the prompt explicitly requires arithmetic
-   reconciliation and a careful re-read of any table before a finding is
-   reported.
-3. (Both of the above compound a third risk: a model can state a quote
-   confidently without that quote actually appearing anywhere in the
-   source.) Fix: every finding requires a verbatim citation, and
-   `filterGrounded()` verifies server-side that every citation actually
-   appears in the source text — never trusting the model's own claim that
-   a quote is real — dropping any finding that doesn't verify before it
-   ever reaches the client.
+The first implementation was one synchronous call over the whole paper.
+It broke in three ways on real, long papers: extended thinking and the
+final JSON share one `max_tokens` budget, so a table-heavy paper ended
+with `stop_reason: max_tokens` and no result at all; the text was silently
+truncated past 150k characters; and one dropped stream lost everything.
 
-The fourth defense is a design choice rather than a bug fix: extended
-thinking (adaptive effort) lets the model reason through verification —
-checking quotes, arithmetic, section attribution — before it commits to
-the tool call, inside one request. A literal second Claude call (draft,
-then a separate verify-and-prune pass) was tried first and worked, but
-re-sends the full paper text a second time and doubles latency for
-accuracy gains a single well-instructed reasoning pass captures almost as
-well.
+**The review is now a map-reduce over the paper, orchestrated by the
+browser** (`src/lib/reviewOrchestrator.ts`):
 
-Three review depths (`ReviewTier`: quick/standard/thorough) map to
-Anthropic's effort levels — verification rigor (grounding, arithmetic) is
-identical at every tier; only how exhaustively the model looks varies.
-`thorough` uses effort `"high"`, deliberately not `"max"`: confirmed
-empirically that `"max"` is effectively unbounded in cost/time (one real
-test ran past 4.5 minutes without finishing, while also truncating its
-own output at a 24,000-token cap on a ~1,200-word paper) — `"high"` is
-the level already proven to work well on a real paper earlier in the
-project.
+1. `review.ts`'s `prepareForReview` strips author lines and normalizes the
+   text (NFKC, ligatures, line-end hyphenation, curly quotes) once,
+   client-side, so the model's verbatim quotes come back in the same
+   alphabet the grounding check reads. `reviewSections.ts` splits it into
+   headed sections and ≤16k-character chunks (heading detection was tuned
+   against real two-column PDFs: letter-spaced headings like
+   "R E F E R E N C E S" are recognized; a wrapped lowercase "methods" line
+   is not a heading). Papers over 400,000 characters are refused before
+   consent — never truncated.
+2. One **extract** pass per chunk (≤3 concurrent, effort `medium` on every
+   tier — it's mechanical) returns a bounded list of quantitative claims,
+   each with a verbatim quote that `reviewGrounding.ts`'s
+   `groundExtractOutput` verifies against *that chunk only*. Output is
+   small and capped, so a pass can't run out of budget the way the single
+   call did; if one still truncates (422), it is retried once asking for
+   half as many claims. A pass that keeps failing is recorded in
+   `coverage.failed` — not fatal: synthesis runs on what succeeded, the
+   page says which section couldn't be checked, and "Retry failed
+   sections" re-runs only those plus synthesis (no second device use).
+3. One **synthesize** pass over the resulting **claims ledger** — never the
+   paper text — finds inconsistencies label by label and writes the
+   prioritized "Fix these first" summary. It can only cite ledger ids;
+   `reviewPasses.ts` drops any id not in the submitted ledger and any
+   inconsistency left with fewer than two. A fabricated cross-reference
+   therefore cannot survive: every citation the user sees was verified in
+   the chunk it came from. (A separate draft-then-verify second call was
+   tried before this redesign and dropped for re-sending the whole paper;
+   the ledger gets the same guarantee without that cost.)
 
-(The `functions/api/review.ts` handler itself carries a short pointer
-back to this section rather than repeating it — see there for where each
-of these defenses actually lives in code.)
+`functions/api/review.ts` is a thin, stateless dispatcher on `pass`: it
+validates exact key sets and caps (`parsePassRequest`), applies the daily
+*pass* cap (`review-pass-count:${date}`, 1,500, incremented before the
+upstream call so client retries can't spend uncounted), calls Anthropic
+through the selfchecked `anthropicStream.ts` (streaming, because long
+non-streaming requests with thinking hit 524s at Anthropic's edge), and
+grounds/validates the output. It never holds paper text between
+requests. Anthropic's prompt cache may retain a chunk for about five
+minutes after a pass; MargaLink itself stores nothing.
+
+Tiers (`TIER_PLAN` in `reviewPrompt.ts`) decide which section kinds are
+extracted (quick: abstract/results/discussion; standard: everything but
+references and supplementary material; thorough: everything but
+references), the claims cap per chunk (20/30/40) and the synthesis effort
+(low/medium/high). Verification rigor is identical at every tier. `max`
+effort stays off-limits: it was confirmed to be effectively unbounded in
+cost and time on a real paper. Estimated cost for a 400k-character paper
+on thorough is about $1.2 (typical) to $1.7 (every chunk table-dense); the
+knobs are `CHUNK_CHARS` and the thorough claims cap.
 
 ### The figure generator: what leaves the device, and what doesn't
 
@@ -188,8 +210,8 @@ doesn't claim it does.
 ## The invariant that keeps `src/lib/` and `functions/` from duplicating types
 
 `functions/api/review.ts` already imports directly from `src/lib/`
-(`journalRules.ts`, `formatCheck.ts`, `reviewTypes.ts`) via relative
-paths — there's no Workers-runtime barrier stopping it. The rule that
+(`journalRules.ts`, `reviewPasses.ts`, `reviewGrounding.ts`,
+`anthropicStream.ts`) via relative paths — there's no Workers-runtime barrier stopping it. The rule that
 makes this safe: **`functions/` may import from `src/lib/` only modules
 that are pure or isomorphic** — no `window`, no `localStorage`, no `fs`.
 Most of `src/lib/` qualifies; a handful of browser-only modules
@@ -197,8 +219,9 @@ Most of `src/lib/` qualifies; a handful of browser-only modules
 used at build time) don't, and should never be imported from `functions/`.
 
 `src/lib/reviewTypes.ts` is the cleanest example: it's the one file both
-the client (`review.ts` and its consumers) and `functions/api/review.ts`
-import `Citation`/`ReviewTier`/`ReviewResult`/`REVIEW_TIERS` from, instead
+the client (`reviewOrchestrator.ts` and its consumers) and
+`functions/api/review.ts` (via `reviewPasses.ts`) take the pass contract
+— `ExtractRequest`/`SynthesizeRequest`/their responses, `ReviewResult` — from, instead
 of each side declaring its own copy. It qualifies for the same reason —
 just types and a `const` array, nothing environment-specific.
 
@@ -289,11 +312,15 @@ real technical concern, not a speculative grouping).
 | `site.ts` | Site-wide metadata (`SITE_TITLE`, `SITE_DESCRIPTION`, `BRAND` colors) — single source for `layout.tsx`, `opengraph-image.tsx`, `sitemap.ts`, `robots.ts`. |
 | `easing.ts` | `clamp01`, `smooth`, `between`, `lerp` — the one shared animation-math kit (was reimplemented 3× before Phase 5). |
 | `errorMessage.ts` | `errorMessage(err, fallback?)` — the one shared `instanceof Error` normalization. |
-| `review.ts` | Client side of the AI review: `requestReview()`, `stripIdentifyingInfo()`, the per-device usage counter. |
-| `reviewTypes.ts` | `Citation`/`ReviewTier`/`ReviewResult`/`REVIEW_TIERS` — the one contract shared by the client and `functions/api/review.ts`. |
-| `reviewGrounding.ts` | `filterGrounded()` and the quote-verification it depends on — the anti-fabrication check, imported by `functions/`. |
-| `reviewPrompt.ts` | `buildPrompt()`, `TIER_CONFIG` — imported by `functions/`. |
-| `reviewTool.ts` | The Claude tool-call JSON Schema + the `ReviewResult` drift guard — imported by `functions/`. |
+| `review.ts` | Before anything is sent: `prepareForReview()` (strip + normalize), `MAX_REVIEW_CHARS`, the per-device usage counter. |
+| `reviewOrchestrator.ts` | Client: `runReview()` — plans chunks, runs extract passes (≤3 concurrent, retries, resume), builds the claims ledger, runs synthesis, assembles `ReviewResult` with `coverage`. |
+| `reviewSections.ts` | Pure: `splitIntoSections()`, `chunkSections()`, `buildPaperMap()` — heading detection and ≤16k-char chunks. |
+| `reviewTypes.ts` | The pass contract and `ReviewResult` — shared by the client and `functions/api/review.ts`. |
+| `reviewPasses.ts` | The Function's gates: `parsePassRequest()` (exact keys, caps), `validateSynthesisOutput()` (ledger-id membership), `passCallConfig()`. |
+| `reviewGrounding.ts` | `normalizeText()`, `groundExtractOutput()` — the anti-fabrication check, imported by `functions/`. |
+| `reviewPrompt.ts` | `TIER_PLAN`, `buildExtractPrompt()`, `buildSynthesizePrompt()` — imported by `functions/`. |
+| `reviewTool.ts` | The two strict tool schemas + drift guards — imported by `functions/`. |
+| `anthropicStream.ts` | `callAnthropicTool()` — the selfchecked streaming transport (typed truncation/upstream errors), imported by `functions/`. |
 | `spreadsheet.ts` | CSV/XLSX → `Dataset` (columns, inferred dtypes, row count). Mirrors `extract.ts`'s shape. |
 | `figureSchema.ts` | The safety-critical file: `buildFigurePayload()` is the only function allowed to construct the outbound figure-generation payload. See "The figure generator" above. |
 | `figurePrompt.ts` | `buildFigurePrompt()`, `extractPythonCode()` — imported by `functions/api/figure.ts`. |
@@ -306,7 +333,7 @@ relative paths) and only genuinely server-specific code stays here.
 
 | File | What |
 |---|---|
-| `api/review.ts` | One of the two server-side files in the project. `Env`, `UpstreamError`, `callAnthropicStreaming` (streaming transport — Workers-specific, doesn't belong in `lib/`), the KV daily cap, and request validation. |
+| `api/review.ts` | One of the two server-side files in the project: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the KV daily pass cap, one `callAnthropicTool`, grounding/validation. |
 | `api/figure.ts` | The other. Plain (non-streaming) `fetch` to Anthropic, no tool call, `isValidFigurePayload`/`validateSpec` request validation, its own KV daily cap. Simpler than `review.ts` — see "The figure generator" above for why. |
 
 ## `lib/` conventions
@@ -321,8 +348,9 @@ relative paths) and only genuinely server-specific code stays here.
   but the recommendation is to stay flat anyway: the `figure*` filename
   prefix is already doing the grouping work a folder would, and carving
   out `lib/figure/` while everything else stays flat buys inconsistency,
-  not clarity. The next feature after this one is the one that should
-  force the real decision.
+  not clarity. The multi-pass review redesign was the next feature, and
+  the decision held: the `review*` prefix groups its files, and a
+  `lib/review/` folder would be churn without a comprehension gain.
 - **camelCase filenames** (`journalUrl.ts`, not `journal-url.ts`) —
   consistent with `components/`'s PascalCase, one casing convention for
   the whole `src/` tree.

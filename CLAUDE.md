@@ -24,10 +24,12 @@ Anthropic's Claude API. Both are opt-in, both sit behind an explicit
 consent step that names exactly what happens before anything is sent, and
 neither has a default-on path.
 
-1. **The LLM pre-submission review** (`functions/api/review.ts`, consent
-   in `ReviewConsent.tsx`) sends the paper's text. This is the only
-   feature where "never leaves your device" doesn't hold for a paper's
-   content.
+1. **The LLM pre-submission review** (`functions/api/review.ts`,
+   orchestrated by `src/lib/reviewOrchestrator.ts`, consent in
+   `ReviewConsent.tsx`) sends the paper's text, in several short requests
+   — one per section, then one over the extracted numbers. This is the
+   only feature where "never leaves your device" doesn't hold for a
+   paper's content. The server keeps none of it between requests.
 2. **The figure generator** (`functions/api/figure.ts`, consent in
    `FigureConsent.tsx`) sends a *description* of a spreadsheet — column
    names, inferred types, row count, the chart type chosen, and an

@@ -99,7 +99,8 @@ export default function PrivacyPage() {
       <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
         <li>
           Nothing is sent until you confirm a plain-language notice naming exactly what&apos;s
-          about to happen — there is no default-on path.
+          about to happen — including how many requests it takes: one per section of your
+          paper, then one over the numbers found. There is no default-on path.
         </li>
         <li>
           Author names and email addresses are stripped from the text first, on a
@@ -110,8 +111,13 @@ export default function PrivacyPage() {
           doesn&apos;t store what you send, before or after the review.
         </li>
         <li>
-          Like every other request in MargaLink, this one shows up in the network-request
-          log on the matching page when it happens — it isn&apos;t hidden from the same
+          Each request carries one section; the server reviews it and forgets it — MargaLink
+          keeps nothing between requests. Anthropic may hold a section for a few minutes to
+          serve a retry.
+        </li>
+        <li>
+          Like every other request in MargaLink, these show up in the network-request log
+          on the review page, one line per request, when they happen — they aren&apos;t hidden from the same
           transparency check the rest of the site relies on.
         </li>
       </ul>
