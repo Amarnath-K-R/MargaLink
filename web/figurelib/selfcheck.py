@@ -308,4 +308,24 @@ fig, _ = fl.render(stacked["spec"], sample_frames["trial"])
 assert fig.axes[0].get_ylabel() == "Count", "a count aggregate labels its axis Count"
 fl.close(fig)
 
+# 22. the worker's entry point: fonts, hooks, and errors that never raise
+df = frame("trial")
+fonts_dir = Path(__file__).parent.parent / "public" / "fonts"
+fl.register_fonts([str(fonts_dir / f) for f in fl.fonts_for(spec([panel("bar", x="arm", y="change")]))])
+fl.register_fonts([str(fonts_dir / f) for f in fl.fonts_for(spec([panel("bar", x="arm", y="change")], style="ieee"))])
+bar_spec = spec([panel("bar", x="arm", y="change")])
+out = fl.run_request(bar_spec, df, ["png"], 72)
+assert out["meta"]["font"] == "Liberation Sans", out["meta"]["font"]
+assert fl.run_request(spec([panel("bar", x="arm", y="change")], style="ieee"), df, ["png"], 72)["meta"]["font"] == "Liberation Serif"
+titled = fl.run_request(bar_spec, df, ["svg"], 72, "def customize(fig, axes, df):\n    axes[0].set_title('HOOKED')\n")
+assert titled["hookWarning"] is None and "HOOKED" in base64.b64decode(titled["images"]["svg"]).decode()
+broken = fl.run_request(bar_spec, df, ["svg"], 72, "def customize(fig, axes, df):\n    axes[0].set_title('HALF')\n    df['nope']\n")
+assert "KeyError" in broken["hookWarning"] and "nope" not in broken["hookWarning"]
+assert "HALF" not in base64.b64decode(broken["images"]["svg"]).decode(), "a failed hook's partial edits are discarded"
+assert "customize" in fl.run_request(bar_spec, df, ["png"], 72, "x = 1")["hookWarning"]
+err = fl.run_request(spec([panel("bar", x="nope", y="change")]), df, ["png"], 72)["error"]
+assert err["code"] == "missing_column" and err["detail"] == {"role": "x", "column": "nope"} and err["traceback"], err
+json.dumps(out), json.dumps(err)  # both cross the worker boundary as JSON
+assert not fl.plt.get_fignums(), "run_request leaves no open figures"
+
 print("figurelib.selfcheck: OK")

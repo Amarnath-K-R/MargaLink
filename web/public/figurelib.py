@@ -1040,6 +1040,7 @@ def _render(spec: dict, df: pd.DataFrame, where: dict):
             letter_panels(axes, style)
         if spec["layout"].get("sharedLegend"):
             shared_legend(fig, axes)
+    fig.panel_axes = axes  # what a hook's customize(fig, axes, df) receives: panels only, no colorbars/tables
     return fig, meta
 
 
@@ -1080,3 +1081,60 @@ def export(fig, formats: list[str], dpi: int) -> dict[str, str]:
 
 def close(fig=None) -> None:
     plt.close(fig if fig is not None else "all")
+
+
+# Bundled faces (public/fonts/), by the preset family that needs them.
+FONT_FILES = {
+    "sans-serif": ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf"],
+    "serif": ["LiberationSerif-Regular.ttf", "LiberationSerif-Bold.ttf"],
+}
+
+
+def fonts_for(spec: dict) -> list[str]:
+    return FONT_FILES[PRESETS.get(spec.get("style", "nature"), PRESETS["nature"])["family"]]
+
+
+def register_fonts(paths: list[str]) -> None:
+    for path in paths:
+        font_manager.fontManager.addfont(path)
+    # findfont memoizes lookups, including fallbacks made before these faces existed.
+    font_manager.fontManager._findfont_cached.cache_clear()
+
+
+def apply_hook(fig, axes, df: pd.DataFrame, code: str) -> str | None:
+    """Runs a custom-code tweak: `code` must define customize(fig, axes, df).
+    Returns None on success, or a warning naming the exception type (never its
+    message, which can quote a value); the caller then re-renders without it."""
+    namespace = {"plt": plt, "np": np, "pd": pd, "matplotlib": matplotlib}
+    try:
+        exec(code, namespace)  # screened by isCodeSafeToRun, runs in the sandboxed worker
+        customize = namespace.get("customize")
+        if not callable(customize):
+            return "The custom tweak doesn't define customize(fig, axes, df), so it was skipped."
+        customize(fig, list(axes), df)
+    except Exception as exc:  # noqa: BLE001 — any failure in user/Claude code becomes a warning
+        return f"The custom tweak failed ({type(exc).__name__}), so the figure is shown without it."
+    return None
+
+
+def run_request(spec: dict, df: pd.DataFrame, formats: list[str], dpi: int, hook: str | None = None) -> dict:
+    """The worker's whole render call: render, optional hook, export. Never raises;
+    failures come back as {"error": {"code", "detail", "traceback"}}."""
+    close()
+    try:
+        fig, meta = render(spec, df)
+        warning = None
+        if hook:
+            warning = apply_hook(fig, fig.panel_axes, df, hook)
+            if warning:
+                close(fig)
+                fig, meta = render(spec, df)
+        try:
+            images = export(fig, formats, dpi)
+        except Exception:  # noqa: BLE001
+            return {"error": {"code": "render_failed", "detail": {"stage": "export"}, "traceback": _tb.format_exc()}}
+        return {"images": images, "meta": meta, "hookWarning": warning}
+    except FigureError as err:
+        return {"error": {"code": err.code, "detail": err.detail, "traceback": err.traceback or ""}}
+    finally:
+        close()
