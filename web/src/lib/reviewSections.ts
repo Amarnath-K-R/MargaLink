@@ -4,7 +4,8 @@
 // heading vocab is deliberately conservative: a missed heading only means a
 // coarser chunk label, while a false one mislabels a whole span.
 import { countWords } from "./formatCheck.ts";
-import type { Chunk, PaperMap, Section, SectionKind } from "./reviewTypes.ts";
+import { normalizeText } from "./reviewGrounding.ts";
+import type { Chunk, HeadingHint, PaperMap, Section, SectionKind } from "./reviewTypes.ts";
 
 export const CHUNK_CHARS = 16_000;
 export const MIN_SECTION_CHARS = 300;
@@ -21,7 +22,7 @@ const HEADING_VOCAB: [SectionKind, string][] = [
   ["discussion", String.raw`discussion|general discussion|conclusions?|concluding remarks|limitations|implications`],
   ["references", String.raw`references|reference list|bibliography|works cited|literature cited`],
   ["supplement", String.raw`(?:supplementary|supplemental) (?:material|materials|information|data|methods|figures|tables)|supporting information|appendix|appendices`],
-  ["other", String.raw`keywords?|key words?|acknowledge?ments?|funding|conflicts? of interest|competing interests?|declarations?(?: of interest)?|data availability|availability of data and materials|author contributions|ethics (?:statement|approval)|consent for publication|abbreviations|highlights`],
+  ["other", String.raw`keywords?|key words?|acknowledge?ments?|funding|conflicts? of interest|competing interests?|declarations?(?: of interest)?|data availability|availability of data and materials|authors?'? contributions|ethics (?:statement|approval)|consent for publication|abbreviations|highlights`],
 ];
 const HEADING_RES = HEADING_VOCAB.map(([kind, vocab]) => [kind, new RegExp(String.raw`^\s*${NUMBERING}\s*(?:${vocab})\s*:?\s*$`, "i")] as const);
 // For lines already known to be headings (hints): the vocab word may start a
@@ -55,11 +56,50 @@ function headingKind(rawLine: string, offset: number): SectionKind | null {
   return null;
 }
 
-export function splitIntoSections(text: string): Section[] {
+// Hint text is raw extracted text; the paper text is already normalized.
+const lineKey = (s: string) => normalizeText(s).replace(/\s+/g, " ").trim().toLowerCase();
+// How far ahead to look when a hint can't be matched (e.g. a heading that
+// extraction split across two lines) before giving up on it.
+const HINT_LOOKAHEAD = 3;
+
+// Matches hints to lines in document order, so the same text appearing as a
+// section heading and later as an appendix subheading is still told apart.
+function hintMatcher(hints: HeadingHint[]) {
+  const keys = hints.map((h) => lineKey(h.text));
+  let next = 0;
+  return (line: string): HeadingHint | null => {
+    const key = lineKey(line);
+    if (!key) return null;
+    for (let j = next; j < Math.min(keys.length, next + HINT_LOOKAHEAD); j++) {
+      if (keys[j] === key) {
+        next = j + 1;
+        return hints[j];
+      }
+    }
+    return null;
+  };
+}
+
+// With the document's own headings (DOCX styles, PDF heading fonts), a level-1
+// hint starts a section — its standard kind if it names one, else "body" — and
+// strict word-list headings still count too (they catch standard headings
+// typeset differently from the rest, e.g. a letter-spaced REFERENCES). A
+// level-2 hint never starts a section; chunkSections uses it for chunk titles.
+// Without at least two level-1 hints, this is the word-list splitter alone.
+export function splitIntoSections(text: string, hints: HeadingHint[] = []): Section[] {
+  const useHints = hints.filter((h) => h.level === 1).length >= 2;
+  const matchHint = useHints ? hintMatcher(hints) : () => null;
   const marks: { title: string; kind: SectionKind; start: number }[] = [];
   let offset = 0;
   for (const line of text.split("\n")) {
-    const kind = headingKind(line, offset);
+    const hint = matchHint(line);
+    let kind: SectionKind | null = null;
+    if (hint?.level === 1) {
+      kind = vocabKind(line.trim(), { prefix: true }) ?? "body";
+      if (kind === "abstract" && offset > HEAD_CHARS) kind = "other";
+    } else if (!hint) {
+      kind = headingKind(line, offset);
+    }
     if (kind) marks.push({ title: line.trim(), kind, start: offset });
     offset += line.length + 1;
   }
@@ -87,11 +127,16 @@ export function splitIntoSections(text: string): Section[] {
 
 type Span = { title: string | null; text: string };
 
-function splitAtSubsections(text: string): Span[] {
+function splitAtSubsections(text: string, subheads: Set<string>): Span[] {
   const spans: Span[] = [];
   let current: Span = { title: null, text: "" };
+  let first = true;
   for (const line of text.split("\n")) {
-    if (SUBSECTION_LINE.test(line) && line.length <= MAX_HEADING_CHARS) {
+    // The section's own heading line (always first) is never a subsection,
+    // even when the same text is also used as a subheading elsewhere.
+    const isSub = !first && ((SUBSECTION_LINE.test(line) && line.length <= MAX_HEADING_CHARS) || subheads.has(lineKey(line)));
+    first = false;
+    if (isSub) {
       if (current.text) spans.push(current);
       current = { title: line.trim(), text: "" };
     }
@@ -142,14 +187,15 @@ function pack(spans: Span[]): Span[] {
   return packed;
 }
 
-export function chunkSections(sections: Section[]): Chunk[] {
+export function chunkSections(sections: Section[], hints: HeadingHint[] = []): Chunk[] {
+  const subheads = new Set(hints.filter((h) => h.level === 2).map((h) => lineKey(h.text)));
   const chunks: Chunk[] = [];
   for (const s of sections) {
     if (s.text.length <= CHUNK_CHARS) {
       chunks.push({ id: s.id, sectionId: s.id, title: s.title, kind: s.kind, part: 1, parts: 1, text: s.text });
       continue;
     }
-    const parts = pack(splitAtSubsections(s.text));
+    const parts = pack(splitAtSubsections(s.text, subheads));
     parts.forEach((p, i) =>
       chunks.push({
         id: `${s.id}-p${i + 1}`,

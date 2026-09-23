@@ -8,7 +8,7 @@ import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
 import { MAX_REVIEW_CHARS, prepareForReview, reviewsRemaining } from "@/lib/review";
 import { ReviewSynthesisError, planChunks, runReview, type ReviewState } from "@/lib/reviewOrchestrator";
 import { chunkSections, splitIntoSections } from "@/lib/reviewSections";
-import type { ReviewProgress, ReviewResult, ReviewTier } from "@/lib/reviewTypes";
+import type { HeadingHint, ReviewProgress, ReviewResult, ReviewTier } from "@/lib/reviewTypes";
 import { errorMessage } from "@/lib/errorMessage";
 import ErrorText from "@/components/ErrorText";
 import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
@@ -33,6 +33,7 @@ export default function ReviewPage() {
   const [busy, setBusy] = useState(false);
   const [paperText, setPaperText] = useState<string | null>(null);
   const [reviewText, setReviewText] = useState<string | null>(null); // stripped + normalized — what gets sent
+  const [headings, setHeadings] = useState<HeadingHint[]>([]); // the document's own heading structure
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedJournalId, setSelectedJournalId] = useState<string | null>(null);
@@ -65,11 +66,12 @@ export default function ReviewPage() {
       setUploadError(null);
       setPaperText(null);
       setReviewText(null);
+      setHeadings([]);
       setFileName(null);
       setSelectedJournalId(null);
       setRulesResult(null);
       try {
-        const { fullText } = await extractFromFile(file);
+        const { fullText, headings: found } = await extractFromFile(file, { headings: true });
         if (fullText.trim().length < 50) {
           throw new Error(
             "Couldn't find readable text in this file. If it's a scanned PDF (no text layer), text extraction won't work on it — try a PDF exported directly from Word or LaTeX instead."
@@ -79,6 +81,7 @@ export default function ReviewPage() {
         if (prepared.length > MAX_REVIEW_CHARS) throw new Error(TOO_LONG);
         setPaperText(fullText);
         setReviewText(prepared);
+        setHeadings(found ?? []);
         setFileName(file.name);
       } catch (err) {
         setUploadError(errorMessage(err));
@@ -111,8 +114,8 @@ export default function ReviewPage() {
 
   // How many requests the consent notice names: one per planned chunk + the cross-check.
   const passCount = useMemo(
-    () => (reviewText ? planChunks(chunkSections(splitIntoSections(reviewText)), tier).run.length + 1 : 0),
-    [reviewText, tier]
+    () => (reviewText ? planChunks(chunkSections(splitIntoSections(reviewText, headings), headings), tier).run.length + 1 : 0),
+    [reviewText, headings, tier]
   );
 
   const startReview = useCallback(
@@ -132,6 +135,7 @@ export default function ReviewPage() {
         const run = await runReview(
           {
             text: reviewText,
+            hints: headings,
             journalId: selectedJournalId,
             tier,
             signal: ac.signal,
@@ -164,7 +168,7 @@ export default function ReviewPage() {
         setProgress(null);
       }
     },
-    [reviewText, selectedJournalId, tier]
+    [reviewText, headings, selectedJournalId, tier]
   );
 
   const selectedRules = selectedJournalId ? findJournalRules(selectedJournalId) : undefined;

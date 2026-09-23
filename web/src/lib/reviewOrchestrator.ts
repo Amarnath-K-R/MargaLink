@@ -14,6 +14,7 @@ import type {
   Chunk,
   Citation,
   ExtractRequest,
+  HeadingHint,
   ExtractResponse,
   PaperMap,
   ReviewProgress,
@@ -25,6 +26,7 @@ import type {
 
 export type RunReviewOptions = {
   text: string; // output of prepareForReview()
+  hints?: HeadingHint[]; // the document's own headings (extract.ts), when it has them
   journalId: string;
   tier: ReviewTier;
   endpoint?: string;
@@ -84,10 +86,10 @@ export function planChunks(chunks: Chunk[], tier: ReviewTier): { run: Chunk[]; s
   return { run, skipped: chunks.filter((c) => !kinds.includes(c.kind)) };
 }
 
-function planState(text: string): ReviewState {
-  const sections = splitIntoSections(text);
+function planState(text: string, hints: HeadingHint[]): ReviewState {
+  const sections = splitIntoSections(text, hints);
   return {
-    chunks: chunkSections(sections),
+    chunks: chunkSections(sections, hints),
     paperMap: buildPaperMap(text, sections),
     abstractText: sections.find((s) => s.kind === "abstract")?.text ?? null,
     extracted: {},
@@ -193,7 +195,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
     throw new ReviewLimitError(`You've used all ${FREE_REVIEWS_PER_DEVICE} free pilot reviews on this device.`);
   }
 
-  const state = resume ?? planState(opts.text);
+  const state = resume ?? planState(opts.text, opts.hints ?? []);
   opts.onState?.(state);
   const { run, skipped } = planChunks(state.chunks, opts.tier);
   const queue = run.filter((c) => !(c.id in state.extracted));

@@ -133,4 +133,53 @@ ${REFS}
   assert.ok(c.every((x) => !x.title.includes("79.3")), c.map((x) => x.title).join(" / "));
 }
 
+// 12-15: sectioning from the document's own headings (HeadingHint[]).
+{
+  // The real Word review that motivated this: custom headings become "body" sections, not "Introduction (part k)".
+  const H = (level: 1 | 2, text: string) => ({ level, text });
+  const hints = [
+    H(1, "Abstract"), H(1, "Journal Submission Guidelines"), H(1, "Introduction"), H(1, "Wave I: Proof of Concept"),
+    H(1, "Wave II: Clinical Validation"), H(1, "Wave III: Hard Clinical Outcomes"), H(2, "Cluster 1: Catching What the Clinic Misses"),
+    H(2, "Cluster 2: Changing the Endpoint"), H(1, "Equity and Governance"), H(1, "Conclusion"),
+    H(1, "Appendix: All 54 Papers by Wave and Section"), H(2, "Equity and Governance"),
+  ];
+  const text = [
+    "Listening Between Appointments", "", "Abstract", "", para(10, "Ab"), "", "Journal Submission Guidelines", "", para(10, "G"),
+    "", "Introduction", "", para(10, "In"), "", "Wave I: Proof of Concept", "", para(10, "W1"), "", "Wave II: Clinical Validation", "", para(10, "W2"),
+    "", "Wave III: Hard Clinical Outcomes", "", para(200, "W3a"), "", "Cluster 1: Catching What the Clinic Misses", "", para(250, "C1"),
+    "", "Cluster 2: Changing the Endpoint", "", para(250, "C2"), "", "Equity and Governance", "", para(10, "Eq"), "", "Conclusion", "", para(10, "Co"),
+    "", "Appendix: All 54 Papers by Wave and Section", "", para(10, "Ap"), "", "Equity and Governance", "", para(10, "Ap2"), "",
+  ].join("\n");
+  const s = splitIntoSections(text, hints);
+  assert.deepEqual(
+    s.map((x) => `${x.kind}:${x.title}`),
+    [
+      "other:Front matter", "abstract:Abstract", "body:Journal Submission Guidelines", "introduction:Introduction",
+      "body:Wave I: Proof of Concept", "body:Wave II: Clinical Validation", "body:Wave III: Hard Clinical Outcomes",
+      "body:Equity and Governance", "discussion:Conclusion", "supplement:Appendix: All 54 Papers by Wave and Section",
+    ],
+    "level-1 hints are sections; subheadings (and the appendix's repeat of 'Equity and Governance') are not"
+  );
+  const wave3 = chunkSections(s, hints).filter((c) => c.sectionId === s[6].id);
+  assert.ok(wave3.length >= 2, "the long Wave III section is chunked");
+  assert.ok(wave3.some((c) => c.title === "Wave III: Hard Clinical Outcomes · Cluster 2: Changing the Endpoint"), wave3.map((c) => c.title).join(" / "));
+}
+{
+  // hints + strict word-list headings: a letter-spaced REFERENCES the hints missed still ends the body.
+  const hints = [{ level: 1 as const, text: "METHODS" }, { level: 1 as const, text: "RESULTS" }];
+  const s = splitIntoSections(`METHODS\n\n${para(10, "M")}\n\nRESULTS\n\n${para(10, "R")}\n\nR E F E R E N C E S\n\n${REFS}\n`, hints);
+  assert.deepEqual(s.map((x) => x.kind), ["methods", "results", "references"]);
+}
+{
+  // fewer than two level-1 hints → exactly the word-list result
+  const one = [{ level: 1 as const, text: "Odd Heading" }];
+  assert.deepEqual(splitIntoSections(NUMBERED, one), splitIntoSections(NUMBERED));
+}
+{
+  // a hint extracted with ligatures matches the normalized paper line
+  const hints = [{ level: 1 as const, text: "Signiﬁcance of ﬁndings" }, { level: 1 as const, text: "Discussion" }];
+  const s = splitIntoSections(`Significance of findings\n\n${para(10, "S")}\n\nDiscussion\n\n${para(10, "D")}\n`, hints);
+  assert.deepEqual(s.map((x) => `${x.kind}:${x.title}`), ["body:Significance of findings", "discussion:Discussion"]);
+}
+
 console.log("reviewSections.selfcheck: OK");

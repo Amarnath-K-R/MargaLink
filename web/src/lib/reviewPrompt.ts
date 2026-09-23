@@ -25,21 +25,21 @@ export const TIER_PLAN: Record<
   { kinds: SectionKind[]; claimsCap: number; synthEffort: "low" | "medium" | "high"; synthMaxTokens: number; guidance: string }
 > = {
   quick: {
-    kinds: ["abstract", "results", "discussion"],
+    kinds: ["abstract", "results", "discussion", "body"],
     claimsCap: 20,
     synthEffort: "low",
     synthMaxTokens: 8000,
     guidance: "Report only the 2-3 most significant issues per category that clearly hold up.",
   },
   standard: {
-    kinds: ["abstract", "introduction", "methods", "results", "discussion", "other"],
+    kinds: ["abstract", "introduction", "methods", "results", "discussion", "body", "other"],
     claimsCap: 30,
     synthEffort: "medium",
     synthMaxTokens: 12000,
     guidance: "Cover the main sections; don't chase every minor number.",
   },
   thorough: {
-    kinds: ["abstract", "introduction", "methods", "results", "discussion", "supplement", "other"],
+    kinds: ["abstract", "introduction", "methods", "results", "discussion", "body", "supplement", "other"],
     claimsCap: 40,
     synthEffort: "high",
     // Synthesis thinking scales with ledger size; the live gate measures a
