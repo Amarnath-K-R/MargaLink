@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The figurelib test project's Python virtualenv (vendored JS inside matplotlib).
+    "figurelib/.venv/**",
   ]),
 ]);
 
