@@ -135,6 +135,124 @@ import `Citation`/`ReviewTier`/`ReviewResult`/`REVIEW_TIERS` from, instead
 of each side declaring its own copy. It qualifies for the same reason —
 just types and a `const` array, nothing environment-specific.
 
+## Folder map
+
+One line per file. Route folders (`app/journals/`, `app/match/`, etc.)
+each follow the same shape: `page.tsx` orchestrates state and layout,
+`_components/` holds the pieces it assembles, `layout.tsx` (where present)
+is Next's required per-route metadata shim for a `"use client"` page.
+
+**`src/app/`** — routes and site-wide chrome.
+
+| File | What |
+|---|---|
+| `layout.tsx` | Root layout: fonts, `<html>`, metadata from `lib/site.ts`. |
+| `page.tsx` | Homepage shell — assembles the `_home/` sections in one tree, no context provider. |
+| `globals.css` | Site-wide only: tokens, reset, reduced-motion. Everything homepage-specific lives in `_home/home.css`. |
+| `opengraph-image.tsx` | OG image, rendered with `satori` — can't resolve CSS custom properties, so `lib/site.ts`'s `BRAND` colors are duplicated here as literal hex, deliberately. |
+| `robots.ts`, `sitemap.ts` | SEO. |
+| `privacy/page.tsx` | Static prose + the privacy-flow SVG diagram. |
+| `journal/[id]/page.tsx` | Static-generated per-journal page (`generateStaticParams` from `getPrerenderedJournals()`). |
+| `journals/page.tsx`, `journals/layout.tsx` | Browse/search/filter the full journal index. |
+| `match/page.tsx` | Orchestrates the extract→embed→match pipeline. `process()` stays here rather than moving to `lib/`: it interleaves ~8 `setState` calls with async steps, and the out-of-order-result guard (`matchSeq`) has to move with that state, not get separated from it. |
+| `match/_components/MatchFilters.tsx` | The 5 filter controls + `FEE_PRESETS`/`SPEED_PRESETS`. |
+| `match/_components/MatchResults.tsx` | The results list, built on the shared `JournalResultTitle`/`JournalResultChips`. |
+| `match/_components/FormatCheckPanel.tsx` | The 9-row structural-check `<dl>`. |
+| `match/_components/ProcessingTrace.tsx` | The live "On this device" step log + error text. |
+| `match/layout.tsx` | Route metadata shim. |
+| `review/page.tsx` | Orchestrates upload → journal pick → structural check → AI review consent/request. |
+| `review/_components/JournalPicker.tsx` | The hand-verified-journal grid. |
+| `review/_components/TierPicker.tsx` | The quick/standard/thorough grid; owns `TIER_OPTIONS`. |
+| `review/layout.tsx` | Route metadata shim. |
+
+**`src/app/_home/`** — homepage-only, a Next "private folder" (excluded
+from routing; nothing outside `app/page.tsx` imports from it).
+
+| File | What |
+|---|---|
+| `home.css` | The ~87% of the old single `globals.css` that's homepage-only. |
+| `useScrollProgress.ts` | The one rAF-throttled scroll listener driving every section's progress value + the reduced-motion media query. |
+| `motion.ts` | `localProgress`, `stagger`, `motionStyle`, `countUp`, `decodeText` — the homepage's own animation-math kit (builds on `lib/easing.ts`'s `between`). |
+| `demoData.ts` | Illustrative marketing content (`journalCards`, `requestRows`, `reviewTiersData`, `privacyMetrics`) — never real data. |
+| `atoms.tsx` | `StageLabel`, `PrivacyPill`, `scrollToId` — small pieces shared by 3+ sections. |
+| `SiteHeader.tsx`, `HeroSection.tsx`, `PathwaysSection.tsx`, `JournalsSection.tsx`, `MatchingSection.tsx`, `ReviewSection.tsx`, `PrivacySection.tsx`, `FinalSection.tsx` | One component per homepage section, each taking only the progress values it uses. `JournalsSection.tsx` fetches the real journal count via `loadManifest()` rather than a hardcoded number. |
+
+**`src/components/`** — shared across routes.
+
+| File | What |
+|---|---|
+| `PageHeader.tsx` | The brand/nav/title header shared by every non-homepage route; 3 content-width tiers. |
+| `NetworkTrace.tsx` | `useNetworkTrace()` + `<NetworkTracePanel>` — the fetch-instrumentation that makes `/match` and `/review`'s privacy claims checkable on the page itself. |
+| `JournalResultRow.tsx` | `JournalResultTitle` (prerendered-link-vs-expand-button) + `JournalResultChips` (metadata chips), shared by `/journals` and `/match`. |
+| `ErrorText.tsx` | The one `role="alert"` error paragraph. |
+| `IntroSequence.tsx` | The first-visit overlay: timing, dismissal, `sessionStorage` memory. |
+| `ThreeIntroScene.tsx`, `ThreePaperScene.tsx` | Thin shells over `components/three/` — see below. |
+| `JournalDetail.tsx`, `PaperDropzone.tsx`, `RulesCheckPanel.tsx`, `ReviewConsent.tsx`, `ReviewResultPanel.tsx`, `CheckRow.tsx` | Single-purpose presentational pieces. |
+
+**`src/components/three/`** — the one domain subfolder in `components/`
+(see "Design decisions" in the reorg plan for why: 5 files sharing one
+real technical concern, not a speculative grouping).
+
+| File | What |
+|---|---|
+| `useThreeCanvas.ts` | The setup/cleanup preamble shared by both scenes — mounting, the WebGL try/catch, resize, the rAF loop, teardown. |
+| `sceneHelpers.ts` | `forEachMaterial` (shared mesh/material traversal) + `setOpacity` (`ThreePaperScene`'s absolute-value policy). |
+| `paperSceneGraph.ts` | `buildPaperScene()` — the homepage scene's meshes/lights/groups. |
+| `paperSceneMotion.ts` | `applyFrame()` + the `SCROLL` table (every scroll-threshold pair the scene's choreography depends on, named). |
+| `introSceneGraph.ts` | `buildIntroScene()` — the first-visit overlay's meshes/lights/groups. |
+
+**`src/lib/`** — framework-agnostic logic, deliberately kept flat (see
+"lib/ conventions" below).
+
+| File | What |
+|---|---|
+| `match.ts` | The entire client-side ranking engine — read this first. |
+| `extract.ts` | PDF/DOCX → text (browser-only: uses `pdfjs-dist`/`mammoth`). |
+| `embed.ts` | Text → vector (browser-only: `@huggingface/transformers`). |
+| `formatCheck.ts` | Heuristic structural checks (word count, abstract, required-statement detection) + `extractAbstract()`. |
+| `rulesCheck.ts` | Checks extracted text against a specific journal's hand-verified rules. |
+| `journalRules.ts` | The hand-verified per-journal rules data (`JOURNAL_RULES`) + `findJournalRules()`. |
+| `journalUrl.ts` | `shortId()`, `journalHref()`, `isPrerendered()` — the prerendered-link-vs-expand-button decision in one place. |
+| `journalsServer.ts` | Node-only (build-time): reads the index off disk for `generateStaticParams()`/`journal/[id]`. Never import from `functions/` or client code. |
+| `manifest.ts` | `loadManifest()` — fetches and caches `index/manifest.json`. |
+| `site.ts` | Site-wide metadata (`SITE_TITLE`, `SITE_DESCRIPTION`, `BRAND` colors) — single source for `layout.tsx`, `opengraph-image.tsx`, `sitemap.ts`, `robots.ts`. |
+| `easing.ts` | `clamp01`, `smooth`, `between`, `lerp` — the one shared animation-math kit (was reimplemented 3× before Phase 5). |
+| `errorMessage.ts` | `errorMessage(err, fallback?)` — the one shared `instanceof Error` normalization. |
+| `review.ts` | Client side of the AI review: `requestReview()`, `stripIdentifyingInfo()`, the per-device usage counter. |
+| `reviewTypes.ts` | `Citation`/`ReviewTier`/`ReviewResult`/`REVIEW_TIERS` — the one contract shared by the client and `functions/api/review.ts`. |
+| `reviewGrounding.ts` | `filterGrounded()` and the quote-verification it depends on — the anti-fabrication check, imported by `functions/`. |
+| `reviewPrompt.ts` | `buildPrompt()`, `TIER_CONFIG` — imported by `functions/`. |
+| `reviewTool.ts` | The Claude tool-call JSON Schema + the `ReviewResult` drift guard — imported by `functions/`. |
+
+**`functions/`** — Cloudflare Pages Functions; every file here is routed
+as an endpoint, so shared logic lives in `src/lib/` instead (imported via
+relative paths) and only genuinely server-specific code stays here.
+
+| File | What |
+|---|---|
+| `api/review.ts` | The only server-side file in the project. `Env`, `UpstreamError`, `callAnthropicStreaming` (streaming transport — Workers-specific, doesn't belong in `lib/`), the KV daily cap, and request validation. |
+
+## `lib/` conventions
+
+- **Flat, not domain-folders.** The dependency graph doesn't support it:
+  `formatCheck.ts` serves both a "format" concern and a "review" concern;
+  `journalUrl.ts` serves journals, match, and the sitemap. Domain folders
+  would strand files in a `shared/` bucket for no comprehension gain at
+  this file count. Revisit if `lib/` crosses ~30 files.
+- **camelCase filenames** (`journalUrl.ts`, not `journal-url.ts`) —
+  consistent with `components/`'s PascalCase, one casing convention for
+  the whole `src/` tree.
+- **Import extensions**: a relative lib-to-lib import carries `.ts`
+  (`from "./easing.ts"`); a `@/`-alias import doesn't
+  (`from "@/lib/easing"`). This isn't stylistic — Node's native TS
+  execution (used by every `*.selfcheck.ts`, see `package.json`'s `test`
+  script) needs the real relative path with its extension; the bundler
+  only resolves the `@/` alias, and errors just as reliably on a stray
+  `.ts` extension there.
+- **`functions/` may only import `src/lib/` modules that are pure or
+  isomorphic** — no `window`, `localStorage`, or `fs`. See "The invariant
+  that keeps `src/lib/` and `functions/` from duplicating types" above.
+
 ## Read these five files first
 
 If you're new to this codebase, in this order:
@@ -145,5 +263,6 @@ If you're new to this codebase, in this order:
    against gets built.
 4. `functions/api/review.ts` — the one exception to "nothing leaves the
    browser," and why it's built the way it is (see above).
-5. `src/app/page.tsx` — the homepage; large, but everything in it is one
-   scroll-driven narrative rather than several unrelated features.
+5. `src/app/page.tsx` and `src/app/_home/` — the homepage. One scroll-driven
+   narrative split into one file per section; `useScrollProgress.ts` is
+   the single source of every value the sections animate against.

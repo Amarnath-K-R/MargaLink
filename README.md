@@ -28,8 +28,11 @@ happens before anything is sent. See `docs/ARCHITECTURE.md`.
 |---|---|
 | `pipeline/` | Offline data pipeline (Python/uv) — fetches OpenAlex/DOAJ/NLM data, builds the static journal index. See `pipeline/README.md`. |
 | `web/` | Next.js app, static export, deployed to Cloudflare Pages. See `web/README.md`. |
+| `web/src/app/` | Routes — one folder per URL, `_home/` holds the homepage's own sections. |
+| `web/src/components/` | Shared UI, including `components/three/` for the two scroll-driven 3D scenes. |
+| `web/src/lib/` | Framework-agnostic logic — matching, format checks, the AI review's prompt/grounding/tool-schema. Kept flat by design. |
 | `web/functions/api/review.ts` | The one server-side file — a Cloudflare Pages Function holding the Anthropic API key for the opt-in AI review. |
-| `docs/ARCHITECTURE.md` | Why the system is built this way — start here after this file. |
+| `docs/ARCHITECTURE.md` | Why the system is built this way, plus a one-line-per-file map of everything above — start here after this file. |
 
 ## Quickstart
 
