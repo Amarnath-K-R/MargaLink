@@ -21,6 +21,12 @@ export type Citation = { quote: string; section: string };
 export const REVIEW_TIERS = ["quick", "standard", "thorough"] as const;
 export type ReviewTier = (typeof REVIEW_TIERS)[number];
 
+export const SECTION_KINDS = ["abstract", "introduction", "methods", "results", "discussion", "references", "supplement", "other"] as const;
+export type SectionKind = (typeof SECTION_KINDS)[number];
+export type Section = { id: string; title: string; kind: SectionKind; text: string; charStart: number; charEnd: number };
+export type Chunk = { id: string; sectionId: string; title: string; kind: SectionKind; part: number; parts: number; text: string };
+export type PaperMap = { title: string | null; totalWords: number; sections: { id: string; title: string; kind: SectionKind; words: number }[] };
+
 export type ReviewResult = {
   journalFit: { assessment: "good" | "possible" | "poor"; explanation: string };
   inconsistencies: { description: string; citations: Citation[] }[];
