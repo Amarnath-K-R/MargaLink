@@ -19,12 +19,24 @@ DATA_DIR = Path(__file__).parent / "data"
 # proceedings volume in. A title starting with an edition ordinal ("44th
 # ...") or containing the standalone word "abstracts" is never a real
 # journal name — validated by hand against the full 18k-journal list.
+#
+# A third shape slipped through this filter: some conference proceedings
+# get a display_name that's just the event's date/location, e.g. "2001
+# Sacramento, CA July 29-August 1,2001" or "2009 ICCAS-SICE" (19 found by
+# hand-scanning the full 18k list — every one starting with a 4-digit year,
+# and every one missing issn_l, homepage_url, and host_organization_name,
+# unlike real journals that happen to start with a number).
 _ORDINAL_TITLE = re.compile(r"^\d+(st|nd|rd|th)\b", re.IGNORECASE)
 _ABSTRACTS_WORD = re.compile(r"\babstracts\b", re.IGNORECASE)
+_YEAR_START = re.compile(r"^(19|20)\d{2}\b")
 
 
 def is_conference_proceedings_name(display_name: str) -> bool:
-    return bool(_ORDINAL_TITLE.search(display_name) or _ABSTRACTS_WORD.search(display_name))
+    return bool(
+        _ORDINAL_TITLE.search(display_name)
+        or _ABSTRACTS_WORD.search(display_name)
+        or _YEAR_START.search(display_name)
+    )
 
 
 def _load_jsonl_by_id(path: Path) -> dict[str, dict]:
@@ -88,12 +100,15 @@ def build_meta_entry(
 def _self_check() -> None:
     assert is_conference_proceedings_name("44th AIAA Aerospace Sciences Meeting and Exhibit")
     assert is_conference_proceedings_name("AGU Fall Meeting Abstracts")
+    assert is_conference_proceedings_name("2001 Sacramento, CA July 29-August 1,2001")
+    assert is_conference_proceedings_name("2009 ICCAS-SICE")
     assert not is_conference_proceedings_name("Proceedings of the National Academy of Sciences")
     assert not is_conference_proceedings_name("Proceedings of the IEEE")
     assert not is_conference_proceedings_name("Congress & the Presidency")
     assert not is_conference_proceedings_name("The Educational Forum")
     assert not is_conference_proceedings_name("Colloquium Mathematicum")
     assert not is_conference_proceedings_name("Assembly Automation")
+    assert not is_conference_proceedings_name("Journal of the 2020s")  # year isn't at the start
 
     sources = {"j1": {"topics": [{"field": {"display_name": "Medicine"}}], "is_in_doaj": True, "apc_usd": 2000, "country_code": "US"}}
     doaj = {"j1": {"publication_time_weeks": 12, "license_type": "CC BY", "apc_amount": 1800, "apc_currency": "EUR"}}
