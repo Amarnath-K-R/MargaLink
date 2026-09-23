@@ -31,15 +31,17 @@ neither has a default-on path.
    only feature where "never leaves your device" doesn't hold for a
    paper's content. The server keeps none of it between requests.
 2. **The figure generator** (`functions/api/figure.ts`, consent in
-   `FigureConsent.tsx`) sends a *description* of a spreadsheet — column
-   names, inferred types, row count, the chart type chosen, and an
-   optional style note — and asks Claude for Python plotting code. It
-   never sends a single cell value. `src/lib/figureSchema.ts` is the only
-   thing permitted to build that payload, and `figureSchema.selfcheck.ts`
-   proves no value can ride along; the Function re-validates server-side
-   and rejects unknown keys, so a tampered client can't widen it either.
-   The returned code runs locally in a Web Worker (Pyodide); the data
-   never leaves the device.
+   `FigureConsent.tsx`). Figures are drawn locally (Pyodide worker running
+   `public/figurelib.py`); only "Ask Claude" sends anything: column names,
+   inferred types, row count, the user's request text, and the current
+   figure description with typed text blanked and group references as
+   `#n`. Category labels (≤30 per column, ≤12 columns) are added only when
+   the user ticks a separate box, and the notice lists them each time. It
+   never sends a cell value or a traceback. `src/lib/figureSchema.ts` is
+   the only thing permitted to build that payload, and
+   `figureSchema.selfcheck.ts` proves it with planted sentinels; the
+   Function re-validates it and gates Claude's reply (valid spec, columns
+   that exist, no label it wasn't given; hooks through the denylist).
 
 These two Pages Functions are the project's only server-side code, and
 they share one credential (`ANTHROPIC_API_KEY`) — no new environment
@@ -101,7 +103,8 @@ one-off checks:
 ```bash
 cd web && npm run check     # typecheck + lint + the *.selfcheck.ts files
 cd web && npm run smoke     # Playwright checks against a running dev server
+cd web/figurelib && uv run selfcheck.py && uv run ruff check . ../public/figurelib.py
 cd pipeline && uv run selfcheck.py && uv run ruff check .
 ```
-`.github/workflows/check.yml` runs the first and third (minus `smoke`,
-which needs a live dev server) on every push.
+`.github/workflows/check.yml` runs all but `smoke` (which needs a live dev
+server) on every push.

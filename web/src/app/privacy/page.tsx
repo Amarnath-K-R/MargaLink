@@ -130,33 +130,38 @@ export default function PrivacyPage() {
         The second exception: making figures from a spreadsheet
       </h2>
       <p className="mt-3 text-ink-soft">
-        The figure generator lets you upload a CSV or Excel file and get a publication-style
-        chart back, drawn with real Python plotting libraries. Real statistical figures need
-        real computation — but your raw spreadsheet is more sensitive than a manuscript
-        draft, so it never leaves your device. What leaves instead is a description: your
-        column names, their inferred types, how many rows you have, the chart type you
-        picked, and an optional short note — never a single cell value. Claude reads that
-        description and writes Python code; that code then runs locally, in your browser, and
-        only there does it ever touch your real data.
+        The figure studio turns a CSV or Excel file into a publication-ready figure. Reading your
+        file, drawing the figure, the statistics and every export happen in your browser — your
+        spreadsheet never leaves your device. Only one optional step sends anything: asking Claude
+        to set up a figure from a description you type. What goes then is a description: your
+        column names, their inferred types, how many rows you have, your request, and the current
+        figure settings (chart types, which columns go where, axis settings) — never a cell value,
+        and never titles or notes you typed.
       </p>
       <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
         <li>
-          Nothing is sent until you confirm a plain-language notice, once per browser
-          session, naming exactly what&apos;s about to happen.
+          Nothing is sent until you confirm a plain-language notice, once per browser session. The
+          exact request is shown on the page before every call.
         </li>
         <li>
-          The exact data sent — the schema, nothing else — is shown on the page before every
-          generation, whether or not the consent notice appears that time.
+          Group labels (like &quot;Placebo&quot; or a site name) are values too, so they&apos;re only
+          sent if you tick a separate box — and then the notice appears every time and lists the
+          exact labels. Only columns with at most 30 distinct values qualify, so ID-like columns
+          never do.
         </li>
         <li>
-          The Python code Claude writes is always shown, never hidden behind the figure it
-          produces.
+          Error details from drawing a figure can quote your data, so they&apos;re shown only to you
+          and never sent anywhere.
         </li>
         <li>
-          The one honest caveat: the figure runs inside a Web Worker that downloads its own
-          Python runtime from a public CDN. Those downloads are public files, never anything
-          from your data, but they happen off the main thread and so don&apos;t appear in the
-          network-request log the rest of this page points to.
+          A custom tweak Claude writes is shown to you, checked before it runs, and runs only in
+          your browser.
+        </li>
+        <li>
+          The one honest caveat: drawing happens in a Web Worker that downloads its Python runtime,
+          the figure engine and fonts. Those are public files, never anything from your data, but
+          they&apos;re fetched off the main thread and so don&apos;t appear in the network-request log
+          the rest of this page points to.
         </li>
       </ul>
 

@@ -158,68 +158,81 @@ is table-dense; the knobs are `CHUNK_CHARS` and the thorough claims cap.
 
 ### The figure generator: what leaves the device, and what doesn't
 
-The figure generator (`/figures`) has the same shape as the AI review —
-an opt-in, consent-gated call to Claude — but a narrower privacy problem
-to solve. A researcher's raw spreadsheet is individual-level data, more
-sensitive than a manuscript draft, so "upload your data, we compute
-stats server-side" was never on the table. The design instead splits
-**code generation** from **code execution**: Claude only ever sees a
-*description* of the data (column names, inferred dtypes, row count, the
-chosen chart type, an optional style note) and generates Python plotting
-code from that description; the code then runs against the real data
-locally, in a Web Worker running Pyodide (Python compiled to WASM). The
-two round trips in the whole feature are the schema-only POST to
-`/api/figure` and the worker's own bodyless GETs to jsDelivr for
-Pyodide's runtime and wheels — a cell value appears in neither.
+`/figures` is a figure *studio*, and almost all of it is local. A
+researcher's raw spreadsheet is individual-level data, more sensitive than
+a manuscript draft, so the design splits **language** from **drawing**:
 
-`src/lib/figureSchema.ts` is this feature's `reviewGrounding.ts`: the one
-piece of previously-untested logic sitting directly behind a network
-call, and the one file this feature's safety actually rests on.
+- A declarative **`FigureSpec`** (`src/lib/figureSpec.ts`) — panels ×
+  roles × overlays × statistics × annotations × journal style — is the
+  single artifact. Templates produce one (`figureTemplates.ts`,
+  `public/figure-gallery/templates.json`), the panel editor edits one,
+  Claude returns one, and a recipe file saves one.
+- **`public/figurelib.py`** draws any valid spec deterministically, in a
+  Web Worker running Pyodide (`public/figureWorker.mjs`, driven by
+  `figureRunner.ts`). The same file is imported unchanged by the CPython
+  selfcheck in `web/figurelib/` (a `uv` project pinned to Pyodide's
+  library versions; also renders the gallery thumbnails), and CI runs it.
+  Every control change re-renders locally (debounced, stale results
+  dropped); exports are PNG/TIFF at 300/600 dpi, SVG and PDF at the
+  journal width, with Liberation Sans/Serif (metric-compatible with
+  Arial/Times) served from `public/fonts/`. SciPy (+14 MB) loads only when
+  a figure asks for a test or a CI; tests run on the device.
+- **Claude's job is language only** — turn "two panels: change by arm with
+  Welch brackets; dose against change with a regression line" into a spec,
+  or, for what the spec can't express, a small `customize(fig, axes, df)`
+  hook. Two strict tools (`submit_figure_spec`, `submit_figure_hook`,
+  `figurePrompt.ts`), called through `callAnthropicTool`.
+
+**What leaves the device**, only when the user asks Claude and confirms
+the notice (`FigureConsent.tsx`): column names and inferred types, the row
+count, the user's request text, and the current spec with every typed text
+field blanked (titles, axis labels and units, annotation text) and every
+group reference as `"#n"` (the n-th group in first-appearance order). With
+the separate labels checkbox ticked — asked afresh each time, and listed
+verbatim in the notice — the labels of categorical columns with at most 30
+distinct values (at most 12 columns) are added. Nothing else: never a
+cell value, never sample rows, never a Python traceback.
+
+`src/lib/figureSchema.ts` is this feature's `reviewGrounding.ts`:
 `buildFigurePayload()` is the *only* function permitted to construct the
-outbound payload — it always builds a fresh object literal, never spreads
-a `Dataset` — and `figureSchema.selfcheck.ts` proves the payload is safe
-rather than asserting it: it plants sentinel values in a fixture dataset,
-confirms they never appear anywhere in the built payload, and asserts the
-payload's key set exactly matches five known keys. That last assertion is
-the one that actually protects the future — it fails the moment someone
-adds a field like `sampleRows` "to help Claude produce better code,"
-turning a quiet leak into a deliberate, reviewed change. The Function
-re-validates the same shape server-side and rejects unknown keys, so a
-tampered client can't widen the payload either.
+outbound payload; it builds a fresh literal, and the spec passes through
+`scrubSpec()`, which walks the schema so a stray local field can't ride
+along. `figureSchema.selfcheck.ts` plants sentinels in cells, titles,
+annotation text and a 40-level column and proves none leave by default,
+and that opting in adds only the small columns' labels. The Function
+re-validates the exact shape (`isValidFigurePayload`) and gates Claude's
+output before returning it: the spec must validate, fit the columns, and
+pass `checkLabels()` — a literal group label is accepted only if it was
+among the labels sent; a hook must define `customize()` and pass the
+denylist (`isCodeSafeToRun`, checked again in the browser before it runs;
+the Worker is the real sandbox). `figureEndpoint.selfcheck.ts` drives the
+real handler with a stubbed upstream.
 
-Three things are deliberately never sent, each for its own reason:
+**Why labels are opt-in, and why tracebacks never leave.** A category
+label is itself a value — a site name, a patient ID. Tracebacks can quote
+a cell verbatim (`KeyError: 'ZZQQ-SENTINEL-0042'`), so there is no
+auto-repair path: render errors are shown as prose built from an error
+code and column names (`FigureRenderError`), with the traceback behind a
+"stays on this device" disclosure.
 
-- **Cell values** — the point of the whole design.
-- **Category levels** — a column's distinct values (a site name, a
-  patient ID, a group label) are themselves data, not schema, even
-  though they look like metadata.
-- **Python tracebacks** — a traceback from the generated code running
-  against real data can quote a cell value verbatim in its error message
-  (`KeyError: 'ZZQQ-SENTINEL-0042'`, for instance). This is why
-  auto-repair-from-error (sending a failure back to Claude to fix its own
-  code) isn't built: it isn't just unbuilt, it's a privacy problem this
-  design specifically avoids creating. Errors are shown to the
-  researcher, who can edit their note and regenerate — they never leave
-  the device.
+**Data prep** (`spreadsheet.ts`) is part of the same local path:
+`readWorkbook` reads every XLSX sheet and decodes CSV as UTF-8 or
+Windows-1252; `suggestPrepOptions` finds the header row past metadata lines
+and the decimal/thousands marks; `prepareDataset` applies missing-value
+markers, strict number parsing, type overrides and a wide→long stack, and
+emits a canonical CSV plus first-appearance `levels` — the order `"#n"`
+means on both sides.
 
-The generated code is always shown, not hidden behind a "trust us" figure
-— the same transparency the payload preview on the page already gives
-the request.
+Costs: a spec call is roughly $0.02–0.04 (effort low); previews and
+exports are free and unlimited; 5 Claude calls per device, 200 per day
+globally (`figure-count:<date>` in `FIGURES_KV`).
 
-The ~28-30MB Pyodide download (wasm runtime, stdlib, pandas/matplotlib
-wheels) sounds large in isolation, but it's the same order of magnitude
-as the embedding model `/match` already downloads for local matching, and
-it's cached by the browser for a year afterward — this isn't a new class
-of tradeoff for the project, just the second time it's made.
-
-One honest caveat: `useNetworkTrace()` patches `fetch` on the main
-thread, so `/match` and `/review`'s "every request this page makes" claim
-is literally complete. The figure worker's CDN fetches happen inside the
-worker, off the main thread, so they don't appear in that trace panel.
-The privacy property still holds — those fetches are bodyless GETs for
-public, versioned assets, never anything from the dataset — but the trace
-panel's completeness guarantee doesn't extend there, and `/figures`
-doesn't claim it does.
+One honest caveat: `useNetworkTrace()` patches `fetch` on the main thread.
+The worker's fetches (Pyodide from jsDelivr, `figurelib.py`, fonts) happen
+off the main thread, so they don't appear in the page's trace panel. They
+are bodyless GETs for public, versioned assets — never anything from the
+dataset — but the panel's completeness guarantee doesn't extend there,
+and `/figures` doesn't claim it does.
 
 ## The invariant that keeps `src/lib/` and `functions/` from duplicating types
 
@@ -269,9 +282,12 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `review/_components/TierPicker.tsx` | The quick/standard/thorough grid; owns `TIER_OPTIONS`. |
 | `review/_components/OutlineEditor.tsx` | The detected outline before consent: per-section type, merge, add heading, "Don't send". |
 | `review/layout.tsx` | Route metadata shim. |
-| `figures/page.tsx` | Orchestrates upload → chart/role spec → consent → code-gen → local Pyodide render. |
-| `figures/_components/FigureSpecForm.tsx` | Chart-type grid + dtype-filtered role selects; owns `CHART_OPTIONS` and the live `[data-testid="figure-payload"]` preview. |
-| `figures/_components/FigurePanel.tsx` | The rendered figure, PNG/SVG/PDF download links, the always-visible generated-code panel, Regenerate. |
+| `figures/page.tsx` | The studio: upload → data prep → Describe/Gallery → panel editor → live local preview → export. Owns the spec, the debounced render loop and recipes. |
+| `figures/_components/DataPrep.tsx` | Sheet, header row, number format, missing-value markers, per-column types, wide→long, the parsed preview table. |
+| `figures/_components/Describe.tsx` | The request box, Ask Claude (spec) / custom tweak (hook), the labels opt-in, the live `[data-testid="figure-payload"]` preview. |
+| `figures/_components/Gallery.tsx` | Template thumbnails; picking one calls `bindTemplate`. |
+| `figures/_components/PanelEditor.tsx`, `StyleBar.tsx` | Per-panel controls (family, roles, axes, summary, order, overlays, statistics, annotations) and whole-figure style/size/palette/grid. |
+| `figures/_components/FigurePreview.tsx`, `ExportBar.tsx`, `RecipeImportExport.tsx` | The live image with local-only error details and test results; PNG/TIFF/SVG/PDF export; recipe save/load. |
 | `figures/layout.tsx` | Route metadata shim. |
 
 **`src/app/_home/`** — homepage-only, a Next "private folder" (excluded
@@ -337,11 +353,13 @@ real technical concern, not a speculative grouping).
 | `reviewPrompt.ts` | `TIER_PLAN`, `buildExtractPrompt()`, `buildSynthesizePrompt()` — imported by `functions/`. |
 | `reviewTool.ts` | The two strict tool schemas + drift guards — imported by `functions/`. |
 | `anthropicStream.ts` | `callAnthropicTool()` — the selfchecked streaming transport (typed truncation/upstream errors), imported by `functions/`. |
-| `spreadsheet.ts` | CSV/XLSX → `Dataset` (columns, inferred dtypes, row count). Mirrors `extract.ts`'s shape. |
-| `figureSchema.ts` | The safety-critical file: `buildFigurePayload()` is the only function allowed to construct the outbound figure-generation payload. See "The figure generator" above. |
-| `figurePrompt.ts` | `buildFigurePrompt()`, `extractPythonCode()` — imported by `functions/api/figure.ts`. |
-| `figure.ts` | Client side of figure generation: `requestFigureCode()`, the per-device usage counter, session-scoped consent. Mirrors `review.ts`. |
-| `figureRunner.ts` | The Pyodide worker lifecycle: `warmUp()`, `runFigureCode()`, `isCodeSafeToRun()`. Talks to `public/figureWorker.mjs`. |
+| `spreadsheet.ts` | `readWorkbook()`, `suggestPrepOptions()`, `prepareDataset()` (NA markers, strict `parseNumber()`, overrides, `reshapeWideToLong()`) → `Dataset` with `levels`. |
+| `figureSpec.ts` | `FigureSpec` types, the strict `FIGURE_SPEC_SCHEMA`, `validateFigureSpec()`, `checkSpecAgainstColumns()`, `checkLabels()`, `scrubSpec()`, `mergeTextFields()`. Imported by `functions/`. |
+| `figureSchema.ts` | The safety-critical file: `buildFigurePayload()` is the only function allowed to construct the outbound payload; `isValidFigurePayload()`. See "The figure generator" above. |
+| `figurePrompt.ts` | The spec and hook system prompts, `SPEC_TOOL`/`HOOK_TOOL`, `buildFigurePrompt()`, `isCodeSafeToRun()` — imported by `functions/api/figure.ts`. |
+| `figure.ts` | Client: `askClaude()` (re-checks everything returned), the per-device usage counter, session-scoped consent. |
+| `figureRunner.ts` | The worker lifecycle: `warmUp()`, `renderFigure()` (stale previews dropped), `exportFigure()`, `FigureRenderError`. Talks to `public/figureWorker.mjs`, which runs `public/figurelib.py`. |
+| `figureTemplates.ts` | `loadTemplates()`, `bindTemplate()` (remaps a template's roles to the user's columns by type). |
 
 **`functions/`** — Cloudflare Pages Functions; every file here is routed
 as an endpoint, so shared logic lives in `src/lib/` instead (imported via
@@ -350,7 +368,7 @@ relative paths) and only genuinely server-specific code stays here.
 | File | What |
 |---|---|
 | `api/review.ts` | One of the two server-side files in the project: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the KV daily pass cap, one `callAnthropicTool`, grounding/validation. |
-| `api/figure.ts` | The other. Plain (non-streaming) `fetch` to Anthropic, no tool call, `isValidFigurePayload`/`validateSpec` request validation, its own KV daily cap. Simpler than `review.ts` — see "The figure generator" above for why. |
+| `api/figure.ts` | The other: body-size guard, `isValidFigurePayload`, the KV daily cap, one `callAnthropicTool` with a strict tool, then the output gates (`validateFigureSpec`, `checkSpecAgainstColumns`, `checkLabels`, or the hook denylist). |
 
 ## `lib/` conventions
 
@@ -359,8 +377,8 @@ relative paths) and only genuinely server-specific code stays here.
   `journalUrl.ts` serves journals, match, and the sitemap. Domain folders
   would strand files in a `shared/` bucket for no comprehension gain at
   this file count. Revisit if `lib/` crosses ~30 files — the figure
-  generator's five new files (`spreadsheet.ts`, `figureSchema.ts`,
-  `figurePrompt.ts`, `figure.ts`, `figureRunner.ts`) cross that number,
+  generator's files (`spreadsheet.ts`, `figureSpec.ts`, `figureSchema.ts`,
+  `figurePrompt.ts`, `figure.ts`, `figureRunner.ts`, `figureTemplates.ts`) cross that number,
   but the recommendation is to stay flat anyway: the `figure*` filename
   prefix is already doing the grouping work a folder would, and carving
   out `lib/figure/` while everything else stays flat buys inconsistency,

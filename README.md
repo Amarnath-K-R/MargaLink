@@ -19,8 +19,9 @@ version, including how each is checkable):
    language notice first.
 
 Two disclosed exceptions: an opt-in AI review sends paper text to
-Anthropic's API, and an opt-in figure generator sends a spreadsheet's
-schema (never its values). Both sit behind an explicit consent step that
+Anthropic's API, and the figure studio's opt-in "Ask Claude" sends a
+spreadsheet's schema and your request (never its values; category labels
+only if you tick a box). Figures themselves are drawn on your device. Both sit behind an explicit consent step that
 names exactly what happens before anything is sent. See
 `docs/ARCHITECTURE.md`.
 
@@ -32,7 +33,7 @@ names exactly what happens before anything is sent. See
 | `web/` | Next.js app, static export, deployed to Cloudflare Pages. See `web/README.md`. |
 | `web/src/app/` | Routes — one folder per URL, `_home/` holds the homepage's own sections. |
 | `web/src/components/` | Shared UI, including `components/three/` for the two scroll-driven 3D scenes. |
-| `web/src/lib/` | Framework-agnostic logic — matching, format checks, the AI review's sectioning/prompts/grounding/orchestration, the figure generator's schema/prompt. Kept flat by design. |
+| `web/src/lib/` | Framework-agnostic logic — matching, format checks, the AI review's sectioning/prompts/grounding/orchestration, the figure studio's spec/payload/prompt. Kept flat by design. |
 | `web/functions/api/review.ts`, `web/functions/api/figure.ts` | The two server-side files — Cloudflare Pages Functions holding the Anthropic API key for the opt-in AI review and the opt-in figure generator. |
 | `docs/ARCHITECTURE.md` | Why the system is built this way, plus a one-line-per-file map of everything above — start here after this file. |
 
