@@ -111,6 +111,10 @@ export default function PrivacyPage() {
           doesn&apos;t store what you send, before or after the review.
         </li>
         <li>
+          Before sending, you can see how your paper was split into sections and mark any
+          section &ldquo;Don&apos;t send&rdquo; — it never leaves your device.
+        </li>
+        <li>
           Each request carries one section; the server reviews it and forgets it — MargaLink
           keeps nothing between requests. Anthropic retains API data only under its own API
           data policy.

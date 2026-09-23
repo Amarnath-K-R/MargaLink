@@ -97,10 +97,22 @@ browser** (`src/lib/reviewOrchestrator.ts`):
    text (NFKC, ligatures, line-end hyphenation, curly quotes) once,
    client-side, so the model's verbatim quotes come back in the same
    alphabet the grounding check reads. `reviewSections.ts` splits it into
-   headed sections and ≤16k-character chunks (heading detection was tuned
-   against real two-column PDFs: letter-spaced headings like
-   "R E F E R E N C E S" are recognized; a wrapped lowercase "methods" line
-   is not a heading). Papers over 400,000 characters are refused before
+   headed sections and ≤16k-character chunks. **Headings come from the
+   document itself where it has them** (`headingHints.ts`): Word heading
+   styles from a DOCX, and for a PDF the embedded font data — a heading is a
+   short line in a non-body font that is followed by body text, used more
+   than once (this separates real headings from figure labels, table headers
+   and bold reference fragments; the level-1 style is the one carrying
+   Methods/Results/…). A document heading that isn't a standard one
+   ("Wave III: Hard Clinical Outcomes") becomes its own section of kind
+   `body`, reviewed at every depth, instead of being swallowed by the
+   previous section. Without such structure, a conservative word list takes
+   over (letter-spaced "R E F E R E N C E S" recognized; a wrapped lowercase
+   "methods" line is not a heading). Before consent the user sees the
+   detected outline and can correct it — change a section's type, merge it
+   into the previous one, add a heading by its exact text, or mark it
+   "Don't send", which keeps it out of every request and out of the section
+   map (`buildOutline`). Papers over 400,000 characters are refused before
    consent — never truncated.
 2. One **extract** pass per chunk (≤3 concurrent, effort `medium` on every
    tier — it's mechanical) returns a bounded list of quantitative claims,
@@ -255,6 +267,7 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `review/page.tsx` | Orchestrates upload → journal pick → structural check → AI review consent/request. |
 | `review/_components/JournalPicker.tsx` | The hand-verified-journal grid. |
 | `review/_components/TierPicker.tsx` | The quick/standard/thorough grid; owns `TIER_OPTIONS`. |
+| `review/_components/OutlineEditor.tsx` | The detected outline before consent: per-section type, merge, add heading, "Don't send". |
 | `review/layout.tsx` | Route metadata shim. |
 | `figures/page.tsx` | Orchestrates upload → chart/role spec → consent → code-gen → local Pyodide render. |
 | `figures/_components/FigureSpecForm.tsx` | Chart-type grid + dtype-filtered role selects; owns `CHART_OPTIONS` and the live `[data-testid="figure-payload"]` preview. |
@@ -303,7 +316,7 @@ real technical concern, not a speculative grouping).
 | File | What |
 |---|---|
 | `match.ts` | The entire client-side ranking engine — read this first. |
-| `extract.ts` | PDF/DOCX → text (browser-only: uses `pdfjs-dist`/`mammoth`). |
+| `extract.ts` | PDF/DOCX → text (browser-only: uses `pdfjs-dist`/`mammoth`); with `{ headings: true }` (the review only) also the document's heading structure. |
 | `embed.ts` | Text → vector (browser-only: `@huggingface/transformers`). |
 | `formatCheck.ts` | Heuristic structural checks (word count, abstract, required-statement detection) + `extractAbstract()`. |
 | `rulesCheck.ts` | Checks extracted text against a specific journal's hand-verified rules. |
@@ -316,7 +329,8 @@ real technical concern, not a speculative grouping).
 | `errorMessage.ts` | `errorMessage(err, fallback?)` — the one shared `instanceof Error` normalization. |
 | `review.ts` | Before anything is sent: `prepareForReview()` (strip + normalize), `MAX_REVIEW_CHARS`, the per-device usage counter. |
 | `reviewOrchestrator.ts` | Client: `runReview()` — plans chunks, runs extract passes (≤3 concurrent, retries, resume), builds the claims ledger, runs synthesis, assembles `ReviewResult` with `coverage`. |
-| `reviewSections.ts` | Pure: `splitIntoSections()`, `chunkSections()`, `buildPaperMap()` — heading detection and ≤16k-char chunks. |
+| `reviewSections.ts` | Pure: `splitIntoSections()` (document headings first, word list as fallback), `chunkSections()`, `buildPaperMap()`, `buildOutline()` (the user's outline edits). |
+| `headingHints.ts` | Pure: the document's own heading structure — `pickPdfHeadings()` from per-line font data, `pickDocxHeadings()` from Word heading styles. |
 | `reviewTypes.ts` | The pass contract and `ReviewResult` — shared by the client and `functions/api/review.ts`. |
 | `reviewPasses.ts` | The Function's gates: `parsePassRequest()` (exact keys, caps), `validateSynthesisOutput()` (ledger-id membership), `passCallConfig()`. |
 | `reviewGrounding.ts` | `normalizeText()`, `groundExtractOutput()` — the anti-fabrication check, imported by `functions/`. |
