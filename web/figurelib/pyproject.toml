@@ -1,0 +1,23 @@
+[project]
+name = "figurelib-tests"
+version = "0.1.0"
+description = "CPython test harness and gallery renderer for web/public/figurelib.py (the same module the browser runs in Pyodide)."
+requires-python = ">=3.14"
+# Pinned to the versions in Pyodide 314.0.7, so these tests exercise what the browser runs.
+dependencies = [
+  "numpy==2.4.6",
+  "pandas==3.0.2",
+  "matplotlib==3.10.8",
+  "scipy==1.18.0",
+  "pillow==12.2.0",
+]
+
+[dependency-groups]
+dev = ["ruff"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 120
+extend-include = ["../public/figurelib.py"]
