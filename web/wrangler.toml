@@ -7,3 +7,8 @@ compatibility_date = "2026-09-18"
 [[kv_namespaces]]
 binding = "REVIEWS_KV"
 id = "8378b6ae716e4ba18cf06f4fe7a605ba"
+
+# Same, for functions/api/figure.ts's daily cap.
+[[kv_namespaces]]
+binding = "FIGURES_KV"
+id = "331dc785a2dc4f93912f8e8cd95b00c5"
