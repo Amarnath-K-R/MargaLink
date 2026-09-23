@@ -1,8 +1,8 @@
-// Dev-only: verify /figures end to end — upload, dtype-filtered role
-// selection, the live payload preview genuinely excluding real values,
-// consent, a mocked generation (never a real Anthropic call — that's a
-// manual gate, see docs/ARCHITECTURE.md), a real Pyodide-rendered figure,
-// and the error path on bad generated code.
+// Dev-only: verify /figures end to end against a running dev server.
+//   Part 1 — a messy real-world export (metadata lines, ";" delimiter,
+//   decimal commas, thousands dots, NA tokens) is read correctly, the
+//   number-format control really matters, a template renders on this device,
+//   all four export formats come back, and no request carries a body.
 //
 // First run downloads Pyodide (~30MB, from jsDelivr) into this profile's
 // HTTP cache — later runs reuse it. That's why this uses a persistent
@@ -12,9 +12,7 @@ import { mkdirSync } from "node:fs";
 
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../.smoke/", import.meta.url).pathname;
 mkdirSync(SCRATCH, { recursive: true });
-const FIXTURE = new URL("./fixtures/test-data.csv", import.meta.url).pathname;
-const SENTINEL_STRING = "ZZQQ-SENTINEL-0042";
-const SENTINEL_NUMBER = "987654.321";
+const MESSY = new URL("./fixtures/messy.csv", import.meta.url).pathname;
 
 const context = await chromium.launchPersistentContext(`${SCRATCH}/figures-profile`, {});
 const page = context.pages()[0] ?? (await context.newPage());
@@ -23,27 +21,18 @@ page.on("console", (msg) => {
   if (msg.type() === "error") consoleErrors.push(msg.text());
 });
 page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
+const bodyRequests = [];
+page.on("request", (r) => {
+  if (r.postData()) bodyRequests.push(`${r.method()} ${r.url()}`);
+});
 
-// Mock the code-gen endpoint — no real Anthropic call, no charge. Verifying
-// Claude's actual output is a manual gate (see docs/ARCHITECTURE.md).
-const GOOD_CODE = `
-counts = df["group"].value_counts()
-fig, ax = plt.subplots(figsize=(5, 4))
-ax.bar(counts.index.astype(str), counts.values, color="#2c5f6f")
-ax.set_xlabel("group")
-ax.set_ylabel("count")
-`;
-const BAD_CODE = 'df["does_not_exist"].plot()';
-let nextCode = GOOD_CODE;
-await page.route("**/api/figure", (route) =>
-  route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ code: nextCode }) })
-);
+let failed = false;
+function check(label, ok) {
+  console.log(`${ok ? "ok  " : "FAIL"} ${label}`);
+  if (!ok) failed = true;
+}
 
 await page.goto("http://localhost:3000/figures");
-// The persistent context (see the top comment) keeps Pyodide's HTTP cache
-// across runs, which also means localStorage/sessionStorage persist —
-// clear those specifically so every run gets a fresh 5-use allowance and
-// fresh consent state, without losing the cached ~30MB download.
 await page.evaluate(() => {
   localStorage.clear();
   sessionStorage.clear();
@@ -51,103 +40,47 @@ await page.evaluate(() => {
 await page.reload();
 await page.waitForSelector("text=Make a figure.");
 
+// --- upload + prep ---
 const [fc] = await Promise.all([page.waitForEvent("filechooser"), page.click("text=Drop a CSV or XLSX")]);
-await fc.setFiles(FIXTURE);
-await page.waitForSelector("text=Loaded test-data.csv", { timeout: 10000 });
+await fc.setFiles(MESSY);
+await page.waitForSelector('[data-testid="preview-table"]', { timeout: 10000 });
 
-const columnsText = await page.locator("main").innerText();
-const expectedColumns = ["subject_id", "group", "treatment_dose", "response_mean", "response_sd", "measured_on"];
-const allColumnsPresent = expectedColumns.every((c) => columnsText.includes(c));
-console.log("parsed columns render:", allColumnsPresent);
-if (!allColumnsPresent) {
-  console.log("FAIL: not every expected column name appeared on the page");
-  process.exit(1);
-}
+const dtypeOf = (name) => page.locator(`select[aria-label="Type of ${name}"]`).getAttribute("data-dtype");
+check("header row guessed past two metadata lines", (await page.getByLabel("Header row").inputValue()) === "3");
+check("decimal comma guessed", (await page.getByLabel("Decimal mark").inputValue()) === ",");
+check("weight_kg (1.081,0 / NA) reads as numeric", (await dtypeOf("weight_kg")) === "numeric");
+check("week1 (decimal commas) reads as numeric", (await dtypeOf("week1")) === "numeric");
+check("arm reads as categorical", (await dtypeOf("arm")) === "categorical");
+const tableText = await page.locator('[data-testid="preview-table"]').innerText();
+check("numbers shown as the figure will read them (1081, 2.4)", tableText.includes("1081") && tableText.includes("2.4"));
 
-// bar-error is the default chart type — x/y role dropdowns should already
-// be filtered by dtype (CHART_ROLES: x wants categorical/date, y wants numeric).
-const xOptions = await page.locator("select").first().locator("option").allTextContents();
-const yOptions = await page.locator("select").nth(1).locator("option").allTextContents();
-const xOffersOnlyCategoricalOrDate = xOptions.every((o) => !o.includes("(numeric)"));
-const yOffersOnlyNumeric = yOptions.every((o) => o === "Choose a column" || o.includes("(numeric)"));
-console.log("x role dropdown excludes numeric columns:", xOffersOnlyCategoricalOrDate);
-console.log("y role dropdown offers only numeric columns:", yOffersOnlyNumeric);
-if (!xOffersOnlyCategoricalOrDate || !yOffersOnlyNumeric) {
-  console.log("FAIL: role dropdowns aren't filtered by column dtype");
-  process.exit(1);
-}
+await page.getByLabel("Decimal mark").selectOption(".");
+await page.waitForTimeout(100);
+check("with a dot decimal mark, week1 falls to categorical", (await dtypeOf("week1")) === "categorical");
+await page.getByLabel("Decimal mark").selectOption(",");
+await page.waitForTimeout(100);
+check("…and back to numeric with a comma", (await dtypeOf("week1")) === "numeric");
 
-await page.locator("select").first().selectOption("group");
-await page.locator("select").nth(1).selectOption("response_mean");
-await page.waitForTimeout(200);
+// --- template → live local render ---
+await page.waitForSelector('[data-template="box"]');
+await page.click('[data-template="box"]');
+await page.waitForSelector('[data-testid="figure-image"]', { timeout: 120000 });
+const src = await page.locator('[data-testid="figure-image"]').getAttribute("src");
+check("the box template rendered a PNG on this device", src?.startsWith("data:image/png;base64,") && src.length > 2000);
+check("no render error", (await page.locator('[data-testid="render-error"]').count()) === 0);
 
-// The end-to-end privacy assertion, in a real browser: the exact payload
-// shown must contain a real column name and never a real cell value.
-const payloadText = await page.locator('[data-testid="figure-payload"]').textContent();
-const hasColumnName = payloadText.includes("response_mean");
-const excludesSentinelString = !payloadText.includes(SENTINEL_STRING);
-const excludesSentinelNumber = !payloadText.includes(SENTINEL_NUMBER);
-console.log("payload contains a real column name:", hasColumnName);
-console.log("payload excludes the sentinel string value:", excludesSentinelString);
-console.log("payload excludes the sentinel numeric value:", excludesSentinelNumber);
-if (!hasColumnName || !excludesSentinelString || !excludesSentinelNumber) {
-  console.log("FAIL: the on-page payload preview leaked a real cell value, or is missing a real column name");
-  process.exit(1);
-}
+// --- export all four formats ---
+const bar = page.locator('[data-testid="export-bar"]');
+for (const f of ["PNG", "TIFF", "SVG", "PDF"]) await bar.getByLabel(f).check();
+await bar.getByRole("button", { name: "Export" }).click();
+await page.waitForSelector('[data-testid="export-bar"] a[download]', { timeout: 60000 });
+const names = await bar.locator("a[download]").evaluateAll((as) => as.map((a) => a.getAttribute("download")));
+check(`four downloads (${names.join(", ")})`, ["figure.png", "figure.tiff", "figure.svg", "figure.pdf"].every((n) => names.includes(n)));
 
-// No request with a body should exist yet — nothing has been sent.
-const trackedBodyCalls = await page.locator("text=had a body").count();
-console.log("no body-carrying request before Generate:", trackedBodyCalls === 0);
+check(`zero body-carrying requests (${bodyRequests.join("; ") || "none"})`, bodyRequests.length === 0);
+check(`no console errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
 
-await page.click("text=Generate figure");
-await page.waitForSelector('[role="alertdialog"]', { timeout: 5000 });
-await page.click("text=Send it and generate");
-
-await page.waitForSelector("text=Show the generated Python code", { timeout: 15000 });
-await page.waitForSelector('[data-testid="figure-image"]', { timeout: 60000 });
-const downloadLinks = await page.locator("a[download]").count();
-console.log("figure rendered with 3 export links:", downloadLinks === 3);
-if (downloadLinks !== 3) {
-  console.log("FAIL: expected PNG/SVG/PDF download links");
-  process.exit(1);
-}
-
-// Waits for the Regenerate button to be enabled again (i.e. the previous
-// generation fully finished) before it's safe to click it again — the
-// button is disabled mid-run, and .click() alone won't wait long enough
-// for a real Pyodide execution to settle.
-async function waitForRegenerateReady(p) {
-  const button = p.getByRole("button", { name: "Regenerate" });
-  for (let i = 0; i < 60; i++) {
-    if (!(await button.isDisabled().catch(() => true))) return;
-    await p.waitForTimeout(500);
-  }
-  throw new Error("Regenerate button never re-enabled");
-}
-
-// Regenerate shouldn't re-show consent — session-scoped, not per-figure.
-await page.getByRole("button", { name: "Regenerate" }).click();
-await page.waitForTimeout(300); // consent (if any) would appear well before Pyodide finishes re-running
-const consentReshown = await page.locator('[role="alertdialog"]').isVisible().catch(() => false);
-console.log("consent not re-shown on regenerate:", !consentReshown);
-await waitForRegenerateReady(page);
-
-// Negative case: code referencing a column that doesn't exist should
-// surface a real Python error next to the still-visible code, with
-// Regenerate still available to retry.
-nextCode = BAD_CODE;
-await page.getByRole("button", { name: "Regenerate" }).click();
-await page.waitForSelector("text=KeyError", { timeout: 30000 });
-const codeStillVisible = await page.locator("text=Show the generated Python code").isVisible();
-const regenerateStillThere = await page.getByRole("button", { name: "Regenerate" }).isVisible();
-console.log("KeyError shown for bad code:", true);
-console.log("code panel stays visible alongside the error:", codeStillVisible);
-console.log("Regenerate still available after a failure:", regenerateStillThere);
-if (!codeStillVisible || !regenerateStillThere) {
-  console.log("FAIL: error state should keep the code visible and Regenerate available");
-  process.exit(1);
-}
-
-console.log("console errors:", consoleErrors.length ? consoleErrors.join("\n") : "(none)");
-console.log("PASS");
+await page.screenshot({ path: `${SCRATCH}/figures.png`, fullPage: true });
 await context.close();
+console.log(failed ? "FAIL" : "PASS");
+process.exit(failed ? 1 : 0);
