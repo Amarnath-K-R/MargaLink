@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { extractFromFile } from "@/lib/extract";
 import { findJournalRules } from "@/lib/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
-import { reviewsRemaining } from "@/lib/review";
-import type { ReviewResult, ReviewTier } from "@/lib/reviewTypes";
+import { MAX_REVIEW_CHARS, prepareForReview, reviewsRemaining } from "@/lib/review";
+import { ReviewSynthesisError, planChunks, runReview, type ReviewState } from "@/lib/reviewOrchestrator";
+import { chunkSections, splitIntoSections } from "@/lib/reviewSections";
+import type { ReviewProgress, ReviewResult, ReviewTier } from "@/lib/reviewTypes";
 import { errorMessage } from "@/lib/errorMessage";
 import ErrorText from "@/components/ErrorText";
 import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
@@ -18,36 +20,53 @@ import RulesCheckPanel from "@/components/RulesCheckPanel";
 import JournalPicker from "./_components/JournalPicker.tsx";
 import TierPicker from "./_components/TierPicker.tsx";
 
+const TOO_LONG =
+  "This paper is over 400,000 characters of text — split off supplementary material and try again.";
+
 // Attach → choose a known journal directly → see Claude's review. Unlike
 // /match, there's no embedding/ranking here at all — the journal is an
 // explicit choice, not a suggestion, so this flow never depends on a pilot
-// journal happening to land in anyone's top-10 matches.
+// journal happening to land in anyone's top-10 matches. The review itself
+// runs as several short passes (see reviewOrchestrator.ts), so this page
+// shows progress, partial results, and a retry for any section that failed.
 export default function ReviewPage() {
   const [busy, setBusy] = useState(false);
   const [paperText, setPaperText] = useState<string | null>(null);
+  const [reviewText, setReviewText] = useState<string | null>(null); // stripped + normalized — what gets sent
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedJournalId, setSelectedJournalId] = useState<string | null>(null);
   const [rulesResult, setRulesResult] = useState<RulesCheckResult | null>(null);
   const [consentOpen, setConsentOpen] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [progress, setProgress] = useState<ReviewProgress | null>(null);
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [tier, setTier] = useState<ReviewTier>("standard");
+  const [resumeState, setResumeState] = useState<ReviewState | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const { calls } = useNetworkTrace();
+
+  const resetReview = useCallback(() => {
+    abortRef.current?.abort();
+    setConsentOpen(false);
+    setReviewResult(null);
+    setReviewError(null);
+    setProgress(null);
+    setResumeState(null);
+  }, []);
 
   const onFile = useCallback(
     async (file: File) => {
       if (busy) return;
       setBusy(true);
+      resetReview();
       setUploadError(null);
       setPaperText(null);
+      setReviewText(null);
       setFileName(null);
       setSelectedJournalId(null);
       setRulesResult(null);
-      setConsentOpen(false);
-      setReviewResult(null);
-      setReviewError(null);
       try {
         const { fullText } = await extractFromFile(file);
         if (fullText.trim().length < 50) {
@@ -55,7 +74,10 @@ export default function ReviewPage() {
             "Couldn't find readable text in this file. If it's a scanned PDF (no text layer), text extraction won't work on it — try a PDF exported directly from Word or LaTeX instead."
           );
         }
+        const prepared = prepareForReview(fullText);
+        if (prepared.length > MAX_REVIEW_CHARS) throw new Error(TOO_LONG);
         setPaperText(fullText);
+        setReviewText(prepared);
         setFileName(file.name);
       } catch (err) {
         setUploadError(errorMessage(err));
@@ -63,43 +85,84 @@ export default function ReviewPage() {
         setBusy(false);
       }
     },
-    [busy]
+    [busy, resetReview]
   );
 
   const selectJournal = useCallback(
     (journalId: string) => {
+      resetReview();
       setSelectedJournalId(journalId);
-      setConsentOpen(false);
-      setReviewResult(null);
-      setReviewError(null);
       if (paperText) {
         const rules = findJournalRules(journalId);
         if (rules) setRulesResult(checkRules(paperText, rules));
       }
     },
-    [paperText]
+    [paperText, resetReview]
   );
 
-  const confirmReview = useCallback(async () => {
-    setConsentOpen(false);
-    if (!paperText || !selectedJournalId) return;
-    setReviewLoading(true);
-    setReviewError(null);
-    try {
-      // ponytail: migration placeholder — replaced by runReview() in the next commit.
-      throw new Error("Review temporarily unavailable during migration");
-    } catch (err) {
-      // Surface the real error (the Function returns descriptive text on
-      // failure, e.g. an Anthropic error or a stop_reason) rather than a
-      // generic message — this is the one flow with a real external
-      // dependency that can fail in ways worth actually seeing.
-      setReviewError(errorMessage(err, "Review failed — try again in a moment."));
-    } finally {
-      setReviewLoading(false);
-    }
-  }, [paperText, selectedJournalId, tier]);
+  const selectTier = useCallback(
+    (next: ReviewTier) => {
+      resetReview();
+      setTier(next);
+    },
+    [resetReview]
+  );
+
+  // How many requests the consent notice names: one per planned chunk + the cross-check.
+  const passCount = useMemo(
+    () => (reviewText ? planChunks(chunkSections(splitIntoSections(reviewText)), tier).run.length + 1 : 0),
+    [reviewText, tier]
+  );
+
+  const startReview = useCallback(
+    async (resume?: ReviewState) => {
+      setConsentOpen(false);
+      if (!reviewText || !selectedJournalId) return;
+      const ac = new AbortController();
+      abortRef.current = ac;
+      setReviewLoading(true);
+      setReviewError(null);
+      // A fresh run replaces the last result; a resume builds on it.
+      if (!resume) {
+        setReviewResult(null);
+        setResumeState(null);
+      }
+      try {
+        const run = await runReview(
+          {
+            text: reviewText,
+            journalId: selectedJournalId,
+            tier,
+            signal: ac.signal,
+            onProgress: (p) => {
+              setProgress(p);
+              setReviewResult(p.partial);
+            },
+          },
+          resume
+        );
+        setResumeState(run.state);
+        setReviewResult(run.result);
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        if (err instanceof ReviewSynthesisError) {
+          setResumeState(err.state);
+          setReviewResult(err.partial);
+        }
+        // The Function returns descriptive text on failure — surface it, not a generic message.
+        setReviewError(errorMessage(err, "Review failed — try again in a moment."));
+      } finally {
+        if (abortRef.current === ac) abortRef.current = null;
+        setReviewLoading(false);
+        setProgress(null);
+      }
+    },
+    [reviewText, selectedJournalId, tier]
+  );
 
   const selectedRules = selectedJournalId ? findJournalRules(selectedJournalId) : undefined;
+  const canRetry =
+    !reviewLoading && resumeState !== null && ((reviewResult?.coverage.failed.length ?? 0) > 0 || reviewResult?.journalFit === null);
 
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-14 sm:py-20">
@@ -149,37 +212,57 @@ export default function ReviewPage() {
             only ever sends a spreadsheet&apos;s schema, never its values).
           </p>
 
-          <TierPicker tier={tier} onSelect={setTier} />
+          <TierPicker tier={tier} onSelect={selectTier} />
 
-          <button
-            type="button"
-            onClick={() => setConsentOpen(true)}
-            disabled={reviewLoading || reviewsRemaining() <= 0}
-            className="mt-4 rounded-sm border border-line bg-paper-alt px-4 py-2 text-sm hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {reviewLoading
-              ? "Reviewing…"
-              : reviewsRemaining() <= 0
-                ? "Pilot review limit reached on this device"
-                : `Get a ${tier} review by Claude`}
-          </button>
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setConsentOpen(true)}
+              disabled={reviewLoading || reviewsRemaining() <= 0}
+              className="rounded-sm border border-line bg-paper-alt px-4 py-2 text-sm hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {reviewLoading
+                ? "Reviewing…"
+                : reviewsRemaining() <= 0
+                  ? "Pilot review limit reached on this device"
+                  : `Get a ${tier} review by Claude`}
+            </button>
+            {reviewLoading && (
+              <button type="button" onClick={() => abortRef.current?.abort()} className="text-sm text-ink-soft hover:underline">
+                Cancel
+              </button>
+            )}
+            {canRetry && resumeState && (
+              <button type="button" onClick={() => void startReview(resumeState)} className="text-sm text-accent hover:underline">
+                Retry failed sections
+              </button>
+            )}
+          </div>
+          {progress && (
+            <p data-testid="review-progress" className="mt-2 text-sm text-ink-soft" aria-live="polite">
+              {progress.phase === "extract"
+                ? `Reviewing ${progress.current ?? "the last sections"} (${progress.done} of ${progress.total})…`
+                : `${progress.current}…`}
+            </p>
+          )}
           {consentOpen && (
             <ReviewConsent
               journalName={selectedRules.journalName}
               tier={tier}
+              passCount={passCount}
               reviewsRemaining={reviewsRemaining()}
-              onConfirm={() => void confirmReview()}
+              onConfirm={() => void startReview()}
               onCancel={() => setConsentOpen(false)}
             />
           )}
           {reviewError && <ErrorText>{reviewError}</ErrorText>}
-          {reviewResult && <ReviewResultPanel result={reviewResult} />}
+          {reviewResult && <ReviewResultPanel result={reviewResult} partial={reviewResult.journalFit === null} />}
         </section>
       )}
 
       <NetworkTracePanel calls={calls} className="mt-12 rounded-sm border border-line bg-paper-alt p-4 text-sm">
         {calls.some((c) => c.hadBody)
-          ? "A request with a body only happens after you confirm the review consent notice above."
+          ? "Requests with a body only happen after you confirm the consent notice above — one per section reviewed, then one for the cross-check."
           : "No request has carried a body yet."}
       </NetworkTracePanel>
 

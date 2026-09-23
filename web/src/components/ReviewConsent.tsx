@@ -10,12 +10,14 @@ import type { ReviewTier } from "@/lib/reviewTypes";
 export default function ReviewConsent({
   journalName,
   tier,
+  passCount,
   reviewsRemaining,
   onConfirm,
   onCancel,
 }: {
   journalName: string;
   tier: ReviewTier;
+  passCount: number;
   reviewsRemaining: number;
   onConfirm: () => void;
   onCancel: () => void;
@@ -25,15 +27,18 @@ export default function ReviewConsent({
       <p className="text-sm font-medium">Send this paper&apos;s text to Claude for a {tier} review?</p>
       <p className="mt-2 text-sm text-ink-soft">
         Unlike matching and the checks above, this sends your paper&apos;s text to
-        Anthropic&apos;s Claude API to review it against {journalName}&apos;s guidelines, at{" "}
-        {tier} depth. Author names and email addresses are stripped first, on a
+        Anthropic&apos;s Claude API in {passCount} short requests — one per section, then one
+        cross-check over the numbers found — to review it against {journalName}&apos;s
+        guidelines, at {tier} depth. Author names and email addresses are stripped first, on a
         best-effort basis — the paper&apos;s content itself is not. Anthropic&apos;s API
-        doesn&apos;t use this to train models; MargaLink doesn&apos;t store it. This is the only
-        feature in MargaLink that leaves your device.
+        doesn&apos;t use this to train models and may hold a section for a few minutes to serve
+        a retry; MargaLink doesn&apos;t store it. This is the one feature in MargaLink that sends
+        your paper&apos;s text off your device.
       </p>
       <p className="mt-2 text-xs text-ink-soft">
         {reviewsRemaining} of {FREE_REVIEWS_PER_DEVICE} free pilot review
-        {reviewsRemaining === 1 ? "" : "s"} left on this device.
+        {reviewsRemaining === 1 ? "" : "s"} left on this device. Retrying a section that
+        failed doesn&apos;t use another one.
       </p>
       <div className="mt-3 flex gap-4 text-sm">
         <button type="button" onClick={onConfirm} className="text-accent hover:underline">
