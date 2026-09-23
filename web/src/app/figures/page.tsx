@@ -1,76 +1,175 @@
 "use client";
 
-// THROWAWAY: exercises parseSpreadsheet() through a real upload, then
-// figureRunner.runFigureCode() through a HARDCODED matplotlib snippet
-// (never a real Claude call) — de-risking Pyodide-in-a-worker with real
-// data, end to end in a real browser, before figurePrompt.ts/functions/api/figure.ts
-// exist at all. Replaced by the real route in a later step.
-import { useState } from "react";
+import Link from "next/link";
+import { useCallback, useState } from "react";
 import { parseSpreadsheet, type Dataset } from "@/lib/spreadsheet";
-import { runFigureCode, warmUp, type ProgressStage } from "@/lib/figureRunner";
+import { requestFigureCode, figuresRemaining, figureConsentGiven, recordFigureConsent } from "@/lib/figure";
+import { runFigureCode, warmUp, type FigureImages, type ProgressStage } from "@/lib/figureRunner";
+import { validateSpec, type FigureSpec } from "@/lib/figureSchema";
+import { errorMessage } from "@/lib/errorMessage";
+import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
+import PageHeader from "@/components/PageHeader";
+import PaperDropzone from "@/components/PaperDropzone";
+import ErrorText from "@/components/ErrorText";
+import FigureConsent from "@/components/FigureConsent";
+import FigureSpecForm from "./_components/FigureSpecForm";
+import FigurePanel from "./_components/FigurePanel";
 
-const HARDCODED_SNIPPET = `
-counts = df["group"].value_counts()
-fig, ax = plt.subplots(figsize=(5, 4))
-ax.bar(counts.index.astype(str), counts.values, color="#2c5f6f")
-ax.set_xlabel("group")
-ax.set_ylabel("count")
-ax.set_title("Throwaway build-check chart")
-`;
+const DEFAULT_SPEC: FigureSpec = { chartType: "bar-error", roles: {}, note: "" };
 
-export default function FiguresPageThrowaway() {
+// Attach a spreadsheet → describe the figure → generate. Unlike /match and
+// /review, the network exception here is much narrower (see
+// figureSchema.ts): only column names, types, and the chart choice ever
+// leave the device — the actual code that touches real data runs locally,
+// in a Web Worker (figureRunner.ts/public/figureWorker.mjs), never on a
+// server.
+export default function FiguresPage() {
   const [dataset, setDataset] = useState<Dataset | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [stage, setStage] = useState<ProgressStage | "idle" | "done">("idle");
-  const [pngSrc, setPngSrc] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [spec, setSpec] = useState<FigureSpec>(DEFAULT_SPEC);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [progressStage, setProgressStage] = useState<ProgressStage | null>(null);
+  const [code, setCode] = useState<string | null>(null);
+  const [images, setImages] = useState<FigureImages | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+  const { calls } = useNetworkTrace();
 
-  async function onFile(file: File) {
-    setError(null);
-    setPngSrc(null);
+  const onFile = useCallback(async (file: File) => {
+    setUploadError(null);
+    setCode(null);
+    setImages(null);
+    setGenError(null);
+    setSpec(DEFAULT_SPEC);
     try {
       const ds = await parseSpreadsheet(file);
       setDataset(ds);
-      warmUp(setStage); // start loading Pyodide the moment we have a file, same as the real flow will
+      // Start loading Pyodide the moment we have real data, so it's
+      // usually ready by the time generated code comes back.
+      warmUp();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setUploadError(errorMessage(err));
     }
-  }
+  }, []);
 
-  async function onRunHardcoded() {
+  const runGeneration = useCallback(async () => {
     if (!dataset) return;
-    setError(null);
-    setPngSrc(null);
+    setBusy(true);
+    setGenError(null);
+    setCode(null);
+    setImages(null);
     try {
-      const images = await runFigureCode(HARDCODED_SNIPPET, dataset.csv, setStage);
-      setStage("done");
-      setPngSrc(`data:image/png;base64,${images.png}`);
+      const generatedCode = await requestFigureCode(dataset, spec);
+      setCode(generatedCode);
+      const result = await runFigureCode(generatedCode, dataset.csv, setProgressStage);
+      setImages(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setGenError(errorMessage(err));
+    } finally {
+      setBusy(false);
+      setProgressStage(null);
     }
-  }
+  }, [dataset, spec]);
+
+  const onGenerateClick = useCallback(() => {
+    if (!dataset) return;
+    if (!figureConsentGiven()) {
+      setConsentOpen(true);
+      return;
+    }
+    void runGeneration();
+  }, [dataset, runGeneration]);
+
+  const onConfirmConsent = useCallback(() => {
+    recordFigureConsent();
+    setConsentOpen(false);
+    void runGeneration();
+  }, [runGeneration]);
+
+  const specError = dataset ? validateSpec(dataset.columns, spec) : null;
+  const generateLabel = busy
+    ? progressStage === "loading-runtime" || progressStage === "loading-packages"
+      ? "Loading Python runtime…"
+      : "Working…"
+    : figuresRemaining() <= 0
+      ? "Pilot figure limit reached on this device"
+      : "Generate figure";
 
   return (
-    <main style={{ padding: 40 }}>
-      <h1>Figures (throwaway Pyodide build check)</h1>
-      <input
-        type="file"
-        accept=".csv,.xlsx"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void onFile(file);
-        }}
+    <main className="mx-auto w-full max-w-4xl px-6 py-14 sm:py-20">
+      <PageHeader
+        width="4xl"
+        links={[
+          { href: "/", label: "← Back" },
+          { href: "/privacy", label: "How privacy works" },
+        ]}
+        title="Make a figure."
+        subtitle={
+          <p className="mt-3 max-w-md text-lg text-ink-soft">
+            Upload your data, pick a chart, and get a publication-ready figure — your values never leave this tab.
+          </p>
+        }
       />
-      <p>stage: {stage}</p>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+
+      <section>
+        <p className="mb-3 text-sm font-medium text-accent">1. Attach your data</p>
+        <PaperDropzone
+          busy={busy}
+          onFile={(file) => void onFile(file)}
+          accept=".csv,.xlsx"
+          title="Drop a CSV or XLSX"
+          ariaLabel="Upload a CSV or XLSX spreadsheet"
+        />
+        {uploadError && <ErrorText>{uploadError}</ErrorText>}
+        {dataset && !uploadError && (
+          <p className="mt-3 text-sm text-ink-soft">
+            Loaded {dataset.fileName} — {dataset.rowCount.toLocaleString()} rows, {dataset.columns.length} columns.
+          </p>
+        )}
+      </section>
+
       {dataset && (
-        <>
-          <pre>{JSON.stringify({ fileName: dataset.fileName, columns: dataset.columns, rowCount: dataset.rowCount }, null, 2)}</pre>
-          <button type="button" onClick={() => void onRunHardcoded()}>
-            Run hardcoded chart against real data
-          </button>
-        </>
+        <section className="mt-12 border-t border-line pt-8">
+          <p className="mb-3 text-sm font-medium text-accent">2. Describe the figure</p>
+          <FigureSpecForm dataset={dataset} spec={spec} onChange={setSpec} />
+          {specError && <ErrorText>{specError}</ErrorText>}
+        </section>
       )}
-      {pngSrc && <img data-testid="figure-image" src={pngSrc} alt="Throwaway test chart" />}
+
+      {dataset && (
+        <section className="mt-12 border-t border-line pt-8">
+          <p className="mb-3 text-sm font-medium text-accent">3. Generate</p>
+          <p className="mt-1 text-sm text-ink-soft">
+            Only the column names, types, and your chart choice above are sent to Claude — never your
+            data&apos;s actual values. That&apos;s the exact request shown above.
+          </p>
+          <button
+            type="button"
+            onClick={onGenerateClick}
+            disabled={busy || !!specError || figuresRemaining() <= 0}
+            className="mt-4 rounded-sm border border-line bg-paper-alt px-4 py-2 text-sm hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {generateLabel}
+          </button>
+          {consentOpen && <FigureConsent onConfirm={onConfirmConsent} onCancel={() => setConsentOpen(false)} />}
+          <FigurePanel images={images} code={code} error={genError} onRegenerate={() => void runGeneration()} busy={busy} />
+        </section>
+      )}
+
+      <NetworkTracePanel calls={calls}>
+        {calls.filter((c) => c.hadBody).length === 0
+          ? "None of these carried your data's values — only column names and your chart choice, on the one request that leaves this tab."
+          : "A request with a body only happens after you confirm the figure-generation consent notice above."}
+      </NetworkTracePanel>
+
+      <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
+        <p>
+          <Link href="/privacy" className="text-accent hover:underline">
+            How privacy works
+          </Link>{" "}
+          — including the figure generator&apos;s exception.
+        </p>
+      </footer>
     </main>
   );
 }

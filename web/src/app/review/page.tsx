@@ -107,6 +107,7 @@ export default function ReviewPage() {
         width="4xl"
         links={[
           { href: "/", label: "← Back" },
+          { href: "/figures", label: "Make figures" },
           { href: "/privacy", label: "How privacy works" },
         ]}
         title="Get it reviewed."

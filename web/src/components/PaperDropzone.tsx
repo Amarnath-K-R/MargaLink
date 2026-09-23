@@ -2,15 +2,25 @@
 
 import { useRef, useState } from "react";
 
-// Shared upload control for /match and /review — drag/drop or click, a real
-// <button> (not a div[role=button]) so keyboard activation reliably opens
-// the native file picker in every browser.
+// Shared upload control for /match, /review, and /figures — drag/drop or
+// click, a real <button> (not a div[role=button]) so keyboard activation
+// reliably opens the native file picker in every browser. The file-type
+// specifics default to /match and /review's original PDF/DOCX copy;
+// /figures overrides all four for CSV/XLSX.
 export default function PaperDropzone({
   busy,
   onFile,
+  accept = ".pdf,.docx",
+  title = "Drop a PDF or DOCX",
+  hint = "or click to choose a file",
+  ariaLabel = "Upload a PDF or DOCX paper",
 }: {
   busy: boolean;
   onFile: (file: File) => void;
+  accept?: string;
+  title?: string;
+  hint?: string;
+  ariaLabel?: string;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -25,7 +35,7 @@ export default function PaperDropzone({
     <button
       type="button"
       disabled={busy}
-      aria-label="Upload a PDF or DOCX paper"
+      aria-label={ariaLabel}
       onDragOver={(e) => {
         if (busy) return;
         e.preventDefault();
@@ -45,12 +55,12 @@ export default function PaperDropzone({
       <input
         ref={inputRef}
         type="file"
-        accept=".pdf,.docx"
+        accept={accept}
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
-      <p className="font-medium">Drop a PDF or DOCX</p>
-      <p className="text-sm text-ink-soft">or click to choose a file</p>
+      <p className="font-medium">{title}</p>
+      <p className="text-sm text-ink-soft">{hint}</p>
     </button>
   );
 }

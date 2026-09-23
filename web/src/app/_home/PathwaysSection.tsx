@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { between } from "@/lib/easing";
 import { motionStyle } from "./motion.ts";
@@ -64,8 +65,8 @@ export default function PathwaysSection({
           >
             <StageLabel number="01" label="Start with the paper" />
             <p>
-              Three focused tools for the decisions researchers actually make: where to publish, whether the
-              paper fits, and what deserves another look.
+              Focused tools for the decisions researchers actually make: where to publish, whether the
+              paper fits, what deserves another look, and how to show the results.
             </p>
           </div>
           <div
@@ -99,6 +100,14 @@ export default function PathwaysSection({
               </span>
               <ArrowUpRight size={18} />
             </button>
+            <Link href="/figures" className="workflow-row">
+              <span className="workflow-index">04</span>
+              <span>
+                <strong>Make figures</strong>
+                <small>Publication-ready charts — your data never leaves the tab.</small>
+              </span>
+              <ArrowUpRight size={18} />
+            </Link>
           </div>
         </div>
       </div>
