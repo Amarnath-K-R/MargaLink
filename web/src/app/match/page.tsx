@@ -90,7 +90,7 @@ export default function MatchPage() {
         setStage("matching");
         log("Ranking journals locally against the vector");
         const mySeq = ++matchSeq.current;
-        const matches = await matchJournals(vector, 10);
+        const matches = await matchJournals({ vector }, 10);
         log(`Found ${matches.length} candidate journals`);
         void getAvailableFields().then(setAvailableFields);
 
@@ -113,7 +113,7 @@ export default function MatchPage() {
       setFilters(next);
       if (!queryVector) return;
       const mySeq = ++matchSeq.current;
-      matchJournals(queryVector, 10, next)
+      matchJournals({ vector: queryVector }, 10, next)
         .then((matches) => {
           if (mySeq === matchSeq.current) setResults(matches);
         })

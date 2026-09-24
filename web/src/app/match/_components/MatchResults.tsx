@@ -39,7 +39,7 @@ export default function MatchResults({
                 <span className="text-ink-soft">{i + 1}</span>
                 <JournalResultTitle journal={r} expanded={expanded} onToggleExpand={() => onToggleExpand(r.id)} />
               </span>
-              <span className="font-mono text-xs text-ink-soft">{(r.score / 127 / 127).toFixed(3)}</span>
+              <span className="font-mono text-xs text-ink-soft">{r.signals.emb.toFixed(3)}</span>
             </div>
             <JournalResultChips journal={r} indent />
             {expanded && (

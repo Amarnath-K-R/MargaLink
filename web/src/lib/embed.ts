@@ -48,6 +48,9 @@ async function getPipeline(): Promise<FeatureExtractionPipeline> {
 
 export async function embed(text: string): Promise<Float32Array> {
   const extractor = await getPipeline();
-  const output = await extractor(text, { pooling: "mean", normalize: true });
+  // Some models (e5) were trained with a "query: " prefix on the asking side;
+  // the pipeline embedded the journals with the matching "passage: " one.
+  const { query_prefix } = await loadManifest();
+  const output = await extractor(query_prefix + text, { pooling: "mean", normalize: true });
   return output.data;
 }

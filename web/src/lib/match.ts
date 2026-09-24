@@ -1,7 +1,10 @@
 // Journal matching: everything below runs against data already sitting in the
 // browser (the index fetched once and cached). The only network calls this
 // file makes are for public, non-personal static assets - never the paper.
-import { loadManifest } from "./manifest.ts";
+import { loadManifest, type RankingConfig } from "./manifest.ts";
+import { rankJournals, type RankedJournal, type TopicEstimate } from "./rank.ts";
+import { buildNameIndex, type NameIndex } from "./references.ts";
+import { loadTopics, topicShares } from "./topics.ts";
 
 export type JournalMeta = {
   id: string;
@@ -38,7 +41,9 @@ export type JournalMeta = {
   is_oa?: boolean | null;
 };
 
-export type MatchResult = JournalMeta & { score: number };
+export type MatchResult = RankedJournal;
+// Everything the ranker needs from the paper, all computed on this device.
+export type MatchInput = { vector: Float32Array; paperTopics?: TopicEstimate[]; cited?: Map<string, number> };
 
 export type JournalFilters = {
   field?: string;
@@ -57,24 +62,6 @@ export function quantizeInt8(unitVec: Float32Array): Int8Array {
   return out;
 }
 
-/** Rank a set of candidate journal indices against one query vector, both int8. */
-export function topK(
-  queryInt8: Int8Array,
-  indexInt8: Int8Array,
-  dim: number,
-  candidateIndices: number[],
-  k: number
-): { index: number; score: number }[] {
-  const scored = candidateIndices.map((j) => {
-    let dot = 0;
-    const base = j * dim;
-    for (let d = 0; d < dim; d++) dot += indexInt8[base + d] * queryInt8[d];
-    return { index: j, score: dot };
-  });
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, k);
-}
-
 export function passesFilters(m: JournalMeta, f: JournalFilters): boolean {
   if (f.field && m.field !== f.field) return false;
   if (f.openAccessOnly && !m.is_in_doaj) return false;
@@ -89,7 +76,7 @@ export function passesFilters(m: JournalMeta, f: JournalFilters): boolean {
 }
 
 let metaCache: JournalMeta[] | null = null;
-let indexCache: { int8: Int8Array; meta: JournalMeta[]; dim: number } | null = null;
+let indexCache: { int8: Int8Array; meta: JournalMeta[]; dim: number; ranking: RankingConfig } | null = null;
 
 /** meta.json only (~a few hundred KB) — for anything that just needs journal
  * info (browse/search, the field dropdown), without pulling the int8 vector
@@ -111,7 +98,7 @@ async function loadIndex() {
   ]);
   if (!binRes.ok) throw new Error("failed to load journal index");
   const buf = new Int8Array(await binRes.arrayBuffer());
-  indexCache = { int8: buf, meta, dim: manifest.dim };
+  indexCache = { int8: buf, meta, dim: manifest.dim, ranking: manifest.ranking };
   return indexCache;
 }
 
@@ -123,16 +110,37 @@ export async function getAvailableFields(): Promise<string[]> {
   return Array.from(fields).sort();
 }
 
-export async function matchJournals(
-  queryEmbedding: Float32Array,
-  k = 10,
-  filters: JournalFilters = {}
-): Promise<MatchResult[]> {
-  const { int8, meta, dim } = await loadIndex();
-  const queryInt8 = quantizeInt8(queryEmbedding);
-  const candidateIndices = meta
-    .map((_, i) => i)
-    .filter((i) => passesFilters(meta[i], filters));
-  const ranked = topK(queryInt8, int8, dim, candidateIndices, k);
-  return ranked.map(({ index, score }) => ({ ...meta[index], score }));
+export async function matchJournals(input: MatchInput, k = 10, filters: JournalFilters = {}): Promise<MatchResult[]> {
+  const { int8, meta, dim, ranking } = await loadIndex();
+  const topics = await loadTopics(dim);
+  const candidates = meta.map((_, i) => i).filter((i) => passesFilters(meta[i], filters));
+  return rankJournals(
+    {
+      queryInt8: quantizeInt8(input.vector),
+      dim,
+      centres: int8,
+      meta,
+      candidates,
+      paperTopics: input.paperTopics ?? [],
+      topicSubfield: new Map(topics.rows.map((t) => [t.id, t.subfield])),
+      cited: input.cited ?? new Map(),
+      k,
+      year: new Date().getFullYear(),
+    },
+    ranking
+  );
+}
+
+/** The paper's estimated OpenAlex topics ([] on an older build without topic files). */
+export async function estimatePaperTopics(vector: Float32Array): Promise<TopicEstimate[]> {
+  const { dim, ranking } = await loadIndex();
+  const table = await loadTopics(dim);
+  return table.rows.length ? topicShares(quantizeInt8(vector), table, ranking) : [];
+}
+
+let nameIndexCache: NameIndex | null = null;
+/** Every journal's names, for matching the paper's own reference list (references.ts). */
+export async function loadNameIndex(): Promise<NameIndex> {
+  nameIndexCache ??= buildNameIndex(await loadMeta());
+  return nameIndexCache;
 }
