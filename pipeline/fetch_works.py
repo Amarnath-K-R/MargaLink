@@ -1,38 +1,48 @@
-"""Phase 1: for each journal in sources.jsonl, fetch up to 200 recent papers
-(title + abstract only) to build its centroid from.
+"""Matching v2: for each journal in sources.jsonl, fetch its most recent
+papers (title, abstract, year, OpenAlex topics) to build its centres, topic
+profile and held-out evaluation set from.
 
-This is the expensive step — one API call per journal, ~20,000 total, and
-per-journal calls are the ones that triggered sustained rate-limiting
-earlier even with an API key. Paced conservatively; expect this to run for
-hours, resumable if interrupted.
+Recent, not OpenAlex's default order: a journal's scope drifts, and the
+default order surfaces old, highly-cited items (textbooks, reviews) that
+don't say what the journal publishes now. The window is WINDOW_YEARS; a
+journal with fewer than WIDEN_BELOW usable papers in it gets a second call
+without the year filter (window_years: null) so small journals still build.
 
 Abstract coverage on OpenAlex is publisher-dependent, not uniform — verified
 by direct sampling: Elsevier ~24%, Wiley ~32%, Springer ~20% of recent works
 have a reconstructable abstract, vs. ~100% for SAGE and Taylor & Francis.
 A journal with poor coverage can fail MIN_PAPERS_TO_KEEP even though it has
-thousands of works — that's real data sparsity, not a bug (confirmed by
-manually inspecting "skipped" journals: e.g. Food Research International,
-Elsevier, 19,641 works, only 1/25 sampled had an abstract). PAPERS_PER_JOURNAL
-is set to 200 (OpenAlex's actual per_page max) rather than some lower number
-specifically to give low-coverage journals the widest net a single API call
-(no added cost) can provide.
+thousands of works — that's real data sparsity, not a bug. PAPERS_PER_JOURNAL
+is 200 (OpenAlex's per_page max) to give low-coverage journals the widest net
+one call can provide.
 
-Usage: uv run --env-file .env fetch_works.py
-Output: pipeline/data/works.jsonl (gitignored), one line per journal:
-    {"id": ..., "papers": [{"title": ..., "abstract": ...}, ...]}
+Usage: uv run --env-file .env fetch_works.py   (hours; resumable)
+Output: pipeline/data/works_v2.jsonl (gitignored), one line per journal:
+    {"id": ..., "window_years": 7 | null,
+     "papers": [{"id": "W…", "title": …, "abstract": …, "year": 2024, "topics": ["T…", …]}]}
+newest first. The v1 file (works.jsonl) is left untouched so the current
+index keeps building until the switch.
 """
 
 import json
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from openalex import BASE, get, reconstruct_abstract, safe_iter_jsonl
 
 SOURCES_PATH = Path(__file__).parent / "data" / "sources.jsonl"
-OUT_PATH = Path(__file__).parent / "data" / "works.jsonl"
+OUT_PATH = Path(__file__).parent / "data" / "works_v2.jsonl"
 PAPERS_PER_JOURNAL = 200  # OpenAlex's per_page max — still one API call, no added cost
-MIN_PAPERS_TO_KEEP = 10  # need at least a few for a meaningful centroid
+MIN_PAPERS_TO_KEEP = 10  # need at least a few for a meaningful centre
+WINDOW_YEARS = 7
+WIDEN_BELOW = 30
 REQUEST_DELAY_S = 1.0
+SELECT = "id,title,abstract_inverted_index,publication_year,topics"
+
+
+def short_id(openalex_id: str) -> str:
+    return openalex_id.rsplit("/", 1)[-1]
 
 
 def load_source_ids() -> list[str]:
@@ -43,20 +53,37 @@ def already_fetched_ids() -> set[str]:
     return {j["id"] for j in safe_iter_jsonl(OUT_PATH)}
 
 
-def fetch_papers(source_id: str, n: int) -> list[dict]:
-    short_id = source_id.rsplit("/", 1)[-1]
+def shape_paper(work: dict) -> dict | None:
+    """One OpenAlex work → the stored paper, or None without title + abstract."""
+    title = work.get("title") or ""
+    abstract = reconstruct_abstract(work.get("abstract_inverted_index"))
+    if not (title and abstract):
+        return None
+    topics = [short_id(t["id"]) for t in (work.get("topics") or [])[:3] if t.get("id")]
+    return {"id": short_id(work.get("id") or ""), "title": title, "abstract": abstract, "year": work.get("publication_year"), "topics": topics}
+
+
+def needs_wider_window(kept: int) -> bool:
+    return kept < WIDEN_BELOW
+
+
+def fetch_papers(source_id: str, n: int, from_year: int | None) -> list[dict]:
+    year = f",publication_year:>{from_year - 1}" if from_year else ""
     url = (
-        f"{BASE}/works?filter=primary_location.source.id:{short_id}"
-        f"&select=title,abstract_inverted_index&per_page={min(n, 200)}"
+        f"{BASE}/works?filter=primary_location.source.id:{short_id(source_id)}{year}"
+        f"&sort=publication_date:desc&select={SELECT}&per_page={min(n, 200)}"
     )
-    data = get(url)
-    papers = []
-    for work in data.get("results", []):
-        title = work.get("title") or ""
-        abstract = reconstruct_abstract(work.get("abstract_inverted_index"))
-        if title and abstract:
-            papers.append({"title": title, "abstract": abstract})
-    return papers
+    papers = [shape_paper(w) for w in get(url).get("results", [])]
+    return [p for p in papers if p]
+
+
+def fetch_journal(source_id: str) -> tuple[list[dict], int | None]:
+    from_year = datetime.now(UTC).year - WINDOW_YEARS
+    papers = fetch_papers(source_id, PAPERS_PER_JOURNAL, from_year)
+    if not needs_wider_window(len(papers)):
+        return papers, WINDOW_YEARS
+    time.sleep(REQUEST_DELAY_S)
+    return fetch_papers(source_id, PAPERS_PER_JOURNAL, None), None
 
 
 def main() -> None:
@@ -68,9 +95,9 @@ def main() -> None:
     skipped_too_few = 0
     with OUT_PATH.open("a") as out:
         for i, source_id in enumerate(todo):
-            papers = fetch_papers(source_id, PAPERS_PER_JOURNAL)
+            papers, window = fetch_journal(source_id)
             if len(papers) >= MIN_PAPERS_TO_KEEP:
-                out.write(json.dumps({"id": source_id, "papers": papers}) + "\n")
+                out.write(json.dumps({"id": source_id, "window_years": window, "papers": papers}) + "\n")
                 out.flush()
             else:
                 skipped_too_few += 1
@@ -99,6 +126,18 @@ def _self_check() -> None:
         assert load_source_ids() == ["a", "b", "c"]
         assert already_fetched_ids() == {"a"}
     SOURCES_PATH, OUT_PATH = real_sources, real_out
+
+    work = {
+        "id": "https://openalex.org/W1",
+        "title": "A trial",
+        "abstract_inverted_index": {"We": [0], "tested": [1]},
+        "publication_year": 2024,
+        "topics": [{"id": "https://openalex.org/T2"}, {"id": "https://openalex.org/T1"}, {"id": "https://openalex.org/T3"}, {"id": "https://openalex.org/T4"}],
+    }
+    assert shape_paper(work) == {"id": "W1", "title": "A trial", "abstract": "We tested", "year": 2024, "topics": ["T2", "T1", "T3"]}
+    assert shape_paper({**work, "abstract_inverted_index": None}) is None, "no abstract → not kept"
+    assert shape_paper({**work, "topics": None})["topics"] == []
+    assert needs_wider_window(29) and not needs_wider_window(30)
 
     print("fetch_works self-check: OK")
 
