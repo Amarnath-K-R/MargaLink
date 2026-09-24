@@ -94,10 +94,30 @@ def build_meta_entry(
         "review_url": d.get("review_url") if d else None,
         "doaj_apc_amount": d.get("apc_amount") if d else None,
         "doaj_apc_currency": d.get("apc_currency") if d else None,
+        # Matching v2 (sources v2 fields; absent on a v1 sources file)
+        "names": journal_names(display_name, s) if s else [],
+        "h_index": ((s.get("summary_stats") or {}).get("h_index")) if s else None,
+        "cited_2yr": ((s.get("summary_stats") or {}).get("2yr_mean_citedness")) if s else None,
+        "is_oa": s.get("is_oa") if s else None,
     }
 
 
+def journal_names(display_name: str, source: dict) -> list[str]:
+    """Other names a reference list might use: the abbreviation and alternate
+    titles, de-duplicated case-insensitively, never the display name itself."""
+    seen = {display_name.strip().lower()}
+    out = []
+    for n in [source.get("abbreviated_title"), *(source.get("alternate_titles") or [])]:
+        if n and n.strip().lower() not in seen:
+            seen.add(n.strip().lower())
+            out.append(n.strip())
+    return out
+
+
 def _self_check() -> None:
+    names = journal_names("Nature", {"abbreviated_title": "Nature", "alternate_titles": ["Nat.", "nat.", "Nature (London)"]})
+    assert names == ["Nat.", "Nature (London)"], names
+    assert journal_names("X", {}) == []
     assert is_conference_proceedings_name("44th AIAA Aerospace Sciences Meeting and Exhibit")
     assert is_conference_proceedings_name("AGU Fall Meeting Abstracts")
     assert is_conference_proceedings_name("2001 Sacramento, CA July 29-August 1,2001")
