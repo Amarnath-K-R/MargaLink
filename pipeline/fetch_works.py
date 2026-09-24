@@ -26,6 +26,7 @@ index keeps building until the switch.
 
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -38,6 +39,7 @@ MIN_PAPERS_TO_KEEP = 10  # need at least a few for a meaningful centre
 WINDOW_YEARS = 7
 WIDEN_BELOW = 30
 REQUEST_DELAY_S = 1.0
+WORKERS = 4
 SELECT = "id,title,abstract_inverted_index,publication_year,topics"
 
 
@@ -86,27 +88,34 @@ def fetch_journal(source_id: str) -> tuple[list[dict], int | None]:
     return fetch_papers(source_id, PAPERS_PER_JOURNAL, None), None
 
 
+def fetch_paced(source_id: str) -> tuple[str, list[dict], int | None]:
+    papers, window = fetch_journal(source_id)
+    time.sleep(REQUEST_DELAY_S)
+    return source_id, papers, window
+
+
 def main() -> None:
     source_ids = load_source_ids()
     done = already_fetched_ids()
     todo = [sid for sid in source_ids if sid not in done]
     print(f"{len(done)} already fetched, {len(todo)} remaining of {len(source_ids)}", flush=True)
 
+    # Each request takes ~2 s server-side; WORKERS in parallel (each pacing
+    # itself) keeps the total near 1 request/s, well under OpenAlex's limit,
+    # while cutting a ~30 h serial run to a few hours. Results are written
+    # from this thread only, as they complete, so the file stays one line per journal.
     skipped_too_few = 0
-    with OUT_PATH.open("a") as out:
-        for i, source_id in enumerate(todo):
-            papers, window = fetch_journal(source_id)
+    with OUT_PATH.open("a") as out, ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        futures = [pool.submit(fetch_paced, sid) for sid in todo]
+        for i, fut in enumerate(as_completed(futures)):
+            source_id, papers, window = fut.result()
             if len(papers) >= MIN_PAPERS_TO_KEEP:
                 out.write(json.dumps({"id": source_id, "window_years": window, "papers": papers}) + "\n")
                 out.flush()
             else:
                 skipped_too_few += 1
             if (i + 1) % 100 == 0:
-                print(
-                    f"processed {i + 1}/{len(todo)} (skipped {skipped_too_few} with <{MIN_PAPERS_TO_KEEP} papers)",
-                    flush=True,
-                )
-            time.sleep(REQUEST_DELAY_S)
+                print(f"processed {i + 1}/{len(todo)} (skipped {skipped_too_few} with <{MIN_PAPERS_TO_KEEP} papers)", flush=True)
 
     print(f"done. total in {OUT_PATH}: {len(already_fetched_ids())}", flush=True)
 
