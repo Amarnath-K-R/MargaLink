@@ -28,6 +28,14 @@ export type JournalMeta = {
   // older builds (e.g. the Phase 0 interim demo), which predate this field
   // and had every journal prerendered — see isPrerendered() in journal-url.ts.
   prerendered?: boolean;
+  // Matching v2 (absent on older builds — rank.ts treats row j as one centre).
+  centres?: [number, number]; // [first row in index.bin, count]
+  centre_topics?: string[]; // one topic label per centre ("" when unknown)
+  topics?: [string, number][]; // recent-paper topic profile: [OpenAlex topic id, share], descending
+  names?: string[]; // abbreviation + alternate titles, for the reference-list matcher
+  h_index?: number | null;
+  cited_2yr?: number | null;
+  is_oa?: boolean | null;
 };
 
 export type MatchResult = JournalMeta & { score: number };
