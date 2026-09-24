@@ -3,7 +3,7 @@
 Offline data pipeline (Python, [uv](https://docs.astral.sh/uv/)) that builds
 the static journal index the web app matches against. Never runs in
 production — its only output the app cares about is
-`web/public/index/{manifest.json,index.bin,meta.json}`, which you produce
+`web/public/index/{manifest.json,index.bin,meta.json,topics.bin,topics.json}`, which you produce
 locally (or in CI/a scheduled job) and the static site just serves.
 
 See [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) for why the app is
@@ -28,11 +28,21 @@ limit. `fetch_sources.py`/`fetch_works.py` work without one, just slower.
 ## Run order
 
 ```bash
-uv run --env-file .env fetch_sources.py   # ~20,000 journal shortlist
-uv run --env-file .env fetch_works.py     # up to 200 papers/journal — hours; resumable, safe to Ctrl-C and re-run
+uv run --env-file .env fetch_sources.py [--fresh]  # ~20,000 journal shortlist (+ names, citation stats); --fresh keeps the old file
+uv run --env-file .env fetch_topics.py    # all ~4,500 OpenAlex topics — a minute
+uv run --env-file .env fetch_works.py     # the 200 newest papers/journal with topics — ~6 h, 4 paced workers; resumable
 uv run --env-file .env enrich_doaj.py     # DOAJ: fee, licence, review process (only journals already in DOAJ)
 uv run --env-file .env enrich_nlm.py      # NLM Catalog: MEDLINE indexing (only biomedical-adjacent fields)
-uv run build_index.py                     # joins everything, embeds, writes web/public/index/*
+uv run build_index.py                     # held-out split, centres, topics, quality pass → web/public/index/* (~7 h at ~110 papers/s; vectors cached)
+uv run --env-file .env fetch_heldout_refs.py  # resolves 500 held-out papers' references, for the reference signal's evaluation
+cd ../web && node scripts/eval_match.ts --refs --fit --write-manifest   # measures, fits and publishes the ranking
+```
+
+Model choice: `uv run bakeoff.py` compares the candidate models in
+`embedding.py` on a 3,000-journal sample (~1 h each); switch `MODEL_NAME`
+only for ≥ 5 points of top-10 accuracy, then rebuild.
+
+```
 ```
 
 `build_index.py` is safe to re-run at any point while `fetch_works.py` is

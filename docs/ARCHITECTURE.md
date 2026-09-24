@@ -11,14 +11,16 @@ compares an uploaded paper's embedding against journal vectors stored in
 Postgres/pgvector. That was never built. What exists instead:
 
 1. The pipeline (`pipeline/`) builds one static, versioned index offline:
-   every journal's centroid embedding, quantized to int8, plus its
-   metadata. Checked into the deploy as `web/public/index/{manifest.json,
-   index.bin, meta.json}` (gitignored in source control — see
-   [pipeline/README.md](../pipeline/README.md) for how to produce it).
+   1–4 centre embeddings per journal (from its recent papers), quantized to
+   int8, plus metadata, a recent-topic profile and alternate names per
+   journal, and the OpenAlex topic table. Shipped as `web/public/index/
+   {manifest.json, index.bin, meta.json, topics.bin, topics.json}`
+   (gitignored in source control — see [pipeline/README.md](../pipeline/README.md)).
 2. The browser downloads that index once (it's public data, same trust
    category as the page's own JS) and does the entire match — extract
-   text, embed, rank — locally. `src/lib/match.ts` is the whole ranking
-   engine: no network round-trip carries anything from the user's paper.
+   text, embed, estimate topics, read the reference list, rank — locally.
+   `src/lib/rank.ts` is the whole ranker: no network round-trip carries
+   anything from the user's paper.
 
 This isn't an optimization on top of a server design — it's the direct
 consequence of the project's privacy rules (`CLAUDE.md`). A server that
@@ -29,11 +31,45 @@ where something *does* leave the device (the AI review, the figure
 generator) are deliberately built as disclosed exceptions, not the
 default — see below.
 
-**Current numbers** (`web/public/index/manifest.json`): 18,125 journals,
-384-dimension embeddings (`thenlper/gte-small` server-side /
-`Xenova/gte-small` in the browser — same weights, frozen together per
-`CLAUDE.md`), shipped as int8 rather than fp32 (~1pp accuracy loss for a
-~4x smaller download). `index.bin` is ~6.9MB, `meta.json` ~10MB.
+**Current numbers** are in `web/public/index/manifest.json` (journal,
+centre and topic counts, the model, the fitted ranking and its measured
+accuracy). Embeddings are 384-dimensional (the model is whichever the
+pipeline's bake-off chose within the small-model cap, named once in
+`pipeline/embedding.py` and carried to the browser by the manifest), shipped
+as int8 rather than fp32 (~1pp accuracy loss for a ~4x smaller download).
+Every index file stays under Cloudflare's 25 MB per-file cap.
+
+### How a paper is matched (matching v2)
+
+Design and plan: `docs/superpowers/specs/2026-09-24-matching-v2-design.md`,
+`docs/superpowers/plans/2026-09-24-matching-v2.md`.
+
+- **What is read** (`matchQuery.ts`): the title, the real abstract
+  (`formatCheck.extractAbstract`), keywords and the reference list — not the
+  first 3,000 characters, which for most PDFs is authors and affiliations.
+  The page shows it ("What we read") with a paste box to correct it, and
+  pasted text is a first-class entry for phones.
+- **Journals** are 1–4 centres each (k-means over their recent papers,
+  `pipeline/kmeans.py`), so a broad journal is several clusters rather than
+  one average that matches none; a journal scores by its closest centre.
+- **Four signals** (`rank.ts`): embedding similarity; overlap between the
+  paper's estimated OpenAlex topics (`topics.ts`) and the journal's recent
+  topic profile; how often the paper's own reference list cites the journal
+  (`references.ts` — a name counts only where a journal name sits in a
+  reference, so "Science" in a title doesn't); a small activity prior. The
+  top 200 by embedding plus every cited journal are scored.
+- **Weights and the fit scale are measured, not chosen.** `build_index.py`
+  holds back each journal's newest papers (never indexed);
+  `web/scripts/eval_match.ts` runs `rank.ts` itself over them, reports a
+  ladder (today → multi-centre → + topics → + references), fits the weights
+  on one half and the fit scale on the other, and writes both with the
+  accuracy into the manifest. "Fit 78" means the match is as close as 78% of
+  real paper→journal pairings; an unfitted build shows raw similarity, no
+  percentages. A drift guard checks that `rank.ts` reproduces the pipeline's
+  own integer ranking exactly.
+- **Hygiene:** journals whose papers don't cohere or don't match their
+  field are dropped at build time (`pipeline/quality.py`, reasons in
+  `pipeline/data/dropped.txt`).
 
 ## Why only some journals get a real URL
 
@@ -286,9 +322,10 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `privacy/page.tsx` | Static prose + the privacy-flow SVG diagram. |
 | `journal/[id]/page.tsx` | Static-generated per-journal page (`generateStaticParams` from `getPrerenderedJournals()`). |
 | `journals/page.tsx`, `journals/layout.tsx` | Browse/search/filter the full journal index. |
-| `match/page.tsx` | Orchestrates the extract→embed→match pipeline. `process()` stays here rather than moving to `lib/`: it interleaves ~8 `setState` calls with async steps, and the out-of-order-result guard (`matchSeq`) has to move with that state, not get separated from it. |
+| `match/page.tsx` | Orchestrates read → embed → topics → references → rank. `process()` stays here rather than moving to `lib/`: it interleaves ~8 `setState` calls with async steps, and the out-of-order-result guard (`matchSeq`) has to move with that state, not get separated from it. |
 | `match/_components/MatchFilters.tsx` | The 5 filter controls + `FEE_PRESETS`/`SPEED_PRESETS`. |
-| `match/_components/MatchResults.tsx` | The results list, built on the shared `JournalResultTitle`/`JournalResultChips`. |
+| `match/_components/MatchResults.tsx` | The results list with fit badges, built on the shared `JournalResultTitle`/`JournalResultChips`. |
+| `match/_components/PaperInput.tsx`, `WhatWeRead.tsx`, `WhyThisJournal.tsx` | File-or-paste entry; what the matcher read (with a paste correction); the per-result reasons. |
 | `match/_components/FormatCheckPanel.tsx` | The 9-row structural-check `<dl>`. |
 | `match/_components/ProcessingTrace.tsx` | The live "On this device" step log + error text. |
 | `match/layout.tsx` | Route metadata shim. |
@@ -346,7 +383,9 @@ real technical concern, not a speculative grouping).
 
 | File | What |
 |---|---|
-| `match.ts` | The entire client-side ranking engine — read this first. |
+| `match.ts` | Loads the index and runs the ranker: `matchJournals`, `estimatePaperTopics`, `loadNameIndex`, filters. |
+| `rank.ts` | The ranker the browser and the harness share — signals, fusion, calibration, explanations. Read this first. |
+| `matchQuery.ts`, `references.ts`, `topics.ts` | What is read from a paper; its reference list → cited journals; its estimated topics. |
 | `extract.ts` | PDF/DOCX → text (browser-only: uses `pdfjs-dist`/`mammoth`); with `{ headings: true }` (the review only) also the document's heading structure. |
 | `embed.ts` | Text → vector (browser-only: `@huggingface/transformers`). |
 | `formatCheck.ts` | Heuristic structural checks (word count, abstract, required-statement detection) + `extractAbstract()`. |
@@ -419,7 +458,7 @@ relative paths) and only genuinely server-specific code stays here.
 If you're new to this codebase, in this order:
 
 1. `CLAUDE.md` — the three privacy rules everything else follows.
-2. `src/lib/match.ts` — the entire client-side ranking engine.
+2. `src/lib/rank.ts` — the ranker (with `match.ts` loading the index).
 3. `pipeline/build_index.py` — how the static index those rankings run
    against gets built.
 4. `functions/api/review.ts` — one of the two exceptions to "nothing

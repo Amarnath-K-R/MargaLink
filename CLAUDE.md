@@ -61,9 +61,12 @@ variable. Every other feature keeps rule 1 absolutely; these two are rule
 
 ## Frozen decisions (Phase 0)
 
-- Embedding model: `thenlper/gte-small` / browser: `Xenova/gte-small`,
-  384 dimensions. Must stay identical for journal centroids and user
-  papers — changing it means rebuilding the whole index.
+- Embedding model: 384-dimensional, small (~33 MB in the browser), named
+  once in `pipeline/embedding.py` and carried to the browser by
+  `manifest.json` (`model_id`, `query_prefix`). Journal centres, topics and
+  user papers always come from the same model; it changes only when the
+  bake-off (`pipeline/bakeoff.py`) shows ≥ 5 points of top-10 accuracy, and
+  a change means rebuilding the whole index.
 - Journal index ships to the browser as int8 (not fp32): negligible
   accuracy loss (~1pp), ~4x smaller download.
 

@@ -85,6 +85,20 @@ export default function PrivacyPage() {
         don&apos;t send it anywhere either. The whole comparison happens
         locally, against the journal index already in your browser.
       </p>
+      <p className="mt-3 text-ink-soft">
+        Two more things are worked out on your device, from the same text: which research
+        topics your paper reads as (compared against a public list of about 4,500 topics),
+        and which journals your own reference list cites. Neither leaves the tab. If you
+        paste a title and abstract instead of uploading a file, that text stays in the tab
+        too.
+      </p>
+      <p className="mt-3 text-ink-soft">
+        How good is the matching? Every index build holds back each journal&apos;s most recent
+        papers — they are never part of the index — and checks how often each one&apos;s real
+        journal comes back in the top ten. That figure is shown at the bottom of the matching
+        page for the build you are using. It measures papers that were published, so treat it
+        as a guide, not a promise for yours.
+      </p>
 
       <h2 id="review-exception" className="mt-12 font-serif text-xl font-medium">
         The first exception: getting a paper reviewed
