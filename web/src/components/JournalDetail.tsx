@@ -5,7 +5,8 @@ import type { JournalMeta } from "@/lib/match";
 // mark_prerendered) and the inline fallback on /journals and /match for
 // every other journal, which doesn't get a dedicated static page under
 // Cloudflare Pages' 20,000-file cap.
-export default function JournalDetail({ journal }: { journal: JournalMeta }) {
+export default function JournalDetail({ journal, topicNames }: { journal: JournalMeta; topicNames?: Record<string, string> }) {
+  const recentTopics = (journal.topics ?? []).filter(([id]) => topicNames?.[id]).slice(0, 4);
   return (
     <>
       {journal.host_organization_name && (
@@ -14,6 +15,12 @@ export default function JournalDetail({ journal }: { journal: JournalMeta }) {
 
       <dl className="mt-6">
         {journal.field && <Row label="Field" value={journal.field} />}
+        {recentTopics.length > 0 && (
+          <Row
+            label="Recent topics"
+            value={recentTopics.map(([id, share]) => `${topicNames![id]} (${Math.round(share * 100)}%)`).join("; ")}
+          />
+        )}
         <Row
           label="Open access"
           value={journal.is_in_doaj ? "Listed in DOAJ" : "Not verified in DOAJ"}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { loadMeta, getAvailableFields, type JournalMeta } from "@/lib/match";
+import { loadTopicNames } from "@/lib/topics";
 import { JournalResultTitle, JournalResultChips } from "@/components/JournalResultRow";
 import JournalDetail from "@/components/JournalDetail";
 import PageHeader from "@/components/PageHeader";
@@ -15,10 +16,12 @@ export default function JournalsPage() {
   const [query, setQuery] = useState("");
   const [field, setField] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [topicNames, setTopicNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     void loadMeta().then(setJournals);
     void getAvailableFields().then(setFields);
+    void loadTopicNames().then(setTopicNames);
   }, []);
 
   const filtered = useMemo(() => {
@@ -99,7 +102,7 @@ export default function JournalsPage() {
               <JournalResultChips journal={j} />
               {expanded && (
                 <div className="mt-3 rounded-sm border border-line bg-paper-alt p-4">
-                  <JournalDetail journal={j} />
+                  <JournalDetail journal={j} topicNames={topicNames} />
                 </div>
               )}
             </li>

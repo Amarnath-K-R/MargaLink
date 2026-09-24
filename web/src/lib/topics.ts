@@ -42,3 +42,14 @@ export function loadTopics(dim: number): Promise<TopicTable> {
   }
   return cache;
 }
+
+let namesCache: Promise<Record<string, string>> | null = null;
+
+// Topic id → name only (topics.json, no vectors) — for journal details.
+export function loadTopicNames(): Promise<Record<string, string>> {
+  namesCache ??= fetch("/index/topics.json")
+    .then((r) => (r.ok ? (r.json() as Promise<TopicRow[]>) : []))
+    .then((rows) => Object.fromEntries(rows.map((t) => [t.id, t.name])))
+    .catch(() => ({}));
+  return namesCache;
+}

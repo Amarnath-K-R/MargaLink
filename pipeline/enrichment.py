@@ -29,6 +29,11 @@ DATA_DIR = Path(__file__).parent / "data"
 _ORDINAL_TITLE = re.compile(r"^\d+(st|nd|rd|th)\b", re.IGNORECASE)
 _ABSTRACTS_WORD = re.compile(r"\babstracts\b", re.IGNORECASE)
 _YEAR_START = re.compile(r"^(19|20)\d{2}\b")
+# A fourth shape, seen in /match results: an event word plus a year anywhere
+# ("World Environmental and Water Resources Congress 2009"). A real journal
+# may be named "…Congress…" (Congress & the Presidency) but never carries a
+# year in its name.
+_EVENT_WITH_YEAR = re.compile(r"\b(congress|conference|symposium|workshop|meeting)\b.*\b(19|20)\d{2}\b|\b(19|20)\d{2}\b.*\b(congress|conference|symposium|workshop|meeting)\b", re.IGNORECASE)
 
 
 def is_conference_proceedings_name(display_name: str) -> bool:
@@ -36,6 +41,7 @@ def is_conference_proceedings_name(display_name: str) -> bool:
         _ORDINAL_TITLE.search(display_name)
         or _ABSTRACTS_WORD.search(display_name)
         or _YEAR_START.search(display_name)
+        or _EVENT_WITH_YEAR.search(display_name)
     )
 
 
@@ -122,6 +128,10 @@ def _self_check() -> None:
     assert is_conference_proceedings_name("AGU Fall Meeting Abstracts")
     assert is_conference_proceedings_name("2001 Sacramento, CA July 29-August 1,2001")
     assert is_conference_proceedings_name("2009 ICCAS-SICE")
+    assert is_conference_proceedings_name("World Environmental and Water Resources Congress 2009")
+    assert is_conference_proceedings_name("Proceedings of the 2015 Winter Simulation Conference")
+    assert not is_conference_proceedings_name("Congress & the Presidency")
+    assert not is_conference_proceedings_name("Journal of Conference Interpreting")
     assert not is_conference_proceedings_name("Proceedings of the National Academy of Sciences")
     assert not is_conference_proceedings_name("Proceedings of the IEEE")
     assert not is_conference_proceedings_name("Congress & the Presidency")

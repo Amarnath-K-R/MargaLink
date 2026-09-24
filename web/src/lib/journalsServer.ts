@@ -22,3 +22,12 @@ export function getAllJournals(): JournalMeta[] {
 export function getPrerenderedJournals(): JournalMeta[] {
   return getAllJournals().filter((j) => j.prerendered !== false);
 }
+
+// Topic id → name for the journal pages' "Recent topics" row; {} for an
+// older build without topics.json.
+export function getTopicNames(): Record<string, string> {
+  const filePath = path.join(process.cwd(), "public", "index", "topics.json");
+  if (!fs.existsSync(filePath)) return {};
+  const rows = JSON.parse(fs.readFileSync(filePath, "utf-8")) as { id: string; name: string }[];
+  return Object.fromEntries(rows.map((t) => [t.id, t.name]));
+}
