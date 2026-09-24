@@ -1,7 +1,7 @@
 // Runnable check for formatCheck.ts's heuristics against realistic sample
 // text — not part of the app bundle. Run directly:
 //   node src/lib/formatCheck.selfcheck.ts
-import { checkFormat } from "./formatCheck.ts";
+import { checkFormat, extractAbstract } from "./formatCheck.ts";
 import assert from "node:assert/strict";
 
 const SAMPLE_PAPER = `
@@ -90,6 +90,32 @@ Text here.
 const structuredResult = checkFormat(STRUCTURED);
 assert(structuredResult.abstract.found, "structured abstract should still be found");
 assert(structuredResult.abstract.structured, "should detect Background:/Methods:/Results: as structured");
+
+// Structured abstract with its subheadings on their own lines (a real PDF layout):
+// "Background" opening the abstract is not the end of it.
+const STRUCTURED_LINES = `Abstract
+
+Background
+
+Heart failure readmissions are common and costly across health systems worldwide.
+
+Methods
+
+We pooled 40 cohorts.
+
+Results
+
+Rates varied fourfold.
+
+Keywords: heart failure; readmission
+
+1. Introduction
+
+Text here.`;
+const sl = extractAbstract(STRUCTURED_LINES);
+assert(sl !== null && sl.text.includes("Rates varied fourfold") && !sl.text.includes("Keywords"), `structured own-line abstract kept whole, got: ${sl?.text}`);
+assert(extractAbstract("Summary\n\nThe Lancet calls its abstract a summary, and it runs for a while here.\n\nIntroduction\n\nBody.")?.text.startsWith("The Lancet"), "a Summary heading starts the abstract");
+assert(extractAbstract("Title\nAbstract: Inline abstract text that starts on the heading line and continues.\n\nIntroduction\n\nBody.")?.text.startsWith("Inline abstract"), "inline 'Abstract:' starts the abstract");
 
 // Negative case: a bare-bones text with none of these sections
 const MINIMAL = "Just a short note with no abstract, no references, nothing structured.";

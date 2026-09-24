@@ -32,15 +32,18 @@ export function countWords(text: string): number {
  * at the source rather than hoping the model gets it right. */
 export function extractAbstract(fullText: string): { text: string } | null {
   const head = fullText.slice(0, 6000); // abstract is always near the start
-  const startMatch = head.match(/^\s*abstract\s*:?\s*$/im);
+  // "Abstract" or "Summary" (The Lancet's word) alone on a line, or "Abstract:" with the text on the same line.
+  const startMatch = head.match(/^\s*(?:abstract|summary)\s*:?\s*$/im) ?? head.match(/^\s*abstract\s*[:.—-]\s*(?=\S)/im);
   if (!startMatch || startMatch.index === undefined) return null;
 
   const afterStart = head.slice(startMatch.index + startMatch[0].length);
   // Optional numbering prefix (1./I./A.) then the heading word — catches
-  // "1. Introduction", "I. INTRODUCTION", "Introduction" alike.
-  const endMatch = afterStart.match(
-    /^\s*(?:[ivx]+\.|[a-z]\.|\d+\.?)?\s*(keywords?|key\s*words?|introduction|background|materials and methods)\s*:?\s*$/im
-  );
+  // "1. Introduction", "I. INTRODUCTION", "Introduction" alike; "Keywords:"
+  // may carry its list on the same line. A heading with no abstract text
+  // before it is a structured abstract's own first subheading ("Background"
+  // on its own line), not the end of the abstract.
+  const ENDS = /^\s*(?:[ivx]+\.|[a-z]\.|\d+\.?)?\s*(?:(?:keywords?|key\s*words?)\s*[:—-].*|(?:keywords?|key\s*words?|introduction|background|materials and methods)\s*:?)\s*$/gim;
+  const endMatch = [...afterStart.matchAll(ENDS)].find((m) => afterStart.slice(0, m.index).trim().length > 0);
   // ponytail: a heading style this doesn't recognize (rare, but real —
   // reference-style heading detection is inherently open-ended) falls back
   // to a flat window sized to a typical abstract, not the full remaining
