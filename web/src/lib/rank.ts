@@ -119,7 +119,12 @@ export function band(fit: number | null, cfg: RankingConfig): Band {
   return fit >= cfg.bands.strong ? "strong" : fit >= cfg.bands.possible ? "possible" : "weak";
 }
 
-export function rankJournals(input: RankInput, cfg: RankingConfig): RankedJournal[] {
+// Everything about a candidate that doesn't depend on the weights — computed
+// once per paper, so the harness can try many weightings cheaply on the
+// same code path the browser runs.
+export type PoolEntry = { j: number; cos: number; centre: number; signals: Signals; shared: Why["topics"]; cited: number };
+
+export function candidatePool(input: RankInput): PoolEntry[] {
   const { queryInt8, dim, centres, meta, candidates, cited } = input;
   const scored = candidates.map((j) => {
     const [start, count] = centreSpan(meta[j], j);
@@ -135,25 +140,38 @@ export function rankJournals(input: RankInput, cfg: RankingConfig): RankedJourna
     if (j !== undefined && !inPool.has(j)) pool.push(scored.find((s) => s.j === j)!);
   }
   const maxCited = Math.max(0, ...cited.values());
-
-  const ranked = pool.map(({ j, cos, centre }) => {
+  return pool.map(({ j, cos, centre }) => {
     const m = meta[j];
-    const t = cfg.weights.topic > 0 || input.paperTopics.length ? topicScore(input.paperTopics, m.topics ?? [], input.topicSubfield) : { score: 0, shared: [] };
-    const nCited = cited.get(m.id) ?? 0;
-    const signals: Signals = { emb: cos, topic: t.score, ref: refScore(nCited, maxCited), prior: priorScore(m, input.year) };
-    const fused = fuse(signals, cfg.weights);
-    const fit = cfg.fitted ? calibrate(fused, cfg.calibration) : null;
-    const [start] = centreSpan(m, j);
-    return {
-      ...m,
-      index: j,
-      fit,
-      band: band(fit, cfg),
-      fused,
-      signals,
-      why: { topics: t.shared, cited: nCited, centre: { cos, label: m.centre_topics?.[centre - start] ?? "" } },
-    };
+    const t = input.paperTopics.length ? topicScore(input.paperTopics, m.topics ?? [], input.topicSubfield) : { score: 0, shared: [] };
+    const n = cited.get(m.id) ?? 0;
+    return { j, cos, centre, cited: n, shared: t.shared, signals: { emb: cos, topic: t.score, ref: refScore(n, maxCited), prior: priorScore(m, input.year) } };
   });
-  ranked.sort((a, b) => b.fused - a.fused || a.index - b.index);
-  return ranked.slice(0, input.k);
+}
+
+// The ranking itself: fused score descending, row ascending on ties.
+export function fusedOrder(pool: PoolEntry[], weights: RankingConfig["weights"]): { entry: PoolEntry; fused: number }[] {
+  return pool.map((entry) => ({ entry, fused: fuse(entry.signals, weights) })).sort((a, b) => b.fused - a.fused || a.entry.j - b.entry.j);
+}
+
+export function scorePool(pool: PoolEntry[], meta: JournalMeta[], cfg: RankingConfig, k: number): RankedJournal[] {
+  return fusedOrder(pool, cfg.weights)
+    .slice(0, k)
+    .map(({ entry, fused }) => {
+      const m = meta[entry.j];
+      const fit = cfg.fitted ? calibrate(fused, cfg.calibration) : null;
+      const [start] = centreSpan(m, entry.j);
+      return {
+        ...m,
+        index: entry.j,
+        fit,
+        band: band(fit, cfg),
+        fused,
+        signals: entry.signals,
+        why: { topics: entry.shared, cited: entry.cited, centre: { cos: entry.cos, label: m.centre_topics?.[entry.centre - start] ?? "" } },
+      };
+    });
+}
+
+export function rankJournals(input: RankInput, cfg: RankingConfig): RankedJournal[] {
+  return scorePool(candidatePool(input), input.meta, cfg, input.k);
 }

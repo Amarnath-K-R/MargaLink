@@ -152,7 +152,7 @@ def main() -> None:
     index_vecs = embed_cached(model, index_texts, "passage", key)
     heldout_vecs = embed_cached(model, heldout_texts, "query", key) if heldout_texts else np.zeros((0, dim), np.float32)
 
-    centres_all, meta, spans, kept, dropped, cohs = [], [], [], [], [], []
+    centres_all, meta, spans, kept, dropped, cohs, means = [], [], [], [], [], [], []
     i = 0
     for sid in ids:
         papers = splits[sid][0]
@@ -172,6 +172,9 @@ def main() -> None:
         entry["topics"] = top_topics(paper_topics) or source_topic_profile(sources[sid])
         spans.append((entry["centres"][0], len(centres)))
         centres_all.append(centres)
+        # The single averaged vector the v1 index used — kept (never deployed)
+        # so the harness's baseline is the index that was actually live.
+        means.append(embedding.normalize(vecs.mean(axis=0, keepdims=True))[0])
         meta.append(entry)
         kept.append(sid)
     q = np.percentile(cohs, [1, 5, 10, 50])
@@ -211,6 +214,7 @@ def main() -> None:
     works_ids = [p["work"] for p in h_papers if p["work"]]
     (DATA_DIR / "heldout_sample.json").write_text(json.dumps(rng.sample(works_ids, min(REF_SAMPLE, len(works_ids)))))
     (DATA_DIR / "dropped.txt").write_text("\n".join(dropped) + "\n")
+    embedding.quantize_int8(np.array(means)).tofile(DATA_DIR / "mean_centroids.bin")
 
     manifest = {
         "model_id": embedding.BROWSER_MODEL_ID,
