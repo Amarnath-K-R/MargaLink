@@ -40,7 +40,7 @@ const served = new Map<string, Uint8Array>();
 for (const t of templates) for (const f of t.files) served.set(`/templates/${t.id}/${f}`, new Uint8Array(readFileSync(`${DIR}${t.id}/${f}`)));
 const fakeFetch = (async (url: string) => {
   const body = served.get(url);
-  return body ? new Response(body) : new Response("missing", { status: 404 });
+  return body ? new Response(new Blob([body.slice()])) : new Response("missing", { status: 404 });
 }) as typeof fetch;
 {
   const files = await starterProject(byId("elsarticle"), { id: "S1", display_name: "Journal of Hydrology & Water_Resources" }, fakeFetch);
