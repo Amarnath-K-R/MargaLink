@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { between } from "@/lib/easing";
 import { useScrollProgress } from "./_home/useScrollProgress.ts";
 import SiteHeader from "./_home/SiteHeader.tsx";
@@ -10,43 +10,82 @@ import PathwaysSection from "./_home/PathwaysSection.tsx";
 import JournalsSection from "./_home/JournalsSection.tsx";
 import MatchingSection from "./_home/MatchingSection.tsx";
 import ReviewSection from "./_home/ReviewSection.tsx";
-import WritingSection from "./_home/WritingSection.tsx";
 import PrivacySection from "./_home/PrivacySection.tsx";
 import FinalSection from "./_home/FinalSection.tsx";
-import SiteFooter from "./_home/SiteFooter.tsx";
 import IntroSequence from "@/components/IntroSequence";
 import ThreePaperScene from "@/components/ThreePaperScene";
 import "./_home/home.css";
 
 function Home() {
-  const { heroProgress, sections, scrolled, reducedMotion, heroRef, sectionRef } = useScrollProgress();
-  // The hero recedes as the workflow list arrives — both from section-local
-  // progress, so page length never shifts the choreography.
-  const screenDive = reducedMotion ? 0 : between(heroProgress, 0.55, 1);
+  const {
+    progress,
+    heroProgress,
+    journalsProgress,
+    matchingProgress,
+    reviewProgress,
+    privacyProgress,
+    finalProgress,
+    reducedMotion,
+    heroRef,
+    journalsRef,
+    matchingRef,
+    reviewRef,
+    privacyRef,
+    finalRef,
+  } = useScrollProgress();
+
+  const screenDive = useMemo(() => (reducedMotion ? 0 : between(progress, 0.12, 0.2)), [progress, reducedMotion]);
+  const featureEntry = useMemo(() => (reducedMotion ? 1 : between(progress, 0.13, 0.21)), [progress, reducedMotion]);
   const [toolsOpen, setToolsOpen] = useState(false);
 
   return (
     <div className="margalink-page">
-      <ThreePaperScene heroProgress={heroProgress} sections={sections} reducedMotion={reducedMotion} />
+      <ThreePaperScene progress={progress} heroProgress={heroProgress} reducedMotion={reducedMotion} />
       <div className="grain" aria-hidden="true" />
 
-      <a className="skip-link" href="#main">
-        Skip to content
-      </a>
-      <SiteHeader scrolled={scrolled} onOpenTools={() => setToolsOpen(true)} />
+      <SiteHeader onOpenTools={() => setToolsOpen(true)} />
       <ToolsOverlay open={toolsOpen} onClose={() => setToolsOpen(false)} />
 
-      <main id="main">
-        <HeroSection heroRef={heroRef} screenDive={screenDive} reducedMotion={reducedMotion} />
-        <PathwaysSection sectionRef={sectionRef("pathways")} progress={sections.pathways} next={sections.journals} reducedMotion={reducedMotion} />
-        <JournalsSection sectionRef={sectionRef("journals")} progress={sections.journals} next={sections.matching} reducedMotion={reducedMotion} />
-        <MatchingSection sectionRef={sectionRef("matching")} progress={sections.matching} next={sections.review} reducedMotion={reducedMotion} />
-        <ReviewSection sectionRef={sectionRef("review")} progress={sections.review} next={sections.writing} reducedMotion={reducedMotion} />
-        <WritingSection sectionRef={sectionRef("writing")} progress={sections.writing} next={sections.privacy} reducedMotion={reducedMotion} />
-        <PrivacySection sectionRef={sectionRef("privacy")} progress={sections.privacy} next={sections.final} reducedMotion={reducedMotion} />
-        <FinalSection sectionRef={sectionRef("final")} progress={sections.final} reducedMotion={reducedMotion} />
+      <main>
+        <HeroSection heroRef={heroRef} heroProgress={heroProgress} screenDive={screenDive} />
+
+        <PathwaysSection
+          progress={progress}
+          reducedMotion={reducedMotion}
+          featureEntry={featureEntry}
+          journalsProgress={journalsProgress}
+        />
+
+        <JournalsSection
+          journalsRef={journalsRef}
+          journalsProgress={journalsProgress}
+          matchingProgress={matchingProgress}
+          reducedMotion={reducedMotion}
+        />
+
+        <MatchingSection
+          matchingRef={matchingRef}
+          matchingProgress={matchingProgress}
+          reviewProgress={reviewProgress}
+          reducedMotion={reducedMotion}
+        />
+
+        <ReviewSection
+          reviewRef={reviewRef}
+          reviewProgress={reviewProgress}
+          privacyProgress={privacyProgress}
+          reducedMotion={reducedMotion}
+        />
+
+        <PrivacySection
+          privacyRef={privacyRef}
+          privacyProgress={privacyProgress}
+          finalProgress={finalProgress}
+          reducedMotion={reducedMotion}
+        />
+
+        <FinalSection finalRef={finalRef} finalProgress={finalProgress} reducedMotion={reducedMotion} />
       </main>
-      <SiteFooter />
     </div>
   );
 }

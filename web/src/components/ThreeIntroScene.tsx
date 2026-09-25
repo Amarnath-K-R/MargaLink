@@ -6,9 +6,6 @@ import { forEachMaterial } from "@/components/three/sceneHelpers";
 import { useThreeCanvas } from "@/components/three/useThreeCanvas";
 import { buildIntroScene } from "@/components/three/introSceneGraph";
 
-// How long the intro's animation runs; IntroSequence fades it after this.
-export const INTRO_MS = 4200;
-
 type ThreeIntroSceneProps = { onProgress?: (value: number) => void };
 
 export default function ThreeIntroScene({ onProgress }: ThreeIntroSceneProps) {
@@ -28,7 +25,7 @@ export default function ThreeIntroScene({ onProgress }: ThreeIntroSceneProps) {
       },
       onFrame: (time) => {
         const elapsed = time - started;
-        const progress = Math.min(1, elapsed / INTRO_MS);
+        const progress = Math.min(1, elapsed / 8000);
         const ease = smooth(progress);
         const handoff = clamp01((progress - 0.78) / 0.22);
         onProgressRef.current?.(progress);

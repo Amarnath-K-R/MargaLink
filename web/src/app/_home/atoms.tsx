@@ -1,13 +1,17 @@
 import type { ReactNode } from "react";
 
-// The step number and its name, in sentence case — the number carries the
-// sequence, so the label doesn't need to shout.
+// Shared by SiteHeader, HeroSection, and PathwaysSection's workflow links —
+// every homepage in-page nav jump goes through this one function.
+export function scrollToId(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+}
+
 export function StageLabel({ number, label }: { number: string; label: string }) {
   return (
-    <p className="stage-label">
-      <span className="stage-number">{number}</span>
+    <div className="stage-label">
+      <span>{number}</span>
       <span>{label}</span>
-    </p>
+    </div>
   );
 }
 

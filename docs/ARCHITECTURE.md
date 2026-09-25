@@ -399,11 +399,11 @@ from routing; nothing outside `app/page.tsx` imports from it).
 | File | What |
 |---|---|
 | `home.css` | The ~87% of the old single `globals.css` that's homepage-only. |
-| `useScrollProgress.ts` | The one rAF-throttled scroll listener: hero progress, each section's own local progress (keyed by name — nothing depends on total page length), whether the page has scrolled (the header's background), and the reduced-motion query. |
+| `useScrollProgress.ts` | The one rAF-throttled scroll listener driving every section's progress value + the reduced-motion media query. |
 | `motion.ts` | `localProgress`, `stagger`, `motionStyle`, `countUp`, `decodeText` — the homepage's own animation-math kit (builds on `lib/easing.ts`'s `between`). |
 | `demoData.ts` | Illustrative marketing content (`journalCards`, `requestRows`, `reviewTiersData`, `privacyMetrics`) — never real data. |
 | `atoms.tsx` | `StageLabel`, `PrivacyPill`, `scrollToId` — small pieces shared by 3+ sections. |
-| `SiteHeader.tsx`, `HeroSection.tsx`, `PathwaysSection.tsx`, `JournalsSection.tsx`, `MatchingSection.tsx`, `ReviewSection.tsx`, `WritingSection.tsx`, `PrivacySection.tsx`, `FinalSection.tsx`, `SiteFooter.tsx`, `ToolsOverlay.tsx` | One component per homepage section. Each reads its own progress plus the next section's (to recede as it arrives). The hero is readable and actionable on the first frame (a one-time CSS entrance, not a scroll-gated reveal); `JournalsSection` shows the live journal count from `loadManifest()`; the footer and tools dialog list all five tools. Labels are sentence case — `check_homepage.mjs` fails on any `text-transform: uppercase` or all-caps copy. |
+| `SiteHeader.tsx`, `HeroSection.tsx`, `PathwaysSection.tsx`, `JournalsSection.tsx`, `MatchingSection.tsx`, `ReviewSection.tsx`, `PrivacySection.tsx`, `FinalSection.tsx` | One component per homepage section, each taking only the progress values it uses. `JournalsSection.tsx` fetches the real journal count via `loadManifest()` rather than a hardcoded number. `PathwaysSection.tsx`'s workflow list has a 4th row linking to `/figures` (a real `<Link>`, unlike the other three rows' `scrollToId` buttons) — a full scroll-narrative section for figures, like the other three tools get, is explicitly deferred. |
 
 **`src/components/`** — shared across routes.
 
@@ -426,7 +426,7 @@ real technical concern, not a speculative grouping).
 | `useThreeCanvas.ts` | The setup/cleanup preamble shared by both scenes — mounting, the WebGL try/catch, resize, the rAF loop, teardown. |
 | `sceneHelpers.ts` | `forEachMaterial` (shared mesh/material traversal) + `setOpacity` (`ThreePaperScene`'s absolute-value policy). |
 | `paperSceneGraph.ts` | `buildPaperScene()` — the homepage scene's meshes/lights/groups. |
-| `paperSceneMotion.ts` | `applyFrame()`: the hero paper and the matching ring, driven by section-local progress, kept in the right-hand lane (never behind the text column); draws nothing on phones. |
+| `paperSceneMotion.ts` | `applyFrame()` + the `SCROLL` table (every scroll-threshold pair the scene's choreography depends on, named). |
 | `introSceneGraph.ts` | `buildIntroScene()` — the first-visit overlay's meshes/lights/groups. |
 
 **`src/lib/`** — framework-agnostic logic, deliberately kept flat (see
