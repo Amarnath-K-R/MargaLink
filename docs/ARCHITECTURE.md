@@ -413,8 +413,8 @@ from routing; nothing outside `app/page.tsx` imports from it).
 | `NetworkTrace.tsx` | `useNetworkTrace()` + `<NetworkTracePanel>` — the fetch-instrumentation that makes `/match` and `/review`'s privacy claims checkable on the page itself. |
 | `JournalResultRow.tsx` | `JournalResultTitle` (prerendered-link-vs-expand-button) + `JournalResultChips` (metadata chips), shared by `/journals` and `/match`. |
 | `ErrorText.tsx` | The one `role="alert"` error paragraph. |
-| `IntroSequence.tsx` | The first-visit overlay: timing, dismissal, `sessionStorage` memory. |
-| `ThreeIntroScene.tsx`, `ThreePaperScene.tsx` | Thin shells over `components/three/` — see below. |
+| `IntroSequence.tsx` | The first-visit intro: a transparent layer over the landing (the question, then the landing's own wordmark builds, then the desk settles) — timing, dismissal, `sessionStorage` memory. |
+| `ThreePaperScene.tsx`, `ClayDesk.tsx` | Thin shells over `components/three/` — see below. `ClayDesk` is the landing's desk; it also plays the intro (held floating while `.intro-overlay` is up, then settling into the landing). |
 | `JournalDetail.tsx`, `PaperDropzone.tsx`, `RulesCheckPanel.tsx`, `ReviewConsent.tsx`, `ReviewResultPanel.tsx`, `CheckRow.tsx`, `FigureConsent.tsx` | Single-purpose presentational pieces. `PaperDropzone.tsx` takes optional `accept`/`title`/`hint`/`ariaLabel` props (defaulting to its original PDF/DOCX copy) so `/figures` reuses it for CSV/XLSX instead of a second dropzone component. `FigureConsent.tsx` is a deliberately separate sibling of `ReviewConsent.tsx`, not a shared generalization — see `CLAUDE.md`'s exceptions paragraph for why each consent notice stays independently readable. |
 
 **`src/components/three/`** — the one domain subfolder in `components/`
@@ -428,7 +428,6 @@ real technical concern, not a speculative grouping).
 | `paperSceneGraph.ts` | `buildPaperScene()` — the homepage scene's meshes/lights/groups. |
 | `clayDesk.ts` | The landing's clay-render desk, built in code (pencil, ruler, graph paper, sheets, chart, notebook, paper plane, the dashed path to a pin): rounded geometry, one matte palette-tinted material, RoomEnvironment + soft VSM shadows on a shadow-only ground. `LANDING_DESK` / `LANDING_DESK_NARROW` place it. Rendered by `components/ClayDesk.tsx` through N8AO ambient occlusion. |
 | `paperSceneMotion.ts` | `applyFrame()` + the `SCROLL` table (every scroll-threshold pair the scene's choreography depends on, named). |
-| `introSceneGraph.ts` | `buildIntroScene()` — the first-visit overlay's meshes/lights/groups. |
 
 **`src/lib/`** — framework-agnostic logic, deliberately kept flat (see
 "lib/ conventions" below).

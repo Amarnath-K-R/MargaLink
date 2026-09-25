@@ -9,20 +9,14 @@
 .grain { position: fixed; inset: 0; pointer-events: none; z-index: 2; opacity: .18; mix-blend-mode: multiply; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.15'/%3E%3C/svg%3E"); }
 .three-scene { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 .three-scene canvas { display: block; width: 100%; height: 100%; }
-.intro-overlay { position: fixed; inset: 0; z-index: 50; overflow: hidden; background: var(--paper); }
+/* Transparent: the intro plays over the landing's own clay desk (held floating) and becomes it. */
+.intro-overlay { position: fixed; inset: 0; z-index: 50; overflow: hidden; background: transparent; }
 .intro-overlay.intro-fade { pointer-events: none; animation: introCurtain .9s var(--ease) forwards; }
-.intro-three-scene { position: absolute; inset: 0; }
-.intro-three-scene canvas { display: block; width: 100%; height: 100%; }
 .intro-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 48%, transparent 0 26%, rgba(27,31,39,.04) 72%, rgba(27,31,39,.1) 100%); }
 .intro-question { position: absolute; left: 50%; top: 19%; width: min(820px, 82vw); color: var(--ink); transform: translateX(-50%); transition: opacity .45s ease; }
 .question-kicker { display: block; margin-bottom: 14px; color: var(--accent); font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
 .intro-question strong { display: block; font-family: var(--font-sans); font-size: clamp(48px, 8vw, 108px); font-weight: 600; letter-spacing: -.075em; line-height: .86; }
 .intro-question mark { padding: 0 .08em .04em; color: var(--paper); background: var(--accent); box-shadow: .12em .11em 0 rgba(44,95,111,.18); }
-.intro-wordmark { position: absolute; left: 50%; top: 50%; display: flex; align-items: center; gap: 16px; color: var(--ink); transform: translate(-50%, -50%); transition: opacity .54s ease; }
-.intro-mark { display: grid; width: 58px; height: 58px; place-items: center; border-radius: 50%; background: var(--ink); color: var(--paper); font-family: var(--font-serif); font-size: 36px; font-weight: 500; box-shadow: 0 14px 32px rgba(27,31,39,.12); }
-.intro-name { font-family: var(--font-serif); font-size: clamp(46px, 7vw, 88px); font-weight: 500; letter-spacing: -.065em; line-height: 1.08; }
-.intro-name em { color: var(--accent); font-style: italic; font-weight: 400; }
-.intro-caption { position: absolute; left: 50%; top: calc(50% + 67px); color: var(--accent); font-family: var(--font-mono); font-size: 10px; letter-spacing: .13em; text-transform: uppercase; transform: translateX(-50%); transition: opacity .5s ease; white-space: nowrap; }
 .intro-status { position: absolute; bottom: 33px; left: 44px; display: inline-flex; align-items: center; gap: 9px; color: var(--ink-soft); }
 .intro-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(44,95,111,.12); }
 .intro-progress-track { position: absolute; right: 44px; bottom: 38px; width: 120px; height: 1px; background: var(--line); }
@@ -70,7 +64,14 @@ body.intro-bridge-fading .site-header { opacity: 1; filter: blur(0); }
 .landing-desk canvas { display: block; width: 100%; height: 100%; }
 .landing-in { animation: landingIn .9s var(--ease) both; }
 @keyframes landingIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
-body.intro-bridge-pending .landing-in { animation-play-state: paused; }
+/* Keyed on the intro overlay (server-rendered, so true from the first paint). */
+body:has(.intro-overlay:not(.intro-fade)) .landing-in { animation-play-state: paused; }
+/* …except the wordmark, which builds during the intro's second beat. */
+body:has(.intro-overlay[data-wordmark]) .landing-wordmark.landing-in { animation-play-state: running; }
+/* the teal "Link" block wipes in after "Marga" */
+.landing-cut { animation: landingCut .8s var(--ease) .5s both; }
+@keyframes landingCut { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 -30% -30% 0); } }
+body:has(.intro-overlay:not([data-wordmark]):not(.intro-fade)) .landing-cut { animation-play-state: paused; }
 .margalink-page .landing-wordmark { margin: 0; font-family: var(--font-serif); font-size: clamp(72px, 11.5vw, 186px); font-weight: 500; letter-spacing: -.06em; line-height: .95; }
 .landing-cut { display: inline-block; margin-left: .04em; padding: .02em .12em .1em; background: var(--accent); color: var(--paper); font-family: var(--font-sans); font-weight: 600; letter-spacing: -.07em; box-shadow: .12em .11em 0 rgba(44,95,111,.2); }
 .landing-catch { margin: 22px 0 0; font-family: var(--font-serif); font-size: clamp(30px, 3.6vw, 54px); letter-spacing: -.03em; line-height: 1.05; }
@@ -281,12 +282,9 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
 
 @media (max-width: 640px) {
   .site-header { padding: 16px 18px; }
-  .intro-wordmark { gap: 10px; }
   .intro-question { top: 18%; width: min(330px, 84vw); }
   .question-kicker { font-size: 8px; }
   .intro-question strong { font-size: 48px; }
-  .intro-mark { width: 43px; height: 43px; font-size: 27px; }
-  .intro-caption { top: calc(50% + 54px); font-size: 8px; }
   .intro-status { left: 18px; bottom: 22px; font-size: 8px; }
   .intro-progress-track { right: 18px; bottom: 26px; width: 86px; }
   .header-cta { font-size: 10px; }

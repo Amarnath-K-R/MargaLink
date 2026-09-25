@@ -247,8 +247,11 @@ const BUILD: Record<Exclude<Kind, "pencil">, (THREE: T) => THREE_NS.Group> = { r
 export type Desk = {
   scene: THREE_NS.Scene;
   camera: THREE_NS.PerspectiveCamera;
-  // Call every frame with ms since start and pointer in -1..1.
-  update: (ms: number, pointer: { x: number; y: number }) => void;
+  // Call every frame with ms since start. While `hold`
+  // is true (the homepage intro), the objects float and tumble above the desk
+  // with the camera close in; when it turns false they fall into place, the
+  // camera eases back and the path draws — the intro becoming the landing.
+  update: (ms: number, hold?: boolean) => void;
 };
 
 export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: DeskLayout, reducedMotion: boolean): Desk {
@@ -281,7 +284,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   const camera = new THREE.PerspectiveCamera(cam.fov, 1, 0.1, 200);
   const look = new THREE.Vector3(cam.lookX, 0, cam.lookZ);
 
-  type Item = { obj: THREE_NS.Object3D; baseY: number; delay: number; float: number; phase: number };
+  type Item = { obj: THREE_NS.Object3D; baseY: number; baseRx: number; baseRz: number; delay: number; float: number; phase: number };
   const items: Item[] = [];
   let pencilTip: THREE_NS.Vector3 | null = null;
   layout.items.forEach((p, i) => {
@@ -298,7 +301,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     if (p.kind === "plane") obj.rotation.z = 0.12;
     scene.add(obj);
     if (pencilTip && p.kind === "pencil") pencilTip.applyMatrix4(new THREE.Matrix4().compose(obj.position, obj.quaternion, obj.scale));
-    items.push({ obj, baseY: obj.position.y, delay: i * 90, float: p.kind === "plane" ? 0.18 : 0, phase: i * 1.3 });
+    items.push({ obj, baseY: obj.position.y, baseRx: obj.rotation.x, baseRz: obj.rotation.z, delay: i * 90, float: p.kind === "plane" ? 0.18 : 0, phase: i * 1.3 });
   });
 
   // The path: dashes laid along a curve on the desk, drawn in on load.
@@ -321,20 +324,31 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   }
 
   const ease = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
-  const update = (ms: number, pointer: { x: number; y: number }) => {
+  // Set the first frame `hold` is false; the fall, the camera and the path
+  // all run from it. Without an intro that's the first frame.
+  let releasedAt: number | null = null;
+  const update = (ms: number, hold = false) => {
+    if (reducedMotion) {
+      for (const it of items) it.obj.position.y = it.baseY;
+      camera.position.set(cam.x, cam.y, cam.z);
+      camera.lookAt(look);
+      return;
+    }
+    if (!hold && releasedAt === null) releasedAt = ms;
+    const since = releasedAt === null ? -Infinity : ms - releasedAt;
     for (const it of items) {
-      const drop = reducedMotion ? 1 : ease((ms - 200 - it.delay) / 900);
-      const float = reducedMotion ? 0 : Math.sin(ms * 0.0012 + it.phase) * it.float;
-      it.obj.position.y = it.baseY + (1 - drop) * 3 + float;
-      it.obj.visible = drop > 0;
+      const settle = ease((since - 120 - it.delay) / 1000);
+      const up = 1 - settle;
+      const float = Math.sin(ms * 0.0012 + it.phase) * it.float;
+      it.obj.position.y = it.baseY + up * (1.6 + Math.sin(ms * 0.0013 + it.phase) * 0.3) + float;
+      it.obj.rotation.x = it.baseRx + up * 0.5 * Math.sin(ms * 0.0009 + it.phase);
+      it.obj.rotation.z = it.baseRz + up * 0.4 * Math.cos(ms * 0.0008 + it.phase * 0.7);
     }
-    if (!reducedMotion) {
-      const shown = Math.floor(ease((ms - 900) / 1600) * dashes.length);
-      dashes.forEach((d, i) => (d.visible = i < shown));
-    }
-    const px = reducedMotion ? 0 : pointer.x * 0.6;
-    const py = reducedMotion ? 0 : pointer.y * 0.35;
-    camera.position.set(cam.x + px, cam.y + py, cam.z);
+    const shown = Math.floor(ease((since - 800) / 1600) * dashes.length);
+    dashes.forEach((d, i) => (d.visible = i < shown));
+    // Closer in while holding, then back out to the landing framing.
+    const pull = 1 - ease(since / 1400);
+    camera.position.set(cam.x, cam.y * (1 - pull * 0.1), cam.z * (1 - pull * 0.1));
     camera.lookAt(look);
   };
 

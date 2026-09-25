@@ -22,19 +22,10 @@ export default function ClayDesk({
   style?: CSSProperties;
   active?: boolean;
 }) {
-  const pointer = useRef({ x: 0, y: 0 });
   const activeRef = useRef(active);
   useEffect(() => {
     activeRef.current = active;
   }, [active]);
-
-  useEffect(() => {
-    const onMove = (e: PointerEvent) => {
-      pointer.current = { x: (e.clientX / window.innerWidth) * 2 - 1, y: (e.clientY / window.innerHeight) * 2 - 1 };
-    };
-    window.addEventListener("pointermove", onMove, { passive: true });
-    return () => window.removeEventListener("pointermove", onMove);
-  }, []);
 
   const mountRef = useThreeCanvas((THREE, _mount, renderer) => {
     renderer.shadowMap.enabled = true;
@@ -66,9 +57,7 @@ export default function ClayDesk({
       composer = c;
     });
 
-    // The entrance (objects dropping in, the path drawing) waits while the
-    // homepage intro still covers the page.
-    let start = performance.now();
+    const start = performance.now();
     return {
       camera: desk.camera,
       onResize: (w, h) => {
@@ -77,8 +66,8 @@ export default function ClayDesk({
       },
       onFrame: (time) => {
         if (!activeRef.current) return;
-        if (document.body.classList.contains("intro-bridge-pending")) start = time;
-        desk.update(time - start, pointer.current);
+        // Held (floating) while the homepage intro plays over it.
+        desk.update(time - start, !!document.querySelector(".intro-overlay:not(.intro-fade)"));
         if (composer) composer.render();
         else renderer.render(desk.scene, desk.camera);
       },

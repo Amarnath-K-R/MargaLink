@@ -1,12 +1,20 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
-import { clamp01 } from "@/lib/easing";
-import ThreeIntroScene from "@/components/ThreeIntroScene";
 
 type IntroSequenceProps = { children: ReactNode };
 
 const SEEN_KEY = "margalink-intro-seen";
+// The intro is a transparent layer over the homepage's own landing: the clay
+// desk floats (ClayDesk holds it while .intro-overlay is on the page and not
+// fading), the question shows, then the landing's real wordmark builds
+// (.intro-overlay[data-wordmark]) and, as the intro ends, the desk settles and
+// the rest of the landing slides in — the intro's last frame is the landing's
+// first. Keyed on the overlay, not a body class, because the overlay is in the
+// server-rendered HTML from the first paint; a class added after hydration
+// would let the landing run before the intro had begun.
+export const INTRO_MS = 5000;
+const WORDMARK_AT = 0.5; // fraction of INTRO_MS
 
 export default function IntroSequence({ children }: IntroSequenceProps) {
   // Lazy initializer: runs once at mount, not re-read on every render. The
@@ -37,8 +45,22 @@ export default function IntroSequence({ children }: IntroSequenceProps) {
     if (alreadySeen) setDismissed(true);
   }, [alreadySeen]);
 
-  const questionOpacity = progress < 0.4 ? 1 : Math.max(0, 1 - (progress - 0.4) / 0.14);
-  const wordmarkOpacity = clamp01((progress - 0.5) / 0.18);
+  const questionOpacity = progress < 0.36 ? 1 : Math.max(0, 1 - (progress - 0.36) / 0.12);
+
+  // The intro's clock: drives the question, the progress line and the moment
+  // the landing's wordmark starts to build.
+  useEffect(() => {
+    if (alreadySeen) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / INTRO_MS);
+      setProgress(p);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [alreadySeen]);
 
   useEffect(() => {
     document.body.classList.toggle("intro-bridge-pending", !fading && !dismissed);
@@ -56,12 +78,12 @@ export default function IntroSequence({ children }: IntroSequenceProps) {
     const timer = window.setTimeout(
       () => {
         const mobile = window.matchMedia("(max-width: 680px)").matches;
-        const pause = reduced ? 0 : mobile ? 420 : 650;
-        const fade = reduced ? 80 : mobile ? 650 : 900;
+        const pause = reduced ? 0 : mobile ? 150 : 200;
+        const fade = reduced ? 80 : 600;
         window.setTimeout(() => setFading(true), pause);
         window.setTimeout(() => setDismissed(true), pause + fade);
       },
-      reduced ? 450 : 8000,
+      reduced ? 450 : INTRO_MS,
     );
     return () => window.clearTimeout(timer);
   }, [alreadySeen]);
@@ -70,29 +92,18 @@ export default function IntroSequence({ children }: IntroSequenceProps) {
     <>
       {children}
       {!dismissed && (
-        <div className={`intro-overlay${fading ? " intro-fade" : ""}`} aria-hidden={fading}>
-          <ThreeIntroScene onProgress={setProgress} />
+        <div className={`intro-overlay${fading ? " intro-fade" : ""}`} aria-hidden={fading} data-wordmark={progress >= WORDMARK_AT ? "" : undefined}>
           <div className="intro-vignette" />
           <div className="intro-question" style={{ opacity: questionOpacity }}>
-            <span className="question-kicker">THE FIRST QUESTION</span>
+            <span className="question-kicker">The first question</span>
             <strong>
               Struggling with
               <br />
               <mark>paper publication?</mark>
             </strong>
           </div>
-          <div className="intro-wordmark" style={{ opacity: fading ? 0 : wordmarkOpacity }}>
-            <span className="intro-mark">M</span>
-            <span className="intro-name">
-              <span>Marga</span>
-              <em>Link</em>
-            </span>
-          </div>
-          <div className="intro-caption" style={{ opacity: clamp01((progress - 0.63) * 3.2) }}>
-            A quieter way to publish
-          </div>
           <div className="intro-status mono" style={{ opacity: fading ? 0 : 0.8 }}>
-            <span className="intro-status-dot" /> PAPER / PRIVACY / PURPOSE
+            <span className="intro-status-dot" /> Paper / privacy / purpose
           </div>
           <div className="intro-progress-track">
             <span style={{ transform: `scaleX(${progress})` }} />
