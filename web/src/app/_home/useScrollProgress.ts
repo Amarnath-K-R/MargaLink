@@ -5,25 +5,17 @@ import { localProgress } from "./motion.ts";
 
 // Drives every scroll-linked value on the homepage: overall page progress,
 // hero-specific progress (the hero section is taller than the viewport, so
-// it needs its own local measure), each later section's local progress
+// it needs its own local measure), the closing section's local progress
 // (localProgress — 0 until it scrolls into view, 1 once it's mostly
 // arrived), and the reduced-motion preference. One rAF-throttled scroll
 // listener drives all of it, rather than a listener per section.
 export function useScrollProgress() {
   const [progress, setProgress] = useState(0);
   const [heroProgress, setHeroProgress] = useState(0);
-  const [journalsProgress, setJournalsProgress] = useState(0);
-  const [matchingProgress, setMatchingProgress] = useState(0);
-  const [reviewProgress, setReviewProgress] = useState(0);
-  const [privacyProgress, setPrivacyProgress] = useState(0);
   const [finalProgress, setFinalProgress] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
 
   const heroRef = useRef<HTMLElement>(null);
-  const journalsRef = useRef<HTMLElement>(null);
-  const matchingRef = useRef<HTMLElement>(null);
-  const reviewRef = useRef<HTMLElement>(null);
-  const privacyRef = useRef<HTMLElement>(null);
   const finalRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -52,10 +44,6 @@ export function useScrollProgress() {
           setHeroProgress(Math.min(1, Math.max(0, -hero.getBoundingClientRect().top / travel)));
         }
 
-        if (journalsRef.current) setJournalsProgress(localProgress(journalsRef.current.getBoundingClientRect(), viewportHeight));
-        if (matchingRef.current) setMatchingProgress(localProgress(matchingRef.current.getBoundingClientRect(), viewportHeight));
-        if (reviewRef.current) setReviewProgress(localProgress(reviewRef.current.getBoundingClientRect(), viewportHeight));
-        if (privacyRef.current) setPrivacyProgress(localProgress(privacyRef.current.getBoundingClientRect(), viewportHeight));
         if (finalRef.current) setFinalProgress(localProgress(finalRef.current.getBoundingClientRect(), viewportHeight));
       });
     };
@@ -72,17 +60,9 @@ export function useScrollProgress() {
   return {
     progress,
     heroProgress,
-    journalsProgress,
-    matchingProgress,
-    reviewProgress,
-    privacyProgress,
     finalProgress,
     reducedMotion,
     heroRef,
-    journalsRef,
-    matchingRef,
-    reviewRef,
-    privacyRef,
     finalRef,
   };
 }

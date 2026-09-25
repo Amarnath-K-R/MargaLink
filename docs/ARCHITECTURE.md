@@ -399,11 +399,9 @@ from routing; nothing outside `app/page.tsx` imports from it).
 | File | What |
 |---|---|
 | `home.css` | The ~87% of the old single `globals.css` that's homepage-only. |
-| `useScrollProgress.ts` | The one rAF-throttled scroll listener driving every section's progress value + the reduced-motion media query. |
+| `useScrollProgress.ts` | The one rAF-throttled scroll listener: hero progress, the closing section's progress (the landing crossfades into it), overall page progress for the 3D paper, and the reduced-motion query. |
 | `motion.ts` | `localProgress`, `stagger`, `motionStyle`, `countUp`, `decodeText` — the homepage's own animation-math kit (builds on `lib/easing.ts`'s `between`). |
-| `demoData.ts` | Illustrative marketing content (`journalCards`, `requestRows`, `reviewTiersData`, `privacyMetrics`) — never real data. |
-| `atoms.tsx` | `StageLabel`, `PrivacyPill`, `scrollToId` — small pieces shared by 3+ sections. |
-| `SiteHeader.tsx`, `HeroSection.tsx`, `PathwaysSection.tsx`, `JournalsSection.tsx`, `MatchingSection.tsx`, `ReviewSection.tsx`, `PrivacySection.tsx`, `FinalSection.tsx` | One component per homepage section, each taking only the progress values it uses. `JournalsSection.tsx` fetches the real journal count via `loadManifest()` rather than a hardcoded number. `PathwaysSection.tsx`'s workflow list has a 4th row linking to `/figures` (a real `<Link>`, unlike the other three rows' `scrollToId` buttons) — a full scroll-narrative section for figures, like the other three tools get, is explicitly deferred. |
+| `SiteHeader.tsx`, `HeroSection.tsx`, `FinalSection.tsx`, `ToolsOverlay.tsx` | The homepage is two screens: the landing (`HeroSection` — the wordmark with the Link cutout, "Find your path.", over the clay desk) and the closing call to action (`FinalSection`), which the landing crossfades into. The middle sections (workflow, journals, matching, review, privacy) were removed on 2026-09-26. |
 
 **`src/components/`** — shared across routes.
 

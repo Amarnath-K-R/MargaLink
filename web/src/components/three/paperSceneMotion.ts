@@ -68,14 +68,17 @@ export function applyFrame(groups: SceneGroups, frame: Frame): void {
     paperExit * 0.08;
   paperGroup.rotation.z = lerp(-0.12, -0.035, heroPaperProgress) + Math.sin(drift * 0.9) * 0.01 * driftScale;
   paperGroup.scale.setScalar((mobile ? 0.82 : 1) * lerp(1, 0.9, paperExit));
-  // Hidden while the landing's clay desk has the first screen; it appears as the landing scrolls away.
-  setOpacity(paperGroup, clamp01(Math.max(paperReveal, 0.86 - paperExit * 0.64)) * between(heroScroll, 0.12, 0.28));
+  // Hidden on the way down (the middle sections it travelled through are
+  // gone); it arrives with the closing section, where it comes to rest.
+  setOpacity(paperGroup, clamp01(Math.max(paperReveal, 0.86 - paperExit * 0.64)) * between(scrollProgress, 0.7, 1));
 
   analysisGroup.position.x = mobile ? 0 : -0.32;
   analysisGroup.position.y = 0.06 + Math.sin(drift * 0.7) * 0.05 * driftScale;
   analysisGroup.rotation.z = drift * 0.18 * driftScale;
   analysisGroup.scale.setScalar(mobile ? 0.72 : 0.92);
-  setOpacity(analysisGroup, clamp01(analysisIn * (1 - analysisOut)));
+  // The analysis ring belonged to the matching section, which is gone.
+  void analysisIn; void analysisOut;
+  setOpacity(analysisGroup, 0);
 
   reviewGroup.position.x = mobile ? 0.55 : 1.22;
   reviewGroup.position.y = 0.1 + Math.sin(drift * 0.75) * 0.04 * driftScale;

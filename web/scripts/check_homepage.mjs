@@ -12,16 +12,13 @@ page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
 // Skip the intro overlay — covered separately by check_intro.mjs.
 await page.addInitScript(() => sessionStorage.setItem("margalink-intro-seen", "1"));
 await page.goto("http://localhost:3000");
-await page.waitForSelector("text=MargaLink helps researchers find the right journal, check the fit, and ask for a review.");
+await page.waitForSelector(".landing-wordmark");
 
+// The page is the landing, then the closing call to action — both offer the
+// two ways in.
 const bodyText = await page.innerText("body");
-// All three tools are fully built now (no more "coming soon" placeholders) —
-// the pathways section's workflow list is the current equivalent overview.
-const hasWorkflowSteps =
-  bodyText.includes("Browse journals") &&
-  bodyText.includes("Match your paper") &&
-  bodyText.includes("Get it reviewed");
-console.log("shows all three workflow steps:", hasWorkflowSteps);
+const hasWorkflowSteps = bodyText.includes("Find your path") && bodyText.includes("Browse journals") && bodyText.includes("Match your paper");
+console.log("landing and closing both present:", hasWorkflowSteps);
 
 const matchLinks = await page.locator('a[href="/match"]').count();
 console.log("links to /match:", matchLinks);
@@ -32,7 +29,7 @@ await page.waitForSelector("text=Find the right journal.");
 console.log("clicking through from the final CTA reaches the tool: yes");
 
 await page.goBack();
-await page.waitForSelector("text=MargaLink helps researchers find the right journal, check the fit, and ask for a review.");
+await page.waitForSelector(".landing-wordmark");
 
 // Click through to journals (header nav + the new tool card both link
 // there now — use .first() rather than an ambiguous selector).

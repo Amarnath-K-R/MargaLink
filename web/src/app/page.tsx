@@ -6,11 +6,6 @@ import { useScrollProgress } from "./_home/useScrollProgress.ts";
 import SiteHeader from "./_home/SiteHeader.tsx";
 import ToolsOverlay from "./_home/ToolsOverlay.tsx";
 import HeroSection from "./_home/HeroSection.tsx";
-import PathwaysSection from "./_home/PathwaysSection.tsx";
-import JournalsSection from "./_home/JournalsSection.tsx";
-import MatchingSection from "./_home/MatchingSection.tsx";
-import ReviewSection from "./_home/ReviewSection.tsx";
-import PrivacySection from "./_home/PrivacySection.tsx";
 import FinalSection from "./_home/FinalSection.tsx";
 import IntroSequence from "@/components/IntroSequence";
 import ThreePaperScene from "@/components/ThreePaperScene";
@@ -19,28 +14,13 @@ import { LANDING_DESK, LANDING_DESK_NARROW } from "@/components/three/clayDesk";
 import "./_home/home.css";
 
 function Home() {
-  const {
-    progress,
-    heroProgress,
-    journalsProgress,
-    matchingProgress,
-    reviewProgress,
-    privacyProgress,
-    finalProgress,
-    reducedMotion,
-    heroRef,
-    journalsRef,
-    matchingRef,
-    reviewRef,
-    privacyRef,
-    finalRef,
-  } = useScrollProgress();
+  const { progress, heroProgress, finalProgress, reducedMotion, heroRef, finalRef } = useScrollProgress();
 
-  const screenDive = useMemo(() => (reducedMotion ? 0 : between(progress, 0.12, 0.2)), [progress, reducedMotion]);
-  const featureEntry = useMemo(() => (reducedMotion ? 1 : between(progress, 0.13, 0.21)), [progress, reducedMotion]);
+  // The landing crossfades into the closing section as it arrives — no empty
+  // beat between them — and the stage recedes as it goes.
+  const landingFade = between(finalProgress, 0, 0.55);
+  const screenDive = useMemo(() => (reducedMotion ? 0 : between(finalProgress, 0.1, 0.8)), [finalProgress, reducedMotion]);
   const [toolsOpen, setToolsOpen] = useState(false);
-  // The landing's clay desk leaves with the landing copy.
-  const landingFade = between(heroProgress, 0.02, 0.2);
 
   return (
     <div className="margalink-page">
@@ -52,42 +32,7 @@ function Home() {
       <ToolsOverlay open={toolsOpen} onClose={() => setToolsOpen(false)} />
 
       <main>
-        <HeroSection heroRef={heroRef} heroProgress={heroProgress} screenDive={screenDive} />
-
-        <PathwaysSection
-          progress={progress}
-          reducedMotion={reducedMotion}
-          featureEntry={featureEntry}
-          journalsProgress={journalsProgress}
-        />
-
-        <JournalsSection
-          journalsRef={journalsRef}
-          journalsProgress={journalsProgress}
-          matchingProgress={matchingProgress}
-          reducedMotion={reducedMotion}
-        />
-
-        <MatchingSection
-          matchingRef={matchingRef}
-          matchingProgress={matchingProgress}
-          reviewProgress={reviewProgress}
-          reducedMotion={reducedMotion}
-        />
-
-        <ReviewSection
-          reviewRef={reviewRef}
-          reviewProgress={reviewProgress}
-          privacyProgress={privacyProgress}
-          reducedMotion={reducedMotion}
-        />
-
-        <PrivacySection
-          privacyRef={privacyRef}
-          privacyProgress={privacyProgress}
-          finalProgress={finalProgress}
-          reducedMotion={reducedMotion}
-        />
+        <HeroSection heroRef={heroRef} landingFade={landingFade} screenDive={screenDive} />
 
         <FinalSection finalRef={finalRef} finalProgress={finalProgress} reducedMotion={reducedMotion} />
       </main>

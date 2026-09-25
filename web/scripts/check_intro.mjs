@@ -35,7 +35,7 @@ await page.screenshot({ path: `${SCRATCH}/intro_1_showing.png` });
 // worst-case desktop timeline.
 await page.waitForSelector(".intro-overlay", { state: "detached", timeout: 12000 });
 console.log("overlay auto-dismissed after the sequence: yes");
-await page.waitForSelector("text=MargaLink helps researchers find the right journal, check the fit, and ask for a review.");
+await page.waitForSelector(".landing-wordmark");
 await page.screenshot({ path: `${SCRATCH}/intro_2_revealed.png` });
 
 // sessionStorage should now remember it (see IntroSequence.tsx SEEN_KEY).
@@ -44,7 +44,7 @@ console.log("sessionStorage remembers it was seen:", seen === "1");
 
 // A second visit (same context = same sessionStorage) should skip it entirely.
 await page.reload();
-await page.waitForSelector("text=MargaLink helps researchers find the right journal, check the fit, and ask for a review.");
+await page.waitForSelector(".landing-wordmark");
 const overlayOnReturn = await page.locator(".intro-overlay").count();
 console.log("overlay count on return visit (should be 0):", overlayOnReturn);
 
