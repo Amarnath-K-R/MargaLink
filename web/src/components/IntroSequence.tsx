@@ -2,11 +2,12 @@
 
 import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import { clamp01 } from "@/lib/easing";
-import ThreeIntroScene from "@/components/ThreeIntroScene";
+import ThreeIntroScene, { INTRO_MS } from "@/components/ThreeIntroScene";
 
 type IntroSequenceProps = { children: ReactNode };
 
 const SEEN_KEY = "margalink-intro-seen";
+
 
 export default function IntroSequence({ children }: IntroSequenceProps) {
   // Lazy initializer: runs once at mount, not re-read on every render. The
@@ -49,6 +50,20 @@ export default function IntroSequence({ children }: IntroSequenceProps) {
     return () => document.body.classList.remove("intro-bridge-pending", "intro-bridge-fading");
   }, [fading, dismissed]);
 
+  // Any key, click, scroll or touch ends it at once — nobody waits for a logo.
+  useEffect(() => {
+    if (alreadySeen || dismissed) return;
+    const skip = () => {
+      setFading(true);
+      window.setTimeout(() => setDismissed(true), 350);
+    };
+    const events = ["keydown", "pointerdown", "wheel", "touchstart"] as const;
+    for (const e of events) window.addEventListener(e, skip, { once: true, passive: true });
+    return () => {
+      for (const e of events) window.removeEventListener(e, skip);
+    };
+  }, [alreadySeen, dismissed]);
+
   useEffect(() => {
     if (alreadySeen) return;
     window.sessionStorage.setItem(SEEN_KEY, "1");
@@ -61,7 +76,7 @@ export default function IntroSequence({ children }: IntroSequenceProps) {
         window.setTimeout(() => setFading(true), pause);
         window.setTimeout(() => setDismissed(true), pause + fade);
       },
-      reduced ? 450 : 8000,
+      reduced ? 450 : INTRO_MS,
     );
     return () => window.clearTimeout(timer);
   }, [alreadySeen]);
@@ -74,11 +89,10 @@ export default function IntroSequence({ children }: IntroSequenceProps) {
           <ThreeIntroScene onProgress={setProgress} />
           <div className="intro-vignette" />
           <div className="intro-question" style={{ opacity: questionOpacity }}>
-            <span className="question-kicker">THE FIRST QUESTION</span>
             <strong>
-              Struggling with
+              Where should
               <br />
-              <mark>paper publication?</mark>
+              <mark>this paper go?</mark>
             </strong>
           </div>
           <div className="intro-wordmark" style={{ opacity: fading ? 0 : wordmarkOpacity }}>
@@ -91,8 +105,8 @@ export default function IntroSequence({ children }: IntroSequenceProps) {
           <div className="intro-caption" style={{ opacity: clamp01((progress - 0.63) * 3.2) }}>
             A quieter way to publish
           </div>
-          <div className="intro-status mono" style={{ opacity: fading ? 0 : 0.8 }}>
-            <span className="intro-status-dot" /> PAPER / PRIVACY / PURPOSE
+          <div className="intro-status" style={{ opacity: fading ? 0 : 0.8 }}>
+            <span className="intro-status-dot" /> Press any key to skip
           </div>
           <div className="intro-progress-track">
             <span style={{ transform: `scaleX(${progress})` }} />

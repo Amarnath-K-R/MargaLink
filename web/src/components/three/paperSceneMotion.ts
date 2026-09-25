@@ -2,27 +2,19 @@ import type * as THREE from "three";
 import { between, clamp01, lerp } from "@/lib/easing";
 import { setOpacity } from "./sceneHelpers.ts";
 
-// Every scroll-linked threshold pair driving this scene's choreography, in
-// one named table instead of scattered as bare number literals through
-// applyFrame() below — turns "what triggers at 0.42?" into a lookup
-// instead of a grep. Values are unchanged from before this extraction.
-export const SCROLL = {
-  paperTravel: [0.08, 0.4],
-  paperReveal: [0.06, 0.22], // heroPaperProgress-based, not scrollProgress
-  paperRotateStart: [0.14, 0.42], // heroPaperProgress-based
-  paperRotateFlip: [0.38, 0.58], // heroPaperProgress-based
-  paperExit: [0.32, 0.55],
-  analysisIn: [0.42, 0.52],
-  analysisOut: [0.58, 0.68],
-  reviewIn: [0.58, 0.7],
-  reviewRotate: [0.58, 0.9],
-  finalEase: [0.85, 1],
-  panJournals: [0.22, 0.38],
-  panMatching: [0.4, 0.53],
-  panReview: [0.56, 0.7],
-  panPrivacy: [0.72, 0.86],
-  panFinal: [0.86, 1],
-} as const;
+// The homepage's 3D layer, driven by each section's own scroll progress (not
+// a fraction of the whole page), so its choreography doesn't shift when a
+// section is added or resized. Everything lives in the right-hand lane: the
+// text column is on the left, and nothing 3D ever passes behind a headline.
+//   hero:     the paper, turned toward the reader, then gone as the hero ends
+//   matching: the analysis ring, faint, behind the network panel
+// On phones (`mobile`) the text is full width, so the scene draws nothing.
+
+export type SceneProgress = {
+  hero: number;
+  matching: number;
+  review: number;
+};
 
 type SceneGroups = {
   camera: THREE.PerspectiveCamera;
@@ -33,73 +25,48 @@ type SceneGroups = {
 };
 
 type Frame = {
-  scrollProgress: number;
-  heroScroll: number;
+  progress: SceneProgress;
   reducedMotion: boolean;
   time: number;
   mobile: boolean;
-  base: { x: number; y: number; z: number };
+  lane: number; // x of the right-hand lane in world units, by viewport width
 };
 
-export function applyFrame(groups: SceneGroups, frame: Frame): void {
+// How visible each accent gets: the hero paper is the one bold element; the
+// later ones sit behind panels and only need to read as texture.
+export const PEAK = { paper: 1, analysis: 0.5 } as const;
+
+// Returns false when there's nothing to draw (the caller skips rendering).
+export function applyFrame(groups: SceneGroups, frame: Frame): boolean {
   const { camera, paperGroup, analysisGroup, reviewGroup, root } = groups;
-  const { scrollProgress, heroScroll, reducedMotion, time, mobile, base } = frame;
-  const driftScale = reducedMotion ? 0 : 1;
-  const drift = time * 0.00035;
-
-  const paperTravel = between(scrollProgress, ...SCROLL.paperTravel);
-  const heroPaperProgress = Math.max(heroScroll, paperTravel);
-
-  const analysisIn = between(scrollProgress, ...SCROLL.analysisIn);
-  const analysisOut = between(scrollProgress, ...SCROLL.analysisOut);
-  const reviewIn = between(scrollProgress, ...SCROLL.reviewIn);
-  const finalEase = between(scrollProgress, ...SCROLL.finalEase);
-
-  const paperReveal = between(heroPaperProgress, ...SCROLL.paperReveal);
-  const paperExit = between(scrollProgress, ...SCROLL.paperExit);
-  paperGroup.position.x = mobile
-    ? lerp(1.5, -0.72, heroPaperProgress) - paperExit * 0.18
-    : lerp(2.4, -0.72, heroPaperProgress) - paperExit * 0.42;
-  paperGroup.position.y =
-    lerp(0.28, 0.08, heroPaperProgress) + Math.sin(drift) * 0.04 * driftScale + paperExit * 0.08;
-  paperGroup.rotation.y =
-    lerp(-0.62, -0.08, between(heroPaperProgress, ...SCROLL.paperRotateStart)) +
-    Math.PI * between(heroPaperProgress, ...SCROLL.paperRotateFlip) -
-    paperExit * 0.08;
-  paperGroup.rotation.z = lerp(-0.12, -0.035, heroPaperProgress) + Math.sin(drift * 0.9) * 0.01 * driftScale;
-  paperGroup.scale.setScalar((mobile ? 0.82 : 1) * lerp(1, 0.9, paperExit));
-  setOpacity(paperGroup, clamp01(Math.max(paperReveal, 0.86 - paperExit * 0.64)));
-
-  analysisGroup.position.x = mobile ? 0 : -0.32;
-  analysisGroup.position.y = 0.06 + Math.sin(drift * 0.7) * 0.05 * driftScale;
-  analysisGroup.rotation.z = drift * 0.18 * driftScale;
-  analysisGroup.scale.setScalar(mobile ? 0.72 : 0.92);
-  setOpacity(analysisGroup, clamp01(analysisIn * (1 - analysisOut)));
-
-  reviewGroup.position.x = mobile ? 0.55 : 1.22;
-  reviewGroup.position.y = 0.1 + Math.sin(drift * 0.75) * 0.04 * driftScale;
-  reviewGroup.rotation.y = 0.08 * between(scrollProgress, ...SCROLL.reviewRotate);
-  reviewGroup.scale.setScalar(mobile ? 0.78 : 0.96);
-  setOpacity(reviewGroup, clamp01(reviewIn * (1 - finalEase * 0.55)));
-
-  root.rotation.y = Math.sin(drift * 0.32) * 0.018 * driftScale;
-
-  // Scroll-driven camera pan: a genuine viewpoint drift layered on top of the
-  // per-object motion above, giving each section its own vantage rather than a
-  // static observer. Frozen at the responsive base framing under reduced motion.
-  if (reducedMotion) {
-    camera.position.set(base.x, base.y, base.z);
-    camera.lookAt(0, 0, 0);
-  } else {
-    const panJournals = between(scrollProgress, ...SCROLL.panJournals);
-    const panMatching = between(scrollProgress, ...SCROLL.panMatching);
-    const panReview = between(scrollProgress, ...SCROLL.panReview);
-    const panPrivacy = between(scrollProgress, ...SCROLL.panPrivacy);
-    const panFinal = between(scrollProgress, ...SCROLL.panFinal);
-
-    camera.position.x = base.x - panJournals * 0.5 + panMatching * 0.35 - panReview * 0.25 + panPrivacy * 0.12;
-    camera.position.y = base.y - panMatching * 0.12 + panReview * 0.16 - panFinal * 0.08;
-    camera.position.z = base.z - panMatching * 1.3 + panReview * 1.7 + panPrivacy * 1.1 - panFinal * 1.6;
-    camera.lookAt(panReview * 0.35 - panFinal * 0.2, panReview * 0.12 - panFinal * 0.1, 0);
+  const { progress, reducedMotion, time, mobile, lane } = frame;
+  if (mobile) {
+    for (const g of [paperGroup, analysisGroup, reviewGroup]) setOpacity(g, 0);
+    return false;
   }
+  const drift = reducedMotion ? 0 : time * 0.00035;
+
+  // Hero paper: turns toward the reader over the first half, then slides back and fades.
+  const turn = between(progress.hero, 0, 0.5);
+  const leave = between(progress.hero, 0.45, 0.9);
+  paperGroup.position.set(lane + leave * 0.6, lerp(0.2, 0.05, turn) + Math.sin(drift) * 0.04 - leave * 0.2, -leave * 1.5);
+  paperGroup.rotation.set(0, lerp(-0.55, -0.18, turn) - leave * 0.25, lerp(-0.1, -0.04, turn) + Math.sin(drift * 0.9) * 0.01);
+  paperGroup.scale.setScalar(1);
+  setOpacity(paperGroup, PEAK.paper * (1 - leave));
+
+  // Analysis ring: arrives with the matching section, leaves as review arrives.
+  const analysis = between(progress.matching, 0.4, 0.9) * (1 - between(progress.review, 0, 0.5));
+  analysisGroup.position.set(lane, 0.06 + Math.sin(drift * 0.7) * 0.05, -0.4);
+  analysisGroup.rotation.z = drift * 0.18;
+  analysisGroup.scale.setScalar(0.72);
+  setOpacity(analysisGroup, PEAK.analysis * analysis);
+
+  // The review sheets read as blank placeholders at this size; the consent
+  // panel carries that section on its own.
+  setOpacity(reviewGroup, 0);
+
+  root.rotation.y = Math.sin(drift * 0.32) * 0.018;
+  camera.position.set(0, 0.1, 11);
+  camera.lookAt(0, 0, 0);
+  return clamp01(PEAK.paper * (1 - leave)) > 0 || analysis > 0;
 }

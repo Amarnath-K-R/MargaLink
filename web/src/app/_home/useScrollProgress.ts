@@ -1,30 +1,33 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { localProgress } from "./motion.ts";
 
-// Drives every scroll-linked value on the homepage: overall page progress,
-// hero-specific progress (the hero section is taller than the viewport, so
-// it needs its own local measure), each later section's local progress
-// (localProgress — 0 until it scrolls into view, 1 once it's mostly
-// arrived), and the reduced-motion preference. One rAF-throttled scroll
-// listener drives all of it, rather than a listener per section.
+export const SECTIONS = ["pathways", "journals", "matching", "review", "writing", "privacy", "final"] as const;
+export type SectionName = (typeof SECTIONS)[number];
+export type SectionProgress = Record<SectionName, number>;
+
+const ZERO = Object.fromEntries(SECTIONS.map((s) => [s, 0])) as SectionProgress;
+
+// Drives every scroll-linked value on the homepage: hero progress (the hero
+// is taller than the viewport, so it has its own measure), each later
+// section's local progress (localProgress — 0 until it scrolls into view, 1
+// once it's mostly arrived), whether the page has scrolled at all (the
+// header's background), and the reduced-motion preference. One rAF-throttled
+// scroll listener drives all of it. Everything is section-local, so adding or
+// resizing a section never shifts another section's choreography.
 export function useScrollProgress() {
-  const [progress, setProgress] = useState(0);
   const [heroProgress, setHeroProgress] = useState(0);
-  const [journalsProgress, setJournalsProgress] = useState(0);
-  const [matchingProgress, setMatchingProgress] = useState(0);
-  const [reviewProgress, setReviewProgress] = useState(0);
-  const [privacyProgress, setPrivacyProgress] = useState(0);
-  const [finalProgress, setFinalProgress] = useState(0);
+  const [sections, setSections] = useState<SectionProgress>(ZERO);
+  const [scrolled, setScrolled] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
 
   const heroRef = useRef<HTMLElement>(null);
-  const journalsRef = useRef<HTMLElement>(null);
-  const matchingRef = useRef<HTMLElement>(null);
-  const reviewRef = useRef<HTMLElement>(null);
-  const privacyRef = useRef<HTMLElement>(null);
-  const finalRef = useRef<HTMLElement>(null);
+  const refs = useRef<Partial<Record<SectionName, HTMLElement | null>>>({});
+  // A ref callback per section, stable across renders.
+  const [sectionRef] = useState(() => (name: SectionName) => (el: HTMLElement | null) => {
+    refs.current[name] = el;
+  });
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -43,20 +46,18 @@ export function useScrollProgress() {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const viewportHeight = window.innerHeight;
-        const maxScroll = document.documentElement.scrollHeight - viewportHeight;
-        setProgress(maxScroll > 0 ? Math.min(1, Math.max(0, window.scrollY / maxScroll)) : 0);
-
+        setScrolled(window.scrollY > 24);
         const hero = heroRef.current;
         if (hero) {
           const travel = Math.max(hero.offsetHeight - viewportHeight, 1);
           setHeroProgress(Math.min(1, Math.max(0, -hero.getBoundingClientRect().top / travel)));
         }
-
-        if (journalsRef.current) setJournalsProgress(localProgress(journalsRef.current.getBoundingClientRect(), viewportHeight));
-        if (matchingRef.current) setMatchingProgress(localProgress(matchingRef.current.getBoundingClientRect(), viewportHeight));
-        if (reviewRef.current) setReviewProgress(localProgress(reviewRef.current.getBoundingClientRect(), viewportHeight));
-        if (privacyRef.current) setPrivacyProgress(localProgress(privacyRef.current.getBoundingClientRect(), viewportHeight));
-        if (finalRef.current) setFinalProgress(localProgress(finalRef.current.getBoundingClientRect(), viewportHeight));
+        const next = { ...ZERO };
+        for (const name of SECTIONS) {
+          const el = refs.current[name];
+          if (el) next[name] = localProgress(el.getBoundingClientRect(), viewportHeight);
+        }
+        setSections(next);
       });
     };
     update();
@@ -69,20 +70,5 @@ export function useScrollProgress() {
     };
   }, []);
 
-  return {
-    progress,
-    heroProgress,
-    journalsProgress,
-    matchingProgress,
-    reviewProgress,
-    privacyProgress,
-    finalProgress,
-    reducedMotion,
-    heroRef,
-    journalsRef,
-    matchingRef,
-    reviewRef,
-    privacyRef,
-    finalRef,
-  };
+  return { heroProgress, sections, scrolled, reducedMotion, heroRef: heroRef as RefObject<HTMLElement | null>, sectionRef };
 }

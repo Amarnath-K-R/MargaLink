@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { ArrowUpRight, BookOpen, ScanSearch, FileCheck2, BarChart3, X } from "lucide-react";
+import { ArrowUpRight, BookOpen, ScanSearch, FileCheck2, BarChart3, PenLine, X } from "lucide-react";
 
 const TOOLS = [
   {
@@ -21,7 +21,13 @@ const TOOLS = [
     href: "/review",
     icon: FileCheck2,
     title: "Get it reviewed",
-    description: "Optional AI review, disclosed at the boundary.",
+    description: "An optional AI review — sent only after you agree.",
+  },
+  {
+    href: "/write",
+    icon: PenLine,
+    title: "Write the paper",
+    description: "Your journal's LaTeX template, compiled in your browser.",
   },
   {
     href: "/figures",
@@ -52,7 +58,7 @@ export default function ToolsOverlay({ open, onClose }: { open: boolean; onClose
       <button className="tools-backdrop" aria-label="Close" onClick={onClose} />
       <div className="tools-dialog">
         <div className="tools-dialog-head">
-          <span>WHICH TOOL DO YOU NEED</span>
+          <h2 className="tools-title">Which tool do you need?</h2>
           <button className="tools-close" aria-label="Close" onClick={onClose}>
             <X size={18} strokeWidth={1.8} />
           </button>
@@ -60,7 +66,7 @@ export default function ToolsOverlay({ open, onClose }: { open: boolean; onClose
         <div className="tools-grid">
           {TOOLS.map(({ href, icon: Icon, title, description }) => (
             <Link key={href} href={href} className="tools-card" onClick={onClose}>
-              <Icon size={22} strokeWidth={1.6} />
+              <Icon size={22} strokeWidth={1.6} aria-hidden="true" />
               <strong>{title}</strong>
               <small>{description}</small>
               <ArrowUpRight size={16} className="tools-card-arrow" />

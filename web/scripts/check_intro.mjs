@@ -29,13 +29,11 @@ const overlayVisible = await page.locator(".intro-overlay").isVisible();
 console.log("overlay visible on first load:", overlayVisible);
 await page.screenshot({ path: `${SCRATCH}/intro_1_showing.png` });
 
-// Wait for the full sequence (8000ms hold + up to 650ms pause + 900ms fade,
-// see IntroSequence.tsx) and confirm it disappears on its own, then that the
-// real page is intact underneath. Timeout padded well past the ~9.55s
-// worst-case desktop timeline.
-await page.waitForSelector(".intro-overlay", { state: "detached", timeout: 12000 });
+// Wait for the sequence (4200ms hold + pause + fade, see IntroSequence.tsx)
+// and confirm it disappears on its own, then that the real page is intact.
+await page.waitForSelector(".intro-overlay", { state: "detached", timeout: 7000 });
 console.log("overlay auto-dismissed after the sequence: yes");
-await page.waitForSelector("text=MargaLink helps researchers find the right journal, check the fit, and ask for a review.");
+await page.waitForSelector(".hero h1");
 await page.screenshot({ path: `${SCRATCH}/intro_2_revealed.png` });
 
 // sessionStorage should now remember it (see IntroSequence.tsx SEEN_KEY).
@@ -44,12 +42,21 @@ console.log("sessionStorage remembers it was seen:", seen === "1");
 
 // A second visit (same context = same sessionStorage) should skip it entirely.
 await page.reload();
-await page.waitForSelector("text=MargaLink helps researchers find the right journal, check the fit, and ask for a review.");
+await page.waitForSelector(".hero h1");
 const overlayOnReturn = await page.locator(".intro-overlay").count();
 console.log("overlay count on return visit (should be 0):", overlayOnReturn);
 
+// A first-time visitor can skip it: any click or key ends it at once.
+const fresh = await (await browser.newContext()).newPage();
+await fresh.goto("http://localhost:3000");
+await fresh.waitForSelector(".intro-overlay");
+await fresh.waitForTimeout(600);
+await fresh.keyboard.press("Space");
+const skipped = await fresh.waitForSelector(".intro-overlay", { state: "detached", timeout: 1500 }).then(() => true, () => false);
+console.log("a key press skips the intro:", skipped);
+
 console.log("console errors:", consoleErrors.length ? consoleErrors.join("\n") : "(none)");
-if (!overlayVisible || overlayOnReturn !== 0) {
+if (!overlayVisible || overlayOnReturn !== 0 || !skipped || consoleErrors.length) {
   console.log("FAIL");
   process.exit(1);
 }
