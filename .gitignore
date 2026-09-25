@@ -12,3 +12,6 @@ pipeline/data/
 *.log
 web/public/index/
 web/.impeccable/
+
+# per-plan execution scratch (superpowers ledgers)
+.superpowers/
