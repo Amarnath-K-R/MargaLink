@@ -108,6 +108,14 @@ export default function PathwaysSection({
               </span>
               <ArrowUpRight size={18} />
             </Link>
+            <Link href="/write" className="workflow-row">
+              <span className="workflow-index">05</span>
+              <span>
+                <strong>Write the paper</strong>
+                <small>Your journal&apos;s LaTeX template, compiled in your browser.</small>
+              </span>
+              <ArrowUpRight size={18} />
+            </Link>
           </div>
         </div>
       </div>

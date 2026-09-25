@@ -285,6 +285,49 @@ are bodyless GETs for public, versioned assets — never anything from the
 dataset — but the panel's completeness guarantee doesn't extend there,
 and `/figures` doesn't claim it does.
 
+### The writing workspace: LaTeX in the browser
+
+`/write` is a single-author LaTeX workspace: start from a journal's
+template (or import a zip), edit in CodeMirror, compile to PDF, back up
+as a zip. No server, no AI.
+
+- **Engine.** TeX Live 2023 compiled to WebAssembly by the BusyTeX
+  project — its MIT-licensed core build (`busytex.js`/`.wasm`, the
+  pipeline and worker scripts, and the Ubuntu TeX Live data packs), used
+  unmodified. The AGPL-licensed wrappers around it are not used; our
+  glue (`public/texWorker.js`, `texRunner.ts`) is our own. Two drivers:
+  pdfLaTeX and XeLaTeX.
+- **Hosting.** The engine is ~30 MB of WASM plus ~110 MB for the basic
+  pack and more for the optional packs — too big for Pages' 25 MB file
+  cap, so it lives on the public R2 bucket `margalink-assets` under a
+  release-dated prefix, every object `immutable` and cached by the
+  browser. `scripts/publish_busytex.sh` uploads only an allowlist of
+  files with pinned sizes and a 500 MB total cap, so a mistake can't
+  grow the bill; the bucket's CORS allows only our origins.
+- **Packs.** `texEngine.ts`'s `packsFor()` reads a paper's `\usepackage`
+  lines to pick data packs. BusyTeX only resolves packages named in the
+  main `.tex`, so a template whose class needs more (IEEEtran's Times
+  fonts, acmart) declares `packs: ["all"]`, and a compile that fails on a
+  missing file is retried once, on a fresh worker, with every pack.
+- **Compile.** `texRunner.ts` owns the worker: newer compiles supersede
+  older ones, a 90 s deadline applies only once TeX runs (a slow first
+  download is not a hang), and `texLog.ts` turns the log into
+  file/line diagnostics for the editor gutter.
+- **Storage.** `projectStore.ts` keeps each project as a folder in the
+  browser's Origin Private File System (`margalink-write/<id>/`), with
+  `project.json` and the last compiled PDF in a hidden `.margalink/`
+  folder. Saves are debounced; the page asks for persistent storage and
+  says plainly that clearing site data deletes drafts. `zip.ts` (fflate)
+  does backup and import.
+- **Templates.** `public/templates/` bundles four that compile here
+  (plain article, elsarticle, IEEEtran, acmart) with their licences in
+  `SOURCES.md`; eight more publishers are links to their own template
+  pages. `templateCatalog.ts` maps a journal's publisher to one, so
+  `/write?journal=<id>` preselects it.
+
+`/write`'s trace panel covers the page's own fetches (template files);
+the engine is fetched by the worker, like `/figures`' runtime.
+
 ## The invariant that keeps `src/lib/` and `functions/` from duplicating types
 
 `functions/api/review.ts` already imports directly from `src/lib/`
@@ -341,6 +384,11 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `figures/_components/PanelEditor.tsx`, `StyleBar.tsx` | Per-panel controls (family, roles, axes, summary, order, overlays, statistics, annotations) and whole-figure style/size/palette/grid. |
 | `figures/_components/FigurePreview.tsx`, `ExportBar.tsx`, `RecipeImportExport.tsx` | The live image with local-only error details and test results; PNG/TIFF/SVG/PDF export; recipe save/load. |
 | `figures/layout.tsx` | Route metadata shim. |
+| `figures/_components/AddToPaper.tsx` | Puts the figure as a PDF into a `/write` project's `figures/` and copies the LaTeX. |
+| `write/page.tsx` | Project list, template picker, zip import; `?journal=` preselects a template. |
+| `write/_components/Workspace.tsx` | One open project: file tree, editor, compile, PDF, diagnostics, backup. |
+| `write/_components/LatexEditor.tsx`, `FileTree.tsx`, `PdfPane.tsx`, `Diagnostics.tsx`, `TemplatePicker.tsx`, `StorageBanner.tsx`, `download.ts` | The workspace's pieces. |
+| `write/layout.tsx` | Route metadata shim. |
 
 **`src/app/_home/`** — homepage-only, a Next "private folder" (excluded
 from routing; nothing outside `app/page.tsx` imports from it).
@@ -414,6 +462,12 @@ real technical concern, not a speculative grouping).
 | `figure.ts` | Client: `askClaude()` (re-checks everything returned), the per-device usage counter, session-scoped consent. |
 | `figureRunner.ts` | The worker lifecycle: `warmUp()`, `renderFigure()` (stale previews dropped), `exportFigure()`, `FigureRenderError`. Talks to `public/figureWorker.mjs`, which runs `public/figurelib.py`. |
 | `figureTemplates.ts` | `loadTemplates()`, `bindTemplate()` (remaps a template's roles to the user's columns by type). |
+| `texEngine.ts` | The engine's R2 URL, release, files and data packs; `packsFor()`. |
+| `texRunner.ts` | The TeX worker lifecycle: `compileProject()`, supersession, deadline, the all-packs retry. Talks to `public/texWorker.js`. |
+| `texLog.ts` | `parseTexLog()` — errors, warnings and missing packages with file and line. |
+| `projectStore.ts` | `/write` projects in the Origin Private File System; `autosaver()`; zip export/import. |
+| `templateCatalog.ts` | `loadTemplates()`, `templateForJournal()`, `starterProject()`. |
+| `zip.ts` | `zipFiles()`, `unzipFiles()`, `flattenSingleRoot()` over fflate. |
 
 **`functions/`** — Cloudflare Pages Functions; every file here is routed
 as an endpoint, so shared logic lives in `src/lib/` instead (imported via

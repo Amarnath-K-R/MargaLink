@@ -19,6 +19,14 @@ instruments `fetch()` for the whole page lifetime (not just one run) and
 shows every request made, so this is checkable on the page itself, not just
 asserted here.
 
+`/write` (the LaTeX workspace) keeps rule 1 the same way: projects live in
+the browser's Origin Private File System (`projectStore.ts`), and TeX Live
+runs in a Web Worker (`public/texWorker.js`, driven by `texRunner.ts`). The
+engine and its data packs are public files on our Cloudflare R2 bucket
+(`texEngine.ts` names the URL; `scripts/publish_busytex.sh` uploads them,
+with pinned sizes and a total cap) — a public-asset origin, fetched with
+bodyless GETs, never anything from a paper.
+
 **The two disclosed exceptions (rule 3):** two features send something to
 Anthropic's Claude API. Both are opt-in, both sit behind an explicit
 consent step that names exactly what happens before anything is sent, and
@@ -74,7 +82,7 @@ variable. Every other feature keeps rule 1 absolutely; these two are rule
 
 Web app: `cd web && npm install && npm run dev` — but `/journals`,
 `/match`, `/journal/[id]`, and `npm run build` all need the pipeline's
-output first (see below); without it you only get `/`, `/privacy`, `/review`.
+output first (see below); without it you only get `/`, `/privacy`, `/review`, `/figures`, `/write`.
 
 Pipeline, in order (see `pipeline/README.md` for the full explanation —
 `fetch_works.py` alone takes hours and is resumable):

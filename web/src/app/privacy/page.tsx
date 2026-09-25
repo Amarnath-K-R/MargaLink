@@ -180,6 +180,31 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
+      <h2 id="writing" className="mt-12 font-serif text-xl font-medium">
+        Writing your paper
+      </h2>
+      <p className="mt-3 text-ink-soft">
+        The writing workspace compiles your LaTeX in your browser, with TeX Live running on your
+        device. Your manuscript, figures and bibliography are kept in this browser&apos;s own storage
+        on this device — never on a server, and never sent anywhere. There is no AI in the editor.
+      </p>
+      <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
+        <li>
+          The first compile downloads the TeX engine and its packages (about 140 MB, more for some
+          templates) from our public file host. Those downloads carry nothing from your paper, and
+          your browser keeps them for later compiles.
+        </li>
+        <li>
+          Because your drafts live only in this browser, clearing its site data deletes them. Use
+          &quot;Download backup&quot; to keep a copy or to move to another computer, and import the
+          zip to continue.
+        </li>
+        <li>
+          &quot;Add to a paper&quot; in the figure studio moves a figure between the two tools inside
+          your browser; nothing is uploaded.
+        </li>
+      </ul>
+
       <h2 className="mt-12 font-serif text-xl font-medium">Accounts and payment</h2>
       <p className="mt-3 text-ink-soft">
         If accounts exist later, they&apos;ll need only an email address.
