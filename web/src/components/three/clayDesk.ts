@@ -360,7 +360,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
 export const LANDING_DESK: DeskLayout = {
   camera: { x: 0, y: 12, z: 10, lookX: 0, lookZ: 0.4, fov: 32 },
   items: [
-    { kind: "pencil", x: -6.2, z: -2.6, rotY: -0.25 },
+    { kind: "pencil", x: -7.2, z: -2.8, rotY: -0.35 },
     { kind: "graph", x: 6.4, z: -2.9, rotY: -0.3 },
     { kind: "chart", x: 6.4, z: -3.1, rotY: -0.3, lift: 0.036 },
     { kind: "ruler", x: -5.6, z: 3.6, rotY: -0.14 },
@@ -369,7 +369,7 @@ export const LANDING_DESK: DeskLayout = {
     { kind: "plane", x: 2.6, z: -2.4, rotY: 0.3, lift: 1.6, scale: 0.6 },
     { kind: "pin", x: 3.8, z: 4.1 },
   ],
-  path: [[-3.6, -1.9], [-4.3, 0.6], [-3.4, 2.7], [-0.8, 3.7], [2.0, 3.8], [3.6, 4.1]],
+  path: [[-4.95, -1.9], [-5.3, 0.3], [-4.6, 2.7], [-1.6, 3.7], [2.0, 3.8], [3.6, 4.1]],
 };
 
 // Phones: the text is full width, so the desk sits above and below it.
