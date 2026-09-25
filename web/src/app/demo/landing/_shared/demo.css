@@ -1,0 +1,78 @@
+/* Landing demos only (/demo/landing/*). The cutout is the intro's `mark`
+   treatment: a solid teal (or ink) block, paper-coloured letters, an offset
+   tinted shadow, the intro's tight 600-weight sans. */
+
+.demo-page { position: relative; min-height: 100svh; overflow: hidden; background: var(--paper); color: var(--ink); }
+.demo-canvas { position: absolute; inset: 0; z-index: 0; }
+.demo-canvas canvas { display: block; width: 100%; height: 100%; }
+.demo-grain { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: .16; mix-blend-mode: multiply; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.15'/%3E%3C/svg%3E"); }
+
+.demo-header { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 24px 44px; }
+.demo-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -.03em; }
+.demo-brand-mark { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; background: var(--ink); color: var(--paper); font-family: var(--font-serif); font-size: 16px; font-weight: 500; }
+.demo-header-links { display: flex; gap: 26px; font-size: 14px; }
+.demo-header-links a { color: var(--ink-soft); text-decoration: none; }
+.demo-header-links a:hover { color: var(--ink); }
+
+.demo-main { position: relative; z-index: 2; min-height: 100svh; display: flex; align-items: center; width: min(1320px, calc(100% - 88px)); margin: 0 auto; padding: 110px 0 70px; pointer-events: none; }
+.demo-main a, .demo-main button { pointer-events: auto; }
+
+.demo-in { animation: demoIn .9s var(--ease) both; }
+@keyframes demoIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+
+/* the cutout */
+.demo-cut { display: inline-block; padding: .02em .12em .1em; background: var(--accent); color: var(--paper); box-shadow: .12em .11em 0 rgba(44,95,111,.2); }
+.demo-cut-ink { background: var(--ink); box-shadow: .12em .11em 0 rgba(27,31,39,.18); }
+.demo-tilt-l { transform: rotate(-2.2deg); }
+.demo-tilt-r { transform: rotate(1.6deg); }
+
+.demo-kicker { display: flex; align-items: center; gap: 12px; margin: 0; color: var(--accent); font-size: 15px; font-weight: 500; }
+.demo-kicker span { display: inline-block; width: 34px; height: 1px; background: currentColor; }
+.demo-deck { max-width: 34em; margin: 26px 0 0; color: var(--ink-soft); font-size: 17px; line-height: 1.6; text-wrap: pretty; }
+.demo-deck strong { color: var(--ink); font-weight: 600; }
+
+.demo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px 26px; margin-top: 30px; }
+.demo-button { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 24px; border-radius: 999px; background: var(--accent); color: var(--white); font-size: 15px; text-decoration: none; box-shadow: 0 12px 28px rgba(44,95,111,.22); transition: transform .18s var(--ease), background .18s ease; }
+.demo-button:hover { background: #244f5d; transform: translateY(-2px); }
+.demo-button:active { transform: scale(.98); }
+.demo-link { display: inline-flex; align-items: center; gap: 7px; padding: 5px 0; border-bottom: 1px solid var(--ink-soft); color: var(--ink); font-size: 15px; text-decoration: none; }
+.demo-link:hover { color: var(--accent); border-color: var(--accent); }
+
+/* A — the phrase leads */
+.demo-copy-a { width: min(640px, 50%); }
+.demo-phrase { margin: 26px 0 0; font-family: var(--font-sans); font-size: clamp(64px, 8.6vw, 138px); font-weight: 600; letter-spacing: -.075em; line-height: .88; }
+.demo-phrase span { display: block; }
+.demo-phrase .demo-cut { margin-top: .06em; }
+.demo-wordmark { margin: 30px 0 0; font-family: var(--font-serif); font-size: clamp(40px, 4.6vw, 70px); font-weight: 500; letter-spacing: -.05em; line-height: 1; }
+.demo-wordmark em, .demo-catch em { color: var(--accent); font-weight: 400; }
+
+/* B — the wordmark leads, centred */
+.demo-main:has(.demo-copy-b) { justify-content: center; }
+.demo-copy-b { display: flex; flex-direction: column; align-items: center; width: min(980px, 100%); text-align: center; }
+.demo-wordmark-xl { margin: 0; font-family: var(--font-serif); font-size: clamp(72px, 11.5vw, 186px); font-weight: 500; letter-spacing: -.06em; line-height: .95; }
+.demo-wordmark-xl .demo-cut { margin-left: .04em; font-family: var(--font-sans); font-weight: 600; letter-spacing: -.07em; }
+.demo-catch { margin: 22px 0 0; font-family: var(--font-serif); font-size: clamp(30px, 3.6vw, 54px); letter-spacing: -.03em; line-height: 1.05; }
+.demo-catch em { font-style: italic; }
+.demo-kicker-center { justify-content: center; margin-top: 18px; }
+.demo-copy-b .demo-deck { margin-left: auto; margin-right: auto; }
+.demo-copy-b .demo-actions { justify-content: center; }
+.demo-copy-b .demo-deck, .demo-copy-b .demo-kicker, .demo-catch { text-shadow: 0 0 14px var(--paper), 0 0 4px var(--paper); }
+
+/* C — stacked cutout labels over a flat-lay */
+.demo-copy-c { width: min(760px, 58%); }
+.demo-stack { margin: 0; font-family: var(--font-sans); font-size: clamp(64px, 9vw, 146px); font-weight: 600; letter-spacing: -.075em; line-height: .86; }
+.demo-stack > span { display: block; }
+.demo-labels { display: flex !important; flex-wrap: wrap; align-items: flex-end; gap: .12em .16em; margin-top: .08em; }
+.demo-labels .demo-cut-ink { font-family: var(--font-serif); font-size: .56em; font-weight: 500; letter-spacing: -.045em; }
+
+.demo-switch { position: fixed; right: 20px; bottom: 20px; z-index: 5; display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--white); color: var(--ink-soft); font-size: 13px; box-shadow: 0 10px 30px rgba(27,31,39,.1); }
+.demo-switch a { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; color: var(--ink); text-decoration: none; font-weight: 600; }
+.demo-switch a[aria-current="page"] { background: var(--ink); color: var(--paper); }
+
+@media (max-width: 900px) {
+  .demo-header { padding: 18px 22px; }
+  .demo-header-links { display: none; }
+  .demo-main { width: calc(100% - 44px); align-items: flex-start; padding-top: 96px; }
+  .demo-copy-a, .demo-copy-c { width: 100%; }
+  .demo-canvas { opacity: .55; }
+}
