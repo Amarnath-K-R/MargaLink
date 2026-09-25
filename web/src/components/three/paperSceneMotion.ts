@@ -68,7 +68,8 @@ export function applyFrame(groups: SceneGroups, frame: Frame): void {
     paperExit * 0.08;
   paperGroup.rotation.z = lerp(-0.12, -0.035, heroPaperProgress) + Math.sin(drift * 0.9) * 0.01 * driftScale;
   paperGroup.scale.setScalar((mobile ? 0.82 : 1) * lerp(1, 0.9, paperExit));
-  setOpacity(paperGroup, clamp01(Math.max(paperReveal, 0.86 - paperExit * 0.64)));
+  // Hidden while the landing's clay desk has the first screen; it appears as the landing scrolls away.
+  setOpacity(paperGroup, clamp01(Math.max(paperReveal, 0.86 - paperExit * 0.64)) * between(heroScroll, 0.12, 0.28));
 
   analysisGroup.position.x = mobile ? 0 : -0.32;
   analysisGroup.position.y = 0.06 + Math.sin(drift * 0.7) * 0.05 * driftScale;

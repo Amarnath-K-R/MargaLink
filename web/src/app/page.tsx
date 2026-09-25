@@ -14,6 +14,8 @@ import PrivacySection from "./_home/PrivacySection.tsx";
 import FinalSection from "./_home/FinalSection.tsx";
 import IntroSequence from "@/components/IntroSequence";
 import ThreePaperScene from "@/components/ThreePaperScene";
+import ClayDesk from "@/components/ClayDesk";
+import { LANDING_DESK, LANDING_DESK_NARROW } from "@/components/three/clayDesk";
 import "./_home/home.css";
 
 function Home() {
@@ -37,10 +39,13 @@ function Home() {
   const screenDive = useMemo(() => (reducedMotion ? 0 : between(progress, 0.12, 0.2)), [progress, reducedMotion]);
   const featureEntry = useMemo(() => (reducedMotion ? 1 : between(progress, 0.13, 0.21)), [progress, reducedMotion]);
   const [toolsOpen, setToolsOpen] = useState(false);
+  // The landing's clay desk leaves with the landing copy.
+  const landingFade = between(heroProgress, 0.02, 0.2);
 
   return (
     <div className="margalink-page">
       <ThreePaperScene progress={progress} heroProgress={heroProgress} reducedMotion={reducedMotion} />
+      <ClayDesk layout={LANDING_DESK} narrowLayout={LANDING_DESK_NARROW} className="landing-desk" style={{ opacity: 1 - landingFade }} active={landingFade < 1} />
       <div className="grain" aria-hidden="true" />
 
       <SiteHeader onOpenTools={() => setToolsOpen(true)} />

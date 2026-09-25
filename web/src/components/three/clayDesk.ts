@@ -340,3 +340,35 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
 
   return { scene, camera, update };
 }
+
+// The homepage landing: the desk frames the centred wordmark from the edges,
+// and the path loops from the pencil tip around the words to the pin.
+export const LANDING_DESK: DeskLayout = {
+  camera: { x: 0, y: 12, z: 10, lookX: 0, lookZ: 0.4, fov: 32 },
+  items: [
+    { kind: "pencil", x: -6.2, z: -2.6, rotY: -0.25 },
+    { kind: "graph", x: 6.4, z: -2.9, rotY: -0.3 },
+    { kind: "chart", x: 6.4, z: -3.1, rotY: -0.3, lift: 0.036 },
+    { kind: "ruler", x: -5.6, z: 3.6, rotY: -0.14 },
+    { kind: "stack", x: 6.6, z: 2.8, rotY: 0.18 },
+    { kind: "notebook", x: -9.6, z: 0.4, rotY: 0.5 },
+    { kind: "plane", x: 2.6, z: -2.4, rotY: 0.3, lift: 1.6, scale: 0.6 },
+    { kind: "pin", x: 3.8, z: 4.1 },
+  ],
+  path: [[-3.6, -1.9], [-4.3, 0.6], [-3.4, 2.7], [-0.8, 3.7], [2.0, 3.8], [3.6, 4.1]],
+};
+
+// Phones: the text is full width, so the desk sits above and below it.
+export const LANDING_DESK_NARROW: DeskLayout = {
+  camera: { x: 0, y: 17, z: 7, lookX: 0, lookZ: 0.2, fov: 40 },
+  items: [
+    { kind: "pencil", x: -1.4, z: -5.6, rotY: -0.35, scale: 0.8 },
+    { kind: "graph", x: 2.4, z: -5.3, rotY: -0.3, scale: 0.7 },
+    { kind: "chart", x: 2.4, z: -5.5, rotY: -0.3, lift: 0.03, scale: 0.7 },
+    { kind: "plane", x: -2.4, z: -3.6, rotY: 0.4, lift: 1.4, scale: 0.45 },
+    { kind: "ruler", x: -1.2, z: 5.7, rotY: -0.18, scale: 0.75 },
+    { kind: "stack", x: 2.9, z: 6.3, rotY: 0.2, scale: 0.7 },
+    { kind: "pin", x: 1.3, z: 4.6, scale: 0.85 },
+  ],
+  path: [[0.2, -5.0], [-2.6, -3.0], [-3.0, 0.6], [-2.2, 3.4], [0.3, 4.3], [1.1, 4.6]],
+};

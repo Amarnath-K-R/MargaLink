@@ -1,14 +1,32 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { useThreeCanvas } from "@/components/three/useThreeCanvas";
-import { buildDesk, type DeskLayout } from "./clayDesk.ts";
+import { buildDesk, type DeskLayout } from "@/components/three/clayDesk";
 
 // The clay desk as a full-bleed canvas: scene from clayDesk.ts, rendered
 // through N8AO (soft, warm-tinted ambient occlusion — the contact darkening
 // that sells the clay look), written straight to the screen.
-export default function ClayDesk({ layout, className }: { layout: DeskLayout; className?: string }) {
+// `active` false skips rendering (e.g. once the landing has scrolled away).
+// `narrowLayout`, if given, is used below 760px wide (chosen once, at mount).
+export default function ClayDesk({
+  layout,
+  narrowLayout,
+  className,
+  style,
+  active = true,
+}: {
+  layout: DeskLayout;
+  narrowLayout?: DeskLayout;
+  className?: string;
+  style?: CSSProperties;
+  active?: boolean;
+}) {
   const pointer = useRef({ x: 0, y: 0 });
+  const activeRef = useRef(active);
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
@@ -23,14 +41,14 @@ export default function ClayDesk({ layout, className }: { layout: DeskLayout; cl
     renderer.shadowMap.type = THREE.VSMShadowMap;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const desk = buildDesk(THREE, renderer, layout, reduced);
+    const narrow = narrowLayout && window.innerWidth < 760;
+    const desk = buildDesk(THREE, renderer, narrow ? narrowLayout : layout, reduced);
 
     type Composer = { render: () => void; setSize: (w: number, h: number) => void };
     let composer: Composer | null = null;
     let size = { w: 1, h: 1 };
     // Post-processing loads async; frames before it's ready render directly.
-    // ?ao=0 renders without post-processing (for comparing).
-    if (new URLSearchParams(window.location.search).get("ao") !== "0") void Promise.all([
+    void Promise.all([
       import("three/examples/jsm/postprocessing/EffectComposer.js"),
       import("n8ao"),
     ]).then(([{ EffectComposer }, { N8AOPass }]) => {
@@ -48,7 +66,9 @@ export default function ClayDesk({ layout, className }: { layout: DeskLayout; cl
       composer = c;
     });
 
-    const start = performance.now();
+    // The entrance (objects dropping in, the path drawing) waits while the
+    // homepage intro still covers the page.
+    let start = performance.now();
     return {
       camera: desk.camera,
       onResize: (w, h) => {
@@ -56,6 +76,8 @@ export default function ClayDesk({ layout, className }: { layout: DeskLayout; cl
         composer?.setSize(w, h);
       },
       onFrame: (time) => {
+        if (!activeRef.current) return;
+        if (document.body.classList.contains("intro-bridge-pending")) start = time;
         desk.update(time - start, pointer.current);
         if (composer) composer.render();
         else renderer.render(desk.scene, desk.camera);
@@ -63,5 +85,5 @@ export default function ClayDesk({ layout, className }: { layout: DeskLayout; cl
     };
   });
 
-  return <div ref={mountRef} className={className} aria-hidden="true" />;
+  return <div ref={mountRef} className={className} style={style} aria-hidden="true" />;
 }

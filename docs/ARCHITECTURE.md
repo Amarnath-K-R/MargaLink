@@ -426,6 +426,7 @@ real technical concern, not a speculative grouping).
 | `useThreeCanvas.ts` | The setup/cleanup preamble shared by both scenes — mounting, the WebGL try/catch, resize, the rAF loop, teardown. |
 | `sceneHelpers.ts` | `forEachMaterial` (shared mesh/material traversal) + `setOpacity` (`ThreePaperScene`'s absolute-value policy). |
 | `paperSceneGraph.ts` | `buildPaperScene()` — the homepage scene's meshes/lights/groups. |
+| `clayDesk.ts` | The landing's clay-render desk, built in code (pencil, ruler, graph paper, sheets, chart, notebook, paper plane, the dashed path to a pin): rounded geometry, one matte palette-tinted material, RoomEnvironment + soft VSM shadows on a shadow-only ground. `LANDING_DESK` / `LANDING_DESK_NARROW` place it. Rendered by `components/ClayDesk.tsx` through N8AO ambient occlusion. |
 | `paperSceneMotion.ts` | `applyFrame()` + the `SCROLL` table (every scroll-threshold pair the scene's choreography depends on, named). |
 | `introSceneGraph.ts` | `buildIntroScene()` — the first-visit overlay's meshes/lights/groups. |
 

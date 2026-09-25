@@ -63,13 +63,28 @@ body.intro-bridge-fading .site-header { opacity: 1; filter: blur(0); }
 .section-shell { position: relative; z-index: 3; width: min(1180px, calc(100% - 150px)); margin: 0 auto; }
 .hero { min-height: 205svh; display: block; padding: 0; }
 .hero-stage { position: sticky; top: 0; min-height: 100svh; display: flex; align-items: center; padding: 132px 0 100px; overflow: hidden; }
-.hero-brand-landing { position: absolute; left: 50%; top: 50%; z-index: 4; display: block; transform: translate(-50%, -50%); transition: opacity .3s ease, transform .3s var(--ease); white-space: nowrap; }
-.hero-brand-highlight { display: inline-flex; align-items: center; gap: 16px; padding: 0; background: transparent; color: var(--ink); box-shadow: none; font-family: var(--font-serif); font-size: clamp(46px, 7vw, 88px); letter-spacing: -.065em; line-height: 1.08; cursor: default; transition: color .35s ease, transform .35s var(--ease), text-shadow .35s ease; }
-.hero-brand-highlight:hover { color: #252c35; transform: translateY(-3px); text-shadow: 0 8px 22px rgba(44,95,111,.16); }
-.hero-brand-highlight em { color: var(--accent); font-style: italic; font-weight: 400; }
-.hero-brand-mark { display: grid; width: 58px; height: 58px; place-items: center; border: 0; border-radius: 50%; background: var(--ink); color: var(--paper); font-size: 36px; transition: transform .35s var(--ease), background .35s ease, box-shadow .35s ease; }
-.hero-brand-highlight:hover .hero-brand-mark { background: var(--accent); transform: rotate(-7deg) scale(1.06); box-shadow: 0 7px 16px rgba(44,95,111,.2); }
-.hero-brand-prompt { position: absolute; left: calc(100% + 28px); top: 50%; display: inline-flex; align-items: center; gap: 8px; color: var(--accent); font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; transform: translateY(-50%); }
+.hero-brand-landing { position: absolute; left: 50%; top: 50%; z-index: 4; display: flex; flex-direction: column; align-items: center; width: min(1000px, 100%); text-align: center; transform: translate(-50%, -50%); transition: opacity .3s ease, transform .3s var(--ease); }
+/* The landing (design B): wordmark with "Link" in the intro's teal cutout,
+   the catchphrase, the way in — over the page-level clay desk. */
+.landing-desk { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+.landing-desk canvas { display: block; width: 100%; height: 100%; }
+.landing-in { animation: landingIn .9s var(--ease) both; }
+@keyframes landingIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+body.intro-bridge-pending .landing-in { animation-play-state: paused; }
+.margalink-page .landing-wordmark { margin: 0; font-family: var(--font-serif); font-size: clamp(72px, 11.5vw, 186px); font-weight: 500; letter-spacing: -.06em; line-height: .95; }
+.landing-cut { display: inline-block; margin-left: .04em; padding: .02em .12em .1em; background: var(--accent); color: var(--paper); font-family: var(--font-sans); font-weight: 600; letter-spacing: -.07em; box-shadow: .12em .11em 0 rgba(44,95,111,.2); }
+.landing-catch { margin: 22px 0 0; font-family: var(--font-serif); font-size: clamp(30px, 3.6vw, 54px); letter-spacing: -.03em; line-height: 1.05; }
+.landing-catch em { color: var(--accent); font-style: italic; font-weight: 400; }
+.landing-kicker { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 18px 0 0; color: var(--accent); font-size: 15px; font-weight: 500; }
+.landing-kicker span { display: inline-block; width: 34px; height: 1px; background: currentColor; }
+.landing-deck { max-width: 34em; margin: 26px auto 0; color: var(--ink-soft); font-size: 17px; line-height: 1.6; text-wrap: pretty; }
+.landing-catch, .landing-kicker, .landing-deck { text-shadow: 0 0 14px var(--paper), 0 0 4px var(--paper); }
+.landing-actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 18px 26px; margin-top: 30px; }
+.landing-button { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 24px; border-radius: 999px; background: var(--accent); color: var(--white); font-size: 15px; text-decoration: none; box-shadow: 0 12px 28px rgba(44,95,111,.22); transition: transform .18s var(--ease), background .18s ease; }
+.landing-button:hover { background: #244f5d; transform: translateY(-2px); }
+.landing-button:active { transform: scale(.98); }
+.landing-link { display: inline-flex; align-items: center; gap: 7px; padding: 5px 0; border-bottom: 1px solid var(--ink-soft); color: var(--ink); font-size: 15px; text-decoration: none; transition: color .18s ease, border-color .18s ease; }
+.landing-link:hover { color: var(--accent); border-color: var(--accent); }
 .hero-copy { width: min(570px, 62%); }
 .nonlinear-copy { position: relative; min-height: 590px; width: min(700px, 72%); }
 .nonlinear-copy .eyebrow { position: absolute; left: 0; top: 2px; }
@@ -102,8 +117,6 @@ body.intro-bridge-fading .site-header { opacity: 1; filter: blur(0); }
 .privacy-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid rgba(44,95,111,.25); border-radius: 999px; color: var(--accent); background: rgba(221,230,230,.36); font-family: var(--font-mono); font-size: 9px; letter-spacing: .05em; }
 .privacy-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(44,95,111,.12); }
 .hero-proof-note { color: var(--ink-soft); font-size: 11px; }
-.hero-coordinate { position: absolute; right: 6px; top: 31%; color: #8e9493; line-height: 1.8; transform: rotate(90deg); transform-origin: right top; }
-.hero-coordinate span { color: var(--accent); }
 .scroll-hint { position: absolute; bottom: 32px; left: 50%; display: flex; align-items: center; gap: 10px; color: #8e9493; font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; transform: translateX(-50%); opacity: 1; filter: blur(0); transition: opacity .9s var(--ease), filter .9s var(--ease), transform .9s var(--ease); }
 body.intro-bridge-pending .scroll-hint { opacity: 0; filter: blur(6px); transform: translate(-50%, 7px); }
 body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: translate(-50%, 0); }
@@ -258,7 +271,6 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
   .section-shell { width: min(680px, calc(100% - 48px)); }
   .hero-copy { width: 62%; }
   .nonlinear-copy { width: 78%; }
-  .hero-coordinate { right: -10px; }
   .story-grid, .story-grid.reverse-mobile { grid-template-columns: 1fr; gap: 50px; }
   .story-copy { max-width: 560px; }
   .journal-panel, .network-panel, .review-panel { margin-left: 0; }
@@ -281,11 +293,12 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
   .section-shell { width: calc(100% - 36px); }
   .hero { padding: 0; }
   .hero-stage { align-items: flex-start; padding-top: 145px; }
-  .hero-brand-landing { top: 50%; display: flex; align-items: center; flex-direction: column; gap: 19px; }
-  .hero-brand-prompt { position: static; transform: none; }
+  .hero-brand-landing { top: 46%; width: 100%; }
+  .margalink-page .landing-wordmark { font-size: clamp(54px, 16vw, 76px); }
+  .landing-catch { font-size: 30px; }
+  .landing-deck { font-size: 15px; }
+  .landing-desk canvas { opacity: .8; }
   .site-header, .scroll-hint { transition-duration: .65s; }
-  .hero-brand-highlight { font-size: 46px; }
-  .hero-brand-mark { width: 43px; height: 43px; font-size: 27px; }
   .hero-copy, .nonlinear-copy { width: 100%; }
   .nonlinear-copy { min-height: 650px; }
   .hero-word { font-size: clamp(57px, 16vw, 86px); }
@@ -297,7 +310,6 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
   .hero-deck { font-size: 14px; }
   .hero-actions { align-items: flex-start; flex-direction: column; gap: 18px; }
   .hero-proof { align-items: flex-start; flex-direction: column; gap: 10px; margin-top: 42px; }
-  .hero-coordinate { top: auto; right: -4px; bottom: 120px; font-size: 8px; }
   .scroll-hint { bottom: 22px; white-space: nowrap; }
   .story-section { min-height: auto; padding: 130px 0; }
   .story-copy h2 { font-size: 48px; }

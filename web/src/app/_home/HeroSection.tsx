@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
-import { ArrowDown, ArrowUpRight, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { ArrowDown, ArrowRight, ArrowUpRight, ChevronDown } from "lucide-react";
 import { between } from "@/lib/easing";
 import { PrivacyPill, scrollToId } from "./atoms.tsx";
 
@@ -34,18 +35,34 @@ export default function HeroSection({
             transform: `translate(-50%, calc(-50% + ${between(heroProgress, 0.02, 0.18) * -22}px))`,
           }}
         >
-          <span className="hero-brand-highlight">
-            <span className="hero-brand-mark">M</span>
-            <span>
-              Marga<em>Link</em>
-            </span>
-          </span>
-          <span className="hero-brand-prompt">
-            Scroll to open the paper <ChevronDown size={15} />
-          </span>
+          {/* The landing: the wordmark with "Link" in the intro's teal cutout,
+              the catchphrase (Marga is Sanskrit for path), and the way in.
+              The clay desk behind it is page-level (page.tsx). */}
+          <h1 className="landing-wordmark landing-in" style={{ animationDelay: "100ms" }}>
+            Marga<mark className="landing-cut">Link</mark>
+          </h1>
+          <p className="landing-catch landing-in" style={{ animationDelay: "280ms" }}>
+            Find your <em>path.</em>
+          </p>
+          <p className="landing-kicker landing-in" style={{ animationDelay: "380ms" }}>
+            <span /> Marga is Sanskrit for “path” <span />
+          </p>
+          <p className="landing-deck landing-in" style={{ animationDelay: "480ms" }}>
+            Find the journals that fit your paper, check it against their rules, write it in their template — without
+            your manuscript ever leaving the browser.
+          </p>
+          <div className="landing-actions landing-in" style={{ animationDelay: "580ms" }}>
+            <Link href="/match" className="landing-button">
+              Match your paper <ArrowRight size={16} />
+            </Link>
+            <Link href="/journals" className="landing-link">
+              Browse journals <ArrowUpRight size={15} />
+            </Link>
+          </div>
         </div>
         <div className="hero-copy nonlinear-copy">
-          <div className="eyebrow">
+          {/* arrives with "Keep", once the landing has gone */}
+          <div className="eyebrow" style={{ opacity: between(heroProgress, 0.04, 0.16) }}>
             <span className="eyebrow-line" /> A quieter way to publish
           </div>
           <div
@@ -110,11 +127,6 @@ export default function HeroSection({
               <span className="hero-proof-note">One clear exception. Always opt-in.</span>
             </div>
           </div>
-        </div>
-        <div className="hero-coordinate mono">
-          37°46′N / 122°25′W
-          <br />
-          <span>LOCAL / INDEXED / HUMAN</span>
         </div>
         <div className="scroll-hint">
           <span>SCROLL TO TRACE THE REVEAL</span>
