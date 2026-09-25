@@ -11,7 +11,7 @@ await page.waitForSelector("text=Find the right journal.");
 
 // Tab from the top of the page until the dropzone is focused.
 let focused = null;
-for (let i = 0; i < 6; i++) {
+for (let i = 0; i < 10; i++) { // header links, then the Upload/Paste tabs, then the dropzone
   await page.keyboard.press("Tab");
   focused = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
   if (focused === "Upload a PDF or DOCX paper") break;
