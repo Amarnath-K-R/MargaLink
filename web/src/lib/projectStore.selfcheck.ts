@@ -204,6 +204,14 @@ await assert.rejects(store.meta(copy.id));
   assert.deepEqual(done, ["typed"]);
 }
 
+// 6g. overlapping metadata updates (an autosave's timestamp bump and an engine switch) don't undo each other
+{
+  const m = await store.create({ name: "Meta", main: "main.tex", engine: "pdftex", journalId: null, templateId: null }, [{ path: "main.tex", data: enc(MAIN) }]);
+  await Promise.all([store.write(m.id, "main.tex", "a"), store.setMeta(m.id, { engine: "xetex" }), store.write(m.id, "main.tex", "b")]);
+  assert.equal((await store.meta(m.id)).engine, "xetex", "the engine switch survives");
+  await store.remove(m.id);
+}
+
 // 7. the autosaver writes only the last text once typing stops (Review Focus 1)
 {
   const writes: string[] = [];

@@ -28,9 +28,9 @@ const page = context.pages()[0] ?? (await context.newPage());
 // One /write project in this browser, for "Add to a paper" (part 1).
 {
   const w = await context.newPage();
-  await w.goto("http://localhost:3000/write");
+  await w.goto("http://localhost:3000/templates/templates.json"); // clear while the app isn't reading it
   await w.evaluate(async () => (await navigator.storage.getDirectory()).removeEntry("margalink-write", { recursive: true }).catch(() => {}));
-  await w.reload();
+  await w.goto("http://localhost:3000/write");
   await w.click('[data-template="article"]');
   await w.waitForSelector('[data-testid="workspace"]');
   await w.close();

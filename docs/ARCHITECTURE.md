@@ -300,8 +300,11 @@ as a zip. No server, no AI.
 - **Hosting.** The engine is ~30 MB of WASM plus ~110 MB for the basic
   pack and more for the optional packs — too big for Pages' 25 MB file
   cap, so it lives on the public R2 bucket `margalink-assets` under a
-  release-dated prefix, every object `immutable` and cached by the
-  browser. `scripts/publish_busytex.sh` uploads only an allowlist of
+  release-dated prefix, every object `immutable`. The data packs are
+  kept by the engine's own loader in IndexedDB (`EM_PRELOAD_CACHE`,
+  keyed by pack version), so the 104 MB basic pack isn't subject to
+  HTTP-cache entry limits (Firefox's is 50 MB); the 30 MB `.wasm` and the
+  small scripts come from the HTTP cache. `scripts/publish_busytex.sh` uploads only an allowlist of
   files with pinned sizes and a 500 MB total cap, so a mistake can't
   grow the bill; the bucket's CORS allows only our origins.
 - **Packs.** `texEngine.ts`'s `packsFor()` reads a paper's `\usepackage`

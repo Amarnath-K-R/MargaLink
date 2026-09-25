@@ -202,5 +202,25 @@ __setTexWorkerFactory(() => new FakeWorker() as unknown as Worker);
   assert.deepEqual((await q)?.pdf, PDF);
 }
 
+// 11. a superseded compile that loops is stopped without failing the newer one queued behind it
+{
+  const a = compileProject(REQ);
+  await flush();
+  const w = FakeWorker.all.at(-1)!;
+  const idA = w.last().id;
+  const b = compileProject(REQ);
+  await flush();
+  w.reply({ type: "progress", id: idA, stage: "running", detail: "pdflatex" });
+  await flush();
+  mock.timers.tick(COMPILE_TIMEOUT_MS + 1);
+  await flush();
+  assert.ok(w.terminated, "the looping worker is stopped");
+  assert.equal(await a, null, "the superseded compile just resolves null");
+  const fresh = FakeWorker.all.at(-1)!;
+  assert.notEqual(fresh, w, "the newer compile is re-sent to a fresh worker");
+  fresh.reply({ type: "result", id: fresh.last().id, pdf: PDF, exitCode: 0, log: "", texLog: "" });
+  assert.deepEqual((await b)?.pdf, PDF);
+}
+
 mock.timers.reset();
 console.log("texRunner.selfcheck: OK");

@@ -47,6 +47,7 @@ type Pending = {
   reject: (e: Error) => void;
   onProgress?: (s: TexStage, detail?: string) => void;
   timer?: ReturnType<typeof setTimeout>;
+  msg: object; // what was posted, to re-send it if the worker has to be replaced
 };
 
 let worker: Worker | null = null;
@@ -83,6 +84,20 @@ function reset(reason: Error): void {
   pending.clear();
 }
 
+// A run that loops is stopped with its worker; compiles queued behind it are
+// sent again to a fresh one, not failed with its timeout.
+function timedOut(id: number): void {
+  const waiting = [...pending].filter(([k]) => k !== id);
+  for (const [k] of waiting) pending.delete(k);
+  reset(new TexCompileError("timeout"));
+  if (!waiting.length) return;
+  const w = getWorker();
+  for (const [k, p] of waiting) {
+    pending.set(k, { ...p, timer: undefined });
+    w.postMessage(p.msg);
+  }
+}
+
 function getWorker(): Worker {
   if (worker) return worker;
   const w = createWorker();
@@ -93,7 +108,7 @@ function getWorker(): Worker {
     if (m.type === "progress") {
       p.onProgress?.(m.stage!, m.detail);
       if (m.stage === "running" && p.timer === undefined) {
-        p.timer = setTimeout(() => reset(new TexCompileError("timeout")), COMPILE_TIMEOUT_MS);
+        p.timer = setTimeout(() => timedOut(m.id), COMPILE_TIMEOUT_MS);
       }
       return;
     }
@@ -120,8 +135,7 @@ export async function compileProject(req: CompileRequest, onProgress?: (stage: T
   const w = getWorker();
   const id = ++seq;
   latest = id;
-  const done = new Promise<Incoming>((resolve, reject) => pending.set(id, { resolve, reject, onProgress }));
-  w.postMessage({
+  const msg = {
     type: "compile",
     id,
     files: req.files,
@@ -132,7 +146,9 @@ export async function compileProject(req: CompileRequest, onProgress?: (stage: T
     base: ENGINE_BASE_URL,
     preload: DATA_PACKS.filter((p) => p.always).map((p) => p.js),
     all: DATA_PACKS.map((p) => p.js),
-  });
+  };
+  const done = new Promise<Incoming>((resolve, reject) => pending.set(id, { resolve, reject, onProgress, msg }));
+  w.postMessage(msg);
   try {
     const m = await done;
     if (id !== latest) return null;

@@ -48,6 +48,8 @@ export default function Workspace({ store, project, onClose, onMeta }: { store: 
     }
   });
   const editor = useRef<EditorHandle | null>(null);
+  const busyRef = useRef(false); // Ctrl+S bypasses the disabled button: one compile at a time
+  const wantedRef = useRef(project.main); // the file most recently asked for; slower reads of others are dropped
   const saver = useMemo(
     () =>
       autosaver(
@@ -74,8 +76,10 @@ export default function Workspace({ store, project, onClose, onMeta }: { store: 
   const open = useCallback(
     async (path: string) => {
       await saver.flush().catch(() => {}); // a failed save stays pending and is shown; switching still works
+      wantedRef.current = path;
       setActive(path);
-      setDoc(TEXT.test(path) ? { path, text: await store.readText(project.id, path) } : null);
+      const loaded = TEXT.test(path) ? { path, text: await store.readText(project.id, path) } : null;
+      if (wantedRef.current === path) setDoc(loaded);
     },
     [saver, store, project.id],
   );
@@ -89,9 +93,13 @@ export default function Workspace({ store, project, onClose, onMeta }: { store: 
     window.addEventListener("focus", onFocus);
     const onHide = () => void saver.flush().catch(() => {}); // a failure is shown by onError
     window.addEventListener("pagehide", onHide);
+    // Hidden fires earlier than pagehide (and reliably on phones): save then.
+    const onVisibility = () => document.visibilityState === "hidden" && onHide();
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVisibility);
       void saver.flush().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per project
@@ -100,10 +108,12 @@ export default function Workspace({ store, project, onClose, onMeta }: { store: 
   useEffect(() => () => void (pdfUrl && URL.revokeObjectURL(pdfUrl)), [pdfUrl]);
 
   const compile = useCallback(async () => {
-    await saver.flush();
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
+      await saver.flush();
       const paths = await store.files(project.id);
       const entries = await Promise.all(paths.map(async (path) => ({ path, data: await store.read(project.id, path) })));
       const mainText = new TextDecoder().decode(entries.find((e) => e.path === project.main)?.data ?? new Uint8Array());
@@ -132,6 +142,7 @@ export default function Workspace({ store, project, onClose, onMeta }: { store: 
       setStatus(null);
       setError(err instanceof TexCompileError ? err.message : String(err));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }, [saver, store, project]);
@@ -238,6 +249,8 @@ export default function Workspace({ store, project, onClose, onMeta }: { store: 
               Insert figure
               <select
                 aria-label="Insert figure"
+                disabled={doc?.path !== active}
+                title={doc?.path !== active ? "Open a .tex file to insert a figure into it" : undefined}
                 value=""
                 onChange={(e) => e.target.value && editor.current?.insert(figureSnippet(e.target.value))}
                 className="rounded-sm border border-line bg-paper px-1.5 py-1 text-sm text-ink"

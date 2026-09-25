@@ -45,13 +45,14 @@ const compiled = () =>
   });
 const fileList = async () => (await page.locator('[data-testid="file-tree"] li > button:first-child').allTextContents()).map((s) => s.replace(" ★", "")).sort();
 
-await page.goto("http://localhost:3000/write");
-// Start from an empty project list (OPFS survives in the persistent profile).
+// Start from an empty project list (OPFS survives in the persistent profile) —
+// cleared from a plain same-origin file, so the app isn't reading it meanwhile.
+await page.goto("http://localhost:3000/templates/templates.json");
 await page.evaluate(async () => {
   const root = await navigator.storage.getDirectory();
   await root.removeEntry("margalink-write", { recursive: true }).catch(() => {});
 });
-await page.reload();
+await page.goto("http://localhost:3000/write");
 await page.waitForSelector("text=Write your paper.");
 check("storage banner on the project list", (await page.locator('[data-testid="storage-banner"]').count()) === 1);
 
@@ -142,6 +143,47 @@ await page.waitForSelector('[data-testid="file-tree"] button[title="paper.tex"]'
 await page.click("button:has-text('Compile')");
 await compiled();
 check("renaming the main file keeps the project compiling", (await pdfBytes()) > 10_000);
+
+// --- Ctrl+S pressed repeatedly: one compile, and Compile stays disabled while TeX runs ---
+await page.evaluate(() => {
+  window.__enabledWhileRunning = false;
+  const status = document.querySelector('[data-testid="compile-status"]');
+  new MutationObserver(() => {
+    const btn = [...document.querySelectorAll("button")].find((b) => /^(Compile|Compiling…)$/.test(b.textContent.trim()));
+    if (status.textContent.startsWith("Running") && btn && !btn.disabled) window.__enabledWhileRunning = true;
+  }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+});
+await page.click('[data-testid="latex-editor"] .cm-content');
+for (let i = 0; i < 3; i++) await page.keyboard.press("ControlOrMeta+s");
+await page.waitForFunction(() => document.querySelector('[data-testid="compile-status"]')?.textContent !== "Compiled.", null, { timeout: 10_000 }).catch(() => {});
+await compiled();
+await page.waitForTimeout(3000); // any queued second compile would start running here
+check("repeated Ctrl+S never re-enables Compile mid-run", !(await page.evaluate(() => window.__enabledWhileRunning)));
+
+// --- hiding the tab saves at once (no 1 s wait) ---
+await page.click('[data-testid="latex-editor"] .cm-content');
+await page.keyboard.press("ControlOrMeta+Home");
+await page.keyboard.type("% saved on hide\n");
+await page.evaluate(() => {
+  Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+});
+await page.waitForTimeout(300);
+const savedOnHide = await page.evaluate(async () => {
+  const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("margalink-write");
+  for await (const [, dir] of root.entries()) {
+    const meta = JSON.parse(await (await (await dir.getFileHandle("project.json")).getFile()).text());
+    if (meta.main === "paper.tex") return (await (await dir.getFileHandle("paper.tex")).getFile()).text();
+  }
+  return "";
+});
+await page.evaluate(() => Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true }));
+check("hiding the tab saves the latest edit", savedOnHide.startsWith("% saved on hide"));
+
+// --- Insert figure is clearly unavailable while a binary file is open ---
+await page.setInputFiles('input[aria-label="Upload files to this project"]', { name: "plot.png", mimeType: "image/png", buffer: Buffer.from("not really a png") });
+await page.click('[data-testid="file-tree"] button[title="figures/plot.png"]');
+check("Insert figure is disabled with a binary file open", await page.locator('select[aria-label="Insert figure"]').isDisabled());
 
 check(`no request carried a body${bodyRequests.length ? `: ${bodyRequests.join(", ")}` : ""}`, bodyRequests.length === 0);
 check(`no page errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);

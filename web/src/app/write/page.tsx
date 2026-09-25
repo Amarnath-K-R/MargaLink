@@ -30,7 +30,13 @@ export default function WritePage() {
   const upload = useRef<HTMLInputElement>(null);
   const { calls } = useNetworkTrace();
 
-  const refresh = useCallback(async (s: ProjectStore) => setProjects(await s.list()), []);
+  const refresh = useCallback(async (s: ProjectStore) => {
+    try {
+      setProjects(await s.list());
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }, []);
 
   useEffect(() => {
     ProjectStore.open().then(

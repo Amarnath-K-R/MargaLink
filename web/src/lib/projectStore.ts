@@ -54,6 +54,7 @@ export function findMainTex(entries: { path: string; text: string | null }[]): s
 export class ProjectStore {
   private readonly root: DirHandle;
   private readonly now: () => string;
+  private metaChain: Promise<unknown> = Promise.resolve();
   constructor(root: DirHandle, now: () => string = () => new Date().toISOString()) {
     this.root = root;
     this.now = now;
@@ -123,8 +124,14 @@ export class ProjectStore {
     return JSON.parse(await (await (await this.fileHandle(id, META, false)).getFile()).text()) as ProjectMeta;
   }
 
+  // Read-modify-write of project.json, one at a time: in this tab through a
+  // promise chain, across tabs through a Web Lock where the browser has them.
   async setMeta(id: string, patch: Partial<ProjectMeta>): Promise<void> {
-    await this.writeRaw(id, META, JSON.stringify({ ...(await this.meta(id)), ...patch, id, updatedAt: this.now() }));
+    const update = () => this.meta(id).then((m) => this.writeRaw(id, META, JSON.stringify({ ...m, ...patch, id, updatedAt: this.now() })));
+    const locks = typeof navigator === "undefined" ? undefined : (navigator as { locks?: { request(n: string, f: () => Promise<void>): Promise<void> } }).locks;
+    const run = this.metaChain.then(() => (locks ? locks.request(`margalink-meta-${id}`, update) : update()));
+    this.metaChain = run.catch(() => {});
+    await run;
   }
 
   async files(id: string): Promise<string[]> {
