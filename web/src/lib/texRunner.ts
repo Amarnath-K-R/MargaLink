@@ -56,6 +56,7 @@ let worker: Worker | null = null;
 // not in the class files a template brings — IEEEtran's Times fonts, acmart's
 // xkeyval).
 let allPacks = false;
+// Tested against the log with its line breaks removed: TeX wraps at 79 columns, mid-word.
 const NEEDS_MORE = /File `[^']+' not found|not loadable: Metric \(TFM\) file not found/;
 let seq = 0;
 let latest = 0;
@@ -126,7 +127,7 @@ export async function compileProject(req: CompileRequest, onProgress?: (stage: T
   try {
     const m = await done;
     if (id !== latest) return null;
-    if (!m.pdf && !allPacks && NEEDS_MORE.test(m.texLog ?? "")) {
+    if (!m.pdf && !allPacks && NEEDS_MORE.test((m.texLog ?? "").replace(/\n/g, ""))) {
       // One retry on a fresh worker with every pack (the engine's package
       // state can't be re-initialised in place).
       allPacks = true;

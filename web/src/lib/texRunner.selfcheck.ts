@@ -129,7 +129,8 @@ __setTexWorkerFactory(() => new FakeWorker() as unknown as Worker);
   await flush();
   const first = FakeWorker.all.at(-1)!;
   assert.ok(!(first.last().packs as string[]).includes("all"));
-  first.reply({ type: "result", id: first.last().id, pdf: null, exitCode: 3, log: "", texLog: "(./main.tex (./IEEEtran.cls\n! Font OT1/ptm/m/n/10=ptmr7t at 10.0pt not loadable: Metric (TFM) file not found.\n" });
+  // as TeX writes it: the log wraps at 79 columns, mid-word
+  first.reply({ type: "result", id: first.last().id, pdf: null, exitCode: 3, log: "", texLog: "(./main.tex (./IEEEtran.cls\n! Font OT1/ptm/m/n/10=ptmr7t at 10.0pt not loadable: Metric (TFM) file not foun\nd.\n" });
   await flush();
   await flush();
   const retry = FakeWorker.all.at(-1)!;

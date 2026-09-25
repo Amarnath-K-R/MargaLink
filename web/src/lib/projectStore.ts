@@ -24,11 +24,15 @@ export type ProjectMeta = {
   engine: "pdftex" | "xetex";
   journalId: string | null;
   templateId: string | null;
+  packs?: string[]; // data packs the template needs up front (["all"] for classes like IEEEtran)
   createdAt: string;
   updatedAt: string;
 };
 
 const META = "project.json";
+// The app's own per-project files (the last compiled PDF): not project files,
+// not in backups.
+const HIDDEN = ".margalink";
 const ROOT = "margalink-write";
 const TEXT_EXT = /\.(tex|bib|cls|sty|bst|def|cfg|txt|md)$/i;
 
@@ -114,7 +118,9 @@ export class ProjectStore {
     const walk = async (d: DirHandle, prefix: string) => {
       for await (const [name, h] of d.entries()) {
         const path = prefix + name;
-        if (h.kind === "directory") await walk(h, `${path}/`);
+        if (h.kind === "directory") {
+          if (path !== HIDDEN) await walk(h, `${path}/`);
+        }
         else if (path !== META) out.push(path);
       }
     };
@@ -150,6 +156,18 @@ export class ProjectStore {
     await this.deleteFile(id, from);
   }
 
+  async saveLastPdf(id: string, pdf: Uint8Array): Promise<void> {
+    await this.writeRaw(id, `${HIDDEN}/last.pdf`, pdf);
+  }
+
+  async lastPdf(id: string): Promise<Uint8Array | null> {
+    try {
+      return await this.read(id, `${HIDDEN}/last.pdf`);
+    } catch {
+      return null;
+    }
+  }
+
   async exportZip(id: string): Promise<Uint8Array> {
     const paths = await this.files(id);
     return zipFiles(await Promise.all(paths.map(async (path) => ({ path, data: await this.read(id, path) }))));
@@ -158,7 +176,7 @@ export class ProjectStore {
   // A backup, a publisher's template or an Overleaf export: one top-level
   // folder is flattened, and the main file is the one with \documentclass.
   async importZip(name: string, bytes: Uint8Array, journalId: string | null = null): Promise<ProjectMeta> {
-    const entries = flattenSingleRoot(unzipFiles(bytes)).filter((e) => e.path !== META);
+    const entries = flattenSingleRoot(unzipFiles(bytes)).filter((e) => e.path !== META && !e.path.startsWith(`${HIDDEN}/`));
     const decoder = new TextDecoder();
     const main = findMainTex(entries.map((e) => ({ path: e.path, text: TEXT_EXT.test(e.path) ? decoder.decode(e.data) : null })));
     if (!main) throw new Error("That zip has no .tex file with a \\documentclass line, so there's nothing to compile.");

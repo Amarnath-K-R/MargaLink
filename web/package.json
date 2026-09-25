@@ -15,7 +15,9 @@
     "deploy": "next build && rm -f out/_next/static/media/ort-wasm-simd-threaded.asyncify*.wasm && wrangler pages deploy out --project-name margalink --branch main --commit-dirty=true"
   },
   "dependencies": {
+    "@codemirror/legacy-modes": "^6.5.4",
     "@huggingface/transformers": "^4.3.0",
+    "codemirror": "^6.0.2",
     "fflate": "^0.8.3",
     "lucide-react": "^1.47.0",
     "mammoth": "^1.12.3",

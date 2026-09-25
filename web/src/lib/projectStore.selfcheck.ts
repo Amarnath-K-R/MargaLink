@@ -112,6 +112,25 @@ await store.remove(copy.id);
 assert.deepEqual((await store.list()).map((m) => m.id).sort(), [p.id, imported.id].sort());
 await assert.rejects(store.meta(copy.id));
 
+// 6b. the last compiled PDF is kept per project, out of the file list and out of backups
+{
+  const pdf = new TextEncoder().encode("%PDF-1.5 fake");
+  assert.equal(await store.lastPdf(p.id), null, "none yet");
+  await store.saveLastPdf(p.id, pdf);
+  assert.deepEqual(await store.lastPdf(p.id), pdf);
+  assert.ok(!(await store.files(p.id)).some((f) => f.startsWith(".margalink")), "not a project file");
+  const again = await store.importZip("Backup", await store.exportZip(p.id));
+  assert.equal(await store.lastPdf(again.id), null, "not in the backup");
+  await store.remove(again.id);
+}
+
+// 6c. a project can carry the data packs its template needs
+{
+  const withPacks = await store.create({ name: "IEEE", main: "main.tex", engine: "pdftex", journalId: null, templateId: "ieeetran", packs: ["all"] }, [{ path: "main.tex", data: enc(MAIN) }]);
+  assert.deepEqual((await store.meta(withPacks.id)).packs, ["all"]);
+  await store.remove(withPacks.id);
+}
+
 // 7. the autosaver writes only the last text once typing stops (Review Focus 1)
 {
   const writes: string[] = [];
