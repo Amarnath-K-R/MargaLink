@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import ErrorText from "@/components/ErrorText";
 import type { ImageFormat } from "@/lib/figureRunner";
+import AddToPaper from "./AddToPaper";
 
 const FORMATS: { value: ImageFormat; label: string; mime: string }[] = [
   { value: "png", label: "PNG", mime: "image/png" },
@@ -80,6 +81,14 @@ export default function ExportBar({
         >
           {busy ? "Exporting…" : "Export"}
         </button>
+        <AddToPaper
+          disabled={disabled}
+          getPdf={async () => {
+            const pdf = (await onExport(["pdf"], 300)).pdf;
+            if (!pdf) throw new Error("The PDF export came back empty — try Export first to see why.");
+            return Uint8Array.from(atob(pdf), (c) => c.charCodeAt(0));
+          }}
+        />
       </div>
       {error && <ErrorText>{error}</ErrorText>}
       {links.length > 0 && (

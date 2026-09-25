@@ -24,6 +24,17 @@ const MESSY = new URL("./fixtures/messy.csv", import.meta.url).pathname;
 
 const context = await chromium.launchPersistentContext(`${SCRATCH}/figures-profile`, {});
 const page = context.pages()[0] ?? (await context.newPage());
+
+// One /write project in this browser, for "Add to a paper" (part 1).
+{
+  const w = await context.newPage();
+  await w.goto("http://localhost:3000/write");
+  await w.evaluate(async () => (await navigator.storage.getDirectory()).removeEntry("margalink-write", { recursive: true }).catch(() => {}));
+  await w.reload();
+  await w.click('[data-template="article"]');
+  await w.waitForSelector('[data-testid="workspace"]');
+  await w.close();
+}
 const consoleErrors = [];
 page.on("console", (msg) => {
   if (msg.type() === "error") consoleErrors.push(msg.text());
@@ -84,6 +95,11 @@ await bar.getByRole("button", { name: "Export" }).click();
 await page.waitForSelector('[data-testid="export-bar"] a[download]', { timeout: 60000 });
 const names = await bar.locator("a[download]").evaluateAll((as) => as.map((a) => a.getAttribute("download")));
 check(`four downloads (${names.join(", ")})`, ["figure.png", "figure.tiff", "figure.svg", "figure.pdf"].every((n) => names.includes(n)));
+
+// --- add to a paper: the PDF goes into the /write project's figures/ folder ---
+await bar.getByRole("button", { name: "Add to a paper" }).click();
+await page.locator('[data-testid="add-to-paper"]').getByRole("button", { name: "New Plain article paper" }).click();
+await page.waitForSelector('[data-testid="add-to-paper"]:has-text("figures/figure.pdf")', { timeout: 60000 });
 
 // --- part 2: editors ---
 const preview = page.locator('[data-testid="figure-preview"]');
@@ -210,6 +226,16 @@ check(`zero other body-carrying requests (${bodyRequests.join("; ") || "none"})`
 check(`no console errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
 
 await page.screenshot({ path: `${SCRATCH}/figures.png`, fullPage: true });
+
+// --- the figure added in part 1 is in the paper, ready to insert ---
+{
+  const w = await context.newPage();
+  await w.goto("http://localhost:3000/write");
+  await w.getByRole("button", { name: "New Plain article paper" }).click();
+  await w.waitForSelector('[data-testid="file-tree"] button[title="figures/figure.pdf"]');
+  check("/write lists the added figure under Insert figure", (await w.locator('select[aria-label="Insert figure"] option').allTextContents()).includes("figure.pdf"));
+  await w.close();
+}
 await context.close();
 console.log(failed ? "FAIL" : "PASS");
 process.exit(failed ? 1 : 0);
