@@ -8,7 +8,9 @@
 #
 # Cost guardrails (R2 free tier: 10 GB stored, 1M writes/month, free egress):
 #   - only the release's named files (ALLOWED) — the bucket holds ~223 MB;
-#   - refuses if the release would exceed MAX_BUCKET_MB;
+#   - refuses unless the bucket's real size (wrangler r2 bucket info) plus the
+#     files still to copy stays under MAX_BUCKET_MB — fails closed if the size
+#     can't be read, so another release or stray uploads count too;
 #   - every object is Cache-Control: immutable, so a browser fetches each once;
 #   - idempotent: a file already live at the right size is skipped.
 # Kill switch: `npx wrangler r2 bucket delete margalink-assets` stops all R2
@@ -50,6 +52,19 @@ for f in "${NAMES[@]}"; do
   if [ "$(header "$PUBLIC/$PREFIX/$f" content-length)" = "$(want_of "$f")" ]; then echo "live   $f"; else TODO+=("$f"); fi
 done
 if [ -z "${TODO[*]:-}" ]; then echo "all live: $PUBLIC/$PREFIX"; exit 0; fi
+
+# The whole bucket, as R2 measures it ("bucket_size: 224 MB"), plus what's about to be copied.
+bucket_mb=$("$WRANGLER" r2 bucket info "$BUCKET" 2>/dev/null | awk '$1=="bucket_size:" {
+  u = toupper($3); m = (u=="B") ? 1e-6 : (u=="KB") ? 1e-3 : (u=="MB") ? 1 : (u=="GB") ? 1e3 : (u=="TB") ? 1e6 : -1
+  if (m > 0) printf "%d", $2 * m + 0.999 }')
+if [ -z "$bucket_mb" ]; then echo "refusing: couldn't read the bucket's size (wrangler r2 bucket info $BUCKET)" >&2; exit 1; fi
+adding=0
+for f in "${TODO[@]}"; do adding=$((adding + $(want_of "$f"))); done
+echo "bucket: ${bucket_mb} MB now, +$((adding / 1000000)) MB to copy (cap ${MAX_BUCKET_MB} MB)"
+if [ $((bucket_mb + adding / 1000000)) -gt "$MAX_BUCKET_MB" ]; then
+  echo "refusing: the bucket would exceed the ${MAX_BUCKET_MB} MB guardrail" >&2
+  exit 1
+fi
 
 WORK=$(mktemp -d)
 TOKEN=$(openssl rand -hex 24)

@@ -48,13 +48,32 @@ export default function Workspace({ store, project, onClose, onMeta }: { store: 
     }
   });
   const editor = useRef<EditorHandle | null>(null);
-  const saver = useMemo(() => autosaver((id, path, t) => store.write(id, path, t)), [store]);
+  const saver = useMemo(
+    () =>
+      autosaver(
+        (id, path, t) => store.write(id, path, t),
+        undefined,
+        undefined,
+        undefined,
+        () => setError("Couldn't save your last edit (is the disk full?). It will be retried — download a backup to be safe."),
+      ),
+    [store],
+  );
+  // File operations report what went wrong instead of failing silently.
+  const guarded = (fn: () => Promise<void>) => async () => {
+    setError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const refresh = useCallback(async () => setFiles(await store.files(project.id)), [store, project.id]);
 
   const open = useCallback(
     async (path: string) => {
-      await saver.flush();
+      await saver.flush().catch(() => {}); // a failed save stays pending and is shown; switching still works
       setActive(path);
       setDoc(TEXT.test(path) ? { path, text: await store.readText(project.id, path) } : null);
     },
@@ -62,18 +81,18 @@ export default function Workspace({ store, project, onClose, onMeta }: { store: 
   );
 
   useEffect(() => {
-    void store.files(project.id).then(setFiles);
+    void store.files(project.id).then(setFiles, () => {});
     void store.readText(project.id, project.main).then((text) => setDoc({ path: project.main, text }));
     void store.lastPdf(project.id).then((pdf) => pdf && setPdfUrl(URL.createObjectURL(new Blob([pdf.slice()], { type: "application/pdf" }))));
     // A figure added from the figure studio shows up when the page regains focus.
-    const onFocus = () => void refresh();
+    const onFocus = () => void refresh().catch(() => {});
     window.addEventListener("focus", onFocus);
-    const onHide = () => void saver.flush();
+    const onHide = () => void saver.flush().catch(() => {}); // a failure is shown by onError
     window.addEventListener("pagehide", onHide);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pagehide", onHide);
-      void saver.flush();
+      void saver.flush().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per project
   }, [project.id]);
@@ -175,29 +194,44 @@ export default function Workspace({ store, project, onClose, onMeta }: { store: 
             active={active}
             main={project.main}
             onOpen={(p) => void open(p)}
-            onCreate={async (p) => {
-              await store.write(project.id, p, "");
-              await refresh();
-              void open(p);
-            }}
-            onUpload={async (list) => {
-              for (const f of Array.from(list)) {
-                const path = IMAGE.test(f.name) ? `figures/${f.name}` : f.name;
-                await store.write(project.id, path, new Uint8Array(await f.arrayBuffer()));
-              }
-              await refresh();
-            }}
-            onRename={async (from, to) => {
-              await saver.flush();
-              await store.rename(project.id, from, to);
-              await refresh();
-              if (active === from) void open(to);
-            }}
-            onDelete={async (p) => {
-              await store.deleteFile(project.id, p);
-              await refresh();
-              if (active === p) void open(project.main);
-            }}
+            onCreate={(p) =>
+              void guarded(async () => {
+                if (await store.exists(project.id, p)) throw new Error(`${p} already exists.`);
+                await store.write(project.id, p, "");
+                await refresh();
+                await open(p);
+              })()
+            }
+            onUpload={(list) =>
+              void guarded(async () => {
+                // an upload with an existing name replaces that file: a new version of a figure
+                for (const f of Array.from(list)) {
+                  const path = IMAGE.test(f.name) ? `figures/${f.name}` : f.name;
+                  await store.write(project.id, path, new Uint8Array(await f.arrayBuffer()));
+                }
+                await refresh();
+              })()
+            }
+            onRename={(from, to) =>
+              void guarded(async () => {
+                await saver.flush();
+                await store.rename(project.id, from, to);
+                if (from === project.main) {
+                  await store.setMeta(project.id, { main: to });
+                  onMeta(await store.meta(project.id));
+                }
+                await refresh();
+                if (active === from) await open(to);
+              })()
+            }
+            onDelete={(p) =>
+              void guarded(async () => {
+                await saver.flush(); // an edit still pending for this file must not write it back
+                await store.deleteFile(project.id, p);
+                await refresh();
+                if (active === p) await open(project.main);
+              })()
+            }
           />
           {figures.length > 0 && (
             <label className="mt-4 flex flex-col gap-1 text-xs text-ink-soft">

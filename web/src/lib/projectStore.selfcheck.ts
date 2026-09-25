@@ -131,6 +131,79 @@ await assert.rejects(store.meta(copy.id));
   await store.remove(withPacks.id);
 }
 
+// 6d. paths: the store's own names are off limits, odd paths are refused, rename never overwrites
+{
+  const q = await store.create({ name: "Paths", main: "main.tex", engine: "pdftex", journalId: null, templateId: null }, [
+    { path: "main.tex", data: enc(MAIN) },
+    { path: "refs.bib", data: enc("@a{b}") },
+  ]);
+  for (const bad of ["project.json", ".margalink/last.pdf", "/abs.tex", "a/../b.tex", "./x.tex", "a//b.tex", ""]) {
+    await assert.rejects(store.write(q.id, bad, "x"), /can't|name/i, `write refuses ${JSON.stringify(bad)}`);
+  }
+  await assert.rejects(store.rename(q.id, "refs.bib", "project.json"), /can't|name/i, "rename can't replace the metadata");
+  await assert.rejects(store.rename(q.id, "refs.bib", "main.tex"), /already/i, "rename refuses an existing target");
+  assert.equal(await store.readText(q.id, "main.tex"), MAIN, "…and main.tex is untouched");
+  assert.equal((await store.meta(q.id)).name, "Paths", "project.json is intact");
+  assert.equal(await store.exists(q.id, "refs.bib"), true);
+  assert.equal(await store.exists(q.id, "nope.tex"), false);
+  // an import that fails partway leaves no invisible folder behind
+  const before = (await store.list()).length;
+  const dirsBefore = [...(store as unknown as { root: FakeDir }).root.children.keys()].length;
+  await assert.rejects(store.create({ name: "Bad", main: "main.tex", engine: "pdftex", journalId: null, templateId: null }, [{ path: "main.tex", data: enc(MAIN) }, { path: "../x.tex", data: enc("x") }]));
+  assert.equal((await store.list()).length, before);
+  assert.equal([...(store as unknown as { root: FakeDir }).root.children.keys()].length, dirsBefore, "no orphan folder");
+  await store.remove(q.id);
+}
+
+// 6e. a failed autosave keeps the text pending and reports it (Review Focus 1)
+{
+  let fail = true;
+  const writes: string[] = [];
+  const errors: unknown[] = [];
+  const save = autosaver(
+    async (_id, _path, text) => {
+      if (fail) throw new Error("QuotaExceededError");
+      writes.push(text);
+    },
+    1000,
+    () => 1,
+    () => {},
+    (err) => errors.push(err),
+  );
+  save("p", "main.tex", "draft");
+  await save.flush().catch(() => {});
+  assert.equal(errors.length, 1, "the failure is reported");
+  fail = false;
+  await save.flush();
+  assert.deepEqual(writes, ["draft"], "the unsaved text is written on the next try");
+}
+
+// 6f. flush() waits for a timer write still in flight (a delete right after it must not race it)
+{
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const timers: (() => void)[] = [];
+  const done: string[] = [];
+  const save = autosaver(
+    async (_id, _path, text) => {
+      await gate;
+      done.push(text);
+    },
+    1000,
+    (fn) => void timers.push(fn),
+    () => {},
+  );
+  save("p", "notes.tex", "typed");
+  timers.at(-1)!(); // the debounce fires; the write is now in flight
+  let flushed = false;
+  const f = save.flush().then(() => (flushed = true));
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(flushed, false, "flush waits for the in-flight write");
+  release();
+  await f;
+  assert.deepEqual(done, ["typed"]);
+}
+
 // 7. the autosaver writes only the last text once typing stops (Review Focus 1)
 {
   const writes: string[] = [];

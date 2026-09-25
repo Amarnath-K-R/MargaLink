@@ -16,12 +16,16 @@ mkdirSync(SCRATCH, { recursive: true });
 const context = await chromium.launchPersistentContext(`${SCRATCH}/write-profile`, { viewport: { width: 1400, height: 900 } });
 const page = context.pages()[0] ?? (await context.newPage());
 const consoleErrors = [];
-page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
+page.on("pageerror", (err) => {
+  consoleErrors.push(`pageerror: ${err.message}`);
+  if (process.env.STACKS) console.log("  pageerror here:", err.message.slice(0, 60));
+});
 const bodyRequests = [];
 page.on("request", (r) => {
   if (r.postData()) bodyRequests.push(`${r.method()} ${r.url()}`);
 });
-page.on("dialog", (d) => void d.accept());
+let promptAnswer = ""; // what the next window.prompt() gets; confirms are accepted
+page.on("dialog", (d) => void (d.type() === "prompt" ? d.accept(promptAnswer) : d.accept()));
 
 let failed = false;
 function check(label, ok) {
@@ -100,8 +104,64 @@ await page.click("button:has-text('Compile')");
 await compiled();
 check("imported copy compiles (retried with every pack)", (await pdfBytes()) > 10_000);
 
+// --- a template that needs every pack, after a plain paper already started the engine ---
+await page.reload();
+await page.click('[data-template="article"]');
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+await page.click("button:has-text('Compile')");
+await compiled();
+await page.click("text=← All projects");
+await page.click('[data-testid="project-list"] button:text-is("New IEEE Transactions (IEEEtran) paper")');
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+await page.click("button:has-text('Compile')");
+await compiled();
+check("IEEEtran compiles after a plain article in the same session", (await pdfBytes()) > 10_000);
+
+// --- file operations don't lose or clobber anything ---
+const tree = page.locator('[data-testid="file-tree"]');
+promptAnswer = "IEEEtran.bst";
+await tree.getByRole("button", { name: "New file" }).click();
+await page.waitForSelector("text=IEEEtran.bst already exists");
+check("New file refuses an existing name", true);
+
+promptAnswer = "notes.tex";
+await tree.getByRole("button", { name: "New file" }).click();
+await page.waitForSelector('[data-testid="file-tree"] button[title="notes.tex"]');
+await page.click('[data-testid="latex-editor"] .cm-content');
+await page.keyboard.type("unsaved words");
+await tree.getByRole("button", { name: "Delete notes.tex" }).click();
+await page.waitForTimeout(1500); // past the autosave delay
+await page.click("text=← All projects");
+await page.click('[data-testid="project-list"] button:text-is("New IEEE Transactions (IEEEtran) paper")');
+await page.waitForSelector('[data-testid="file-tree"] button[title="main.tex"]');
+check("a deleted file stays deleted", (await page.locator('[data-testid="file-tree"] button[title="notes.tex"]').count()) === 0);
+
+promptAnswer = "paper.tex";
+await tree.getByRole("button", { name: "Rename main.tex" }).click();
+await page.waitForSelector('[data-testid="file-tree"] button[title="paper.tex"]');
+await page.click("button:has-text('Compile')");
+await compiled();
+check("renaming the main file keeps the project compiling", (await pdfBytes()) > 10_000);
+
 check(`no request carried a body${bodyRequests.length ? `: ${bodyRequests.join(", ")}` : ""}`, bodyRequests.length === 0);
 check(`no page errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
 
 await context.close();
+
+// --- the engine download fails (offline, r2.dev throttling): an error, not a
+// forever "Loading TeX…" — in a fresh browser, so nothing is cached ---
+{
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  await ctx.route(/busytex\.wasm$/, (r) => r.abort());
+  const p = await ctx.newPage();
+  await p.goto("http://localhost:3000/write");
+  await p.click('[data-template="article"]');
+  await p.waitForSelector('[data-testid="latex-editor"] .cm-content');
+  await p.click("button:has-text('Compile')");
+  const reported = await p.waitForSelector("text=The TeX engine couldn't load", { timeout: 60_000 }).then(() => true, () => false);
+  check("a failed engine download is reported, and Compile is usable again", reported && (await p.locator("button:has-text('Compile')").isEnabled()));
+  await browser.close();
+}
+
 process.exit(failed ? 1 : 0);

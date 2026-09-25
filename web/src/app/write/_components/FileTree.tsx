@@ -47,7 +47,7 @@ export default function FileTree({
                 const to = window.prompt("Rename to", f)?.trim();
                 if (to && to !== f) onRename(f, to);
               }}
-              className="hidden text-xs text-ink-soft hover:text-ink group-hover:inline"
+              className="text-xs text-ink-soft opacity-0 hover:text-ink focus:opacity-100 group-hover:opacity-100"
             >
               rename
             </button>
@@ -56,7 +56,7 @@ export default function FileTree({
                 type="button"
                 aria-label={`Delete ${f}`}
                 onClick={() => window.confirm(`Delete ${f}?`) && onDelete(f)}
-                className="hidden text-xs text-ink-soft hover:text-ink group-hover:inline"
+                className="text-xs text-ink-soft opacity-0 hover:text-ink focus:opacity-100 group-hover:opacity-100"
               >
                 delete
               </button>

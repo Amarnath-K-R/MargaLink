@@ -3,7 +3,7 @@
 //   node src/lib/texRunner.selfcheck.ts
 import assert from "node:assert/strict";
 import { mock } from "node:test";
-import { COMPILE_TIMEOUT_MS, TexCompileError, __setTexWorkerFactory, compileProject, type CompileRequest } from "./texRunner.ts";
+import { COMPILE_TIMEOUT_MS, TexCompileError, __resetAllPacks, __setTexWorkerFactory, compileProject, type CompileRequest } from "./texRunner.ts";
 
 type Msg = { type: string; id: number; [k: string]: unknown };
 class FakeWorker {
@@ -158,6 +158,48 @@ __setTexWorkerFactory(() => new FakeWorker() as unknown as Worker);
   const r = await p;
   assert.equal(r?.pdf, null);
   assert.equal(FakeWorker.all.length, before, "no new worker");
+}
+
+// 8. a missing file of the paper's own (a figure, an \input) is not retried with every pack
+{
+  __setTexWorkerFactory(() => new FakeWorker() as unknown as Worker);
+  __resetAllPacks();
+  const before = FakeWorker.all.length;
+  const p = compileProject(REQ);
+  await flush();
+  const w = FakeWorker.all.at(-1)!;
+  w.reply({ type: "result", id: w.last().id, pdf: null, exitCode: 1, log: "", texLog: "(./main.tex\n! LaTeX Error: File `figures/plot.png' not found.\n" });
+  assert.equal((await p)?.pdf, null);
+  assert.equal(FakeWorker.all.length, before + 1, "no retry worker");
+}
+
+// 9. a project that needs every pack, after the engine already started without them: a fresh worker (Review: IEEEtran after a plain article)
+{
+  const first = FakeWorker.all.at(-1)!;
+  const p = compileProject({ ...REQ, packs: ["all"] });
+  await flush();
+  assert.ok(first.terminated, "the worker started with fewer packs is replaced");
+  const w = FakeWorker.all.at(-1)!;
+  assert.notEqual(w, first);
+  assert.deepEqual(w.last().packs, ["all"]);
+  w.reply({ type: "result", id: w.last().id, pdf: PDF, exitCode: 0, log: "", texLog: "" });
+  assert.deepEqual((await p)?.pdf, PDF);
+}
+
+// 10. a worker that reports an error (e.g. the engine failed to load) is replaced on the next compile
+{
+  const p = compileProject(REQ);
+  await flush();
+  const broken = FakeWorker.all.at(-1)!;
+  broken.reply({ type: "error", id: broken.last().id, code: "load_failed", detail: "fetch failed" });
+  await p.catch(() => {});
+  assert.ok(broken.terminated, "the broken worker is terminated");
+  const q = compileProject(REQ);
+  await flush();
+  const fresh = FakeWorker.all.at(-1)!;
+  assert.notEqual(fresh, broken);
+  fresh.reply({ type: "result", id: fresh.last().id, pdf: PDF, exitCode: 0, log: "", texLog: "" });
+  assert.deepEqual((await q)?.pdf, PDF);
 }
 
 mock.timers.reset();

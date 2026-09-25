@@ -47,6 +47,9 @@ function init(msg) {
         BusytexPipeline.ScriptLoaderWorker,
       );
       guardArgs(pipeline);
+      // If the engine's first load fails (the .wasm or a pack download drops),
+      // on_initialized never fires: fail the compile instead of waiting forever.
+      Promise.resolve(pipeline.Module).catch(reject);
     } catch (err) {
       reject(err);
     }
@@ -119,7 +122,8 @@ async function pump() {
   busy = false;
 }
 
-// A failure inside the engine's own loading (e.g. a data file 404) surfaces here.
+// A failure inside the engine's own loading (e.g. a data file 404) surfaces
+// here. The runner then replaces this worker.
 self.addEventListener("error", (e) => {
   if (current !== null) self.postMessage({ type: "error", id: current, code: "load_failed", detail: String(e.message || e) });
 });

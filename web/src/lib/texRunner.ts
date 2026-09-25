@@ -57,13 +57,17 @@ let worker: Worker | null = null;
 // xkeyval).
 let allPacks = false;
 // Tested against the log with its line breaks removed: TeX wraps at 79 columns, mid-word.
-const NEEDS_MORE = /File `[^']+' not found|not loadable: Metric \(TFM\) file not found/;
+// Only TeX's own files: a missing figure or \input of the paper's is the author's to fix.
+const NEEDS_MORE = /File `[^']+\.(?:sty|cls|clo|fd|def|cfg|bst|ldf|tfm|enc|map|pfb|otf|ttf)' not found|not loadable: Metric \(TFM\) file not found/;
 let seq = 0;
 let latest = 0;
 const pending = new Map<number, Pending>();
 
 let createWorker = (): Worker => new Worker("/texWorker.js");
 // Test seam: the selfcheck swaps in an in-process fake.
+export function __resetAllPacks(): void {
+  allPacks = false;
+}
 export function __setTexWorkerFactory(f: () => Worker): void {
   reset(new TexCompileError("worker_failed", "replaced"));
   createWorker = f;
@@ -94,10 +98,11 @@ function getWorker(): Worker {
       return;
     }
     if (m.type === "started") return;
+    // An engine that failed (to load, or mid-run) isn't trusted again: the next compile gets a fresh worker.
+    if (m.type === "error") return reset(new TexCompileError(m.code ?? "worker_failed", m.detail ?? ""));
     pending.delete(m.id);
     clearTimeout(p.timer);
-    if (m.type === "error") p.reject(new TexCompileError(m.code ?? "worker_failed", m.detail ?? ""));
-    else p.resolve(m);
+    p.resolve(m);
   };
   w.onerror = () => reset(new TexCompileError("worker_failed"));
   worker = w;
@@ -107,7 +112,11 @@ function getWorker(): Worker {
 // Compiles a project. Resolves null when a newer compile was started meanwhile
 // (its result is the one that matters).
 export async function compileProject(req: CompileRequest, onProgress?: (stage: TexStage, detail?: string) => void): Promise<CompileResult | null> {
-  if (req.packs.includes("all")) allPacks = true;
+  if (req.packs.includes("all") && !allPacks) {
+    allPacks = true;
+    // The engine's packs are fixed when it starts: one started without them must go.
+    if (worker) reset(new TexCompileError("worker_failed", "restarting with every data pack"));
+  }
   const w = getWorker();
   const id = ++seq;
   latest = id;

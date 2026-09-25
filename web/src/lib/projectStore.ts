@@ -38,6 +38,14 @@ const TEXT_EXT = /\.(tex|bib|cls|sty|bst|def|cfg|txt|md)$/i;
 
 const parts = (path: string) => path.split("/").filter(Boolean);
 
+// A project file's path: relative, no empty/"."/".." segments, and never the
+// store's own project.json or .margalink/ folder.
+export function checkPath(path: string): void {
+  const segs = path.split("/");
+  if (!path || segs.some((s) => s === "" || s === "." || s === "..")) throw new Error(`"${path}" isn't a file name this project can use.`);
+  if (path === META || segs[0] === HIDDEN) throw new Error(`"${path}" is reserved — pick another name.`);
+}
+
 export function findMainTex(entries: { path: string; text: string | null }[]): string | null {
   if (entries.some((e) => e.path === "main.tex")) return "main.tex";
   return entries.find((e) => e.path.endsWith(".tex") && e.text && /\\documentclass/.test(e.text))?.path ?? null;
@@ -92,12 +100,18 @@ export class ProjectStore {
   }
 
   async create(meta: Omit<ProjectMeta, "id" | "createdAt" | "updatedAt">, files: ZipEntry[]): Promise<ProjectMeta> {
+    for (const f of files) checkPath(f.path);
     const id = crypto.randomUUID();
     await this.root.getDirectoryHandle(id, { create: true });
     const at = this.now();
     const full: ProjectMeta = { ...meta, id, createdAt: at, updatedAt: at };
-    for (const f of files) await this.writeRaw(id, f.path, f.data);
-    await this.writeRaw(id, META, JSON.stringify(full));
+    try {
+      for (const f of files) await this.writeRaw(id, f.path, f.data);
+      await this.writeRaw(id, META, JSON.stringify(full));
+    } catch (err) {
+      await this.remove(id).catch(() => {}); // no half-written, invisible project left behind
+      throw err;
+    }
     return full;
   }
 
@@ -137,7 +151,7 @@ export class ProjectStore {
   }
 
   async write(id: string, path: string, data: Uint8Array | string): Promise<void> {
-    if (path === META) throw new Error("project.json is managed by the store");
+    checkPath(path);
     await this.writeRaw(id, path, data);
     await this.setMeta(id, {});
   }
@@ -150,7 +164,16 @@ export class ProjectStore {
     await this.setMeta(id, {});
   }
 
+  async exists(id: string, path: string): Promise<boolean> {
+    return this.fileHandle(id, path, false).then(
+      () => true,
+      () => false,
+    );
+  }
+
   async rename(id: string, from: string, to: string): Promise<void> {
+    checkPath(to);
+    if (await this.exists(id, to)) throw new Error(`${to} already exists.`);
     const data = await this.read(id, from);
     await this.writeRaw(id, to, data);
     await this.deleteFile(id, from);
@@ -193,20 +216,35 @@ export function autosaver(
   delay = 1000,
   setTimer: (fn: () => void, ms: number) => unknown = (fn, ms) => setTimeout(fn, ms),
   clearTimer: (t: unknown) => void = (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
+  onError: (err: unknown) => void = () => {},
 ) {
   let pending: { id: string; path: string; text: string } | null = null;
   let timer: unknown = null;
-  const run = async () => {
+  // Writes run one at a time, in order; flush() waits for the one in flight,
+  // so nothing (a delete, a compile) can run underneath a save.
+  let chain: Promise<void> = Promise.resolve();
+  const run = () => {
     const p = pending;
     pending = null;
     timer = null;
-    if (p) await write(p.id, p.path, p.text);
+    if (!p) return chain;
+    const next = chain.then(async () => {
+      try {
+        await write(p.id, p.path, p.text);
+      } catch (err) {
+        pending ??= p; // keep it for the next try, unless newer text has replaced it
+        onError(err);
+        throw err;
+      }
+    });
+    chain = next.catch(() => {});
+    return next;
   };
   const save = (id: string, path: string, text: string) => {
-    if (pending && (pending.id !== id || pending.path !== path)) void run(); // a different file: save the previous one now
+    if (pending && (pending.id !== id || pending.path !== path)) void run().catch(() => {}); // a different file: save the previous one now (errors go to onError)
     pending = { id, path, text };
     if (timer !== null) clearTimer(timer);
-    timer = setTimer(() => void run(), delay);
+    timer = setTimer(() => void run().catch(() => {}), delay);
   };
   save.flush = async () => {
     if (timer !== null) clearTimer(timer);
