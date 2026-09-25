@@ -50,6 +50,13 @@ type Pending = {
 };
 
 let worker: Worker | null = null;
+// Every data pack preloaded, for the rest of the session: set by a template
+// that declares it (packs: ["all"]) or after a compile fails on a file only a
+// pack we didn't load has (BusyTeX only looks for packages in the main .tex,
+// not in the class files a template brings — IEEEtran's Times fonts, acmart's
+// xkeyval).
+let allPacks = false;
+const NEEDS_MORE = /File `[^']+' not found|not loadable: Metric \(TFM\) file not found/;
 let seq = 0;
 let latest = 0;
 const pending = new Map<number, Pending>();
@@ -99,6 +106,7 @@ function getWorker(): Worker {
 // Compiles a project. Resolves null when a newer compile was started meanwhile
 // (its result is the one that matters).
 export async function compileProject(req: CompileRequest, onProgress?: (stage: TexStage, detail?: string) => void): Promise<CompileResult | null> {
+  if (req.packs.includes("all")) allPacks = true;
   const w = getWorker();
   const id = ++seq;
   latest = id;
@@ -110,7 +118,7 @@ export async function compileProject(req: CompileRequest, onProgress?: (stage: T
     main: req.main,
     driver: req.engine === "xetex" ? "xetex_bibtex8_dvipdfmx" : "pdftex_bibtex8",
     bibtex: req.bibtex,
-    packs: req.packs,
+    packs: allPacks ? ["all"] : req.packs,
     base: ENGINE_BASE_URL,
     preload: DATA_PACKS.filter((p) => p.always).map((p) => p.js),
     all: DATA_PACKS.map((p) => p.js),
@@ -118,6 +126,14 @@ export async function compileProject(req: CompileRequest, onProgress?: (stage: T
   try {
     const m = await done;
     if (id !== latest) return null;
+    if (!m.pdf && !allPacks && NEEDS_MORE.test(m.texLog ?? "")) {
+      // One retry on a fresh worker with every pack (the engine's package
+      // state can't be re-initialised in place).
+      allPacks = true;
+      onProgress?.("loading-package", "all");
+      reset(new TexCompileError("worker_failed", "restarting with every data pack"));
+      return compileProject(req, onProgress);
+    }
     return { pdf: m.pdf ?? null, log: m.log ?? "", exitCode: m.exitCode ?? 1, diagnostics: parseTexLog(m.texLog ?? "") };
   } catch (err) {
     if (id !== latest) return null;

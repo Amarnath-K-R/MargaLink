@@ -122,5 +122,42 @@ __setTexWorkerFactory(() => new FakeWorker() as unknown as Worker);
   assert.match(err.message, /couldn't load/i);
 }
 
+// 6. a class that needs files outside the loaded packs: one automatic retry on a fresh worker with every pack
+{
+  const stages: string[] = [];
+  const p = compileProject({ ...REQ, packs: [] }, (s, d) => stages.push(`${s}${d ? ":" + d : ""}`));
+  await flush();
+  const first = FakeWorker.all.at(-1)!;
+  assert.ok(!(first.last().packs as string[]).includes("all"));
+  first.reply({ type: "result", id: first.last().id, pdf: null, exitCode: 3, log: "", texLog: "(./main.tex (./IEEEtran.cls\n! Font OT1/ptm/m/n/10=ptmr7t at 10.0pt not loadable: Metric (TFM) file not found.\n" });
+  await flush();
+  await flush();
+  const retry = FakeWorker.all.at(-1)!;
+  assert.notEqual(retry, first, "the retry runs on a fresh worker");
+  assert.ok(first.terminated);
+  assert.deepEqual(retry.last().packs, ["all"], "…with every data pack");
+  assert.ok(stages.includes("loading-package:all"));
+  retry.reply({ type: "result", id: retry.last().id, pdf: PDF, exitCode: 0, log: "", texLog: "" });
+  assert.deepEqual((await p)?.pdf, PDF);
+  // later compiles in this session keep every pack
+  const q = compileProject({ ...REQ, packs: [] });
+  await flush();
+  assert.deepEqual(FakeWorker.all.at(-1)!.last().packs, ["all"]);
+  FakeWorker.all.at(-1)!.reply({ type: "result", id: FakeWorker.all.at(-1)!.last().id, pdf: PDF, exitCode: 0, log: "", texLog: "" });
+  await q;
+}
+
+// 7. an ordinary error (not a missing file) is not retried
+{
+  const before = FakeWorker.all.length;
+  const p = compileProject(REQ);
+  await flush();
+  const w = FakeWorker.all.at(-1)!;
+  w.reply({ type: "result", id: w.last().id, pdf: null, exitCode: 1, log: "", texLog: "(./main.tex\n! Undefined control sequence.\nl.4 \\foo" });
+  const r = await p;
+  assert.equal(r?.pdf, null);
+  assert.equal(FakeWorker.all.length, before, "no new worker");
+}
+
 mock.timers.reset();
 console.log("texRunner.selfcheck: OK");
