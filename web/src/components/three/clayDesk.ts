@@ -379,10 +379,12 @@ function pin(THREE: T) {
 }
 
 
-// ---- Scroll props: small desk scenes along the path's off-screen stretch ----
-type Prop = { obj: THREE_NS.Group; z: number; shownAt: number | null; tick: (ms: number, inT: number, pass: number, still: boolean) => void };
+// ---- Props: small desk scenes beside the two beats, the path weaving past ----
+// Each sits at a home spot (x, z) on the desk; buildDesk places it each frame
+// so it moves with the page's copy (see `anchor`). `tick`: its own small idle
+// motion; `pass` runs -1 → 1 as the view goes by.
+type Prop = { obj: THREE_NS.Group; x: number; z: number; tick: (ms: number, pass: number, still: boolean) => void };
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
-const bounce = (t: number) => (t >= 1 ? 1 : 1 - Math.abs(Math.cos(t * Math.PI * 2.5)) * (1 - t) * (1 - t));
 
 function books(THREE: T) {
   const g = new THREE.Group();
@@ -519,92 +521,52 @@ function stamp(THREE: T) {
   return g;
 }
 
-// Placed across the stretch [zA, zB] on both sides of the view's centre,
-// clear of the middle lane the path runs down.
+// Spread over the stretch [zA, zB]: the first beat's copy is on the right, so
+// its props sit left; the second's is on the left, so its props sit right.
 function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   const at = (f: number) => zA + (zB - zA) * f;
   const out: Prop[] = [];
-  const place = (obj: THREE_NS.Group, x: number, z: number, rotY: number, scale: number, tick: Prop["tick"]) => {
+  const place = (obj: THREE_NS.Group, x: number, z: number, rotY: number, scale: number, tick: Prop["tick"] = () => {}) => {
     obj.position.set(x, 0, z);
     obj.rotation.y = rotY;
     obj.scale.setScalar(scale * 1.6);
     obj.visible = false;
-    out.push({ obj, z, shownAt: null, tick });
+    out.push({ obj, x, z, tick });
   };
-  // books: drop in with a bounce
+  place(books(THREE), -4.6, at(0), 0.35, 1);
+  place(eraser(THREE), -0.9, at(0.2), -0.3, 1);
+  // sticky notes: the top one peels up as the view passes
   {
-    const o = books(THREE);
-    place(o, -4.4, at(0.02), 0.35, 1, (_ms, inT) => (o.position.y = (1 - bounce(inT)) * 3));
+    const o = notes(THREE);
+    const top = o.children[o.children.length - 1];
+    place(o, -4, at(0.4), 0.2, 1.1, (_ms, pass, still) => {
+      top.rotation.x = still ? -0.4 : -0.9 * Math.max(0, Math.sin(Math.min(Math.PI, Math.max(0, (pass + 0.6) * 1.6))));
+    });
   }
-  // mug: drops in, steam rises
+  // mug: steam rises
   {
     const o = mug(THREE);
     const steam = o.userData.steam as THREE_NS.Mesh[];
-    place(o, 2.4, at(0.8), -0.4, 1, (ms, inT, _p, still) => {
-      o.position.y = (1 - bounce(inT)) * 3;
+    place(o, 5.4, at(0.78), -0.4, 1, (ms, _p, still) => {
       steam.forEach((m, i) => {
         const t = still ? 0.4 : ((ms / 2200 + i / 3) % 1);
         m.position.set(Math.sin(t * 6 + i) * 0.12, 1.2 + t * 1.3, 0);
         m.scale.setScalar(0.6 + t * 1.1);
-        (m.material as THREE_NS.MeshStandardMaterial).opacity = inT * 0.45 * Math.sin(t * Math.PI);
+        (m.material as THREE_NS.MeshStandardMaterial).opacity = 0.45 * Math.sin(t * Math.PI);
       });
     });
   }
-  // sticky notes: drop, then the top one peels up as the view passes
-  {
-    const o = notes(THREE);
-    const top = o.children[o.children.length - 1];
-    place(o, -3.6, at(0.36), 0.2, 1.1, (_ms, inT, pass, still) => {
-      o.position.y = (1 - bounce(inT)) * 2.5;
-      top.rotation.x = still ? -0.4 : -0.9 * Math.max(0, Math.sin(Math.min(Math.PI, Math.max(0, (pass + 0.6) * 1.6))));
-    });
-  }
-  // magnifying glass: slides across the desk as the view passes
-  {
-    const o = magnifier(THREE);
-    const x0 = 5;
-    place(o, x0, at(1.02), 0.6, 1.1, (_ms, inT, pass, still) => {
-      o.position.y = (1 - bounce(inT)) * 2.5;
-      const s = still ? 0 : Math.max(-1, Math.min(1, pass));
-      o.position.x = x0 - s * 1.2;
-      o.rotation.y = 0.6 + s * 0.5;
-    });
-  }
-  // eraser: rolls a turn as it lands
-  {
-    const o = eraser(THREE);
-    place(o, -2.4, at(0.22), -0.3, 1, (_ms, inT) => {
-      o.position.y = (1 - bounce(inT)) * 2.5;
-      o.rotation.z = (1 - inT) * Math.PI * 2;
-    });
-  }
-  // pencil cup: the lower left of the second beat
-  {
-    const o = pencilCup(THREE);
-    place(o, -6.1, at(1.5), 0.3, 0.85, (_ms, inT) => (o.position.y = (1 - bounce(inT)) * 3));
-  }
+  place(magnifier(THREE), 2.6, at(1), Math.PI / 2, 1.1); // handle straight up
+  place(pencilCup(THREE), -5.8, at(1.5), 0.3, 0.85);
   // rubber stamp: thumps down every couple of seconds, leaving its mark
   {
     const o = stamp(THREE);
     const body = o.userData.body as THREE_NS.Group;
     const mark = o.userData.mark as THREE_NS.Mesh;
-    place(o, 3.2, at(1.45), -0.2, 1, (ms, inT, _p, still) => {
-      o.position.y = (1 - bounce(inT)) * 3;
+    (mark.material as THREE_NS.MeshBasicMaterial).opacity = 0.55;
+    place(o, 4.2, at(1.45), -0.2, 1, (ms, _p, still) => {
       const t = still ? 0.9 : (ms % 2400) / 2400;
-      const lift = t < 0.7 ? smoothstep(t / 0.7) * 0.9 : (1 - (t - 0.7) / 0.3) ** 2 * 0.9;
-      body.position.y = lift;
-      (mark.material as THREE_NS.MeshBasicMaterial).opacity = inT * 0.55;
-    });
-  }
-  // paper plane: glides across the view over the middle of the stretch
-  {
-    const o = plane(THREE);
-    const zMid = at(0.5);
-    place(o, 0, zMid, 0, 0.9, (ms, _inT, pass, still) => {
-      const t = still ? 0.5 : Math.max(0, Math.min(1, (pass + 1.2) / 2.6));
-      o.visible = still || (t > 0 && t < 1);
-      o.position.set(-9 + 18 * t, 2.6 + Math.sin(t * Math.PI) * 0.8 + Math.sin(ms * 0.003) * 0.08, zMid + 1.5 - 3 * t);
-      o.rotation.set(0, Math.atan2(3, 18), 0.15 * Math.sin(ms * 0.002));
+      body.position.y = t < 0.7 ? smoothstep(t / 0.7) * 0.9 : (1 - (t - 0.7) / 0.3) ** 2 * 0.9;
     });
   }
   return out;
@@ -830,7 +792,9 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   // the landing's pin → behind the paper's pin (leg 0), on from under the
   // paper → under the book's edge by its pin (leg 1), on from under the
   // book → under the finale's manuscript (leg 2).
-  type Dash = { d: THREE_NS.Mesh; leg: 0 | 1 | 2 };
+  // Leg 1's run past the beats is anchored to the page like the props (`w`:
+  // 0 → 1 away from the paper and the book, which stay on the desk).
+  type Dash = { d: THREE_NS.Mesh; leg: 0 | 1 | 2; home: THREE_NS.Vector3; w: number; ok: boolean };
   let second: {
     paperZ: number;
     paper: WritablePaper;
@@ -862,7 +826,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       d.quaternion.setFromUnitVectors(along, curve.getTangentAt(t));
       d.visible = false;
       scene.add(d);
-      out.push({ d, leg });
+      out.push({ d, leg, home: d.position.clone(), w: 0, ok: true });
     }
     return out;
   };
@@ -915,22 +879,38 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       V(behind.x + 0.15, y, behind.z - 0.9),
       behind.clone(),
     ], 0);
-    // Leg 1: on behind the paper and out from under its bottom edge, then
-    // down the middle of the view — between the two beats' copy, in view the
-    // whole way — and under the book's top edge by its pin.
+    // Leg 1: on behind the paper and out from under its bottom edge, then a
+    // slalom through the props — left past the books, eraser and notes beside
+    // the first beat, across between the beats, right past the mug, the
+    // magnifier and the stamp beside the second — and under the book's top
+    // edge by its pin. (Props: see buildProps; `at` matches its spread.)
+    const zA = beatsZ + 2.2;
+    const zB = bookZ - 10.85;
+    const at = (f: number) => zA + (zB - zA) * f;
+    const out = V(behind.x + 0.2, y, paperZ + 4.4); // out from under the paper
     const toBook = layTrail([
       behind.clone(),
       V(behind.x + 0.4, y, behind.z + 1.6),
       V(behind.x + 0.5, y, paperZ + 2.4),
-      V(behind.x + 0.2, y, paperZ + 4.4), // out from under the paper
-      V(1, y, paperZ + 6.2),
-      V(0.3, y, paperZ + 8.5),
-      V(0.2, y, (paperZ + bookZ) / 2),
-      V(0.3, y, bookZ - 7),
-      V(bp.x - 0.1, y, bp.z - 2.2),
+      out,
+      V(0.2, y, out.z + 1.9),
+      V(-2.3, y, at(0.1)), // between the books and the eraser
+      V(-2, y, at(0.3)),
+      V(-1, y, at(0.42)), // under the eraser, past the notes
+      V(0, y, at(0.55)), // across between the beats
+      V(3.7, y, at(0.64)), // over the magnifier's handle, past the mug
+      V(4.1, y, at(0.92)),
+      V(4, y, at(1.12)), // round the magnifier
+      V(2.9, y, at(1.3)), // and under it
+      V(1.9, y, at(1.5)), // past the stamp
+      V(bp.x + 0.4, y, bp.z - 2.2),
       V(bp.x, y, bp.z - 0.8),
       V(bp.x, y, bp.z - 0.15), // under the book
     ], 1);
+    for (const ds of toBook) {
+      const z = ds.home.z;
+      ds.w = smooth(clamp01((z - out.z - 0.3) / 1.6)) * (1 - smooth(clamp01((z - (bp.z - 3.2)) / 2.2)));
+    }
     // The finale's manuscript, right of its copy, lifted a touch so the path
     // runs in under it.
     const sheetAt = new THREE.Vector3(3.4, 0.13, finaleZ + 0.4);
@@ -946,8 +926,8 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       V(fp.x - 0.1, y, fp.z - 1.2),
       V(fp.x, y, fp.z), // under the manuscript, at its pin
     ], 2);
-    // Desk objects along the two beats, where the path is out of view.
-    const props = buildProps(THREE, beatsZ + 2.2, bookZ - 10.85);
+    // Desk objects beside the two beats.
+    const props = buildProps(THREE, zA, zB);
     for (const pr of props) scene.add(pr.obj);
     second = { paperZ, paper, stackObj, newPin, pinAt, bookPin, bookPinAt: bp, trail: [...toPaper, ...toBook, ...toFinale], behindZ: behind.z - 1, props, finale };
   };
@@ -964,6 +944,11 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     return Math.max(1e-3, ((probeA.y - probeB.y) * vh) / 2);
   };
   let lastSig = "";
+  const anchorNdc = new THREE.Vector3();
+  const anchorRay = new THREE.Vector3();
+  const anchorHit = new THREE.Vector3();
+  const anchored = new THREE.Vector3();
+  const alongX = new THREE.Vector3(1, 0, 0);
   let typeStart: number | null = null;
   let typed = 0;
   let finaleStart: number | null = null;
@@ -1006,13 +991,42 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     const rise = reducedMotion ? 1 : smooth(clamp01((0.8 * scroll.vh - toGo) / (0.6 * scroll.vh)));
     const drop = reducedMotion ? 1 : smooth(clamp01((0.22 * scroll.vh - toGo) / (0.2 * scroll.vh)));
     const { stackObj, newPin, pinAt, bookPin, bookPinAt, trail, behindZ, paper, props } = second;
-    // each prop: dropped in as the view reaches it, then its own small motion
     const viewZ = look.z + pan;
+    // Anchor to the page: under the tilted camera the desk's far (top) side
+    // crawls and its near side races against the page's copy, so props and
+    // the path beside the beats are placed each frame where the desk shows
+    // them moving with the page — their x as at the view's centre, their y at
+    // the page's own speed. (Faded out as the camera tips over the book.)
+    camera.position.set(cam.x, cam.y, cam.z + pan);
+    camera.lookAt(look.x, look.y, look.z + pan);
+    camera.updateMatrixWorld();
+    const anchor = (x: number, z: number, y0: number, w: number, out: THREE_NS.Vector3) => {
+      anchorNdc.set(x, y0, viewZ).project(camera);
+      const ndcY = (-2 * (z - viewZ) * ppu) / scroll.vh;
+      if (Math.abs(ndcY) > 2.2) return false;
+      anchorRay.set(anchorNdc.x, ndcY, 0.5).unproject(camera).sub(camera.position).normalize();
+      anchorHit.copy(camera.position).addScaledVector(anchorRay, (y0 - camera.position.y) / anchorRay.y);
+      const k = w * (1 - tilt);
+      out.set(x + (anchorHit.x - x) * k, y0, z + (anchorHit.z - z) * k);
+      return true;
+    };
     for (const pr of props) {
-      if (pr.shownAt === null && pr.z <= viewZ + (0.45 * scroll.vh) / ppu) pr.shownAt = ms;
-      const inT = reducedMotion ? 1 : pr.shownAt === null ? 0 : clamp01((ms - pr.shownAt) / 750);
-      pr.obj.visible = inT > 0;
-      pr.tick(ms, inT, (viewZ - pr.z) / 8, reducedMotion);
+      pr.obj.visible = anchor(pr.x, pr.z, 0, 1, anchored);
+      pr.obj.position.x = anchored.x;
+      pr.obj.position.z = anchored.z;
+      pr.tick(ms, (viewZ - pr.z) / 8, reducedMotion);
+    }
+    // leg 1's dashes follow their anchored points, turned along the new line
+    let prev: Dash | null = null;
+    for (const ds of trail) {
+      if (ds.leg !== 1 || ds.w <= 0) continue;
+      ds.ok = anchor(ds.home.x, ds.home.z, ds.home.y, ds.w, anchored);
+      ds.d.position.copy(anchored);
+      if (prev) {
+        anchorRay.subVectors(ds.d.position, prev.d.position).normalize();
+        prev.d.quaternion.setFromUnitVectors(alongX, anchorRay);
+      }
+      prev = ds;
     }
     stackObj.position.set(to.x, 0.02 + (to.y - 0.02) * rise, to.z + second.paperZ + 1.2 * (1 - rise));
     stackObj.rotation.set(faceX * rise, 0.18 * (1 - rise), 0);
@@ -1021,9 +1035,9 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     // paper waits until the page scrolls on from the closing view.
     const revealZ = viewZ + (0.32 * scroll.vh) / ppu;
     const pastPaper = scroll.y > paperHold.top + paperHold.range;
-    for (const { d, leg } of trail) {
-      const z = d.position.z;
-      d.visible = z <= revealZ && (leg === 0 ? z < behindZ || drop > 0 : leg === 1 ? pastPaper : dropBook >= 1);
+    for (const { d, leg, home, ok } of trail) {
+      const z = home.z;
+      d.visible = ok && z <= revealZ && (leg === 0 ? z < behindZ || drop > 0 : leg === 1 ? pastPaper : dropBook >= 1);
     }
     // The finale plays once its view arrives, at its own pace — or as fast as
     // the scroll through its hold — and stays played. Reduced motion: it's
