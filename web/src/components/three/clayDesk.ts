@@ -373,6 +373,173 @@ function pin(THREE: T) {
   return g;
 }
 
+
+// ---- Scroll props: small desk scenes along the path's off-screen stretch ----
+type Prop = { obj: THREE_NS.Group; z: number; shownAt: number | null; tick: (ms: number, inT: number, pass: number, still: boolean) => void };
+const bounce = (t: number) => (t >= 1 ? 1 : 1 - Math.abs(Math.cos(t * Math.PI * 2.5)) * (1 - t) * (1 - t));
+
+function books(THREE: T) {
+  const g = new THREE.Group();
+  const specs: [number, number, number, number][] = [
+    [CLAY.teal, 2.2, 0.34, 0.05],
+    [CLAY.clay, 2.0, 0.3, -0.12],
+    [CLAY.sand, 2.1, 0.32, 0.1],
+  ];
+  let y = 0;
+  for (const [color, w, h, rot] of specs) {
+    const b = mesh(THREE, new RoundedBoxGeometry(w, h, 1.5, 3, 0.06), clay(THREE, color));
+    b.position.y = y + h / 2;
+    b.rotation.y = rot;
+    g.add(b);
+    const pages = mesh(THREE, new RoundedBoxGeometry(w - 0.08, h * 0.7, 1.42, 2, 0.03), clay(THREE, CLAY.sheet));
+    pages.position.set(0.06, y + h / 2, 0);
+    pages.rotation.y = rot;
+    g.add(pages);
+    y += h;
+  }
+  const ribbon = mesh(THREE, new THREE.BoxGeometry(0.08, 0.02, 0.9), clay(THREE, CLAY.clay));
+  ribbon.position.set(0.5, y + 0.01, 0.9);
+  g.add(ribbon);
+  return g;
+}
+
+function mug(THREE: T) {
+  const g = new THREE.Group();
+  const body = mesh(THREE, new THREE.CylinderGeometry(0.55, 0.5, 1.1, 40), clay(THREE, CLAY.teal));
+  body.position.y = 0.55;
+  g.add(body);
+  const coffee = new THREE.Mesh(new THREE.CircleGeometry(0.47, 32), clay(THREE, 0x5b3a26, 0.6));
+  coffee.rotation.x = -Math.PI / 2;
+  coffee.position.y = 1.02;
+  g.add(coffee);
+  const handle = mesh(THREE, new THREE.TorusGeometry(0.3, 0.08, 12, 28), clay(THREE, CLAY.teal));
+  handle.position.set(0.62, 0.58, 0);
+  g.add(handle);
+  const steam: THREE_NS.Mesh[] = [];
+  for (let i = 0; i < 3; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0, roughness: 1 }));
+    g.add(m);
+    steam.push(m);
+  }
+  g.userData.steam = steam;
+  return g;
+}
+
+function notes(THREE: T) {
+  const g = new THREE.Group();
+  const cols = [CLAY.tealPale, CLAY.claySoft, CLAY.sand];
+  cols.forEach((c, i) => {
+    const pivot = new THREE.Group(); // hinged at the note's far edge, so it peels up
+    pivot.position.set(i * 0.35 - 0.35, 0.015 + i * 0.012, -0.5 + i * 0.2);
+    pivot.rotation.y = (i - 1) * 0.25;
+    const n = mesh(THREE, new RoundedBoxGeometry(1, 0.02, 1, 2, 0.008), clay(THREE, c, 0.95));
+    n.position.z = 0.5;
+    pivot.add(n);
+    g.add(pivot);
+  });
+  return g;
+}
+
+function magnifier(THREE: T) {
+  const g = new THREE.Group();
+  const rim = mesh(THREE, new THREE.TorusGeometry(0.6, 0.09, 16, 48), clay(THREE, CLAY.ink, 0.6));
+  rim.rotation.x = -Math.PI / 2;
+  rim.position.y = 0.1;
+  g.add(rim);
+  const glass = new THREE.Mesh(new THREE.CircleGeometry(0.58, 40), new THREE.MeshPhysicalMaterial({ color: 0xd8e6ea, transparent: true, opacity: 0.35, roughness: 0.1 }));
+  glass.rotation.x = -Math.PI / 2;
+  glass.position.y = 0.1;
+  g.add(glass);
+  const handle = mesh(THREE, new THREE.CapsuleGeometry(0.1, 1.1, 6, 12), clay(THREE, CLAY.clay));
+  handle.rotation.z = Math.PI / 2;
+  handle.position.set(1.25, 0.1, 0);
+  g.add(handle);
+  return g;
+}
+
+function eraser(THREE: T) {
+  const g = new THREE.Group();
+  const e = mesh(THREE, new RoundedBoxGeometry(0.9, 0.3, 0.45, 3, 0.1), clay(THREE, CLAY.claySoft));
+  e.position.y = 0.15;
+  g.add(e);
+  const band = mesh(THREE, new RoundedBoxGeometry(0.35, 0.32, 0.47, 2, 0.05), clay(THREE, CLAY.tealSoft));
+  band.position.set(-0.2, 0.15, 0);
+  g.add(band);
+  return g;
+}
+
+// Placed across the stretch [zA, zB] on both sides of the view's centre.
+function buildProps(THREE: T, zA: number, zB: number): Prop[] {
+  const at = (f: number) => zA + (zB - zA) * f;
+  const out: Prop[] = [];
+  const place = (obj: THREE_NS.Group, x: number, z: number, rotY: number, scale: number, tick: Prop["tick"]) => {
+    obj.position.set(x, 0, z);
+    obj.rotation.y = rotY;
+    obj.scale.setScalar(scale);
+    obj.visible = false;
+    out.push({ obj, z, shownAt: null, tick });
+  };
+  // books: drop in with a bounce
+  {
+    const o = books(THREE);
+    place(o, -3.2, at(0.08), 0.35, 1, (_ms, inT) => (o.position.y = (1 - bounce(inT)) * 3));
+  }
+  // mug: drops in, steam rises
+  {
+    const o = mug(THREE);
+    const steam = o.userData.steam as THREE_NS.Mesh[];
+    place(o, 3.6, at(0.3), -0.4, 1, (ms, inT, _p, still) => {
+      o.position.y = (1 - bounce(inT)) * 3;
+      steam.forEach((m, i) => {
+        const t = still ? 0.4 : ((ms / 2200 + i / 3) % 1);
+        m.position.set(Math.sin(t * 6 + i) * 0.12, 1.2 + t * 1.3, 0);
+        m.scale.setScalar(0.6 + t * 1.1);
+        (m.material as THREE_NS.MeshStandardMaterial).opacity = inT * 0.45 * Math.sin(t * Math.PI);
+      });
+    });
+  }
+  // sticky notes: drop, then the top one peels up as the view passes
+  {
+    const o = notes(THREE);
+    const top = o.children[o.children.length - 1];
+    place(o, -2.4, at(0.52), 0.2, 1.1, (_ms, inT, pass, still) => {
+      o.position.y = (1 - bounce(inT)) * 2.5;
+      top.rotation.x = still ? -0.4 : -0.9 * Math.max(0, Math.sin(Math.min(Math.PI, Math.max(0, (pass + 0.6) * 1.6))));
+    });
+  }
+  // magnifying glass: slides across the desk as the view passes
+  {
+    const o = magnifier(THREE);
+    const x0 = 2.4;
+    place(o, x0, at(0.7), 0.6, 1.1, (_ms, inT, pass, still) => {
+      o.position.y = (1 - bounce(inT)) * 2.5;
+      const s = still ? 0 : Math.max(-1, Math.min(1, pass));
+      o.position.x = x0 - s * 2.2;
+      o.rotation.y = 0.6 + s * 0.5;
+    });
+  }
+  // eraser: rolls a turn as it lands
+  {
+    const o = eraser(THREE);
+    place(o, -1.2, at(0.9), -0.3, 1, (_ms, inT) => {
+      o.position.y = (1 - bounce(inT)) * 2.5;
+      o.rotation.z = (1 - inT) * Math.PI * 2;
+    });
+  }
+  // paper plane: glides across the view over the middle of the stretch
+  {
+    const o = plane(THREE);
+    const zMid = at(0.45);
+    place(o, 0, zMid, 0, 0.9, (ms, _inT, pass, still) => {
+      const t = still ? 0.5 : Math.max(0, Math.min(1, (pass + 1.2) / 2.6));
+      o.visible = still || (t > 0 && t < 1);
+      o.position.set(-9 + 18 * t, 2.6 + Math.sin(t * Math.PI) * 0.8 + Math.sin(ms * 0.003) * 0.08, zMid + 1.5 - 3 * t);
+      o.rotation.set(0, Math.atan2(3, 18), 0.15 * Math.sin(ms * 0.002));
+    });
+  }
+  return out;
+}
+
 const BUILD: Record<Exclude<Kind, "pencil" | "stack">, (THREE: T) => THREE_NS.Group> = { ruler, graph, chart, notebook, plane, pin };
 
 export type Desk = {
@@ -484,10 +651,11 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     newPin: THREE_NS.Object3D;
     pinAt: THREE_NS.Vector3;
     trail: { d: THREE_NS.Mesh; raised: number }[];
+    props: Prop[];
   } | null = null;
   const disposeSecond = () => {
     if (!second) return;
-    scene.remove(second.stackObj, second.newPin, ...second.trail.map((t) => t.d));
+    scene.remove(second.stackObj, second.newPin, ...second.trail.map((t) => t.d), ...second.props.map((p) => p.obj));
     second = null;
   };
   const buildSecond = (endZ: number) => {
@@ -502,25 +670,27 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       new THREE.Quaternion().setFromEuler(new THREE.Euler(faceX, 0, 0)),
       new THREE.Vector3(to.scale, to.scale, to.scale),
     );
-    const pinAt = new THREE.Vector3(1.32, 0.14, -1.72).applyMatrix4(onPaper);
+    const pinAt = new THREE.Vector3(-1.32, 0.14, -1.72).applyMatrix4(onPaper); // top-left corner
     const newPin = BUILD.pin(THREE);
     newPin.visible = false;
     scene.add(newPin);
-    // From the landing's pin, a long winding path down the desk through the
-    // gap, then in from the right and up onto the standing paper.
+    // From the landing's pin the path carries on the way it arrived —
+    // rightwards — and slides off the right edge; it runs on out of view, then
+    // comes back from the upper right in one sweeping curve over the top and
+    // drops into the new pin at the paper's top-left corner.
     const y = 0.06;
     const z0 = pinItem.baseZ;
-    const gap = Math.max(4, to.z + endZ - 3 - z0);
     const pts = [
       new THREE.Vector3(pinItem.baseX, y, z0),
-      new THREE.Vector3(pinItem.baseX - 2.5, y, z0 + gap * 0.12),
-      new THREE.Vector3(-3.5, y, z0 + gap * 0.3),
-      new THREE.Vector3(-5.2, y, z0 + gap * 0.45),
-      new THREE.Vector3(-1.5, y, z0 + gap * 0.62),
-      new THREE.Vector3(3.5, y, z0 + gap * 0.78),
-      new THREE.Vector3(7.5, y, z0 + gap * 0.92),
-      new THREE.Vector3(pinAt.x + 2.2, 0.5, pinAt.z + 0.8),
-      pinAt.clone().addScaledVector(pinNormal, 0.9),
+      new THREE.Vector3(pinItem.baseX + 3, y, z0 + 0.7),
+      new THREE.Vector3(pinItem.baseX + 7.5, y, z0 + 2.2), // off the right edge
+      new THREE.Vector3(13, y, (z0 + endZ) / 2),
+      new THREE.Vector3(9.5, y, endZ - 9.8), // back in, upper right
+      new THREE.Vector3(5, y, endZ - 7.8),
+      new THREE.Vector3(2.4, y, endZ - 5.2),
+      new THREE.Vector3(1.6, y, endZ - 3.2),
+      new THREE.Vector3(pinAt.x, 0.7, pinAt.z - 1.4),
+      pinAt.clone().addScaledVector(pinNormal, 0.5),
       pinAt.clone(),
     ];
     const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
@@ -545,7 +715,10 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
         if (j >= firstRaised - 1) tr.raised = (j - (firstRaised - 1)) / Math.max(1, m - 1);
       });
     }
-    second = { endZ, paper, stackObj, newPin, pinAt, trail };
+    // Desk objects along the scroll, in the stretch where the path is off-screen.
+    const props = buildProps(THREE, z0 + 3, endZ - 10);
+    for (const pr of props) scene.add(pr.obj);
+    second = { endZ, paper, stackObj, newPin, pinAt, trail, props };
   };
 
   // px per world unit along the desk (z) at the look point, for the base camera.
@@ -580,7 +753,15 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     const fromEnd = scroll.max - scroll.y;
     const rise = reducedMotion ? 1 : smooth(clamp01((0.8 * scroll.vh - fromEnd) / (0.6 * scroll.vh)));
     const drop = reducedMotion ? 1 : smooth(clamp01((0.22 * scroll.vh - fromEnd) / (0.2 * scroll.vh)));
-    const { stackObj, newPin, pinAt, trail, paper } = second;
+    const { stackObj, newPin, pinAt, trail, paper, props } = second;
+    // each prop: dropped in as the view reaches it, then its own small motion
+    const viewZ = look.z + pan;
+    for (const pr of props) {
+      if (pr.shownAt === null && pr.z <= viewZ + (0.45 * scroll.vh) / ppu) pr.shownAt = ms;
+      const inT = reducedMotion ? 1 : pr.shownAt === null ? 0 : clamp01((ms - pr.shownAt) / 750);
+      pr.obj.visible = inT > 0;
+      pr.tick(ms, inT, (viewZ - pr.z) / 8, reducedMotion);
+    }
     stackObj.position.set(to.x, 0.02 + (to.y - 0.02) * rise, to.z + second.endZ + 1.2 * (1 - rise));
     stackObj.rotation.set(faceX * rise, 0.18 * (1 - rise), 0);
     // the trail draws as the view reaches it; the climb onto the paper last
