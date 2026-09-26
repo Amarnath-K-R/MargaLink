@@ -516,7 +516,8 @@ function stamp(THREE: T) {
   return g;
 }
 
-// Placed across the stretch [zA, zB] on both sides of the view's centre.
+// Placed across the stretch [zA, zB] on both sides of the view's centre,
+// clear of the middle lane the path runs down.
 function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   const at = (f: number) => zA + (zB - zA) * f;
   const out: Prop[] = [];
@@ -536,7 +537,7 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   {
     const o = mug(THREE);
     const steam = o.userData.steam as THREE_NS.Mesh[];
-    place(o, 1.4, at(0.8), -0.4, 1, (ms, inT, _p, still) => {
+    place(o, 2.4, at(0.8), -0.4, 1, (ms, inT, _p, still) => {
       o.position.y = (1 - bounce(inT)) * 3;
       steam.forEach((m, i) => {
         const t = still ? 0.4 : ((ms / 2200 + i / 3) % 1);
@@ -558,18 +559,18 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   // magnifying glass: slides across the desk as the view passes
   {
     const o = magnifier(THREE);
-    const x0 = 3.2;
-    place(o, x0, at(0.95), 0.6, 1.1, (_ms, inT, pass, still) => {
+    const x0 = 5;
+    place(o, x0, at(1.02), 0.6, 1.1, (_ms, inT, pass, still) => {
       o.position.y = (1 - bounce(inT)) * 2.5;
       const s = still ? 0 : Math.max(-1, Math.min(1, pass));
-      o.position.x = x0 - s * 3;
+      o.position.x = x0 - s * 1.2;
       o.rotation.y = 0.6 + s * 0.5;
     });
   }
   // eraser: rolls a turn as it lands
   {
     const o = eraser(THREE);
-    place(o, 0.6, at(0.22), -0.3, 1, (_ms, inT) => {
+    place(o, -2.4, at(0.22), -0.3, 1, (_ms, inT) => {
       o.position.y = (1 - bounce(inT)) * 2.5;
       o.rotation.z = (1 - inT) * Math.PI * 2;
     });
@@ -584,7 +585,7 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
     const o = stamp(THREE);
     const body = o.userData.body as THREE_NS.Group;
     const mark = o.userData.mark as THREE_NS.Mesh;
-    place(o, -0.6, at(1.45), -0.2, 1, (ms, inT, _p, still) => {
+    place(o, 3.2, at(1.45), -0.2, 1, (ms, inT, _p, still) => {
       o.position.y = (1 - bounce(inT)) * 3;
       const t = still ? 0.9 : (ms % 2400) / 2400;
       const lift = t < 0.7 ? smoothstep(t / 0.7) * 0.9 : (1 - (t - 0.7) / 0.3) ** 2 * 0.9;
@@ -812,23 +813,21 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       V(behind.x + 0.15, y, behind.z - 0.9),
       behind.clone(),
     ], 0);
-    // Leg 1: on behind the paper and out from under its bottom edge, away off
-    // the right edge; it runs on out of view past the two beats, comes back
-    // from the upper right in one sweeping curve and slips under the book's
-    // top edge by its pin.
+    // Leg 1: on behind the paper and out from under its bottom edge, then
+    // down the middle of the view — between the two beats' copy, in view the
+    // whole way — and under the book's top edge by its pin.
     const toBook = layTrail([
       behind.clone(),
       V(behind.x + 0.4, y, behind.z + 1.6),
       V(behind.x + 0.5, y, paperZ + 2.4),
       V(behind.x + 0.2, y, paperZ + 4.4), // out from under the paper
-      V(4.8, y, paperZ + 5.3),
-      V(x0 + 4.5, y, paperZ + 5.8), // off the right edge
-      V(13, y, (paperZ + bookZ) / 2),
-      V(9.5, y, bookZ - 8.4), // back in, upper right
-      V(6.4, y, bookZ - 5.9),
-      V(bp.x + 1.1, y, bp.z - 1.7),
-      V(bp.x + 0.3, y, bp.z - 0.8),
-      V(bp.x + 0.05, y, bp.z - 0.15), // under the book
+      V(1, y, paperZ + 6.2),
+      V(0.3, y, paperZ + 8.5),
+      V(0.2, y, (paperZ + bookZ) / 2),
+      V(0.3, y, bookZ - 7),
+      V(bp.x - 0.1, y, bp.z - 2.2),
+      V(bp.x, y, bp.z - 0.8),
+      V(bp.x, y, bp.z - 0.15), // under the book
     ], 1);
     // Desk objects along the two beats, where the path is out of view.
     const props = buildProps(THREE, beatsZ + 2.2, bookZ - 10.85);
@@ -900,7 +899,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     // waits for the paper to stand (and its pin to drop); what's past the
     // paper waits for the pin to land, then shows out from under the paper.
     const revealZ = viewZ + (0.32 * scroll.vh) / ppu;
-    const outFromPaper = Math.max(revealZ, second.paperZ + 6.2);
+    const outFromPaper = Math.max(revealZ, second.paperZ + 5.4);
     for (const { d, leg } of trail) {
       const z = d.position.z;
       d.visible = leg === 0 ? z <= revealZ && (z < behindZ || drop > 0) : drop >= 1 && z <= outFromPaper;
