@@ -1018,12 +1018,12 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     stackObj.rotation.set(faceX * rise, 0.18 * (1 - rise), 0);
     // The trail draws as the view reaches it. Its run in behind the paper
     // waits for the paper to stand (and its pin to drop); what's past the
-    // paper waits for the pin to land, then shows out from under the paper.
+    // paper waits until the page scrolls on from the closing view.
     const revealZ = viewZ + (0.32 * scroll.vh) / ppu;
-    const outFromPaper = Math.max(revealZ, second.paperZ + 5.4);
+    const pastPaper = scroll.y > paperHold.top + paperHold.range;
     for (const { d, leg } of trail) {
       const z = d.position.z;
-      d.visible = leg === 0 ? z <= revealZ && (z < behindZ || drop > 0) : leg === 1 ? drop >= 1 && z <= outFromPaper : dropBook >= 1 && z <= revealZ;
+      d.visible = z <= revealZ && (leg === 0 ? z < behindZ || drop > 0 : leg === 1 ? pastPaper : dropBook >= 1);
     }
     // The finale plays once its view arrives, at its own pace — or as fast as
     // the scroll through its hold — and stays played. Reduced motion: it's
