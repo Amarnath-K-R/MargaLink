@@ -70,9 +70,10 @@ export default function ClayDesk({
         // scrolls with the page, past the closing section to the tools book.
         const closing = document.getElementById("closing");
         const bookEl = document.getElementById("tools-book");
+        const finale = document.getElementById("finale");
         const { scrollY: y, innerHeight: vh } = window;
         const span = (el: HTMLElement) => ({ top: el.getBoundingClientRect().top + y, height: el.offsetHeight });
-        desk.update(time - start, !!document.querySelector(".intro-overlay:not(.intro-fade)"), closing && bookEl ? { y, vh, paper: span(closing), book: span(bookEl) } : undefined);
+        desk.update(time - start, !!document.querySelector(".intro-overlay:not(.intro-fade)"), closing && bookEl && finale ? { y, vh, paper: span(closing), book: span(bookEl), finale: span(finale) } : undefined);
         if (composer) composer.render();
         else renderer.render(desk.scene, desk.camera);
       },

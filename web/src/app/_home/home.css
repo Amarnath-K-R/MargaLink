@@ -371,7 +371,7 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
 .gap-steps li::before { content: counter(gs); display: grid; flex: none; width: 26px; height: 26px; place-items: center; border-radius: 6px; background: var(--accent); color: var(--paper); font-family: var(--font-mono); font-size: 12px; }
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
-    .gap-beat { animation: gapBeatIn linear both; animation-timeline: view(); animation-range: entry 10% cover 40%; }
+    .gap-beat, .finale-copy { animation: gapBeatIn linear both; animation-timeline: view(); animation-range: entry 10% cover 40%; }
     @keyframes gapBeatIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
   }
 }
@@ -386,6 +386,24 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
 .closing-hold { height: 250svh; }
 .closing-hold > .final-section { position: sticky; top: 0; min-height: 100svh; }
 @media (max-width: 759px) { .closing-hold { height: auto; } .closing-hold > .final-section { position: relative; } }
+
+/* The finale: holds while the desk's manuscript is stamped and takes off. */
+.finale-hold { height: 170svh; }
+.finale-hold > .finale-section { position: sticky; top: 0; display: flex; align-items: center; min-height: 100svh; padding-top: 60px; }
+.finale-copy { max-width: 620px; }
+.margalink-page .finale-copy h2 { font-size: clamp(56px, 6.3vw, 100px); }
+.finale-copy .gap-cut { margin-top: .1em; }
+.finale-copy p { max-width: 30em; margin: 28px 0 0; color: var(--ink-soft); font-size: 20px; line-height: 1.55; text-wrap: pretty; }
+.finale-actions { display: flex; align-items: center; gap: 24px; margin-top: 34px; }
+.finale-proof { display: flex; gap: 40px; margin: 46px 0 0; }
+.finale-proof dt { color: var(--accent); font-family: var(--font-serif); font-size: 40px; letter-spacing: -.03em; line-height: 1; }
+.finale-proof dd { max-width: 11em; margin: 8px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.4; }
+@media (max-width: 759px) {
+  .finale-hold { height: auto; }
+  .finale-hold > .finale-section { position: relative; z-index: 2; min-height: auto; padding: 80px 0; background: var(--paper); }
+  .finale-actions { flex-direction: column; align-items: flex-start; }
+  .finale-proof { flex-direction: column; gap: 18px; }
+}
 
 /* The tools book: the section pins while scroll turns the 3D book's pages;
    the caption under the book names the open spread and links to the tool. */

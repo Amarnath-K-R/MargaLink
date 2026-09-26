@@ -229,7 +229,9 @@ function writablePaper(THREE: T): WritablePaper {
     }
   };
   let last = "";
+  let now = { typed: 0, caret: false };
   const draw = (typed: number, caret: boolean) => {
+    now = { typed, caret };
     const sig = `${typed}|${caret}|${lines.length}`;
     if (sig === last) return;
     last = sig;
@@ -265,11 +267,12 @@ function writablePaper(THREE: T): WritablePaper {
     texture.needsUpdate = true;
   };
   draw(0, false);
-  // Placeholder widths come from the real fonts once they're loaded.
+  // Line breaks and placeholder widths come from the real fonts once they're
+  // loaded: lay out again and redraw as it stands.
   void document.fonts?.ready.then(() => {
     lines = [];
     last = "";
-    draw(0, false);
+    draw(now.typed, now.caret);
   });
   return { texture, draw };
 }
@@ -613,9 +616,10 @@ const BUILD: Record<Exclude<Kind, "pencil" | "stack">, (THREE: T) => THREE_NS.Gr
 // its top on the page and its height: `paper`, the closing section right
 // after the landing — its paper stands up as it arrives and writes itself
 // while it holds — and `book`, the tools book after the two beats, whose
-// pages turn while it holds. While either holds, so does the desk.
+// pages turn while it holds. `finale`: the last section, holding while its
+// manuscript is stamped ready and takes off. While any holds, so does the desk.
 type Span = { top: number; height: number };
-export type DeskScroll = { y: number; vh: number; paper: Span; book: Span };
+export type DeskScroll = { y: number; vh: number; paper: Span; book: Span; finale: Span };
 
 export type Desk = {
   scene: THREE_NS.Scene;
@@ -725,12 +729,78 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     scene.add(book.group);
   }
 
-  // The closing section's paper and pin, the book's pin, and the trail —
-  // built once the page's layout is known (the first frame with a scroll),
-  // rebuilt on resize. The trail stays flat on the desk and runs in two legs:
-  // the landing's pin → behind the paper's pin (leg 0), then on from under
-  // the paper → under the book's edge by its pin (leg 1).
-  type Dash = { d: THREE_NS.Mesh; leg: 0 | 1 };
+  // The finale: the finished manuscript on the desk, the path's last pin
+  // drops onto its corner, then a rubber stamp slams a READY mark onto it
+  // and rests beside it. `tick(t)`, t 0 → 1; returns true on the stamp's hit.
+  const readyMark = () => {
+    const tex = canvasTexture(THREE, 512, 240, (c) => {
+      c.clearRect(0, 0, 512, 240);
+      c.strokeStyle = hex(CLAY.teal);
+      c.fillStyle = hex(CLAY.teal);
+      c.lineWidth = 14;
+      c.beginPath();
+      c.roundRect(14, 14, 484, 212, 26);
+      c.stroke();
+      c.font = `700 124px ${getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim() || "sans-serif"}`;
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText("READY", 256, 128);
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.8), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false }));
+    m.rotation.set(-Math.PI / 2, 0, 0.14);
+    return m;
+  };
+  const buildFinale = (at: THREE_NS.Vector3) => {
+    const paper = writablePaper(THREE);
+    paper.draw(PAPER_TOTAL, false);
+    const pile = stack(THREE, paper.texture);
+    pile.position.copy(at);
+    pile.rotation.y = 0.1;
+    pile.scale.setScalar(1.1);
+    const top = pile.children[pile.children.length - 1];
+    const mark = readyMark();
+    mark.position.set(0.4, 0.03, 0.95);
+    top.add(mark);
+    scene.add(pile);
+    pile.updateMatrixWorld(true);
+    const pinAt = top.localToWorld(new THREE.Vector3(-1.2, 0.02, -1.6)); // top-left corner
+    const markAt = mark.getWorldPosition(new THREE.Vector3());
+    const lastPin = BUILD.pin(THREE);
+    lastPin.scale.setScalar(0.8);
+    const stamper = stamp(THREE);
+    (stamper.userData.mark as THREE_NS.Mesh).visible = false;
+    stamper.scale.setScalar(1.3);
+    stamper.rotation.y = 0.14;
+    scene.add(lastPin, stamper);
+    const rest = new THREE.Vector3(at.x + 1.4, 0, at.z + 3.3);
+    const topY = pinAt.y;
+    let hit = false;
+    const tick = (t: number) => {
+      const drop = smooth(clamp01((t - 0.05) / 0.15));
+      lastPin.visible = drop > 0;
+      lastPin.position.copy(pinAt).y += (1 - drop) * 3;
+      // the stamp falls onto the page (hitting at 0.42), lifts aside and rests
+      const fall = clamp01((t - 0.3) / 0.12);
+      const aside = smooth(clamp01((t - 0.46) / 0.16));
+      stamper.visible = t >= 0.3;
+      if (t < 0.46) stamper.position.set(markAt.x, topY + 7 * (1 - fall * fall), markAt.z);
+      else stamper.position.set(markAt.x + (rest.x - markAt.x) * aside, topY * (1 - aside) + Math.sin(Math.PI * aside) * 1.2, markAt.z + (rest.z - markAt.z) * aside);
+      (mark.material as THREE_NS.MeshBasicMaterial).opacity = t >= 0.42 ? 0.9 : 0;
+      const justHit = t >= 0.42 && !hit;
+      hit = t >= 0.42;
+      return justHit;
+    };
+    tick(0);
+    return { objs: [pile, lastPin, stamper], pinAt, tick };
+  };
+
+  // The closing section's paper and pin, the book's pin, the finale, and the
+  // trail — built once the page's layout is known (the first frame with a
+  // scroll), rebuilt on resize. The trail stays flat on the desk, in legs:
+  // the landing's pin → behind the paper's pin (leg 0), on from under the
+  // paper → under the book's edge by its pin (leg 1), on from under the
+  // book → under the finale's manuscript (leg 2).
+  type Dash = { d: THREE_NS.Mesh; leg: 0 | 1 | 2 };
   let second: {
     paperZ: number;
     paper: WritablePaper;
@@ -742,14 +812,15 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     trail: Dash[];
     behindZ: number;
     props: Prop[];
+    finale: ReturnType<typeof buildFinale>;
   } | null = null;
   const disposeSecond = () => {
     if (!second) return;
-    scene.remove(second.stackObj, second.newPin, second.bookPin, ...second.trail.map((t) => t.d), ...second.props.map((p) => p.obj));
+    scene.remove(second.stackObj, second.newPin, second.bookPin, ...second.trail.map((t) => t.d), ...second.props.map((p) => p.obj), ...second.finale.objs);
     second = null;
   };
   // Dashes along a curve on the desk.
-  const layTrail = (pts: THREE_NS.Vector3[], leg: 0 | 1): Dash[] => {
+  const layTrail = (pts: THREE_NS.Vector3[], leg: Dash["leg"]): Dash[] => {
     const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
     const along = new THREE.Vector3(1, 0, 0);
     const n = Math.floor(curve.getLength() / 0.42);
@@ -766,7 +837,8 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     return out;
   };
   // `beatsZ`: where the two beats start (the view's centre as they arrive).
-  const buildSecond = (paperZ: number, bookZ: number, beatsZ: number) => {
+  // `finaleZ`: the view's centre while the finale holds.
+  const buildSecond = (paperZ: number, bookZ: number, beatsZ: number, finaleZ: number) => {
     if (!to || !pinItem || !book) return;
     disposeSecond();
     const paper = writablePaper(THREE);
@@ -829,10 +901,25 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       V(bp.x, y, bp.z - 0.8),
       V(bp.x, y, bp.z - 0.15), // under the book
     ], 1);
+    // The finale's manuscript, right of its copy, lifted a touch so the path
+    // runs in under it.
+    const sheetAt = new THREE.Vector3(3.4, 0.13, finaleZ + 0.4);
+    const finale = buildFinale(sheetAt);
+    // Leg 2: on under the book and out from under its bottom edge, then down
+    // to the manuscript and in under it at its pin.
+    const fp = finale.pinAt;
+    const toFinale = layTrail([
+      V(bp.x, y, bp.z - 0.15),
+      V(bp.x + 0.1, y, bookZ + 1),
+      V(bp.x + 0.3, y, bookZ + 3.6), // out from under the book
+      V((bp.x + fp.x) / 2 + 0.2, y, (bookZ + 3.6 + fp.z - 1.2) / 2),
+      V(fp.x - 0.1, y, fp.z - 1.2),
+      V(fp.x, y, fp.z), // under the manuscript, at its pin
+    ], 2);
     // Desk objects along the two beats, where the path is out of view.
     const props = buildProps(THREE, beatsZ + 2.2, bookZ - 10.85);
     for (const pr of props) scene.add(pr.obj);
-    second = { paperZ, paper, stackObj, newPin, pinAt, bookPin, bookPinAt: bp, trail: [...toPaper, ...toBook], behindZ: behind.z - 1, props };
+    second = { paperZ, paper, stackObj, newPin, pinAt, bookPin, bookPinAt: bp, trail: [...toPaper, ...toBook, ...toFinale], behindZ: behind.z - 1, props, finale };
   };
 
   // px per world unit along the desk (z) at the look point, for the base camera.
@@ -849,6 +936,9 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   let lastSig = "";
   let typeStart: number | null = null;
   let typed = 0;
+  let finaleStart: number | null = null;
+  let finaleT = 0;
+  let thumpAt = -Infinity; // the stamp's hit: the view dips with it
   const REST = { pan: 0, tilt: 0, bookZ: 0 };
   const [pin0, pin1] = BOOK_TIMING.pin;
 
@@ -858,16 +948,17 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     if (!to || !scroll) return REST;
     const ppu = pxPerUnit(scroll.vh);
     // The page scrolls on while a section is pinned; the desk holds.
-    const [paperHold, bookHold] = [scroll.paper, scroll.book].map((s) => ({ top: s.top, range: Math.max(0, s.height - scroll.vh) }));
-    const held = (y: number) => y - Math.min(paperHold.range, Math.max(0, y - paperHold.top)) - Math.min(bookHold.range, Math.max(0, y - bookHold.top));
+    const [paperHold, bookHold, finaleHold] = [scroll.paper, scroll.book, scroll.finale].map((s) => ({ top: s.top, range: Math.max(0, s.height - scroll.vh) }));
+    const held = (y: number) => [paperHold, bookHold, finaleHold].reduce((v, h) => v - Math.min(h.range, Math.max(0, y - h.top)), y);
     const through = (h: typeof paperHold) => (h.range > 0 ? clamp01((scroll.y - h.top) / h.range) : 0);
     const paperZ = held(paperHold.top) / ppu;
     const bookZ = look.z + held(bookHold.top) / ppu;
     const beatsZ = look.z + held(scroll.paper.top + scroll.paper.height - scroll.vh / 2) / ppu;
-    const sig = `${Math.round(paperZ * 100)}|${Math.round(bookZ * 100)}|${Math.round(beatsZ * 100)}`;
+    const finaleZ = look.z + held(finaleHold.top) / ppu;
+    const sig = [paperZ, bookZ, beatsZ, finaleZ].map((z) => Math.round(z * 100)).join("|");
     if (sig !== lastSig) {
       lastSig = sig;
-      buildSecond(paperZ, bookZ, beatsZ);
+      buildSecond(paperZ, bookZ, beatsZ, finaleZ);
     }
     if (!second || !book) return REST;
     const pan = held(scroll.y) / ppu;
@@ -902,8 +993,14 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     const outFromPaper = Math.max(revealZ, second.paperZ + 5.4);
     for (const { d, leg } of trail) {
       const z = d.position.z;
-      d.visible = leg === 0 ? z <= revealZ && (z < behindZ || drop > 0) : drop >= 1 && z <= outFromPaper;
+      d.visible = leg === 0 ? z <= revealZ && (z < behindZ || drop > 0) : leg === 1 ? drop >= 1 && z <= outFromPaper : dropBook >= 1 && z <= revealZ;
     }
+    // The finale plays once its view arrives, at its own pace — or as fast as
+    // the scroll through its hold — and stays played. Reduced motion: it's
+    // simply there, stamped.
+    if (finaleStart === null && scroll.y >= finaleHold.top - 0.05 * scroll.vh) finaleStart = ms;
+    if (finaleStart !== null) finaleT = reducedMotion ? 1 : Math.max(finaleT, Math.min(1, Math.max((ms - finaleStart) / 2600, through(finaleHold) / 0.7)));
+    if (second.finale.tick(finaleT) && !reducedMotion) thumpAt = ms;
     bookPin.visible = dropBook > 0;
     bookPin.position.copy(bookPinAt).y += (1 - dropBook) * 3;
     bookPin.scale.setScalar(0.8);
@@ -958,6 +1055,8 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       camera.position.lerp(overBook.set(0, 15, bookZ + 3.4), tilt);
       aim.lerp(aimOver.set(0, 0, bookZ + 0.5), tilt);
     }
+    const thump = (ms - thumpAt) / 240;
+    if (thump < 1) camera.position.y -= 0.14 * Math.sin(Math.PI * thump) * (1 - thump);
     camera.lookAt(aim);
   };
 

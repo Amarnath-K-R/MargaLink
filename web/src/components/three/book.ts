@@ -85,8 +85,8 @@ export function buildBook(THREE: T, kit: Kit): Book {
     group.add(block);
   }
   // a ribbon marker out of the foot of the spine, onto the desk
-  const ribbon = mesh(THREE, new RoundedBoxGeometry(0.16, 0.02, 1.3, 2, 0.008), clay(THREE, colors.clay));
-  ribbon.position.set(0.25, 0.012, PD / 2 + 0.65);
+  const ribbon = mesh(THREE, new RoundedBoxGeometry(0.16, 0.02, 0.9, 2, 0.008), clay(THREE, colors.clay));
+  ribbon.position.set(0.2, 0.012, PD / 2 + 0.45);
   ribbon.rotation.y = -0.25;
   group.add(ribbon);
 

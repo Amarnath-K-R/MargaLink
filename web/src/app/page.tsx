@@ -140,6 +140,41 @@ function Home() {
             ))}
           </ol>
         </section>
+        {/* the finale: holds while the manuscript is stamped ready and takes off as a paper plane (clayDesk.ts) */}
+        <div id="finale" className="finale-hold">
+          <section className="finale-section section-shell" aria-labelledby="finale-title">
+            <div className="finale-copy">
+              <h2 id="finale-title">
+                Afraid of rejection?
+                <br />
+                <mark className="gap-cut">Not this time.</mark>
+              </h2>
+              <p>Unlock your paper&apos;s true potential. Find the journal it fits, meet its format and get a second read — before an editor does.</p>
+              <div className="finale-actions">
+                <Link href="/match" className="button button-primary">
+                  Find my journal <ArrowUpRight size={16} />
+                </Link>
+                <Link href="/journals" className="landing-link">
+                  Browse journals
+                </Link>
+              </div>
+              <dl className="finale-proof">
+                <div>
+                  <dt>0</dt>
+                  <dd>uploads — matching runs in your browser</dd>
+                </div>
+                <div>
+                  <dt>5</dt>
+                  <dd>tools, one path to submission</dd>
+                </div>
+                <div>
+                  <dt>Free</dt>
+                  <dd>to use, no sign-up</dd>
+                </div>
+              </dl>
+            </div>
+          </section>
+        </div>
         <footer className="final-footer section-shell">
           <span>© 2026 MargaLink</span>
           <span className="mono">CALM TOOLS FOR SERIOUS PAPERS</span>
