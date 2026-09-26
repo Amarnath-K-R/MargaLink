@@ -17,7 +17,8 @@ export type Kit = {
 };
 export type Book = {
   group: THREE_NS.Group;
-  // Where the checkpoint pin goes (book-local): the right page's top-right.
+  // Where the checkpoint pin goes (book-local): the right page's top-right,
+  // close to the edge the path slips under.
   pinSpot: THREE_NS.Vector3;
   // `hp`: 0 → 1 through the book's pinned scroll. `still`: turns snap.
   setProgress: (hp: number, still: boolean) => void;
@@ -182,5 +183,5 @@ export function buildBook(THREE: T, kit: Kit): Book {
   };
   setProgress(0, true);
 
-  return { group, pinSpot: new THREE.Vector3(PW - 0.6, TOP, -PD / 2 + 0.65), setProgress };
+  return { group, pinSpot: new THREE.Vector3(PW - 0.6, TOP, -PD / 2 + 0.35), setProgress };
 }

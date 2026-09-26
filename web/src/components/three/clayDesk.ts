@@ -726,9 +726,10 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
 
   // The closing section's paper and pin, the book's pin, and the trail —
   // built once the page's layout is known (the first frame with a scroll),
-  // rebuilt on resize. The trail runs in two legs: the landing's pin → the
-  // paper's (leg 0), then the paper's pin → the book's (leg 1).
-  type Dash = { d: THREE_NS.Mesh; leg: 0 | 1; climb: number };
+  // rebuilt on resize. The trail stays flat on the desk and runs in two legs:
+  // the landing's pin → behind the paper's pin (leg 0), then on from under
+  // the paper → under the book's edge by its pin (leg 1).
+  type Dash = { d: THREE_NS.Mesh; leg: 0 | 1 };
   let second: {
     paperZ: number;
     paper: WritablePaper;
@@ -738,6 +739,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     bookPin: THREE_NS.Object3D;
     bookPinAt: THREE_NS.Vector3;
     trail: Dash[];
+    behindZ: number;
     props: Prop[];
   } | null = null;
   const disposeSecond = () => {
@@ -745,8 +747,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     scene.remove(second.stackObj, second.newPin, second.bookPin, ...second.trail.map((t) => t.d), ...second.props.map((p) => p.obj));
     second = null;
   };
-  // Dashes along a curve; the run at the end that leaves the desk (climbing
-  // onto the book or the paper) gets its order along the climb, 0..1.
+  // Dashes along a curve on the desk.
   const layTrail = (pts: THREE_NS.Vector3[], leg: 0 | 1): Dash[] => {
     const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
     const along = new THREE.Vector3(1, 0, 0);
@@ -759,11 +760,8 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       d.quaternion.setFromUnitVectors(along, curve.getTangentAt(t));
       d.visible = false;
       scene.add(d);
-      out.push({ d, leg, climb: -1 });
+      out.push({ d, leg });
     }
-    let j = out.length;
-    while (j > 0 && out[j - 1].d.position.y > 0.15) j--;
-    for (let q = j; q < out.length; q++) out[q].climb = (q - j) / Math.max(1, out.length - j - 1);
     return out;
   };
   // `beatsZ`: where the two beats start (the view's centre as they arrive).
@@ -793,10 +791,14 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     scene.add(bookPin);
     const y = 0.06;
     const V = (x: number, py: number, z: number) => new THREE.Vector3(x, py, z);
+    // The desk point hidden right behind the paper's pin, from the closing
+    // view: the path runs in behind the paper there, so the pin holds it.
+    const eye = new THREE.Vector3(cam.x, cam.y, cam.z + paperZ);
+    const behind = eye.clone().lerp(pinAt, (eye.y - y) / (eye.y - pinAt.y));
     // Leg 0: from the landing's pin the path carries on the way it arrived —
     // rightwards — and slides off the right edge; it turns out of view, then
-    // comes back from the upper right in one sweeping curve over the top and
-    // drops into the new pin at the paper's top-left corner.
+    // comes back from the upper right in one sweeping curve and runs in behind
+    // the paper at its pin.
     const x0 = pinItem.baseX;
     const z0 = pinItem.baseZ;
     const toPaper = layTrail([
@@ -807,35 +809,31 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       V(9.5, y, paperZ - 7), // back in, upper right
       V(5, y, paperZ - 5.8),
       V(2.4, y, paperZ - 4.4),
-      V(1.6, y, paperZ - 3.2),
-      V(pinAt.x, 0.7, pinAt.z - 1.4),
-      pinAt.clone().addScaledVector(pinNormal, 0.5),
-      pinAt.clone(),
+      V(behind.x + 0.15, y, behind.z - 0.9),
+      behind.clone(),
     ], 0);
-    // Leg 1: out of the paper's pin, down past its left edge to the desk and
-    // away off the right edge; it runs on out of view past the two beats,
-    // comes back from the upper right in one sweeping curve and climbs over
-    // the book's top edge into its pin.
+    // Leg 1: on behind the paper and out from under its bottom edge, away off
+    // the right edge; it runs on out of view past the two beats, comes back
+    // from the upper right in one sweeping curve and slips under the book's
+    // top edge by its pin.
     const toBook = layTrail([
-      pinAt.clone(),
-      pinAt.clone().addScaledVector(pinNormal, 0.5),
-      V(pinAt.x - 0.6, 1.9, pinAt.z + 1.2),
-      V(pinAt.x - 0.95, 0.8, pinAt.z + 2.5),
-      V(pinAt.x - 0.9, y, pinAt.z + 3.5),
-      V(pinAt.x + 1.4, y, pinAt.z + 4.3),
-      V(x0 + 4.5, y, pinAt.z + 4.9), // off the right edge
-      V(13, y, (pinAt.z + bookZ) / 2),
+      behind.clone(),
+      V(behind.x + 0.4, y, behind.z + 1.6),
+      V(behind.x + 0.5, y, paperZ + 2.4),
+      V(behind.x + 0.2, y, paperZ + 4.4), // out from under the paper
+      V(4.8, y, paperZ + 5.3),
+      V(x0 + 4.5, y, paperZ + 5.8), // off the right edge
+      V(13, y, (paperZ + bookZ) / 2),
       V(9.5, y, bookZ - 8.4), // back in, upper right
       V(6.4, y, bookZ - 5.9),
-      V(bp.x + 1.35, y, bp.z - 1.85),
-      V(bp.x + 0.75, bp.y + 0.1, bp.z - 1.0), // over the edge
-      V(bp.x + 0.35, bp.y + 0.07, bp.z - 0.45),
-      bp.clone(),
+      V(bp.x + 1.1, y, bp.z - 1.7),
+      V(bp.x + 0.3, y, bp.z - 0.8),
+      V(bp.x + 0.05, y, bp.z - 0.15), // under the book
     ], 1);
     // Desk objects along the two beats, where the path is out of view.
     const props = buildProps(THREE, beatsZ + 2.2, bookZ - 10.85);
     for (const pr of props) scene.add(pr.obj);
-    second = { paperZ, paper, stackObj, newPin, pinAt, bookPin, bookPinAt: bp, trail: [...toPaper, ...toBook], props };
+    second = { paperZ, paper, stackObj, newPin, pinAt, bookPin, bookPinAt: bp, trail: [...toPaper, ...toBook], behindZ: behind.z - 1, props };
   };
 
   // px per world unit along the desk (z) at the look point, for the base camera.
@@ -881,15 +879,13 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     // key light and its shadow follow the view down the desk
     key.position.set(keyBase.x, keyBase.y, keyBase.z + pan);
     key.target.position.set(look.x, 0, look.z + pan);
-    // The book's pin: the trail climbs onto the book, then the pin drops.
-    const span = pin1 - pin0;
-    const climbBook = reducedMotion ? 1 : clamp01((hp - pin0) / (span * 0.6));
-    const dropBook = reducedMotion ? 1 : smooth(clamp01((hp - pin0 - span * 0.4) / (span * 0.6)));
+    // The book's pin drops once its last spread is open.
+    const dropBook = reducedMotion ? 1 : smooth(clamp01((hp - pin0) / (pin1 - pin0)));
     // The paper stands up as its section arrives; then the pin drops.
     const toGo = paperHold.top - scroll.y;
     const rise = reducedMotion ? 1 : smooth(clamp01((0.8 * scroll.vh - toGo) / (0.6 * scroll.vh)));
     const drop = reducedMotion ? 1 : smooth(clamp01((0.22 * scroll.vh - toGo) / (0.2 * scroll.vh)));
-    const { stackObj, newPin, pinAt, bookPin, bookPinAt, trail, paper, props } = second;
+    const { stackObj, newPin, pinAt, bookPin, bookPinAt, trail, behindZ, paper, props } = second;
     // each prop: dropped in as the view reaches it, then its own small motion
     const viewZ = look.z + pan;
     for (const pr of props) {
@@ -900,13 +896,14 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     }
     stackObj.position.set(to.x, 0.02 + (to.y - 0.02) * rise, to.z + second.paperZ + 1.2 * (1 - rise));
     stackObj.rotation.set(faceX * rise, 0.18 * (1 - rise), 0);
-    // The trail draws as the view reaches it, each climb onto a page late;
-    // past the paper it waits for the paper's pin.
+    // The trail draws as the view reaches it. Its run in behind the paper
+    // waits for the paper to stand (and its pin to drop); what's past the
+    // paper waits for the pin to land, then shows out from under the paper.
     const revealZ = viewZ + (0.32 * scroll.vh) / ppu;
-    const paperClimb = clamp01((rise - 0.6) / 0.4);
-    for (const { d, leg, climb } of trail) {
-      if (leg === 0) d.visible = climb < 0 ? d.position.z <= revealZ : rise > 0.6 && climb <= paperClimb;
-      else d.visible = drop >= 1 && (climb < 0 ? d.position.z <= revealZ : climbBook > 0 && climb <= climbBook);
+    const outFromPaper = Math.max(revealZ, second.paperZ + 6.2);
+    for (const { d, leg } of trail) {
+      const z = d.position.z;
+      d.visible = leg === 0 ? z <= revealZ && (z < behindZ || drop > 0) : drop >= 1 && z <= outFromPaper;
     }
     bookPin.visible = dropBook > 0;
     bookPin.position.copy(bookPinAt).y += (1 - dropBook) * 3;
