@@ -502,7 +502,7 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   {
     const o = notes(THREE);
     const top = o.children[o.children.length - 1];
-    place(o, -2.4, at(0.52), 0.2, 1.1, (_ms, inT, pass, still) => {
+    place(o, -0.4, at(0.52), 0.2, 1.1, (_ms, inT, pass, still) => {
       o.position.y = (1 - bounce(inT)) * 2.5;
       top.rotation.x = still ? -0.4 : -0.9 * Math.max(0, Math.sin(Math.min(Math.PI, Math.max(0, (pass + 0.6) * 1.6))));
     });
@@ -510,7 +510,7 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   // magnifying glass: slides across the desk as the view passes
   {
     const o = magnifier(THREE);
-    const x0 = 2.4;
+    const x0 = -2.2;
     place(o, x0, at(0.7), 0.6, 1.1, (_ms, inT, pass, still) => {
       o.position.y = (1 - bounce(inT)) * 2.5;
       const s = still ? 0 : Math.max(-1, Math.min(1, pass));
@@ -521,7 +521,7 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   // eraser: rolls a turn as it lands
   {
     const o = eraser(THREE);
-    place(o, -1.2, at(0.9), -0.3, 1, (_ms, inT) => {
+    place(o, 2.8, at(0.9), -0.3, 1, (_ms, inT) => {
       o.position.y = (1 - bounce(inT)) * 2.5;
       o.rotation.z = (1 - inT) * Math.PI * 2;
     });

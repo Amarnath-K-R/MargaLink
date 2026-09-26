@@ -352,5 +352,17 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
 }
 
 /* After the landing: scroll where only the desk path winds on (wider screens). */
-.path-gap { height: 150svh; }
+.path-gap { display: flex; flex-direction: column; justify-content: space-around; min-height: 220svh; padding: 10svh 0; }
+.gap-beat { position: relative; z-index: 3; max-width: 25em; }
+.gap-beat-right { align-self: flex-end; text-align: right; }
+.gap-step { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.margalink-page .gap-beat h2 { margin-top: 10px; font-size: clamp(34px, 3.6vw, 52px); }
+.gap-beat p { margin: 14px 0 0; color: var(--ink-soft); font-size: 17px; line-height: 1.6; }
+.gap-beat h2, .gap-beat p, .gap-step { text-shadow: 0 0 18px var(--paper), 0 0 6px var(--paper); }
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .gap-beat { animation: gapBeatIn linear both; animation-timeline: view(); animation-range: entry 10% cover 40%; }
+    @keyframes gapBeatIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+  }
+}
 @media (max-width: 759px) { .path-gap { display: none; } .hero-stage { position: sticky; } .hero { min-height: 120svh; } }

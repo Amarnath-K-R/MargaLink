@@ -12,6 +12,14 @@ import ClayDesk from "@/components/ClayDesk";
 import { LANDING_DESK, LANDING_DESK_NARROW } from "@/components/three/clayDesk";
 import "./_home/home.css";
 
+// Short beats in the scroll between the landing and the closing section.
+const GAP_BEATS = [
+  { title: "Find where it fits.", text: "Browse journals by field, fees, open access and indexing — no upload needed." },
+  { title: "Match without uploading.", text: "Your paper is read and ranked against every journal inside this tab." },
+  { title: "Review, only if you ask.", text: "An optional AI review — the one step that sends text, and it asks first." },
+  { title: "Write it in their template.", text: "Your journal's LaTeX, compiled in the browser, with figures drawn on your device." },
+];
+
 function Home() {
   const { finalProgress, reducedMotion, heroRef, finalRef } = useScrollProgress();
 
@@ -48,8 +56,16 @@ function Home() {
 
       <main>
         <HeroSection heroRef={heroRef} landingFade={landingFade} screenDive={narrow && !reducedMotion ? between(finalProgress, 0.1, 0.8) : 0} />
-        {/* the path winds on down the desk before the next section */}
-        <div className="path-gap" aria-hidden="true" />
+        {/* the path winds on down the desk before the next section, past a few words on what's here */}
+        <div className="path-gap section-shell">
+          {GAP_BEATS.map((b, i) => (
+            <div key={b.title} className={`gap-beat ${i % 2 ? "" : "gap-beat-right"}`}>
+              <span className="gap-step">{String(i + 1).padStart(2, "0")}</span>
+              <h2>{b.title}</h2>
+              <p>{b.text}</p>
+            </div>
+          ))}
+        </div>
 
         <FinalSection finalRef={finalRef} finalProgress={finalProgress} onOpenTools={() => setToolsOpen(true)} writePaper={writePaper} paperShown={paperShown} reducedMotion={reducedMotion} />
       </main>
