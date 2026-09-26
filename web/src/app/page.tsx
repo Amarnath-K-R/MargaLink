@@ -16,8 +16,6 @@ import "./_home/home.css";
 const GAP_BEATS = [
   { title: "Find where it fits.", text: "Browse journals by field, fees, open access and indexing — no upload needed." },
   { title: "Match without uploading.", text: "Your paper is read and ranked against every journal inside this tab." },
-  { title: "Review, only if you ask.", text: "An optional AI review — the one step that sends text, and it asks first." },
-  { title: "Write it in their template.", text: "Your journal's LaTeX, compiled in the browser, with figures drawn on your device." },
 ];
 
 function Home() {

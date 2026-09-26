@@ -475,20 +475,20 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   const place = (obj: THREE_NS.Group, x: number, z: number, rotY: number, scale: number, tick: Prop["tick"]) => {
     obj.position.set(x, 0, z);
     obj.rotation.y = rotY;
-    obj.scale.setScalar(scale);
+    obj.scale.setScalar(scale * 1.6);
     obj.visible = false;
     out.push({ obj, z, shownAt: null, tick });
   };
   // books: drop in with a bounce
   {
     const o = books(THREE);
-    place(o, -3.2, at(0.08), 0.35, 1, (_ms, inT) => (o.position.y = (1 - bounce(inT)) * 3));
+    place(o, -4.4, at(0.02), 0.35, 1, (_ms, inT) => (o.position.y = (1 - bounce(inT)) * 3));
   }
   // mug: drops in, steam rises
   {
     const o = mug(THREE);
     const steam = o.userData.steam as THREE_NS.Mesh[];
-    place(o, 3.6, at(0.3), -0.4, 1, (ms, inT, _p, still) => {
+    place(o, 1.4, at(0.8), -0.4, 1, (ms, inT, _p, still) => {
       o.position.y = (1 - bounce(inT)) * 3;
       steam.forEach((m, i) => {
         const t = still ? 0.4 : ((ms / 2200 + i / 3) % 1);
@@ -502,7 +502,7 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   {
     const o = notes(THREE);
     const top = o.children[o.children.length - 1];
-    place(o, -0.4, at(0.52), 0.2, 1.1, (_ms, inT, pass, still) => {
+    place(o, -3.6, at(0.36), 0.2, 1.1, (_ms, inT, pass, still) => {
       o.position.y = (1 - bounce(inT)) * 2.5;
       top.rotation.x = still ? -0.4 : -0.9 * Math.max(0, Math.sin(Math.min(Math.PI, Math.max(0, (pass + 0.6) * 1.6))));
     });
@@ -510,18 +510,18 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   // magnifying glass: slides across the desk as the view passes
   {
     const o = magnifier(THREE);
-    const x0 = -2.2;
-    place(o, x0, at(0.7), 0.6, 1.1, (_ms, inT, pass, still) => {
+    const x0 = 3.2;
+    place(o, x0, at(0.95), 0.6, 1.1, (_ms, inT, pass, still) => {
       o.position.y = (1 - bounce(inT)) * 2.5;
       const s = still ? 0 : Math.max(-1, Math.min(1, pass));
-      o.position.x = x0 - s * 2.2;
+      o.position.x = x0 - s * 3;
       o.rotation.y = 0.6 + s * 0.5;
     });
   }
   // eraser: rolls a turn as it lands
   {
     const o = eraser(THREE);
-    place(o, 2.8, at(0.9), -0.3, 1, (_ms, inT) => {
+    place(o, 0.6, at(0.22), -0.3, 1, (_ms, inT) => {
       o.position.y = (1 - bounce(inT)) * 2.5;
       o.rotation.z = (1 - inT) * Math.PI * 2;
     });
@@ -529,7 +529,7 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   // paper plane: glides across the view over the middle of the stretch
   {
     const o = plane(THREE);
-    const zMid = at(0.45);
+    const zMid = at(0.5);
     place(o, 0, zMid, 0, 0.9, (ms, _inT, pass, still) => {
       const t = still ? 0.5 : Math.max(0, Math.min(1, (pass + 1.2) / 2.6));
       o.visible = still || (t > 0 && t < 1);
