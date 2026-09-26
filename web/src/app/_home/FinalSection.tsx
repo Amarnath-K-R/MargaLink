@@ -6,8 +6,8 @@ import TypedPaper from "./TypedPaper.tsx";
 // The closing section: the call to action on the left, and on the right the
 // page the landing's desk morphed into, writing itself (`writePaper` flips
 // true once the 3D paper has handed over — see page.tsx). On wider screens
-// the 3D paper stands up beside it instead, and page.tsx pins this section
-// while that paper writes itself.
+// the landing's 3D paper settles beside it instead, and page.tsx pins this
+// section while that paper writes itself.
 export default function FinalSection({
   finalRef,
   finalProgress,

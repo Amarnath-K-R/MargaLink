@@ -55,8 +55,8 @@ body.intro-bridge-fading .site-header { opacity: 1; filter: blur(0); }
 @keyframes toolsDialogIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
 
 .section-shell { position: relative; z-index: 3; width: min(1180px, calc(100% - 150px)); margin: 0 auto; }
-.hero { min-height: 100svh; display: block; padding: 0; }
-.hero-stage { position: relative; top: 0; min-height: 100svh; display: flex; align-items: center; padding: 132px 0 100px; overflow: hidden; }
+.hero { min-height: 120svh; display: block; padding: 0; }
+.hero-stage { position: sticky; top: 0; min-height: 100svh; display: flex; align-items: center; padding: 132px 0 100px; overflow: hidden; }
 .hero-brand-landing { position: absolute; left: 50%; top: 50%; z-index: 4; display: flex; flex-direction: column; align-items: center; width: min(1000px, 100%); text-align: center; transform: translate(-50%, -50%); transition: opacity .3s ease, transform .3s var(--ease); }
 /* The landing (design B): wordmark with "Link" in the intro's teal cutout,
    the catchphrase, the way in — over the page-level clay desk. */
@@ -351,7 +351,7 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
   .final-footer { align-items: flex-start; flex-direction: column; gap: 13px; }
 }
 
-/* After the landing: scroll where only the desk path winds on (wider screens). */
+/* After the closing section: two beats while the desk path winds on to the book (wider screens). */
 .path-gap { display: flex; flex-direction: column; justify-content: space-around; min-height: 160svh; padding: 8svh 0; }
 .gap-beat { position: relative; z-index: 3; max-width: 32em; }
 .gap-beat-right { align-self: flex-end; text-align: right; }
@@ -375,7 +375,7 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
     @keyframes gapBeatIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
   }
 }
-@media (max-width: 759px) { .path-gap { display: none; } .hero-stage { position: sticky; } .hero { min-height: 120svh; } }
+@media (max-width: 759px) { .path-gap { display: none; } }
 
 /* The closing view holds (sticky) while the desk's paper writes itself. */
 .closing-hold { height: 250svh; }
