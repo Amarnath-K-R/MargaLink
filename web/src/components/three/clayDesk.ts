@@ -230,7 +230,7 @@ function writablePaper(THREE: T): WritablePaper {
     if (sig === last) return;
     last = sig;
     if (!lines.length) layout();
-    c.fillStyle = hex(CLAY.sheet);
+    c.fillStyle = "#ffffff";
     c.fillRect(0, 0, W, H);
     c.fillStyle = hex(CLAY.teal);
     c.fillRect(M, ruleY, TEXT_W, 5);
@@ -270,14 +270,50 @@ function writablePaper(THREE: T): WritablePaper {
   return { texture, draw };
 }
 
+// A soft, blurred rectangle: the drop shadow that lifts the written top sheet
+// off the ones below it (independent of the light, so it holds when the paper
+// turns to face the reader).
+function dropShadow(THREE: T, w: number, d: number) {
+  const S = 256, pad = 40;
+  const tex = canvasTexture(THREE, S, S, (c) => {
+    c.clearRect(0, 0, S, S);
+    // draw the rect off-canvas and keep only its blurred shadow
+    c.shadowColor = "rgba(58,44,28,.72)";
+    c.shadowBlur = 26;
+    c.shadowOffsetX = S * 2;
+    c.fillStyle = "#000";
+    c.fillRect(pad - S * 2, pad, S - 2 * pad, S - 2 * pad);
+  });
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(w * (S / (S - 2 * 40)), d * (S / (S - 2 * 40))),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
+  );
+  m.rotation.x = -Math.PI / 2;
+  return m;
+}
+
 function stack(THREE: T, face: THREE_NS.Texture) {
   const g = new THREE.Group();
   [[0, 0, 0.12], [0.08, 0.04, -0.06], [-0.05, 0.08, 0.02]].forEach(([dx, dy, rot], i, all) => {
-    const s = sheet(THREE, 3, 3.9, i === all.length - 1 ? face : null, CLAY.sheet, true);
+    const top = i === all.length - 1;
+    const s = sheet(THREE, 3, 3.9, top ? face : null, top ? 0xffffff : CLAY.sheet, true);
     s.position.set(dx, 0.02 + dy, dx * 0.6);
     s.rotation.y = rot;
+    if (top) {
+      // just above the sheet below, nudged down-right on the page
+      const sh = dropShadow(THREE, 3, 3.9);
+      sh.position.set(0.14, -0.02, 0.2);
+      s.add(sh);
+    }
     g.add(s);
   });
+  // The sheets' lit bodies read cream on the desk; the morph turns them white.
+  const bodies: THREE_NS.MeshPhysicalMaterial[] = [];
+  g.traverse((o) => {
+    const m = (o as THREE_NS.Mesh).material;
+    if (m instanceof THREE.MeshPhysicalMaterial) bodies.push(m);
+  });
+  g.userData.bodies = bodies;
   return g;
 }
 
@@ -442,14 +478,25 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   const toward = new THREE.Vector3();
   const faceX = to ? Math.atan2(cam.z - to.z, cam.y - to.y) : 0;
   const smooth = (t: number) => t * t * (3 - 2 * t);
+  const WHITE = new THREE.Color(0xffffff);
   const applyMorph = (morph: number) => {
     if (!to || morph <= 0) {
       for (const d of dashes) d.position.copy(d.userData.base);
+      for (const it of items)
+        if (it.kind === "stack")
+          for (const m of it.obj.userData.bodies as THREE_NS.MeshPhysicalMaterial[]) {
+            m.color.set(CLAY.sheet);
+            m.emissive.setScalar(0);
+          }
       return;
     }
     const k = smooth(Math.min(1, morph));
     for (const it of items) {
       if (it.kind === "stack") {
+        for (const m of it.obj.userData.bodies as THREE_NS.MeshPhysicalMaterial[]) {
+          m.color.set(CLAY.sheet).lerp(WHITE, k);
+          m.emissive.setScalar(0.14 * k); // lifts the warm light's tint
+        }
         it.obj.position.set(it.baseX + (to.x - it.baseX) * k, it.obj.position.y + (to.y - it.baseY) * k, it.baseZ + (to.z - it.baseZ) * k);
         it.obj.rotation.set(it.obj.rotation.x + (faceX - it.baseRx) * k, it.baseRy * (1 - k), it.obj.rotation.z * (1 - k));
         it.obj.scale.setScalar(it.baseScale + (to.scale - it.baseScale) * k);
