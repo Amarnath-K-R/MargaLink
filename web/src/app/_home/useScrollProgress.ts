@@ -5,7 +5,8 @@ import { localProgress } from "./motion.ts";
 
 // Drives every scroll-linked value on the homepage: overall page progress,
 // hero-specific progress (the hero section is taller than the viewport, so
-// it needs its own local measure), the closing section's local progress
+// it needs its own local measure), the tools book's pinned progress, the
+// closing section's local progress
 // (localProgress — 0 until it scrolls into view, 1 once it's mostly
 // arrived), and the reduced-motion preference. One rAF-throttled scroll
 // listener drives all of it, rather than a listener per section.
@@ -13,10 +14,12 @@ export function useScrollProgress() {
   const [progress, setProgress] = useState(0);
   const [heroProgress, setHeroProgress] = useState(0);
   const [finalProgress, setFinalProgress] = useState(0);
+  const [bookProgress, setBookProgress] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
 
   const heroRef = useRef<HTMLElement>(null);
   const finalRef = useRef<HTMLElement>(null);
+  const bookRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -45,6 +48,10 @@ export function useScrollProgress() {
         }
 
         if (finalRef.current) setFinalProgress(localProgress(finalRef.current.getBoundingClientRect(), viewportHeight));
+
+        // the tools book: 0 → 1 through its pinned (sticky) stretch
+        const book = bookRef.current;
+        if (book) setBookProgress(Math.min(1, Math.max(0, -book.getBoundingClientRect().top / Math.max(1, book.offsetHeight - viewportHeight))));
       });
     };
     update();
@@ -61,8 +68,10 @@ export function useScrollProgress() {
     progress,
     heroProgress,
     finalProgress,
+    bookProgress,
     reducedMotion,
     heroRef,
     finalRef,
+    bookRef,
   };
 }

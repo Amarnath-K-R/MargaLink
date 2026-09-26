@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { between } from "@/lib/easing";
 import { useScrollProgress } from "./_home/useScrollProgress.ts";
 import SiteHeader from "./_home/SiteHeader.tsx";
@@ -10,6 +12,7 @@ import FinalSection from "./_home/FinalSection.tsx";
 import IntroSequence from "@/components/IntroSequence";
 import ClayDesk from "@/components/ClayDesk";
 import { LANDING_DESK, LANDING_DESK_NARROW } from "@/components/three/clayDesk";
+import { SPREADS, spreadAt } from "@/components/three/bookSpreads";
 import "./_home/home.css";
 
 // Short beats in the scroll between the landing and the closing section.
@@ -31,11 +34,13 @@ const GAP_BEATS = [
 ];
 
 function Home() {
-  const { finalProgress, reducedMotion, heroRef, finalRef } = useScrollProgress();
+  const { finalProgress, bookProgress, reducedMotion, heroRef, finalRef, bookRef } = useScrollProgress();
+  const spread = SPREADS[spreadAt(bookProgress)];
 
   // Wider screens: the desk scrolls with the page (its camera pans down it);
   // after the landing, a gap where only the path winds on, then the closing
-  // section's paper stands up and a pin drops onto it (clayDesk.ts).
+  // section's paper stands up and a pin drops onto it, then the path runs on
+  // to the tools book, which holds while its pages turn (clayDesk.ts).
   // Phones: the landing fades into the closing section instead.
   // Phones have no room beside the text: the desk just fades with the landing.
   const [narrow, setNarrow] = useState(false);
@@ -95,7 +100,51 @@ function Home() {
           ))}
         </div>
 
-        <FinalSection finalRef={finalRef} finalProgress={finalProgress} onOpenTools={() => setToolsOpen(true)} writePaper={writePaper} paperShown={paperShown} reducedMotion={reducedMotion} />
+        {/* the closing view holds while the desk's paper writes itself (clayDesk.ts) */}
+        <div id="closing" className="closing-hold">
+          <FinalSection finalRef={finalRef} finalProgress={finalProgress} onOpenTools={() => setToolsOpen(true)} writePaper={writePaper} paperShown={paperShown} reducedMotion={reducedMotion} />
+        </div>
+
+        {/* the open book on the desk: scroll holds the view and turns its pages,
+            one tool per spread (clayDesk.ts, book.ts); phones get the cards */}
+        <section id="tools-book" ref={bookRef} className="book-section" aria-labelledby="book-title">
+          <h2 id="book-title" className="sr-only">
+            Three more tools
+          </h2>
+          <div className="book-sticky">
+            <p key={spread.n} className="book-caption">
+              <span className="gap-step">{spread.n}</span>
+              <strong>{spread.tool}</strong>
+              <span className="book-caption-line">{spread.line}</span>
+              <Link href={spread.href} className="book-caption-link">
+                Open {spread.tool} <ArrowUpRight size={15} />
+              </Link>
+            </p>
+          </div>
+          <ol className="book-cards section-shell">
+            {SPREADS.map((s) => (
+              <li key={s.n} className="book-card">
+                <span className="gap-kicker">
+                  <span className="gap-step">{s.n}</span> {s.tool}
+                </span>
+                <h3>
+                  {s.lead} <mark className="gap-cut">{s.cut}</mark>
+                </h3>
+                <p>{s.line}</p>
+                <Link href={s.href} className="landing-link">
+                  Open {s.tool} <ArrowUpRight size={15} />
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+        <footer className="final-footer section-shell">
+          <span>© 2026 MargaLink</span>
+          <span className="mono">CALM TOOLS FOR SERIOUS PAPERS</span>
+          <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+            Back to top <ArrowUpRight size={14} />
+          </button>
+        </footer>
       </main>
     </div>
   );

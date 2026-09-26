@@ -422,7 +422,10 @@ real technical concern, not a speculative grouping).
 | File | What |
 |---|---|
 | `useThreeCanvas.ts` | The setup/cleanup preamble shared by both scenes — mounting, the WebGL try/catch, resize, the rAF loop, teardown. |
-| `clayDesk.ts` | The landing's clay-render desk, built in code (pencil, ruler, graph paper, sheets, chart, notebook, paper plane, the dashed path to a pin): rounded geometry, one matte palette-tinted material, RoomEnvironment + soft VSM shadows on a shadow-only ground. `LANDING_DESK` / `LANDING_DESK_NARROW` place it. Rendered by `components/ClayDesk.tsx` through N8AO ambient occlusion. |
+| `clayDesk.ts` | The landing's clay-render desk, built in code (pencil, ruler, graph paper, sheets, chart, notebook, paper plane, the dashed path to a pin): rounded geometry, one matte palette-tinted material, RoomEnvironment + soft VSM shadows on a shadow-only ground. `LANDING_DESK` / `LANDING_DESK_NARROW` place it. Rendered by `components/ClayDesk.tsx` through N8AO ambient occlusion. On wider screens the camera pans down the desk with the page's scroll and holds while a sticky section is pinned: the closing section (its paper stands up, gets a pin and writes itself — finished by the end of the hold) and then the tools book (camera tips to look down while the pages turn, then a pin drops onto it). The dashed path runs landing pin → paper pin → book pin. |
+| `book.ts` | The open clay book: board, page blocks, two static page faces and two turning leaves whose vertices are laid along a bending curve each frame (corner lifts first, lands last; front/back textures, the back mirrored). `setProgress(hp, still)` turns them by the book's pinned scroll; `still` (reduced motion) snaps. |
+| `bookPages.ts` | Draws one book page on a canvas: heading pages (tool, heading with the teal cutout, one line) and simple illustrations (review, write, figures). |
+| `bookSpreads.ts` | The book's content — one spread per tool — and its scroll timing (tilt, turns, pin), shared by the 3D book and the page's caption so they always agree. |
 
 **`src/lib/`** — framework-agnostic logic, deliberately kept flat (see
 "lib/ conventions" below).
