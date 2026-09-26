@@ -55,7 +55,7 @@ body.intro-bridge-fading .site-header { opacity: 1; filter: blur(0); }
 @keyframes toolsDialogIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
 
 .section-shell { position: relative; z-index: 3; width: min(1180px, calc(100% - 150px)); margin: 0 auto; }
-.hero { min-height: 118svh; display: block; padding: 0; } /* a little desk after the landing, so it's clear of the closing view */
+.hero { min-height: 100svh; display: block; padding: 0; }
 .hero-stage { position: relative; top: 0; min-height: 100svh; display: flex; align-items: center; padding: 132px 0 100px; overflow: hidden; }
 .hero-brand-landing { position: absolute; left: 50%; top: 50%; z-index: 4; display: flex; flex-direction: column; align-items: center; width: min(1000px, 100%); text-align: center; transform: translate(-50%, -50%); transition: opacity .3s ease, transform .3s var(--ease); }
 /* The landing (design B): wordmark with "Link" in the intro's teal cutout,
@@ -376,6 +376,11 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
   }
 }
 @media (max-width: 759px) { .path-gap { display: none; } .hero-stage { position: sticky; } .hero { min-height: 120svh; } }
+
+/* Between the landing and the closing view: room on the desk for the path
+   to run off the right edge and curve back in to the paper's pin. */
+.landing-gap { height: 75svh; }
+@media (max-width: 759px) { .landing-gap { display: none; } }
 
 /* The closing view holds (sticky) while the desk's paper writes itself. */
 .closing-hold { height: 250svh; }

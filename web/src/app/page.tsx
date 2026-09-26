@@ -72,7 +72,8 @@ function Home() {
 
       <main>
         <HeroSection heroRef={heroRef} landingFade={landingFade} screenDive={narrow && !reducedMotion ? between(finalProgress, 0.1, 0.8) : 0} />
-        {/* the closing view: holds while the desk's paper writes itself (clayDesk.ts) */}
+        {/* room for the path to curve back in, then the closing view: it holds while the desk's paper writes itself (clayDesk.ts) */}
+        <div className="landing-gap" aria-hidden="true" />
         <div id="closing" className="closing-hold">
           <FinalSection finalRef={finalRef} finalProgress={finalProgress} onOpenTools={() => setToolsOpen(true)} writePaper={writePaper} paperShown={paperShown} reducedMotion={reducedMotion} />
         </div>

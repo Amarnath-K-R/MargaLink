@@ -794,20 +794,20 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     const y = 0.06;
     const V = (x: number, py: number, z: number) => new THREE.Vector3(x, py, z);
     // Leg 0: from the landing's pin the path carries on the way it arrived —
-    // rightwards — and slides off the right edge, turns out of view and comes
-    // back in from the right at the paper's top, runs on behind it and comes
-    // over its top-left corner into the new pin there.
+    // rightwards — and slides off the right edge; it turns out of view, then
+    // comes back from the upper right in one sweeping curve over the top and
+    // drops into the new pin at the paper's top-left corner.
     const x0 = pinItem.baseX;
     const z0 = pinItem.baseZ;
     const toPaper = layTrail([
       V(x0, y, z0),
       V(x0 + 3, y, z0 + 0.7),
-      V(x0 + 6.7, y, z0 + 1.5), // off the right edge
-      V(12.4, y, pinAt.z - 3.2),
-      V(11.2, y, pinAt.z - 1.9), // turning back, out of view
-      V(7.5, y, pinAt.z - 2),
-      V(5, y, pinAt.z - 2.1),
-      V(2.6, y, pinAt.z - 1.9), // behind the paper
+      V(x0 + 7.5, y, z0 + 2.2), // off the right edge
+      V(13, y, (z0 + 2.2 + paperZ - 7) / 2),
+      V(9.5, y, paperZ - 7), // back in, upper right
+      V(5, y, paperZ - 5.8),
+      V(2.4, y, paperZ - 4.4),
+      V(1.6, y, paperZ - 3.2),
       V(pinAt.x, 0.7, pinAt.z - 1.4),
       pinAt.clone().addScaledVector(pinNormal, 0.5),
       pinAt.clone(),
