@@ -1,5 +1,4 @@
 import type { RefObject } from "react";
-import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { stagger, motionStyle } from "./motion.ts";
 import TypedPaper from "./TypedPaper.tsx";
@@ -10,12 +9,14 @@ import TypedPaper from "./TypedPaper.tsx";
 export default function FinalSection({
   finalRef,
   finalProgress,
+  onOpenTools,
   writePaper,
   paperShown,
   reducedMotion,
 }: {
   finalRef: RefObject<HTMLElement | null>;
   finalProgress: number;
+  onOpenTools: () => void;
   writePaper: boolean;
   paperShown: number;
   reducedMotion: boolean;
@@ -36,12 +37,9 @@ export default function FinalSection({
             Browse first. Match privately. Review only when you choose.
           </p>
           <div className="final-actions" style={motionStyle(reducedMotion, stagger(finalProgress, 3, 4, 30))}>
-            <Link href="/journals" className="button button-primary">
-              Browse journals <ArrowUpRight size={16} />
-            </Link>
-            <Link href="/match" className="button button-quiet">
-              Match your paper <ArrowUpRight size={16} />
-            </Link>
+            <button type="button" className="button button-primary" onClick={onOpenTools}>
+              Explore our tools <ArrowUpRight size={16} />
+            </button>
           </div>
         </div>
         <div className="final-paper" style={{ opacity: reducedMotion ? 1 : paperShown }}>

@@ -26,7 +26,7 @@ console.log("links to /match:", matchLinks);
 // Click through to the tool from the final call-to-action.
 // Scroll to the closing section first, as a visitor would — mid-reveal its
 // buttons are still easing into place.
-await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
 await page.waitForTimeout(800);
 await page.click('a[href="/match"].button-quiet');
 await page.waitForSelector("text=Find the right journal.");
@@ -34,6 +34,10 @@ console.log("clicking through from the final CTA reaches the tool: yes");
 
 await page.goBack();
 await page.waitForSelector(".landing-wordmark");
+// Back restores the scroll position (the bottom); the landing's links are
+// faded out there, so return to the top as a visitor using them would be.
+await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+await page.waitForFunction(() => scrollY === 0 && getComputedStyle(document.querySelector(".hero-brand-landing")).opacity === "1");
 
 // Click through to journals (header nav + the new tool card both link
 // there now — use .first() rather than an ambiguous selector).

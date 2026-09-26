@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { ArrowUpRight, BookOpen, ScanSearch, FileCheck2, BarChart3, X } from "lucide-react";
+import { ArrowUpRight, BookOpen, ScanSearch, FileCheck2, BarChart3, PenLine, X } from "lucide-react";
 
 const TOOLS = [
   {
@@ -28,6 +28,12 @@ const TOOLS = [
     icon: BarChart3,
     title: "Make figures",
     description: "Publication-ready charts — your data never leaves the tab.",
+  },
+  {
+    href: "/write",
+    icon: PenLine,
+    title: "Write your paper",
+    description: "Your journal's LaTeX template, compiled in your browser.",
   },
 ] as const;
 

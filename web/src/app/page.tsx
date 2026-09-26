@@ -51,7 +51,7 @@ function Home() {
       <main>
         <HeroSection heroRef={heroRef} landingFade={landingFade} screenDive={screenDive} />
 
-        <FinalSection finalRef={finalRef} finalProgress={finalProgress} writePaper={writePaper} paperShown={paperShown} reducedMotion={reducedMotion} />
+        <FinalSection finalRef={finalRef} finalProgress={finalProgress} onOpenTools={() => setToolsOpen(true)} writePaper={writePaper} paperShown={paperShown} reducedMotion={reducedMotion} />
       </main>
     </div>
   );
