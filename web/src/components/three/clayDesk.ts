@@ -26,7 +26,15 @@ export const CLAY = {
 
 export type Kind = "pencil" | "ruler" | "graph" | "stack" | "chart" | "notebook" | "plane" | "pin";
 export type Placement = { kind: Kind; x: number; z: number; rotY?: number; scale?: number; lift?: number };
-export type DeskLayout = { items: Placement[]; path: [number, number][]; camera: { x: number; y: number; z: number; lookX: number; lookZ: number; fov: number } };
+export type DeskLayout = {
+  items: Placement[];
+  path: [number, number][];
+  camera: { x: number; y: number; z: number; lookX: number; lookZ: number; fov: number };
+  // Where the ruled paper stack ends up when the desk morphs away (see
+  // update's `morph`): everything else leaves the frame; this sheet rises,
+  // turns to face the camera and settles here. Without it, morph does nothing.
+  paperTo?: { x: number; y: number; z: number; scale: number };
+};
 
 function clay(THREE: T, color: number, roughness = 0.9) {
   return new THREE.MeshPhysicalMaterial({ color, roughness, metalness: 0, sheen: 0.35, sheenRoughness: 0.8, sheenColor: new THREE.Color(0xffffff) });
@@ -247,11 +255,13 @@ const BUILD: Record<Exclude<Kind, "pencil">, (THREE: T) => THREE_NS.Group> = { r
 export type Desk = {
   scene: THREE_NS.Scene;
   camera: THREE_NS.PerspectiveCamera;
+  // `morph` (0..1, scroll-driven) sends the desk away and brings the paper
+  // stack forward — see DeskLayout.paperTo.
   // Call every frame with ms since start. While `hold`
   // is true (the homepage intro), the objects float and tumble above the desk
   // with the camera close in; when it turns false they fall into place, the
   // camera eases back and the path draws — the intro becoming the landing.
-  update: (ms: number, hold?: boolean) => void;
+  update: (ms: number, hold?: boolean, morph?: number) => void;
 };
 
 export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: DeskLayout, reducedMotion: boolean): Desk {
@@ -284,7 +294,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   const camera = new THREE.PerspectiveCamera(cam.fov, 1, 0.1, 200);
   const look = new THREE.Vector3(cam.lookX, 0, cam.lookZ);
 
-  type Item = { obj: THREE_NS.Object3D; baseY: number; baseRx: number; baseRz: number; delay: number; float: number; phase: number };
+  type Item = { kind: Kind; obj: THREE_NS.Object3D; baseX: number; baseY: number; baseZ: number; baseRx: number; baseRy: number; baseRz: number; baseScale: number; delay: number; float: number; phase: number };
   const items: Item[] = [];
   let pencilTip: THREE_NS.Vector3 | null = null;
   layout.items.forEach((p, i) => {
@@ -301,7 +311,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     if (p.kind === "plane") obj.rotation.z = 0.12;
     scene.add(obj);
     if (pencilTip && p.kind === "pencil") pencilTip.applyMatrix4(new THREE.Matrix4().compose(obj.position, obj.quaternion, obj.scale));
-    items.push({ obj, baseY: obj.position.y, baseRx: obj.rotation.x, baseRz: obj.rotation.z, delay: i * 90, float: p.kind === "plane" ? 0.18 : 0, phase: i * 1.3 });
+    items.push({ kind: p.kind, obj, baseX: obj.position.x, baseY: obj.position.y, baseZ: obj.position.z, baseRx: obj.rotation.x, baseRy: obj.rotation.y, baseRz: obj.rotation.z, baseScale: obj.scale.x, delay: i * 90, float: p.kind === "plane" ? 0.18 : 0, phase: i * 1.3 });
   });
 
   // The path: dashes laid along a curve on the desk, drawn in on load.
@@ -319,6 +329,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     const tan = curve.getTangentAt(t);
     d.rotation.y = -Math.atan2(tan.z, tan.x);
     d.visible = reducedMotion;
+    d.userData.base = d.position.clone();
     scene.add(d);
     dashes.push(d);
   }
@@ -327,11 +338,46 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   // Set the first frame `hold` is false; the fall, the camera and the path
   // all run from it. Without an intro that's the first frame.
   let releasedAt: number | null = null;
-  const update = (ms: number, hold = false) => {
+  // Morph: everything but the paper stack is pushed out of frame, away from
+  // the centre of the desk; the stack rises, turns to face the camera and
+  // settles at layout.paperTo.
+  const to = layout.paperTo;
+  const toward = new THREE.Vector3();
+  const faceX = to ? Math.atan2(cam.z - to.z, cam.y - to.y) : 0;
+  const smooth = (t: number) => t * t * (3 - 2 * t);
+  const applyMorph = (morph: number) => {
+    if (!to || morph <= 0) {
+      for (const d of dashes) d.position.copy(d.userData.base);
+      return;
+    }
+    const k = smooth(Math.min(1, morph));
+    for (const it of items) {
+      if (it.kind === "stack") {
+        it.obj.position.set(it.baseX + (to.x - it.baseX) * k, it.obj.position.y + (to.y - it.baseY) * k, it.baseZ + (to.z - it.baseZ) * k);
+        it.obj.rotation.set(it.obj.rotation.x + (faceX - it.baseRx) * k, it.baseRy * (1 - k), it.obj.rotation.z * (1 - k));
+        it.obj.scale.setScalar(it.baseScale + (to.scale - it.baseScale) * k);
+        continue;
+      }
+      toward.set(it.baseX - look.x, 0, it.baseZ - look.z);
+      if (toward.lengthSq() < 0.01) toward.set(0, 0, -1);
+      toward.normalize().multiplyScalar(k * k * 18);
+      it.obj.position.x = it.baseX + toward.x;
+      it.obj.position.z = it.baseZ + toward.z;
+      it.obj.position.y += k * 1.5;
+    }
+    for (const d of dashes) {
+      const b = d.userData.base as THREE_NS.Vector3;
+      toward.set(b.x - look.x, 0, b.z - look.z).normalize().multiplyScalar(k * k * 18);
+      d.position.set(b.x + toward.x, b.y, b.z + toward.z);
+    }
+  };
+
+  const update = (ms: number, hold = false, morph = 0) => {
     if (reducedMotion) {
       for (const it of items) it.obj.position.y = it.baseY;
       camera.position.set(cam.x, cam.y, cam.z);
       camera.lookAt(look);
+      applyMorph(morph);
       return;
     }
     if (!hold && releasedAt === null) releasedAt = ms;
@@ -350,6 +396,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     const pull = 1 - ease(since / 1400);
     camera.position.set(cam.x, cam.y * (1 - pull * 0.1), cam.z * (1 - pull * 0.1));
     camera.lookAt(look);
+    applyMorph(morph);
   };
 
   return { scene, camera, update };
@@ -370,6 +417,7 @@ export const LANDING_DESK: DeskLayout = {
     { kind: "pin", x: 3.8, z: 4.1 },
   ],
   path: [[-4.95, -1.9], [-5.3, 0.3], [-4.6, 2.7], [-1.6, 3.7], [2.0, 3.8], [3.6, 4.1]],
+  paperTo: { x: 2.95, y: 1.2, z: 1.7, scale: 1.15 },
 };
 
 // Phones: the text is full width, so the desk sits above and below it.

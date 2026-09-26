@@ -401,7 +401,7 @@ from routing; nothing outside `app/page.tsx` imports from it).
 | `home.css` | The ~87% of the old single `globals.css` that's homepage-only. |
 | `useScrollProgress.ts` | The one rAF-throttled scroll listener: hero progress, the closing section's progress (the landing crossfades into it), overall page progress for the 3D paper, and the reduced-motion query. |
 | `motion.ts` | `localProgress`, `stagger`, `motionStyle`, `countUp`, `decodeText` — the homepage's own animation-math kit (builds on `lib/easing.ts`'s `between`). |
-| `SiteHeader.tsx`, `HeroSection.tsx`, `FinalSection.tsx`, `ToolsOverlay.tsx` | The homepage is two screens: the landing (`HeroSection` — the wordmark with the Link cutout, "Find your path.", over the clay desk) and the closing call to action (`FinalSection`), which the landing crossfades into. The middle sections (workflow, journals, matching, review, privacy) were removed on 2026-09-26. |
+| `SiteHeader.tsx`, `HeroSection.tsx`, `FinalSection.tsx`, `TypedPaper.tsx`, `ToolsOverlay.tsx` | The homepage is two screens: the landing (`HeroSection` — the wordmark with the Link cutout, "Find your path.", over the clay desk) and the closing call to action (`FinalSection`), which the landing crossfades into; its right column is `TypedPaper`, a manuscript page that types itself once the desk's 3D sheet hands over. The middle sections (workflow, journals, matching, review, privacy) were removed on 2026-09-26. |
 
 **`src/components/`** — shared across routes.
 
@@ -412,7 +412,7 @@ from routing; nothing outside `app/page.tsx` imports from it).
 | `JournalResultRow.tsx` | `JournalResultTitle` (prerendered-link-vs-expand-button) + `JournalResultChips` (metadata chips), shared by `/journals` and `/match`. |
 | `ErrorText.tsx` | The one `role="alert"` error paragraph. |
 | `IntroSequence.tsx` | The first-visit intro: a transparent layer over the landing (the question, then the landing's own wordmark builds, then the desk settles) — timing, dismissal, `sessionStorage` memory. |
-| `ThreePaperScene.tsx`, `ClayDesk.tsx` | Thin shells over `components/three/` — see below. `ClayDesk` is the landing's desk; it also plays the intro (held floating while `.intro-overlay` is up, then settling into the landing). |
+| `ClayDesk.tsx` | Thin shell over `components/three/clayDesk.ts`: the landing's desk. It plays the intro (held floating while `.intro-overlay` is up, then settling), and on scroll morphs: every object leaves the frame, the ruled paper stack rises, faces the camera and settles right, where it crossfades into `_home/TypedPaper.tsx`. |
 | `JournalDetail.tsx`, `PaperDropzone.tsx`, `RulesCheckPanel.tsx`, `ReviewConsent.tsx`, `ReviewResultPanel.tsx`, `CheckRow.tsx`, `FigureConsent.tsx` | Single-purpose presentational pieces. `PaperDropzone.tsx` takes optional `accept`/`title`/`hint`/`ariaLabel` props (defaulting to its original PDF/DOCX copy) so `/figures` reuses it for CSV/XLSX instead of a second dropzone component. `FigureConsent.tsx` is a deliberately separate sibling of `ReviewConsent.tsx`, not a shared generalization — see `CLAUDE.md`'s exceptions paragraph for why each consent notice stays independently readable. |
 
 **`src/components/three/`** — the one domain subfolder in `components/`
@@ -422,10 +422,7 @@ real technical concern, not a speculative grouping).
 | File | What |
 |---|---|
 | `useThreeCanvas.ts` | The setup/cleanup preamble shared by both scenes — mounting, the WebGL try/catch, resize, the rAF loop, teardown. |
-| `sceneHelpers.ts` | `forEachMaterial` (shared mesh/material traversal) + `setOpacity` (`ThreePaperScene`'s absolute-value policy). |
-| `paperSceneGraph.ts` | `buildPaperScene()` — the homepage scene's meshes/lights/groups. |
 | `clayDesk.ts` | The landing's clay-render desk, built in code (pencil, ruler, graph paper, sheets, chart, notebook, paper plane, the dashed path to a pin): rounded geometry, one matte palette-tinted material, RoomEnvironment + soft VSM shadows on a shadow-only ground. `LANDING_DESK` / `LANDING_DESK_NARROW` place it. Rendered by `components/ClayDesk.tsx` through N8AO ambient occlusion. |
-| `paperSceneMotion.ts` | `applyFrame()` + the `SCROLL` table (every scroll-threshold pair the scene's choreography depends on, named). |
 
 **`src/lib/`** — framework-agnostic logic, deliberately kept flat (see
 "lib/ conventions" below).

@@ -15,17 +15,21 @@ export default function ClayDesk({
   className,
   style,
   active = true,
+  morph = 0,
 }: {
   layout: DeskLayout;
   narrowLayout?: DeskLayout;
   className?: string;
   style?: CSSProperties;
   active?: boolean;
+  morph?: number; // 0..1, scroll-driven: the desk leaves, the paper comes forward
 }) {
   const activeRef = useRef(active);
+  const morphRef = useRef(morph);
   useEffect(() => {
     activeRef.current = active;
-  }, [active]);
+    morphRef.current = morph;
+  }, [active, morph]);
 
   const mountRef = useThreeCanvas((THREE, _mount, renderer) => {
     renderer.shadowMap.enabled = true;
@@ -67,7 +71,7 @@ export default function ClayDesk({
       onFrame: (time) => {
         if (!activeRef.current) return;
         // Held (floating) while the homepage intro plays over it.
-        desk.update(time - start, !!document.querySelector(".intro-overlay:not(.intro-fade)"));
+        desk.update(time - start, !!document.querySelector(".intro-overlay:not(.intro-fade)"), morphRef.current);
         if (composer) composer.render();
         else renderer.render(desk.scene, desk.camera);
       },

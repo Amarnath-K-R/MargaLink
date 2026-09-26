@@ -258,8 +258,21 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
 .metric-value { display: block; color: var(--accent); font-family: var(--font-serif); font-size: 44px; line-height: 1; }
 .privacy-metrics span:last-child { display: block; max-width: 115px; margin-top: 8px; color: var(--ink-soft); font-size: 11px; line-height: 1.4; }
 
-.final-section { min-height: 95svh; display: flex; flex-direction: column; justify-content: center; padding-top: 120px; }
-.final-section h2 { margin-top: 28px; font-size: clamp(56px, 8vw, 108px); }
+.final-section { min-height: 95svh; display: flex; flex-direction: column; justify-content: center; padding-top: 110px; }
+/* Copy on the left; on the right, the page the landing's desk morphed into. */
+.final-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: clamp(32px, 5vw, 80px); align-items: center; margin: auto 0; }
+.final-paper { display: flex; justify-content: center; will-change: opacity; }
+.typed-paper { width: min(440px, 100%); min-height: 520px; padding: 44px 40px 40px; border: 1px solid rgba(27,31,39,.1); border-radius: 6px; background: var(--white); box-shadow: 0 30px 60px rgba(58,50,38,.14), 0 4px 12px rgba(58,50,38,.06); color: var(--ink); }
+.typed-paper p { margin: 0; }
+.typed-paper .tp-title { min-height: 2.4em; font-family: var(--font-serif); font-size: 24px; font-weight: 500; line-height: 1.2; letter-spacing: -.02em; }
+.typed-paper .tp-authors { margin-top: 16px; min-height: 1.4em; font-size: 13.5px; }
+.typed-paper .tp-affil { margin-top: 4px; min-height: 1.4em; padding-bottom: 18px; border-bottom: 2px solid var(--accent); color: var(--ink-soft); font-size: 11.5px; white-space: pre-wrap; }
+.typed-paper .tp-label { margin-top: 20px; min-height: 1.3em; color: var(--accent); font-size: 12px; font-weight: 600; }
+.typed-paper .tp-abstract { margin-top: 6px; min-height: 8.6em; color: var(--ink); font-size: 13.5px; line-height: 1.6; }
+.typed-paper .tp-keywords { margin-top: 16px; min-height: 2.8em; color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
+.tp-caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 1px; vertical-align: -.15em; background: var(--accent); animation: tpBlink 1s steps(1) infinite; }
+@keyframes tpBlink { 50% { opacity: 0; } }
+.final-section h2 { margin-top: 28px; font-size: clamp(48px, 6vw, 92px); }
 .final-section p { margin: 28px 0 0; color: var(--ink-soft); font-size: 16px; }
 .final-actions { display: flex; gap: 11px; margin-top: 32px; }
 .final-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding: 20px 0 24px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 10px; }
@@ -328,7 +341,9 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
   .privacy-metrics { grid-column: 1; }
   .privacy-metrics span:last-child { max-width: 90px; }
   .final-section { min-height: 100svh; padding-top: 100px; }
-  .final-section h2 { font-size: 62px; }
+  .final-section h2 { font-size: 52px; }
+  .final-grid { grid-template-columns: 1fr; gap: 44px; }
+  .typed-paper { min-height: 0; padding: 30px 24px; }
   .final-actions { align-items: stretch; flex-direction: column; width: max-content; }
   .final-footer { align-items: flex-start; flex-direction: column; gap: 13px; }
 }
