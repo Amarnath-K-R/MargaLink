@@ -470,9 +470,67 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   const toward = new THREE.Vector3();
   const faceX = to ? Math.atan2(cam.z - to.z, cam.y - to.y) : 0;
   const smooth = (t: number) => t * t * (3 - 2 * t);
+  // Checkpoint trail. The landing's pin stays where it is — the landing's
+  // checkpoint. As the morph runs, the path keeps drawing from it: along the
+  // desk under the rising paper, off the right edge in a curve, back in from
+  // the top right and up to the paper's top-right corner, where a new pin
+  // drops in and grounds the paper — the next checkpoint.
+  const pinItem = items.find((it) => it.kind === "pin");
+  const trail: THREE_NS.Mesh[] = [];
+  let newPin: THREE_NS.Object3D | null = null;
+  const pinAt = new THREE.Vector3();
+  const pinNormal = new THREE.Vector3(0, 1, 0).applyEuler(new THREE.Euler(faceX, 0, 0));
+  if (to && pinItem) {
+    const onPaper = new THREE.Matrix4().compose(
+      new THREE.Vector3(to.x, to.y, to.z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(faceX, 0, 0)),
+      new THREE.Vector3(to.scale, to.scale, to.scale),
+    );
+    pinAt.set(1.32, 0.14, -1.72).applyMatrix4(onPaper);
+    const y = 0.06;
+    const curve = new THREE.CatmullRomCurve3(
+      [
+        new THREE.Vector3(pinItem.baseX, y, pinItem.baseZ),
+        new THREE.Vector3(pinItem.baseX + 2.2, y, pinItem.baseZ - 0.6),
+        new THREE.Vector3(pinItem.baseX + 5.5, y, pinItem.baseZ - 2.2), // off the right edge
+        new THREE.Vector3(pinItem.baseX + 7.5, y, pinItem.baseZ - 5.5),
+        new THREE.Vector3(pinItem.baseX + 5.8, y, pinItem.baseZ - 8.6), // turning back
+        new THREE.Vector3(pinAt.x + 2.4, pinAt.y * 0.4, pinAt.z - 2.6), // re-entering, top right
+        pinAt.clone().addScaledVector(pinNormal, 0.9),
+        pinAt.clone(),
+      ],
+      false,
+      "centripetal",
+    );
+    const along = new THREE.Vector3(1, 0, 0);
+    const n = Math.floor(curve.getLength() / 0.42);
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      const d = mesh(THREE, dashGeo, dashMat);
+      d.position.copy(curve.getPointAt(t));
+      d.quaternion.setFromUnitVectors(along, curve.getTangentAt(t));
+      d.userData.t = t;
+      d.visible = false;
+      scene.add(d);
+      trail.push(d);
+    }
+    newPin = BUILD.pin(THREE);
+    newPin.visible = false;
+    scene.add(newPin);
+  }
+  const pinTilt = new THREE.Euler(0.45 * faceX, 0, 0);
+
   const applyMorph = (morph: number) => {
     if (!to || morph <= 0) {
       for (const d of dashes) d.position.copy(d.userData.base);
+      for (const d of trail) d.visible = false;
+      if (newPin) newPin.visible = false;
+      for (const it of items) {
+        it.obj.position.x = it.baseX;
+        it.obj.position.z = it.baseZ;
+        it.obj.rotation.y = it.baseRy;
+        it.obj.scale.setScalar(it.baseScale);
+      }
       return;
     }
     const k = smooth(Math.min(1, morph));
@@ -483,6 +541,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
         it.obj.scale.setScalar(it.baseScale + (to.scale - it.baseScale) * k);
         continue;
       }
+      if (it === pinItem) continue; // the checkpoint stays
       toward.set(it.baseX - look.x, 0, it.baseZ - look.z);
       if (toward.lengthSq() < 0.01) toward.set(0, 0, -1);
       toward.normalize().multiplyScalar(k * k * 18);
@@ -494,6 +553,16 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       const b = d.userData.base as THREE_NS.Vector3;
       toward.set(b.x - look.x, 0, b.z - look.z).normalize().multiplyScalar(k * k * 18);
       d.position.set(b.x + toward.x, b.y, b.z + toward.z);
+    }
+    // The path draws over the first 85% of the morph; then the new pin drops in.
+    const drawn = Math.min(1, k / 0.85);
+    for (const d of trail) d.visible = (d.userData.t as number) < drawn;
+    if (newPin) {
+      const drop = smooth(Math.max(0, Math.min(1, (k - 0.82) / 0.18)));
+      newPin.visible = drop > 0;
+      newPin.position.copy(pinAt).addScaledVector(pinNormal, (1 - drop) * 3);
+      newPin.rotation.copy(pinTilt);
+      newPin.scale.setScalar(0.8);
     }
   };
 
