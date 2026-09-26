@@ -307,12 +307,14 @@ function stack(THREE: T, face: THREE_NS.Texture) {
     }
     g.add(s);
   });
-  // The sheets' lit bodies read cream on the desk; the morph turns them white.
+  // The lower sheets' lit bodies (not the white top page).
   const bodies: THREE_NS.MeshPhysicalMaterial[] = [];
-  g.traverse((o) => {
-    const m = (o as THREE_NS.Mesh).material;
-    if (m instanceof THREE.MeshPhysicalMaterial) bodies.push(m);
-  });
+  g.children.slice(0, -1).forEach((sh) =>
+    sh.traverse((o) => {
+      const m = (o as THREE_NS.Mesh).material;
+      if (m instanceof THREE.MeshPhysicalMaterial) bodies.push(m);
+    }),
+  );
   g.userData.bodies = bodies;
   return g;
 }
@@ -478,25 +480,19 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   const toward = new THREE.Vector3();
   const faceX = to ? Math.atan2(cam.z - to.z, cam.y - to.y) : 0;
   const smooth = (t: number) => t * t * (3 - 2 * t);
-  const WHITE = new THREE.Color(0xffffff);
+  const CREAM_LIT = new THREE.Color(0xe9dfca);
   const applyMorph = (morph: number) => {
     if (!to || morph <= 0) {
       for (const d of dashes) d.position.copy(d.userData.base);
-      for (const it of items)
-        if (it.kind === "stack")
-          for (const m of it.obj.userData.bodies as THREE_NS.MeshPhysicalMaterial[]) {
-            m.color.set(CLAY.sheet);
-            m.emissive.setScalar(0);
-          }
+      for (const it of items) if (it.kind === "stack") for (const m of it.obj.userData.bodies as THREE_NS.MeshPhysicalMaterial[]) m.color.set(CLAY.sheet);
       return;
     }
     const k = smooth(Math.min(1, morph));
     for (const it of items) {
       if (it.kind === "stack") {
-        for (const m of it.obj.userData.bodies as THREE_NS.MeshPhysicalMaterial[]) {
-          m.color.set(CLAY.sheet).lerp(WHITE, k);
-          m.emissive.setScalar(0.14 * k); // lifts the warm light's tint
-        }
+        // Facing the key light, the cream sheets wash out to white; deepen
+        // them as they turn so they still read cream.
+        for (const m of it.obj.userData.bodies as THREE_NS.MeshPhysicalMaterial[]) m.color.set(CLAY.sheet).lerp(CREAM_LIT, k);
         it.obj.position.set(it.baseX + (to.x - it.baseX) * k, it.obj.position.y + (to.y - it.baseY) * k, it.baseZ + (to.z - it.baseZ) * k);
         it.obj.rotation.set(it.obj.rotation.x + (faceX - it.baseRx) * k, it.baseRy * (1 - k), it.obj.rotation.z * (1 - k));
         it.obj.scale.setScalar(it.baseScale + (to.scale - it.baseScale) * k);
