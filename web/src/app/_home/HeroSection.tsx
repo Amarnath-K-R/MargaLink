@@ -1,6 +1,5 @@
 import type { RefObject } from "react";
-import Link from "next/link";
-import { ArrowRight, ArrowUpRight, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 // The landing. Scrolling on, it fades and the stage recedes (`screenDive`,
 // 0 under reduced motion — see page.tsx) into the closing section.
@@ -46,14 +45,6 @@ export default function HeroSection({
             Find the journals that fit your paper, check it against their rules, write it in their template — without
             your manuscript ever leaving the browser.
           </p>
-          <div className="landing-actions landing-in" style={{ animationDelay: "580ms" }}>
-            <Link href="/match" className="landing-button">
-              Match your paper <ArrowRight size={16} />
-            </Link>
-            <Link href="/journals" className="landing-link">
-              Browse journals <ArrowUpRight size={15} />
-            </Link>
-          </div>
         </div>
         <div className="scroll-hint">
           <span>SCROLL TO TRACE THE REVEAL</span>
