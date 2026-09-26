@@ -31,9 +31,11 @@ export type DeskLayout = {
   items: Placement[];
   path: [number, number][];
   camera: { x: number; y: number; z: number; lookX: number; lookZ: number; fov: number };
-  // Where the ruled paper stack ends up when the desk morphs away (see
-  // update's `morph`): everything else leaves the frame; this sheet rises,
-  // turns to face the camera and settles here. Without it, morph does nothing.
+  // The next section's paper, relative to the camera at the end of the page:
+  // it lies on the desk further down, stands up to face the reader here as
+  // the page reaches the end, writes itself, and a pin drops onto it. The
+  // path winds from the landing's pin down to it. Without it the camera
+  // doesn't pan (phones).
   paperTo?: { x: number; y: number; z: number; scale: number };
 };
 
@@ -376,13 +378,13 @@ const BUILD: Record<Exclude<Kind, "pencil" | "stack">, (THREE: T) => THREE_NS.Gr
 export type Desk = {
   scene: THREE_NS.Scene;
   camera: THREE_NS.PerspectiveCamera;
-  // `morph` (0..1, scroll-driven) sends the desk away and brings the paper
-  // stack forward — see DeskLayout.paperTo.
+  // `scroll` (the page's scroll, px) pans the camera down the desk at the
+  // page's own speed — see DeskLayout.paperTo.
   // Call every frame with ms since start. While `hold`
   // is true (the homepage intro), the objects float and tumble above the desk
   // with the camera close in; when it turns false they fall into place, the
   // camera eases back and the path draws — the intro becoming the landing.
-  update: (ms: number, hold?: boolean, morph?: number) => void;
+  update: (ms: number, hold?: boolean, scroll?: { y: number; max: number; vh: number }) => void;
 };
 
 export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: DeskLayout, reducedMotion: boolean): Desk {
@@ -405,8 +407,10 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   key.shadow.blurSamples = 20;
   key.shadow.bias = -0.0005;
   scene.add(key);
+  scene.add(key.target);
+  const keyBase = key.position.clone();
 
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.ShadowMaterial({ color: 0x3a3226, opacity: 0.22 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.ShadowMaterial({ color: 0x3a3226, opacity: 0.22 }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
@@ -418,7 +422,6 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   type Item = { kind: Kind; obj: THREE_NS.Object3D; baseX: number; baseY: number; baseZ: number; baseRx: number; baseRy: number; baseRz: number; baseScale: number; delay: number; float: number; phase: number };
   const items: Item[] = [];
   let pencilTip: THREE_NS.Vector3 | null = null;
-  let paper: WritablePaper | null = null;
   layout.items.forEach((p, i) => {
     let obj: THREE_NS.Object3D;
     if (p.kind === "pencil") {
@@ -427,8 +430,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       obj.add(built.group);
       pencilTip = built.tip.clone();
     } else if (p.kind === "stack") {
-      paper = writablePaper(THREE);
-      obj = stack(THREE, paper.texture);
+      obj = stack(THREE, writablePaper(THREE).texture); // the landing's: stays a ruled sheet
     } else obj = BUILD[p.kind](THREE);
     obj.position.set(p.x, p.lift ?? 0, p.z);
     obj.rotation.y = p.rotY ?? 0;
@@ -467,122 +469,140 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   // the centre of the desk; the stack rises, turns to face the camera and
   // settles at layout.paperTo.
   const to = layout.paperTo;
-  const toward = new THREE.Vector3();
-  const faceX = to ? Math.atan2(cam.z - to.z, cam.y - to.y) : 0;
   const smooth = (t: number) => t * t * (3 - 2 * t);
-  // Checkpoint trail. The landing's pin stays where it is — the landing's
-  // checkpoint. As the morph runs, the path keeps drawing from it: along the
-  // desk under the rising paper, off the right edge in a curve, back in from
-  // the top right and up to the paper's top-right corner, where a new pin
-  // drops in and grounds the paper — the next checkpoint.
-  const pinItem = items.find((it) => it.kind === "pin");
-  const trail: THREE_NS.Mesh[] = [];
-  let newPin: THREE_NS.Object3D | null = null;
-  const pinAt = new THREE.Vector3();
+  const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+  const faceX = to ? Math.atan2(cam.z - to.z, cam.y - to.y) : 0;
   const pinNormal = new THREE.Vector3(0, 1, 0).applyEuler(new THREE.Euler(faceX, 0, 0));
-  if (to && pinItem) {
+  const pinItem = items.find((it) => it.kind === "pin");
+
+  // The next section's paper, its pin, and the trail — built once the page's
+  // length is known (the first frame with a scroll), rebuilt on resize.
+  let second: {
+    endZ: number;
+    paper: WritablePaper;
+    stackObj: THREE_NS.Object3D;
+    newPin: THREE_NS.Object3D;
+    pinAt: THREE_NS.Vector3;
+    trail: { d: THREE_NS.Mesh; raised: number }[];
+  } | null = null;
+  const disposeSecond = () => {
+    if (!second) return;
+    scene.remove(second.stackObj, second.newPin, ...second.trail.map((t) => t.d));
+    second = null;
+  };
+  const buildSecond = (endZ: number) => {
+    if (!to || !pinItem) return;
+    disposeSecond();
+    const paper = writablePaper(THREE);
+    const stackObj = stack(THREE, paper.texture);
+    stackObj.scale.setScalar(to.scale);
+    scene.add(stackObj);
     const onPaper = new THREE.Matrix4().compose(
-      new THREE.Vector3(to.x, to.y, to.z),
+      new THREE.Vector3(to.x, to.y, to.z + endZ),
       new THREE.Quaternion().setFromEuler(new THREE.Euler(faceX, 0, 0)),
       new THREE.Vector3(to.scale, to.scale, to.scale),
     );
-    pinAt.set(1.32, 0.14, -1.72).applyMatrix4(onPaper);
+    const pinAt = new THREE.Vector3(1.32, 0.14, -1.72).applyMatrix4(onPaper);
+    const newPin = BUILD.pin(THREE);
+    newPin.visible = false;
+    scene.add(newPin);
+    // From the landing's pin, a long winding path down the desk through the
+    // gap, then in from the right and up onto the standing paper.
     const y = 0.06;
-    const curve = new THREE.CatmullRomCurve3(
-      [
-        new THREE.Vector3(pinItem.baseX, y, pinItem.baseZ),
-        new THREE.Vector3(pinItem.baseX + 2.2, y, pinItem.baseZ - 0.6),
-        new THREE.Vector3(pinItem.baseX + 5.5, y, pinItem.baseZ - 2.2), // off the right edge
-        new THREE.Vector3(pinItem.baseX + 7.5, y, pinItem.baseZ - 5.5),
-        new THREE.Vector3(pinItem.baseX + 5.8, y, pinItem.baseZ - 8.6), // turning back
-        new THREE.Vector3(pinAt.x + 2.4, pinAt.y * 0.4, pinAt.z - 2.6), // re-entering, top right
-        pinAt.clone().addScaledVector(pinNormal, 0.9),
-        pinAt.clone(),
-      ],
-      false,
-      "centripetal",
-    );
+    const z0 = pinItem.baseZ;
+    const gap = Math.max(4, to.z + endZ - 3 - z0);
+    const pts = [
+      new THREE.Vector3(pinItem.baseX, y, z0),
+      new THREE.Vector3(pinItem.baseX - 2.5, y, z0 + gap * 0.12),
+      new THREE.Vector3(-3.5, y, z0 + gap * 0.3),
+      new THREE.Vector3(-5.2, y, z0 + gap * 0.45),
+      new THREE.Vector3(-1.5, y, z0 + gap * 0.62),
+      new THREE.Vector3(3.5, y, z0 + gap * 0.78),
+      new THREE.Vector3(7.5, y, z0 + gap * 0.92),
+      new THREE.Vector3(pinAt.x + 2.2, 0.5, pinAt.z + 0.8),
+      pinAt.clone().addScaledVector(pinNormal, 0.9),
+      pinAt.clone(),
+    ];
+    const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
     const along = new THREE.Vector3(1, 0, 0);
     const n = Math.floor(curve.getLength() / 0.42);
+    const trail: { d: THREE_NS.Mesh; raised: number }[] = [];
+    let firstRaised = -1;
     for (let i = 1; i < n; i++) {
       const t = i / n;
       const d = mesh(THREE, dashGeo, dashMat);
       d.position.copy(curve.getPointAt(t));
       d.quaternion.setFromUnitVectors(along, curve.getTangentAt(t));
-      d.userData.t = t;
       d.visible = false;
       scene.add(d);
-      trail.push(d);
+      if (firstRaised < 0 && d.position.y > 0.15) firstRaised = i;
+      trail.push({ d, raised: -1 });
     }
-    newPin = BUILD.pin(THREE);
-    newPin.visible = false;
-    scene.add(newPin);
-  }
-  const pinTilt = new THREE.Euler(0.45 * faceX, 0, 0);
-
-  const applyMorph = (morph: number) => {
-    if (!to || morph <= 0) {
-      for (const d of dashes) d.position.copy(d.userData.base);
-      for (const d of trail) d.visible = false;
-      if (newPin) newPin.visible = false;
-      for (const it of items) {
-        it.obj.position.x = it.baseX;
-        it.obj.position.z = it.baseZ;
-        it.obj.rotation.y = it.baseRy;
-        it.obj.scale.setScalar(it.baseScale);
-      }
-      return;
+    // raised dashes get their order along the climb (0..1), drawn late
+    if (firstRaised > 0) {
+      const m = trail.length - (firstRaised - 1);
+      trail.forEach((tr, j) => {
+        if (j >= firstRaised - 1) tr.raised = (j - (firstRaised - 1)) / Math.max(1, m - 1);
+      });
     }
-    const k = smooth(Math.min(1, morph));
-    for (const it of items) {
-      if (it.kind === "stack") {
-        it.obj.position.set(it.baseX + (to.x - it.baseX) * k, it.obj.position.y + (to.y - it.baseY) * k, it.baseZ + (to.z - it.baseZ) * k);
-        it.obj.rotation.set(it.obj.rotation.x + (faceX - it.baseRx) * k, it.baseRy * (1 - k), it.obj.rotation.z * (1 - k));
-        it.obj.scale.setScalar(it.baseScale + (to.scale - it.baseScale) * k);
-        continue;
-      }
-      if (it === pinItem) continue; // the checkpoint stays
-      toward.set(it.baseX - look.x, 0, it.baseZ - look.z);
-      if (toward.lengthSq() < 0.01) toward.set(0, 0, -1);
-      toward.normalize().multiplyScalar(k * k * 18);
-      it.obj.position.x = it.baseX + toward.x;
-      it.obj.position.z = it.baseZ + toward.z;
-      it.obj.position.y += k * 1.5;
-    }
-    for (const d of dashes) {
-      const b = d.userData.base as THREE_NS.Vector3;
-      toward.set(b.x - look.x, 0, b.z - look.z).normalize().multiplyScalar(k * k * 18);
-      d.position.set(b.x + toward.x, b.y, b.z + toward.z);
-    }
-    // The path draws over the first 85% of the morph; then the new pin drops in.
-    const drawn = Math.min(1, k / 0.85);
-    for (const d of trail) d.visible = (d.userData.t as number) < drawn;
-    if (newPin) {
-      const drop = smooth(Math.max(0, Math.min(1, (k - 0.82) / 0.18)));
-      newPin.visible = drop > 0;
-      newPin.position.copy(pinAt).addScaledVector(pinNormal, (1 - drop) * 3);
-      newPin.rotation.copy(pinTilt);
-      newPin.scale.setScalar(0.8);
-    }
+    second = { endZ, paper, stackObj, newPin, pinAt, trail };
   };
 
-  // The paper writes itself once the morph has settled (and stays written).
+  // px per world unit along the desk (z) at the look point, for the base camera.
+  const probeA = new THREE.Vector3();
+  const probeB = new THREE.Vector3();
+  const pxPerUnit = (vh: number) => {
+    camera.position.set(cam.x, cam.y, cam.z);
+    camera.lookAt(look);
+    camera.updateMatrixWorld();
+    probeA.copy(look).project(camera);
+    probeB.copy(look).add(new THREE.Vector3(0, 0, 1)).project(camera);
+    return Math.max(1e-3, ((probeA.y - probeB.y) * vh) / 2);
+  };
+  let lastSig = "";
   let typeStart: number | null = null;
-  const writePaper = (ms: number, morph: number) => {
-    if (!paper) return;
-    if (to && morph >= 0.97 && typeStart === null) typeStart = ms;
-    if (typeStart === null) return paper.draw(0, false);
-    const typed = reducedMotion ? PAPER_TOTAL : Math.min(PAPER_TOTAL, Math.floor(((ms - typeStart) / 1000) * TYPE_CHARS_PER_SECOND));
-    paper.draw(typed, Math.floor(ms / 500) % 2 === 0);
+
+  const scrollScene = (ms: number, scroll?: { y: number; max: number; vh: number }) => {
+    if (!to || !scroll) return 0;
+    const ppu = pxPerUnit(scroll.vh);
+    const endZ = scroll.max / ppu;
+    const sig = `${Math.round(endZ * 100)}`;
+    if (sig !== lastSig) {
+      lastSig = sig;
+      buildSecond(endZ);
+    }
+    if (!second) return 0;
+    const pan = scroll.y / ppu;
+    // key light and its shadow follow the view down the desk
+    key.position.set(keyBase.x, keyBase.y, keyBase.z + pan);
+    key.target.position.set(look.x, 0, look.z + pan);
+    // The paper stands up as the page reaches its end; then the pin drops.
+    const fromEnd = scroll.max - scroll.y;
+    const rise = reducedMotion ? 1 : smooth(clamp01((0.8 * scroll.vh - fromEnd) / (0.6 * scroll.vh)));
+    const drop = reducedMotion ? 1 : smooth(clamp01((0.22 * scroll.vh - fromEnd) / (0.2 * scroll.vh)));
+    const { stackObj, newPin, pinAt, trail, paper } = second;
+    stackObj.position.set(to.x, 0.02 + (to.y - 0.02) * rise, to.z + second.endZ + 1.2 * (1 - rise));
+    stackObj.rotation.set(faceX * rise, 0.18 * (1 - rise), 0);
+    // the trail draws as the view reaches it; the climb onto the paper last
+    const revealZ = look.z + pan + (0.32 * scroll.vh) / ppu;
+    for (const tr of trail) tr.d.visible = tr.raised < 0 ? tr.d.position.z <= revealZ : rise > 0.6 && tr.raised <= clamp01((rise - 0.6) / 0.4);
+    newPin.visible = drop > 0;
+    newPin.position.copy(pinAt).addScaledVector(pinNormal, (1 - drop) * 3);
+    newPin.rotation.set(0.45 * faceX, 0, 0);
+    newPin.scale.setScalar(0.8);
+    // it writes itself once it has stood up (and stays written)
+    if (rise >= 0.97 && typeStart === null) typeStart = ms;
+    if (typeStart === null) paper.draw(0, false);
+    else paper.draw(reducedMotion ? PAPER_TOTAL : Math.min(PAPER_TOTAL, Math.floor(((ms - typeStart) / 1000) * TYPE_CHARS_PER_SECOND)), Math.floor(ms / 500) % 2 === 0);
+    return pan;
   };
 
-  const update = (ms: number, hold = false, morph = 0) => {
+  const update = (ms: number, hold = false, scroll?: { y: number; max: number; vh: number }) => {
     if (reducedMotion) {
       for (const it of items) it.obj.position.y = it.baseY;
-      camera.position.set(cam.x, cam.y, cam.z);
-      camera.lookAt(look);
-      applyMorph(morph);
-      writePaper(ms, morph);
+      const pan = scrollScene(ms, scroll);
+      camera.position.set(cam.x, cam.y, cam.z + pan);
+      camera.lookAt(look.x, look.y, look.z + pan);
       return;
     }
     if (!hold && releasedAt === null) releasedAt = ms;
@@ -597,12 +617,11 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     }
     const shown = Math.floor(ease((since - 800) / 1600) * dashes.length);
     dashes.forEach((d, i) => (d.visible = i < shown));
+    const pan = scrollScene(ms, scroll);
     // Closer in while holding, then back out to the landing framing.
     const pull = 1 - ease(since / 1400);
-    camera.position.set(cam.x, cam.y * (1 - pull * 0.1), cam.z * (1 - pull * 0.1));
-    camera.lookAt(look);
-    applyMorph(morph);
-    writePaper(ms, morph);
+    camera.position.set(cam.x, cam.y * (1 - pull * 0.1), cam.z * (1 - pull * 0.1) + pan);
+    camera.lookAt(look.x, look.y, look.z + pan);
   };
 
   return { scene, camera, update };
