@@ -14,8 +14,20 @@ import "./_home/home.css";
 
 // Short beats in the scroll between the landing and the closing section.
 const GAP_BEATS = [
-  { title: "Find where it fits.", text: "Browse journals by field, fees, open access and indexing — no upload needed." },
-  { title: "Match without uploading.", text: "Your paper is read and ranked against every journal inside this tab." },
+  {
+    kicker: "Browse journals",
+    lead: "Find where it",
+    cut: "fits.",
+    text: "Browse journals by field, fees, open access and indexing — no upload needed.",
+    tags: ["Field & topics", "APC fees", "Open access", "Indexed in", "Review speed"],
+  },
+  {
+    kicker: "Match your paper",
+    lead: "Match without",
+    cut: "uploading.",
+    text: "Your paper is read and ranked against every journal inside this tab.",
+    steps: ["Reads your title, abstract and references", "Ranks thousands of journals on this device", "Shows why each one fits"],
+  },
 ];
 
 function Home() {
@@ -57,10 +69,28 @@ function Home() {
         {/* the path winds on down the desk before the next section, past a few words on what's here */}
         <div className="path-gap section-shell">
           {GAP_BEATS.map((b, i) => (
-            <div key={b.title} className={`gap-beat ${i % 2 ? "" : "gap-beat-right"}`}>
-              <span className="gap-step">{String(i + 1).padStart(2, "0")}</span>
-              <h2>{b.title}</h2>
+            <div key={b.cut} className={`gap-beat ${i % 2 ? "" : "gap-beat-right"}`}>
+              <span className="gap-kicker">
+                <span className="gap-step">{String(i + 1).padStart(2, "0")}</span> {b.kicker}
+              </span>
+              <h2>
+                {b.lead} <mark className="gap-cut">{b.cut}</mark>
+              </h2>
               <p>{b.text}</p>
+              {"tags" in b && b.tags && (
+                <ul className="gap-tags">
+                  {b.tags.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+              )}
+              {"steps" in b && b.steps && (
+                <ol className="gap-steps">
+                  {b.steps.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ol>
+              )}
             </div>
           ))}
         </div>

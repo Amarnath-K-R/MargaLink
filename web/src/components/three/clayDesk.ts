@@ -376,6 +376,7 @@ function pin(THREE: T) {
 
 // ---- Scroll props: small desk scenes along the path's off-screen stretch ----
 type Prop = { obj: THREE_NS.Group; z: number; shownAt: number | null; tick: (ms: number, inT: number, pass: number, still: boolean) => void };
+const smoothstep = (t: number) => t * t * (3 - 2 * t);
 const bounce = (t: number) => (t >= 1 ? 1 : 1 - Math.abs(Math.cos(t * Math.PI * 2.5)) * (1 - t) * (1 - t));
 
 function books(THREE: T) {
@@ -468,6 +469,51 @@ function eraser(THREE: T) {
   return g;
 }
 
+function pencilCup(THREE: T) {
+  const g = new THREE.Group();
+  const cup = mesh(THREE, new THREE.CylinderGeometry(0.5, 0.44, 1.2, 36, 1, true), clay(THREE, CLAY.clay));
+  (cup.material as THREE_NS.MeshPhysicalMaterial).side = THREE.DoubleSide;
+  cup.position.y = 0.6;
+  g.add(cup);
+  const base = mesh(THREE, new THREE.CylinderGeometry(0.44, 0.44, 0.06, 36), clay(THREE, CLAY.clay));
+  base.position.y = 0.03;
+  g.add(base);
+  const cols = [CLAY.teal, CLAY.sand, CLAY.tealSoft, CLAY.ink];
+  cols.forEach((c, i) => {
+    const p = mesh(THREE, new THREE.CylinderGeometry(0.07, 0.07, 1.9, 6), clay(THREE, c));
+    const a = (i / cols.length) * Math.PI * 2;
+    p.position.set(Math.cos(a) * 0.2, 1.1, Math.sin(a) * 0.2);
+    p.rotation.set(Math.sin(a) * 0.22, 0, -Math.cos(a) * 0.22);
+    g.add(p);
+    const tip = mesh(THREE, new THREE.ConeGeometry(0.07, 0.2, 6), clay(THREE, CLAY.wood));
+    tip.position.y = 1.05;
+    p.add(tip);
+  });
+  return g;
+}
+
+function stamp(THREE: T) {
+  const g = new THREE.Group();
+  const mark = new THREE.Mesh(new THREE.CircleGeometry(0.55, 40), new THREE.MeshBasicMaterial({ color: CLAY.clay, transparent: true, opacity: 0 }));
+  mark.rotation.x = -Math.PI / 2;
+  mark.position.y = 0.012;
+  g.add(mark);
+  const body = new THREE.Group();
+  const pad = mesh(THREE, new RoundedBoxGeometry(1.2, 0.28, 1.2, 3, 0.08), clay(THREE, CLAY.teal));
+  pad.position.y = 0.14;
+  body.add(pad);
+  const stem = mesh(THREE, new THREE.CylinderGeometry(0.16, 0.2, 0.7, 20), clay(THREE, CLAY.sand));
+  stem.position.y = 0.6;
+  body.add(stem);
+  const knob = mesh(THREE, new THREE.SphereGeometry(0.34, 24, 16), clay(THREE, CLAY.clay));
+  knob.position.y = 1.08;
+  body.add(knob);
+  g.add(body);
+  g.userData.body = body;
+  g.userData.mark = mark;
+  return g;
+}
+
 // Placed across the stretch [zA, zB] on both sides of the view's centre.
 function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   const at = (f: number) => zA + (zB - zA) * f;
@@ -524,6 +570,24 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
     place(o, 0.6, at(0.22), -0.3, 1, (_ms, inT) => {
       o.position.y = (1 - bounce(inT)) * 2.5;
       o.rotation.z = (1 - inT) * Math.PI * 2;
+    });
+  }
+  // pencil cup: the lower left of the second beat
+  {
+    const o = pencilCup(THREE);
+    place(o, -4.8, at(1.66), 0.3, 1, (_ms, inT) => (o.position.y = (1 - bounce(inT)) * 3));
+  }
+  // rubber stamp: thumps down every couple of seconds, leaving its mark
+  {
+    const o = stamp(THREE);
+    const body = o.userData.body as THREE_NS.Group;
+    const mark = o.userData.mark as THREE_NS.Mesh;
+    place(o, -0.6, at(1.62), -0.2, 1, (ms, inT, _p, still) => {
+      o.position.y = (1 - bounce(inT)) * 3;
+      const t = still ? 0.9 : (ms % 2400) / 2400;
+      const lift = t < 0.7 ? smoothstep(t / 0.7) * 0.9 : (1 - (t - 0.7) / 0.3) ** 2 * 0.9;
+      body.position.y = lift;
+      (mark.material as THREE_NS.MeshBasicMaterial).opacity = inT * 0.55;
     });
   }
   // paper plane: glides across the view over the middle of the stretch

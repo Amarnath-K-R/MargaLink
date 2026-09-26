@@ -353,12 +353,22 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
 
 /* After the landing: scroll where only the desk path winds on (wider screens). */
 .path-gap { display: flex; flex-direction: column; justify-content: space-around; min-height: 160svh; padding: 8svh 0; }
-.gap-beat { position: relative; z-index: 3; max-width: 30em; }
+.gap-beat { position: relative; z-index: 3; max-width: 32em; }
 .gap-beat-right { align-self: flex-end; text-align: right; }
 .gap-step { font-family: var(--font-mono); font-size: 14px; color: var(--accent); }
 .margalink-page .gap-beat h2 { margin-top: 12px; font-size: clamp(48px, 5.4vw, 84px); }
 .gap-beat p { margin: 18px 0 0; color: var(--ink-soft); font-size: 21px; line-height: 1.55; }
-.gap-beat h2, .gap-beat p, .gap-step { text-shadow: 0 0 18px var(--paper), 0 0 6px var(--paper); }
+.gap-beat h2, .gap-beat p, .gap-kicker, .gap-steps li { text-shadow: 0 0 18px var(--paper), 0 0 6px var(--paper); }
+.gap-kicker { display: inline-flex; align-items: center; gap: 10px; color: var(--accent); font-size: 15px; font-weight: 500; }
+.gap-kicker .gap-step { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid rgba(44,95,111,.35); border-radius: 50%; font-size: 11px; }
+/* the landing's teal cutout, on the key word */
+.gap-cut { display: inline-block; padding: .02em .12em .08em; background: var(--accent); color: var(--paper); font-family: var(--font-sans); font-weight: 600; letter-spacing: -.06em; box-shadow: .1em .09em 0 rgba(44,95,111,.2); text-shadow: none; }
+.gap-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; padding: 0; list-style: none; }
+.gap-beat-right .gap-tags { justify-content: flex-end; }
+.gap-tags li { padding: 7px 14px; border: 1px solid rgba(44,95,111,.3); border-radius: 999px; background: color-mix(in srgb, var(--paper) 80%, transparent); color: var(--accent); font-size: 14px; font-weight: 500; }
+.gap-steps { display: grid; gap: 10px; margin: 24px 0 0; padding: 0; list-style: none; counter-reset: gs; }
+.gap-steps li { display: flex; align-items: center; gap: 12px; color: var(--ink); font-size: 17px; counter-increment: gs; }
+.gap-steps li::before { content: counter(gs); display: grid; flex: none; width: 26px; height: 26px; place-items: center; border-radius: 6px; background: var(--accent); color: var(--paper); font-family: var(--font-mono); font-size: 12px; }
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     .gap-beat { animation: gapBeatIn linear both; animation-timeline: view(); animation-range: entry 10% cover 40%; }
