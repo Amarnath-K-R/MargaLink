@@ -33,11 +33,11 @@ export type DeskLayout = {
   items: Placement[];
   path: [number, number][];
   camera: { x: number; y: number; z: number; lookX: number; lookZ: number; fov: number };
-  // Where the landing's paper stack settles as the closing section scrolls in
-  // (the morph): everything else leaves the frame; the stack rises, turns to
-  // face the camera and settles here beside the closing copy, writes itself
-  // and gets a pin. After the closing section the camera pans on down the
-  // desk to the tools book. Without it the desk stays put (phones).
+  // The closing section's paper, relative to the camera once that section has
+  // arrived: it lies on the desk just below the landing, stands up to face
+  // the reader as the section arrives, writes itself, and a pin drops onto
+  // it. The path winds from the landing's pin to it, then on past the two
+  // beats to the tools book. Without it the camera doesn't pan (phones).
   paperTo?: { x: number; y: number; z: number; scale: number };
 };
 
@@ -609,11 +609,10 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
 const BUILD: Record<Exclude<Kind, "pencil" | "stack">, (THREE: T) => THREE_NS.Group> = { ruler, graph, chart, notebook, plane, pin };
 
 // The page's scroll, px, and two pinned (sticky) stretches of the page, each
-// its top on the page and its height: `paper`, the closing section — the
-// landing morphs into it as it arrives and its paper writes itself while it
-// holds — and `book`, the tools book further down, whose pages turn while it
-// holds. The desk stays put until the closing section's hold ends, then pans
-// with the page, holding again over the book.
+// its top on the page and its height: `paper`, the closing section right
+// after the landing — its paper stands up as it arrives and writes itself
+// while it holds — and `book`, the tools book after the two beats, whose
+// pages turn while it holds. While either holds, so does the desk.
 type Span = { top: number; height: number };
 export type DeskScroll = { y: number; vh: number; paper: Span; book: Span };
 
@@ -664,7 +663,6 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   type Item = { kind: Kind; obj: THREE_NS.Object3D; baseX: number; baseY: number; baseZ: number; baseRx: number; baseRy: number; baseRz: number; baseScale: number; delay: number; float: number; phase: number };
   const items: Item[] = [];
   let pencilTip: THREE_NS.Vector3 | null = null;
-  let landingPaper: WritablePaper | null = null;
   layout.items.forEach((p, i) => {
     let obj: THREE_NS.Object3D;
     if (p.kind === "pencil") {
@@ -673,9 +671,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       obj.add(built.group);
       pencilTip = built.tip.clone();
     } else if (p.kind === "stack") {
-      // its top sheet: a ruled page on the landing, then the closing page
-      landingPaper = writablePaper(THREE);
-      obj = stack(THREE, landingPaper.texture);
+      obj = stack(THREE, writablePaper(THREE).texture); // the landing's: stays a ruled sheet
     } else obj = BUILD[p.kind](THREE);
     obj.position.set(p.x, p.lift ?? 0, p.z);
     obj.rotation.y = p.rotY ?? 0;
@@ -710,49 +706,15 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   // Set the first frame `hold` is false; the fall, the camera and the path
   // all run from it. Without an intro that's the first frame.
   let releasedAt: number | null = null;
+  // Morph: everything but the paper stack is pushed out of frame, away from
+  // the centre of the desk; the stack rises, turns to face the camera and
+  // settles at layout.paperTo.
   const to = layout.paperTo;
   const smooth = (t: number) => t * t * (3 - 2 * t);
   const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
   const faceX = to ? Math.atan2(cam.z - to.z, cam.y - to.y) : 0;
   const pinNormal = new THREE.Vector3(0, 1, 0).applyEuler(new THREE.Euler(faceX, 0, 0));
   const pinItem = items.find((it) => it.kind === "pin");
-  // The paper's own pin, where it settles: its top-left corner.
-  const pinAt = to
-    ? new THREE.Vector3(-1.32, 0.14, -1.72).applyMatrix4(
-        new THREE.Matrix4().compose(new THREE.Vector3(to.x, to.y, to.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(faceX, 0, 0)), new THREE.Vector3(to.scale, to.scale, to.scale)),
-      )
-    : new THREE.Vector3();
-
-  // Morph (`k`, 0 → 1 as the closing section scrolls in, the camera still):
-  // everything but the paper stack and the landing's pin is pushed out of
-  // frame, away from the centre of the desk; the stack rises, turns to face
-  // the camera and settles at layout.paperTo, beside the closing copy.
-  const toward = new THREE.Vector3();
-  const applyMorph = (k: number) => {
-    if (!to) return;
-    for (const it of items) {
-      if (it.kind === "stack") {
-        it.obj.position.set(it.baseX + (to.x - it.baseX) * k, it.obj.position.y + (to.y - it.baseY) * k, it.baseZ + (to.z - it.baseZ) * k);
-        it.obj.rotation.set(it.obj.rotation.x + (faceX - it.baseRx) * k, it.baseRy * (1 - k), it.obj.rotation.z * (1 - k));
-        it.obj.scale.setScalar(it.baseScale + (to.scale - it.baseScale) * k);
-        continue;
-      }
-      if (it === pinItem) continue; // the landing's checkpoint stays
-      toward.set(it.baseX - look.x, 0, it.baseZ - look.z);
-      if (toward.lengthSq() < 0.01) toward.set(0, 0, -1);
-      toward.normalize().multiplyScalar(k * k * 18);
-      it.obj.position.x = it.baseX + toward.x;
-      it.obj.position.z = it.baseZ + toward.z;
-      it.obj.position.y += k * 1.5;
-      it.obj.visible = k < 1; // gone, so the camera panning on later doesn't meet it
-    }
-    for (const d of dashes) {
-      const b = d.userData.base as THREE_NS.Vector3;
-      toward.set(b.x - look.x, 0, b.z - look.z).normalize().multiplyScalar(k * k * 18);
-      d.position.set(b.x + toward.x, b.y, b.z + toward.z);
-      d.visible = k < 1 && (reducedMotion || d.visible);
-    }
-  };
 
   // The tools book (desktop only): built once, placed where its section's
   // scroll puts it.
@@ -762,15 +724,17 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     scene.add(book.group);
   }
 
-  // The pins, the trail and the props past the closing section — built once
-  // the page's layout is known (the first frame with a scroll), rebuilt on
-  // resize. The trail runs in two legs: the landing's pin → the paper's
-  // (leg 0, drawn by the morph), then the paper's pin → the book's (leg 1,
-  // drawn as the view reaches it). `order` runs 0 → 1 along a leg; `climb`
-  // too, along the run at its end that leaves the desk (-1 elsewhere).
-  type Dash = { d: THREE_NS.Mesh; leg: 0 | 1; order: number; climb: number };
+  // The closing section's paper and pin, the book's pin, and the trail —
+  // built once the page's layout is known (the first frame with a scroll),
+  // rebuilt on resize. The trail runs in two legs: the landing's pin → the
+  // paper's (leg 0), then the paper's pin → the book's (leg 1).
+  type Dash = { d: THREE_NS.Mesh; leg: 0 | 1; climb: number };
   let second: {
+    paperZ: number;
+    paper: WritablePaper;
+    stackObj: THREE_NS.Object3D;
     newPin: THREE_NS.Object3D;
+    pinAt: THREE_NS.Vector3;
     bookPin: THREE_NS.Object3D;
     bookPinAt: THREE_NS.Vector3;
     trail: Dash[];
@@ -778,9 +742,11 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   } | null = null;
   const disposeSecond = () => {
     if (!second) return;
-    scene.remove(second.newPin, second.bookPin, ...second.trail.map((t) => t.d), ...second.props.map((p) => p.obj));
+    scene.remove(second.stackObj, second.newPin, second.bookPin, ...second.trail.map((t) => t.d), ...second.props.map((p) => p.obj));
     second = null;
   };
+  // Dashes along a curve; the run at the end that leaves the desk (climbing
+  // onto the book or the paper) gets its order along the climb, 0..1.
   const layTrail = (pts: THREE_NS.Vector3[], leg: 0 | 1): Dash[] => {
     const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
     const along = new THREE.Vector3(1, 0, 0);
@@ -793,16 +759,27 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       d.quaternion.setFromUnitVectors(along, curve.getTangentAt(t));
       d.visible = false;
       scene.add(d);
-      out.push({ d, leg, order: t, climb: -1 });
+      out.push({ d, leg, climb: -1 });
     }
     let j = out.length;
     while (j > 0 && out[j - 1].d.position.y > 0.15) j--;
     for (let q = j; q < out.length; q++) out[q].climb = (q - j) / Math.max(1, out.length - j - 1);
     return out;
   };
-  const buildSecond = (bookZ: number) => {
+  // `beatsZ`: where the two beats start (the view's centre as they arrive).
+  const buildSecond = (paperZ: number, bookZ: number, beatsZ: number) => {
     if (!to || !pinItem || !book) return;
     disposeSecond();
+    const paper = writablePaper(THREE);
+    const stackObj = stack(THREE, paper.texture);
+    stackObj.scale.setScalar(to.scale);
+    scene.add(stackObj);
+    const onPaper = new THREE.Matrix4().compose(
+      new THREE.Vector3(to.x, to.y, to.z + paperZ),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(faceX, 0, 0)),
+      new THREE.Vector3(to.scale, to.scale, to.scale),
+    );
+    const pinAt = new THREE.Vector3(-1.32, 0.14, -1.72).applyMatrix4(onPaper); // top-left corner
     const newPin = BUILD.pin(THREE);
     newPin.visible = false;
     scene.add(newPin);
@@ -816,19 +793,21 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     scene.add(bookPin);
     const y = 0.06;
     const V = (x: number, py: number, z: number) => new THREE.Vector3(x, py, z);
-    // Leg 0: from the landing's pin the path carries on rightwards and off
-    // the right edge, turns out of view, and comes back from the top right in
-    // one curve that drops into the paper's pin.
+    // Leg 0: from the landing's pin the path carries on the way it arrived —
+    // rightwards — and slides off the right edge, turns out of view and comes
+    // back in from the right at the paper's top, runs on behind it and comes
+    // over its top-left corner into the new pin there.
     const x0 = pinItem.baseX;
     const z0 = pinItem.baseZ;
     const toPaper = layTrail([
       V(x0, y, z0),
-      V(x0 + 2.2, y, z0 - 0.6),
-      V(x0 + 5.5, y, z0 - 2.2), // off the right edge
-      V(x0 + 7.5, y, z0 - 6),
-      V(x0 + 5, y, z0 - 11), // turning back, out of view
-      V(2.4, y, pinAt.z - 8),
-      V(1.6, y, pinAt.z - 5.1),
+      V(x0 + 3, y, z0 + 0.7),
+      V(x0 + 6.7, y, z0 + 1.5), // off the right edge
+      V(12.4, y, pinAt.z - 3.2),
+      V(11.2, y, pinAt.z - 1.9), // turning back, out of view
+      V(7.5, y, pinAt.z - 2),
+      V(5, y, pinAt.z - 2.1),
+      V(2.6, y, pinAt.z - 1.9), // behind the paper
       V(pinAt.x, 0.7, pinAt.z - 1.4),
       pinAt.clone().addScaledVector(pinNormal, 0.5),
       pinAt.clone(),
@@ -854,9 +833,9 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       bp.clone(),
     ], 1);
     // Desk objects along the two beats, where the path is out of view.
-    const props = buildProps(THREE, z0 + 3, bookZ - 10.85);
+    const props = buildProps(THREE, beatsZ + 2.2, bookZ - 10.85);
     for (const pr of props) scene.add(pr.obj);
-    second = { newPin, bookPin, bookPinAt: bp, trail: [...toPaper, ...toBook], props };
+    second = { paperZ, paper, stackObj, newPin, pinAt, bookPin, bookPinAt: bp, trail: [...toPaper, ...toBook], props };
   };
 
   // px per world unit along the desk (z) at the look point, for the base camera.
@@ -881,20 +860,18 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   const scrollScene = (ms: number, scroll?: DeskScroll) => {
     if (!to || !scroll) return REST;
     const ppu = pxPerUnit(scroll.vh);
-    // The camera stays put through the morph and the closing section's hold,
-    // then pans down the desk at the page's speed, holding again over the book.
+    // The page scrolls on while a section is pinned; the desk holds.
     const [paperHold, bookHold] = [scroll.paper, scroll.book].map((s) => ({ top: s.top, range: Math.max(0, s.height - scroll.vh) }));
-    const still = paperHold.top + paperHold.range;
-    const held = (y: number) => Math.max(0, y - still) - Math.min(bookHold.range, Math.max(0, y - bookHold.top));
+    const held = (y: number) => y - Math.min(paperHold.range, Math.max(0, y - paperHold.top)) - Math.min(bookHold.range, Math.max(0, y - bookHold.top));
     const through = (h: typeof paperHold) => (h.range > 0 ? clamp01((scroll.y - h.top) / h.range) : 0);
+    const paperZ = held(paperHold.top) / ppu;
     const bookZ = look.z + held(bookHold.top) / ppu;
-    const sig = `${Math.round(bookZ * 100)}`;
+    const beatsZ = look.z + held(scroll.paper.top + scroll.paper.height - scroll.vh / 2) / ppu;
+    const sig = `${Math.round(paperZ * 100)}|${Math.round(bookZ * 100)}|${Math.round(beatsZ * 100)}`;
     if (sig !== lastSig) {
       lastSig = sig;
-      buildSecond(bookZ);
+      buildSecond(paperZ, bookZ, beatsZ);
     }
-    const k = smooth(clamp01((scroll.y - 0.03 * paperHold.top) / (0.79 * paperHold.top)));
-    applyMorph(k);
     if (!second || !book) return REST;
     const pan = held(scroll.y) / ppu;
     const hp = through(bookHold);
@@ -904,13 +881,15 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     // key light and its shadow follow the view down the desk
     key.position.set(keyBase.x, keyBase.y, keyBase.z + pan);
     key.target.position.set(look.x, 0, look.z + pan);
-    // The paper's pin drops as the morph settles; the book's once its last
-    // spread is open, after the trail has climbed onto the book.
-    const drop = smooth(clamp01((k - 0.82) / 0.18));
+    // The book's pin: the trail climbs onto the book, then the pin drops.
     const span = pin1 - pin0;
     const climbBook = reducedMotion ? 1 : clamp01((hp - pin0) / (span * 0.6));
     const dropBook = reducedMotion ? 1 : smooth(clamp01((hp - pin0 - span * 0.4) / (span * 0.6)));
-    const { newPin, bookPin, bookPinAt, trail, props } = second;
+    // The paper stands up as its section arrives; then the pin drops.
+    const toGo = paperHold.top - scroll.y;
+    const rise = reducedMotion ? 1 : smooth(clamp01((0.8 * scroll.vh - toGo) / (0.6 * scroll.vh)));
+    const drop = reducedMotion ? 1 : smooth(clamp01((0.22 * scroll.vh - toGo) / (0.2 * scroll.vh)));
+    const { stackObj, newPin, pinAt, bookPin, bookPinAt, trail, paper, props } = second;
     // each prop: dropped in as the view reaches it, then its own small motion
     const viewZ = look.z + pan;
     for (const pr of props) {
@@ -919,30 +898,33 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       pr.obj.visible = inT > 0;
       pr.tick(ms, inT, (viewZ - pr.z) / 8, reducedMotion);
     }
-    // Leg 0 draws with the morph; leg 1, once the paper is pinned, as the
-    // view reaches it — its climb onto the book last.
+    stackObj.position.set(to.x, 0.02 + (to.y - 0.02) * rise, to.z + second.paperZ + 1.2 * (1 - rise));
+    stackObj.rotation.set(faceX * rise, 0.18 * (1 - rise), 0);
+    // The trail draws as the view reaches it, each climb onto a page late;
+    // past the paper it waits for the paper's pin.
     const revealZ = viewZ + (0.32 * scroll.vh) / ppu;
-    for (const { d, leg, order, climb } of trail) {
-      if (leg === 0) d.visible = order < k / 0.85;
+    const paperClimb = clamp01((rise - 0.6) / 0.4);
+    for (const { d, leg, climb } of trail) {
+      if (leg === 0) d.visible = climb < 0 ? d.position.z <= revealZ : rise > 0.6 && climb <= paperClimb;
       else d.visible = drop >= 1 && (climb < 0 ? d.position.z <= revealZ : climbBook > 0 && climb <= climbBook);
     }
+    bookPin.visible = dropBook > 0;
+    bookPin.position.copy(bookPinAt).y += (1 - dropBook) * 3;
+    bookPin.scale.setScalar(0.8);
     newPin.visible = drop > 0;
     newPin.position.copy(pinAt).addScaledVector(pinNormal, (1 - drop) * 3);
     newPin.rotation.set(0.45 * faceX, 0, 0);
     newPin.scale.setScalar(0.8);
-    bookPin.visible = dropBook > 0;
-    bookPin.position.copy(bookPinAt).y += (1 - dropBook) * 3;
-    bookPin.scale.setScalar(0.8);
-    // The paper writes itself once it has settled, at its own pace — but
-    // finished by the time the closing section's hold ends, however fast the
-    // scroll — and stays written.
-    if (k >= 0.97 && typeStart === null) typeStart = ms;
+    // It writes itself once it has stood up, at its own pace — but finished
+    // by the time the closing section's hold ends, however fast the scroll —
+    // and stays written.
+    if (rise >= 0.97 && typeStart === null) typeStart = ms;
     if (typeStart !== null) {
       const byTime = ((ms - typeStart) / 1000) * TYPE_CHARS_PER_SECOND;
       const byScroll = (through(paperHold) / 0.85) * PAPER_TOTAL;
       typed = reducedMotion ? PAPER_TOTAL : Math.max(typed, Math.min(PAPER_TOTAL, Math.floor(Math.max(byTime, byScroll))));
     }
-    landingPaper?.draw(typed, typeStart !== null && Math.floor(ms / 500) % 2 === 0);
+    paper.draw(typed, typeStart !== null && Math.floor(ms / 500) % 2 === 0);
     return { pan, tilt, bookZ };
   };
 
@@ -953,11 +935,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   const aimOver = new THREE.Vector3();
   const update = (ms: number, hold = false, scroll?: DeskScroll) => {
     if (reducedMotion) {
-      for (const it of items) {
-        it.obj.position.y = it.baseY;
-        it.obj.rotation.x = it.baseRx;
-        it.obj.rotation.z = it.baseRz;
-      }
+      for (const it of items) it.obj.position.y = it.baseY;
       const { pan } = scrollScene(ms, scroll);
       camera.position.set(cam.x, cam.y, cam.z + pan);
       camera.lookAt(look.x, look.y, look.z + pan);

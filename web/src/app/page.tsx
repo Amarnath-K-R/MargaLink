@@ -37,13 +37,13 @@ function Home() {
   const { finalProgress, bookProgress, reducedMotion, heroRef, finalRef, bookRef } = useScrollProgress();
   const spread = SPREADS[spreadAt(bookProgress)];
 
-  // The landing's words crossfade into the closing section as it arrives.
-  // Wider screens: the desk morphs over the same scroll — objects leave, the
-  // paper stack comes forward beside the copy and writes itself while the
-  // section holds; then the desk scrolls with the page (its camera pans down
-  // it) past the two beats to the tools book, which holds while its pages
-  // turn (clayDesk.ts). Phones have no room beside the text: the desk just
-  // fades with the landing and an HTML page writes instead.
+  // Wider screens: the desk scrolls with the page (its camera pans down it).
+  // As the landing scrolls away the closing section's paper stands up beside
+  // its copy, a pin drops onto it and it writes itself while the section
+  // holds; then the path runs on past the two beats to the tools book, which
+  // holds while its pages turn (clayDesk.ts). Phones have no room beside the
+  // text: the landing and its desk fade into the closing section, where an
+  // HTML page writes instead.
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 759px)");
@@ -55,7 +55,7 @@ function Home() {
   }, []);
   // Wider screens: the desk stays — its paper settles beside the copy and
   // writes itself. Phones: the desk fades and an HTML page writes instead.
-  const landingFade = between(finalProgress, 0, 0.55);
+  const landingFade = narrow ? between(finalProgress, 0, 0.55) : 0;
   const deskOut = narrow ? landingFade : 0;
   const paperShown = narrow ? between(finalProgress, 0.5, 1) : 0;
   const [writePaper, setWritePaper] = useState(false);
@@ -71,8 +71,8 @@ function Home() {
       <ToolsOverlay open={toolsOpen} onClose={() => setToolsOpen(false)} />
 
       <main>
-        <HeroSection heroRef={heroRef} landingFade={landingFade} screenDive={reducedMotion ? 0 : between(finalProgress, 0.1, 0.8)} />
-        {/* the landing morphs into the closing view, which holds while the desk's paper writes itself (clayDesk.ts) */}
+        <HeroSection heroRef={heroRef} landingFade={landingFade} screenDive={narrow && !reducedMotion ? between(finalProgress, 0.1, 0.8) : 0} />
+        {/* the closing view: holds while the desk's paper writes itself (clayDesk.ts) */}
         <div id="closing" className="closing-hold">
           <FinalSection finalRef={finalRef} finalProgress={finalProgress} onOpenTools={() => setToolsOpen(true)} writePaper={writePaper} paperShown={paperShown} reducedMotion={reducedMotion} />
         </div>
