@@ -730,8 +730,9 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   }
 
   // The finale: the finished manuscript on the desk, the path's last pin
-  // drops onto its corner, then a rubber stamp slams a READY mark onto it
-  // and rests beside it. `tick(t)`, t 0 → 1; returns true on the stamp's hit.
+  // drops onto its corner, then a wide rubber stamp comes down, presses, and
+  // lifts straight off to reveal READY printed on the page, before setting
+  // down beside it. `tick(t)`, t 0 → 1; returns true on the press.
   const readyMark = () => {
     const tex = canvasTexture(THREE, 512, 240, (c) => {
       c.clearRect(0, 0, 512, 240);
@@ -745,10 +746,34 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       c.textAlign = "center";
       c.textBaseline = "middle";
       c.fillText("READY", 256, 128);
+      // rubber-stamp ink: specks where the print didn't take
+      c.globalCompositeOperation = "destination-out";
+      for (let i = 0; i < 1400; i++) {
+        c.globalAlpha = 0.25 + Math.random() * 0.6;
+        c.fillRect(Math.random() * 512, Math.random() * 240, 1 + Math.random() * 3, 1 + Math.random() * 3);
+      }
+      c.globalAlpha = 1;
+      c.globalCompositeOperation = "source-over";
     });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.8), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false }));
     m.rotation.set(-Math.PI / 2, 0, 0.14);
     return m;
+  };
+  // A stamp as wide as the mark: rubber face, teal block, handle and knob.
+  const readyStamp = () => {
+    const g = new THREE.Group();
+    const body = new THREE.Group();
+    const rubber = mesh(THREE, new RoundedBoxGeometry(2.1, 0.06, 1.0, 2, 0.02), clay(THREE, CLAY.ink, 0.7));
+    rubber.position.y = 0.03;
+    const block = mesh(THREE, new RoundedBoxGeometry(2.2, 0.32, 1.1, 3, 0.08), clay(THREE, CLAY.teal));
+    block.position.y = 0.22;
+    const stem = mesh(THREE, new THREE.CylinderGeometry(0.17, 0.24, 0.72, 20), clay(THREE, CLAY.sand));
+    stem.position.y = 0.74;
+    const knob = mesh(THREE, new THREE.SphereGeometry(0.38, 24, 16), clay(THREE, CLAY.clay));
+    knob.position.y = 1.22;
+    body.add(rubber, block, stem, knob);
+    g.add(body);
+    return { g, body };
   };
   const buildFinale = (at: THREE_NS.Vector3) => {
     const paper = writablePaper(THREE);
@@ -765,30 +790,35 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     pile.updateMatrixWorld(true);
     const pinAt = top.localToWorld(new THREE.Vector3(-1.2, 0.02, -1.6)); // top-left corner
     const markAt = mark.getWorldPosition(new THREE.Vector3());
+    const markYaw = new THREE.Euler().setFromQuaternion(mark.getWorldQuaternion(new THREE.Quaternion()), "YXZ").y;
     const lastPin = BUILD.pin(THREE);
     lastPin.scale.setScalar(0.8);
-    const stamper = stamp(THREE);
-    (stamper.userData.mark as THREE_NS.Mesh).visible = false;
-    stamper.scale.setScalar(1.3);
-    stamper.rotation.y = 0.14;
+    const { g: stamper, body } = readyStamp();
     scene.add(lastPin, stamper);
-    const rest = new THREE.Vector3(at.x + 1.4, 0, at.z + 3.3);
+    const rest = new THREE.Vector3(at.x - 0.9, 0, at.z + 3.1);
     const topY = pinAt.y;
-    let hit = false;
+    const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
+    let pressed = false;
     const tick = (t: number) => {
       const drop = smooth(clamp01((t - 0.05) / 0.15));
       lastPin.visible = drop > 0;
       lastPin.position.copy(pinAt).y += (1 - drop) * 3;
-      // the stamp falls onto the page (hitting at 0.42), lifts aside and rests
-      const fall = clamp01((t - 0.3) / 0.12);
-      const aside = smooth(clamp01((t - 0.46) / 0.16));
-      stamper.visible = t >= 0.3;
-      if (t < 0.46) stamper.position.set(markAt.x, topY + 7 * (1 - fall * fall), markAt.z);
-      else stamper.position.set(markAt.x + (rest.x - markAt.x) * aside, topY * (1 - aside) + Math.sin(Math.PI * aside) * 1.2, markAt.z + (rest.z - markAt.z) * aside);
-      (mark.material as THREE_NS.MeshBasicMaterial).opacity = t >= 0.42 ? 0.9 : 0;
-      const justHit = t >= 0.42 && !hit;
-      hit = t >= 0.42;
-      return justHit;
+      // down (0.26–0.4), pressed (0.4–0.5), straight up (0.5–0.62) — the
+      // print shows as it lifts — then aside and down onto the desk
+      const down = clamp01((t - 0.26) / 0.14);
+      const press = clamp01((t - 0.4) / 0.1);
+      const up = smooth(clamp01((t - 0.5) / 0.12));
+      const aside = smooth(clamp01((t - 0.64) / 0.16));
+      stamper.visible = t >= 0.26;
+      const liftY = topY + 1.8;
+      if (t < 0.64) stamper.position.set(markAt.x, t < 0.4 ? topY + 6 * (1 - down * down) : topY + 1.8 * up, markAt.z);
+      else stamper.position.set(lerp(markAt.x, rest.x, aside), lerp(liftY, 0, aside) + Math.sin(Math.PI * aside) * 0.4, lerp(markAt.z, rest.z, aside));
+      stamper.rotation.y = lerp(markYaw, -0.25, aside);
+      body.scale.y = 1 - 0.12 * Math.sin(Math.PI * press);
+      (mark.material as THREE_NS.MeshBasicMaterial).opacity = t >= 0.4 ? 0.92 : 0;
+      const justPressed = t >= 0.4 && !pressed;
+      pressed = t >= 0.4;
+      return justPressed;
     };
     tick(0);
     return { objs: [pile, lastPin, stamper], pinAt, tick };
@@ -999,7 +1029,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     // the scroll through its hold — and stays played. Reduced motion: it's
     // simply there, stamped.
     if (finaleStart === null && scroll.y >= finaleHold.top - 0.05 * scroll.vh) finaleStart = ms;
-    if (finaleStart !== null) finaleT = reducedMotion ? 1 : Math.max(finaleT, Math.min(1, Math.max((ms - finaleStart) / 2600, through(finaleHold) / 0.7)));
+    if (finaleStart !== null) finaleT = reducedMotion ? 1 : Math.max(finaleT, Math.min(1, Math.max((ms - finaleStart) / 3600, through(finaleHold) / 0.7)));
     if (second.finale.tick(finaleT) && !reducedMotion) thumpAt = ms;
     bookPin.visible = dropBook > 0;
     bookPin.position.copy(bookPinAt).y += (1 - dropBook) * 3;
