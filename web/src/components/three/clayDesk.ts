@@ -575,7 +575,7 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   // pencil cup: the lower left of the second beat
   {
     const o = pencilCup(THREE);
-    place(o, -4.8, at(1.66), 0.3, 1, (_ms, inT) => (o.position.y = (1 - bounce(inT)) * 3));
+    place(o, -6.1, at(1.5), 0.3, 0.85, (_ms, inT) => (o.position.y = (1 - bounce(inT)) * 3));
   }
   // rubber stamp: thumps down every couple of seconds, leaving its mark
   {
