@@ -480,7 +480,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   const toward = new THREE.Vector3();
   const faceX = to ? Math.atan2(cam.z - to.z, cam.y - to.y) : 0;
   const smooth = (t: number) => t * t * (3 - 2 * t);
-  const CREAM_LIT = new THREE.Color(0xe9dfca);
+  const CREAM_LIT = new THREE.Color(0xe6e4dd);
   const applyMorph = (morph: number) => {
     if (!to || morph <= 0) {
       for (const d of dashes) d.position.copy(d.userData.base);
