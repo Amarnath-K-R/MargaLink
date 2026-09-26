@@ -1,6 +1,7 @@
 import type * as THREE_NS from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { PAPER_PARTS, PAPER_TOTAL, TYPE_CHARS_PER_SECOND, type PaperPartKey } from "./paperText.ts";
 
 // A clay-render desk, built in code: every object is rounded geometry in one
 // matte material family tinted from MargaLink's palette, lit by a soft studio
@@ -61,8 +62,10 @@ function mesh(THREE: T, geo: THREE_NS.BufferGeometry, mat: THREE_NS.Material) {
 }
 
 // A face drawn on top of a flat object (ruler ticks, graph grid, ruled lines).
-function topFace(THREE: T, w: number, d: number, y: number, tex: THREE_NS.Texture) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, transparent: true }));
+// `unlit`: shown in its true colours (the self-writing page, which is read).
+function topFace(THREE: T, w: number, d: number, y: number, tex: THREE_NS.Texture, unlit = false) {
+  const mat = unlit ? new THREE.MeshBasicMaterial({ map: tex }) : new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, transparent: true });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
   m.rotation.x = -Math.PI / 2;
   m.position.y = y;
   m.receiveShadow = true;
@@ -131,10 +134,10 @@ function ruler(THREE: T) {
   return g;
 }
 
-function sheet(THREE: T, w: number, d: number, face: THREE_NS.Texture | null, color: number = CLAY.sheet) {
+function sheet(THREE: T, w: number, d: number, face: THREE_NS.Texture | null, color: number = CLAY.sheet, unlit = false) {
   const g = new THREE.Group();
   g.add(mesh(THREE, new RoundedBoxGeometry(w, 0.035, d, 2, 0.015), clay(THREE, color, 0.95)));
-  if (face) g.add(topFace(THREE, w - 0.04, d - 0.04, 0.019, face));
+  if (face) g.add(topFace(THREE, w - 0.04, d - 0.04, 0.019, face, unlit));
   return g;
 }
 
@@ -165,22 +168,112 @@ function graph(THREE: T) {
   return g;
 }
 
-function ruledTexture(THREE: T) {
-  return canvasTexture(THREE, 1024, 1300, (c) => {
+// The paper stack's top sheet is a page that can write itself. It is laid out
+// as the finished manuscript from the start (PAPER_PARTS): until a line is
+// typed it shows as a placeholder bar — teal for the title, grey for text —
+// so on the desk it reads as a ruled sheet, and when writing starts each
+// line's text replaces its own bar, left to right, with a caret following.
+// Drawn at ~3x its on-screen size, in the page's own Plex fonts.
+type WritablePaper = { texture: THREE_NS.CanvasTexture; draw: (typed: number, caret: boolean) => void };
+function writablePaper(THREE: T): WritablePaper {
+  const W = 1536, H = 1996, M = 140, TEXT_W = W - 2 * M;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const c = canvas.getContext("2d")!;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  const css = getComputedStyle(document.documentElement);
+  const serif = css.getPropertyValue("--font-serif").trim() || "Georgia, serif";
+  const sans = css.getPropertyValue("--font-sans").trim() || "system-ui, sans-serif";
+  const STYLE: Record<PaperPartKey, { font: string; lh: number; gap: number; color: string; bar: string }> = {
+    title: { font: `500 100px ${serif}`, lh: 116, gap: 0, color: hex(CLAY.ink), bar: hex(CLAY.teal) },
+    authors: { font: `400 54px ${sans}`, lh: 72, gap: 56, color: hex(CLAY.ink), bar: "rgba(42,47,56,.26)" },
+    affil: { font: `400 42px ${sans}`, lh: 60, gap: 8, color: "#565b66", bar: "rgba(42,47,56,.18)" },
+    label: { font: `600 48px ${sans}`, lh: 68, gap: 88, color: hex(CLAY.teal), bar: "rgba(44,95,111,.45)" },
+    abstract: { font: `400 52px ${sans}`, lh: 84, gap: 12, color: hex(CLAY.ink), bar: "rgba(42,47,56,.24)" },
+    keywords: { font: `400 44px ${sans}`, lh: 66, gap: 54, color: "#565b66", bar: "rgba(42,47,56,.18)" },
+  };
+  type Line = { key: PaperPartKey; text: string; y: number; start: number };
+  let lines: Line[] = [];
+  let ruleY = 0;
+  const layout = () => {
+    lines = [];
+    let y = 170;
+    let start = 0;
+    for (const part of PAPER_PARTS) {
+      const st = STYLE[part.key];
+      c.font = st.font;
+      y += st.gap;
+      const words = part.text.split(" ");
+      let line = "";
+      let lineStart = start;
+      for (const w of words) {
+        const next = line ? `${line} ${w}` : w;
+        if (line && c.measureText(next).width > TEXT_W) {
+          y += st.lh;
+          lines.push({ key: part.key, text: line, y, start: lineStart });
+          lineStart += line.length + 1;
+          line = w;
+        } else line = next;
+      }
+      y += st.lh;
+      lines.push({ key: part.key, text: line, y, start: lineStart });
+      start += part.text.length;
+      if (part.key === "affil") ruleY = y + 40;
+    }
+  };
+  let last = "";
+  const draw = (typed: number, caret: boolean) => {
+    const sig = `${typed}|${caret}|${lines.length}`;
+    if (sig === last) return;
+    last = sig;
+    if (!lines.length) layout();
     c.fillStyle = hex(CLAY.sheet);
-    c.fillRect(0, 0, 1024, 1300);
+    c.fillRect(0, 0, W, H);
     c.fillStyle = hex(CLAY.teal);
-    c.fillRect(110, 140, 520, 26);
-    c.fillStyle = "rgba(42,47,56,.28)";
-    [230, 290, 350, 410, 520, 580, 640, 700, 760, 870, 930, 990].forEach((y, i) => c.fillRect(110, y, i % 4 === 3 ? 480 : 800, 12));
+    c.fillRect(M, ruleY, TEXT_W, 5);
+    let caretAt: { x: number; y: number; h: number } | null = null;
+    for (const ln of lines) {
+      const st = STYLE[ln.key];
+      c.font = st.font;
+      const size = parseInt(st.font.split(" ")[1], 10);
+      const n = Math.max(0, Math.min(ln.text.length, typed - ln.start));
+      const done = c.measureText(ln.text.slice(0, n)).width;
+      const full = c.measureText(ln.text).width;
+      if (n > 0) {
+        c.fillStyle = st.color;
+        c.fillText(ln.text.slice(0, n), M, ln.y);
+      }
+      if (n < ln.text.length) {
+        // the rest of the line is still a placeholder bar
+        const barH = ln.key === "title" ? size * 0.34 : size * 0.3;
+        c.fillStyle = st.bar;
+        c.fillRect(M + done + (n > 0 ? size * 0.25 : 0), ln.y - size * 0.34 - barH / 2, Math.max(0, full - done - (n > 0 ? size * 0.25 : 0)), barH);
+      }
+      if (typed > ln.start && typed <= ln.start + ln.text.length) caretAt = { x: M + done + 4, y: ln.y, h: size };
+    }
+    if (caret && caretAt) {
+      c.fillStyle = hex(CLAY.teal);
+      c.fillRect(caretAt.x, caretAt.y - caretAt.h * 0.82, 6, caretAt.h * 1.02);
+    }
+    texture.needsUpdate = true;
+  };
+  draw(0, false);
+  // Placeholder widths come from the real fonts once they're loaded.
+  void document.fonts?.ready.then(() => {
+    lines = [];
+    last = "";
+    draw(0, false);
   });
+  return { texture, draw };
 }
 
-function stack(THREE: T) {
+function stack(THREE: T, face: THREE_NS.Texture) {
   const g = new THREE.Group();
-  const face = ruledTexture(THREE);
   [[0, 0, 0.12], [0.08, 0.04, -0.06], [-0.05, 0.08, 0.02]].forEach(([dx, dy, rot], i, all) => {
-    const s = sheet(THREE, 3, 3.9, i === all.length - 1 ? face : null);
+    const s = sheet(THREE, 3, 3.9, i === all.length - 1 ? face : null, CLAY.sheet, true);
     s.position.set(dx, 0.02 + dy, dx * 0.6);
     s.rotation.y = rot;
     g.add(s);
@@ -250,7 +343,7 @@ function pin(THREE: T) {
   return g;
 }
 
-const BUILD: Record<Exclude<Kind, "pencil">, (THREE: T) => THREE_NS.Group> = { ruler, graph, stack, chart, notebook, plane, pin };
+const BUILD: Record<Exclude<Kind, "pencil" | "stack">, (THREE: T) => THREE_NS.Group> = { ruler, graph, chart, notebook, plane, pin };
 
 export type Desk = {
   scene: THREE_NS.Scene;
@@ -297,6 +390,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   type Item = { kind: Kind; obj: THREE_NS.Object3D; baseX: number; baseY: number; baseZ: number; baseRx: number; baseRy: number; baseRz: number; baseScale: number; delay: number; float: number; phase: number };
   const items: Item[] = [];
   let pencilTip: THREE_NS.Vector3 | null = null;
+  let paper: WritablePaper | null = null;
   layout.items.forEach((p, i) => {
     let obj: THREE_NS.Object3D;
     if (p.kind === "pencil") {
@@ -304,6 +398,9 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       obj = new THREE.Group();
       obj.add(built.group);
       pencilTip = built.tip.clone();
+    } else if (p.kind === "stack") {
+      paper = writablePaper(THREE);
+      obj = stack(THREE, paper.texture);
     } else obj = BUILD[p.kind](THREE);
     obj.position.set(p.x, p.lift ?? 0, p.z);
     obj.rotation.y = p.rotY ?? 0;
@@ -372,12 +469,23 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     }
   };
 
+  // The paper writes itself once the morph has settled (and stays written).
+  let typeStart: number | null = null;
+  const writePaper = (ms: number, morph: number) => {
+    if (!paper) return;
+    if (to && morph >= 0.97 && typeStart === null) typeStart = ms;
+    if (typeStart === null) return paper.draw(0, false);
+    const typed = reducedMotion ? PAPER_TOTAL : Math.min(PAPER_TOTAL, Math.floor(((ms - typeStart) / 1000) * TYPE_CHARS_PER_SECOND));
+    paper.draw(typed, Math.floor(ms / 500) % 2 === 0);
+  };
+
   const update = (ms: number, hold = false, morph = 0) => {
     if (reducedMotion) {
       for (const it of items) it.obj.position.y = it.baseY;
       camera.position.set(cam.x, cam.y, cam.z);
       camera.lookAt(look);
       applyMorph(morph);
+      writePaper(ms, morph);
       return;
     }
     if (!hold && releasedAt === null) releasedAt = ms;
@@ -397,6 +505,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     camera.position.set(cam.x, cam.y * (1 - pull * 0.1), cam.z * (1 - pull * 0.1));
     camera.lookAt(look);
     applyMorph(morph);
+    writePaper(ms, morph);
   };
 
   return { scene, camera, update };

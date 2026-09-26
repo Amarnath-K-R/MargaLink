@@ -262,6 +262,9 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
 /* Copy on the left; on the right, the page the landing's desk morphed into. */
 .final-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: clamp(32px, 5vw, 80px); align-items: center; margin: auto 0; }
 .final-paper { display: flex; justify-content: center; will-change: opacity; }
+/* Wider screens: the landing's 3D paper sits here and writes itself; this
+   HTML page is the phone version, so it only keeps the column's space. */
+@media (min-width: 760px) { .final-paper { visibility: hidden; } }
 .typed-paper { width: min(440px, 100%); min-height: 520px; padding: 44px 40px 40px; border: 1px solid rgba(27,31,39,.1); border-radius: 6px; background: var(--white); box-shadow: 0 30px 60px rgba(58,50,38,.14), 0 4px 12px rgba(58,50,38,.06); color: var(--ink); }
 .typed-paper p { margin: 0; }
 .typed-paper .tp-title { min-height: 2.4em; font-family: var(--font-serif); font-size: 24px; font-weight: 500; line-height: 1.2; letter-spacing: -.02em; }

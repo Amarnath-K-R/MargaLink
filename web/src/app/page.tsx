@@ -31,9 +31,10 @@ function Home() {
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
-  const deskOut = narrow ? landingFade : between(progress, 0.9, 1);
-  // The typed paper takes over from the 3D sheet, then starts writing.
-  const paperShown = narrow ? between(finalProgress, 0.5, 1) : deskOut;
+  // Wider screens: the desk stays — its paper settles beside the copy and
+  // writes itself. Phones: the desk fades and an HTML page writes instead.
+  const deskOut = narrow ? landingFade : 0;
+  const paperShown = narrow ? between(finalProgress, 0.5, 1) : 0;
   const [writePaper, setWritePaper] = useState(false);
   if (!writePaper && paperShown > 0.6) setWritePaper(true);
   const screenDive = useMemo(() => (reducedMotion ? 0 : between(finalProgress, 0.1, 0.8)), [finalProgress, reducedMotion]);

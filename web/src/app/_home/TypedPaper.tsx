@@ -2,24 +2,11 @@
 
 import { useEffect, useState } from "react";
 
-// The paper the landing's desk morphs into: a manuscript page that writes
-// itself — title, authors, abstract, keywords — once `write` turns true.
-// An illustration, not a real paper.
-const PARTS = [
-  { key: "title", text: "Seasonal nitrate flux in headwater streams under shifting snowmelt" },
-  { key: "authors", text: "Asha Rao¹, Mikael Lindqvist², Tobi Okafor¹" },
-  { key: "affil", text: "¹ Department of Earth Sciences   ² Institute for Hydrology" },
-  { key: "label", text: "Abstract" },
-  {
-    key: "abstract",
-    text: "Earlier snowmelt is changing when nitrogen leaves mountain catchments. From six years of high-frequency sensor records in 14 streams, we find that spring nitrate pulses now arrive 11 days earlier and carry 23% more of the annual load, most strongly below 1,200 m.",
-  },
-  { key: "keywords", text: "Keywords: nitrate · snowmelt · headwater streams · high-frequency sensing" },
-] as const;
+import { PAPER_PARTS as PARTS, PAPER_TOTAL as TOTAL, TYPE_CHARS_PER_SECOND as CHARS_PER_SECOND } from "@/components/three/paperText";
 
-const TOTAL = PARTS.reduce((n, p) => n + p.text.length, 0);
-const CHARS_PER_SECOND = 95;
-
+// Phones: the paper as an HTML page that writes itself once `write` turns
+// true. (On wider screens the landing's 3D sheet is the paper and writes
+// itself in place — see clayDesk.ts.)
 export default function TypedPaper({ write, reducedMotion }: { write: boolean; reducedMotion: boolean }) {
   const [typed, setTyped] = useState(0);
 
