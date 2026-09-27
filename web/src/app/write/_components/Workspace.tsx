@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { FileText } from "lucide-react";
+import { BarChart3, Command as CommandIcon, FileText, Quote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { autosaver, type ProjectMeta, type ProjectStore } from "@/lib/projectStore";
 import { compileProject, TexCompileError, type TexStage } from "@/lib/texRunner";
@@ -24,6 +24,7 @@ import Toolbar, { type Tool, type View } from "./Toolbar.tsx";
 import StatusBar from "./StatusBar.tsx";
 import EditorFormatBar from "./EditorFormatBar.tsx";
 import Outline from "./Outline.tsx";
+import Shortcuts from "./Shortcuts.tsx";
 import CommandPalette, { type Command } from "./CommandPalette.tsx";
 import { useChecks } from "./useChecks.ts";
 import { useMatch } from "@/app/match/_components/useMatch.ts";
@@ -47,6 +48,7 @@ const SPLIT_KEY = "margalink-write-split";
 const VIEW_KEY = "margalink-write-view";
 const FILES_KEY = "margalink-write-files";
 const AUTO_KEY = "margalink-write-autocompile";
+const TIPS_KEY = "margalink-write-tips";
 
 // A choice remembered in this browser, read once when the workspace opens.
 function useStored<T extends string>(key: string, fallback: T, allowed: readonly T[]) {
@@ -89,7 +91,7 @@ const STAGE_TEXT: Record<TexStage, (d?: string) => string> = {
   running: (d) => `Running ${d ?? "TeX"}…`,
 };
 
-const WINDOWS: { tool: Exclude<Tool, "palette">; title: string; size: "lg" | "full" }[] = [
+const WINDOWS: { tool: Exclude<Tool, "palette" | "shortcuts">; title: string; size: "lg" | "full" }[] = [
   { tool: "match", title: "Match", size: "lg" },
   { tool: "review", title: "Review", size: "lg" },
   { tool: "figures", title: "Figures", size: "full" },
@@ -143,6 +145,7 @@ export default function Workspace({
   const [view, setView] = useStored<View>(VIEW_KEY, "split", ["source", "split", "pdf"]);
   const [filesPanel, setFilesPanel] = useStored(FILES_KEY, "open", ["open", "closed"] as const);
   const [auto, setAuto] = useStored(AUTO_KEY, "off", ["on", "off"] as const);
+  const [tips, setTips] = useStored(TIPS_KEY, "show", ["show", "done"] as const);
   const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null); // a .figure.json to reopen in the Figures window
   // Every text file's content (the Insert menu's citation keys and labels
   // come from these); refreshed on load, on save, after a compile.
@@ -443,6 +446,7 @@ export default function Workspace({
       { id: "view-pdf", label: "Show the PDF only", run: () => setView("pdf"), disabled: view === "pdf" },
       { id: "files", label: filesPanel === "open" ? "Hide the files" : "Show the files", run: () => setFilesPanel(filesPanel === "open" ? "closed" : "open") },
       { id: "auto", label: auto === "on" ? "Turn auto-compile off" : "Turn auto-compile on", run: () => setAuto(auto === "on" ? "off" : "on") },
+      { id: "shortcuts", label: "Keyboard shortcuts", run: () => setTool("shortcuts") },
       { id: "projects", label: "All projects", run: onClose },
     ],
     [compile, busy, insert, texOpen, figures, backup, pdfBytes, project.name, project.engine, setEngine, onClose, view, setView, filesPanel, setFilesPanel, auto, setAuto],
@@ -707,6 +711,30 @@ export default function Workspace({
             url={pdfUrl}
             name={`${safeName(project.name)}.pdf`}
             hint={firstRun && !busy ? "The first compile downloads the TeX engine (about 140 MB). Your browser keeps it, so later compiles take a second or two." : null}
+            extra={
+              tips === "show" && (
+                <div className="clay mt-6 w-full max-w-sm p-4 text-left text-xs leading-relaxed" data-testid="tips">
+                  <p className="mb-2 font-serif text-sm font-medium text-ink">Getting around</p>
+                  <ul className="space-y-2 text-ink-soft">
+                    <li className="flex gap-2.5">
+                      <BarChart3 size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-accent" />
+                      <span>Match, Review, Figures and Checks open as windows over your paper; the journal chip sets the journal you&apos;re writing for.</span>
+                    </li>
+                    <li className="flex gap-2.5">
+                      <Quote size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-accent" />
+                      <span>The bar over the source formats text. Type \cite{"{"} and your references are suggested; the Outline tab jumps between sections.</span>
+                    </li>
+                    <li className="flex gap-2.5">
+                      <CommandIcon size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-accent" />
+                      <span>⌘K finds any command; the ? on the status line lists every shortcut.</span>
+                    </li>
+                  </ul>
+                  <button type="button" onClick={() => setTips("done")} className="clay-btn mt-3 h-7 text-xs">
+                    Got it
+                  </button>
+                </div>
+              )
+            }
           />
         </section>
       </div>
@@ -724,6 +752,7 @@ export default function Workspace({
           setAuto(on ? "on" : "off");
           if (!on && autoTimer.current) clearTimeout(autoTimer.current);
         }}
+        onShortcuts={() => setTool("shortcuts")}
         dirty={dirty}
         running={running}
         sent={calls.filter((c) => c.hadBody).length}
@@ -736,6 +765,9 @@ export default function Workspace({
         </Dialog>
       ))}
       <CommandPalette open={tool === "palette"} onClose={closeTool} commands={commands} />
+      <Dialog open={tool === "shortcuts"} onClose={closeTool} title="Keyboard shortcuts" size="md">
+        {tool === "shortcuts" && <Shortcuts />}
+      </Dialog>
     </div>
   );
 }

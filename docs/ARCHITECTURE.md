@@ -329,8 +329,15 @@ tools open as windows over it (see **Windows** below).
   pages. `templateCatalog.ts` maps a journal's publisher to one, so
   `/write?journal=<id>` preselects it.
 
-- **Windows.** The toolbar's Match, Review, Figures, Checks and Journal
-  open in a native `<dialog>` (`components/Dialog.tsx`: focus trap,
+- **Layout.** An open project is the whole viewport (`fixed inset-0`, no
+  page header): a clay tray (home, back, name, journal chip, tools, the
+  files toggle and the view — source, both, or PDF — Compile, ⌘K), the
+  files and outline on a clay slab, the source and the PDF on paper
+  sheets, a status line. The view, the files panel and auto-compile are
+  remembered in `localStorage`; the editor stays mounted in the PDF view
+  so undo survives.
+- **Windows.** The toolbar's Match, Review, Figures and Checks (and the
+  journal chip's Journal) open in a native `<dialog>` (`components/Dialog.tsx`: focus trap,
   Escape, focus back to the editor). Each body is a `next/dynamic`
   import, so pdf.js, the matching model and the figure studio load only
   when asked for. Tool state lives in hooks mounted by `Workspace`
@@ -345,11 +352,20 @@ tools open as windows over it (see **Windows** below).
   first" until there is one. `extract.ts` destroys its pdf.js task after
   reading (the workspace extracts once per compile). No LaTeX→text
   detex: `texSource.ts` only has a rough word count for the status bar.
-- **Insert.** `texSource.ts` (pure, selfchecked) gives the Insert menu its
-  citation keys (from the project's `.bib` files) and labels, the
-  figure/table/equation/section snippets, and `findQuoteInTex`, which
-  turns a review citation into a line for "Jump to source" (best effort:
-  first six words of three letters or more, then the last six).
+- **Writing aids.** `texSource.ts` (pure, selfchecked) is the source of
+  all of them: `bibEntries` (keys and titles from the project's `.bib`
+  files) and `texLabels` feed the formatting bar's Cite/Ref lists
+  (`EditorFormatBar.tsx`) and the suggestions (`latexCompletions.ts`, a
+  CodeMirror completion source created once per editor — autocompletion
+  tells sources apart by identity); `texOutline` + `paperFiles` (the main
+  file and what it `\input`s, depth first) build the Outline tab and the
+  whole-paper word count, shown against a pilot journal's word limit;
+  `tableSnippet`/`figureSnippet` are what the bar inserts; and
+  `findQuoteInTex` turns a review citation into a line for "Jump to
+  source" (best effort: first six words of three letters or more, then
+  the last six). Auto-compile (off by default) compiles 2 s after the
+  last keystroke unless a compile is running. File names are edited in
+  place (`FileTree.tsx`); dropping files on the list uploads them.
 - **Figures.** "Insert into paper" writes the 300 dpi PDF and a data-free
   recipe (`figures/<name>.figure.json`, the same shape `RecipeImportExport`
   saves) into the project and drops a figure block at the cursor; opening
@@ -360,10 +376,9 @@ tools open as windows over it (see **Windows** below).
   studio's link); `/write?journal=<id>` (from a match result or a journal
   page) preselects a template for a new one.
 
-`/write`'s trace panel covers the page's own fetches (templates, the
-index, the matching model); the engines are fetched by workers, like
-`/figures`' runtime. Its copy is conditional: once a review or Ask Claude
-ran, it says what those requests carried.
+Nothing in the workspace shows a network trace any more (the tool pages
+lost theirs too); the status line says whether a request carried text
+you agreed to send (a review or Ask Claude).
 
 ## The invariant that keeps `src/lib/` and `functions/` from duplicating types
 
@@ -396,7 +411,8 @@ is Next's required per-route metadata shim for a `"use client"` page.
 |---|---|
 | `layout.tsx` | Root layout: fonts, `<html>`, metadata from `lib/site.ts`. |
 | `page.tsx` | Homepage shell — assembles the `_home/` sections in one tree, no context provider. |
-| `globals.css` | Site-wide only: tokens, reset, reduced-motion. Everything homepage-specific lives in `_home/home.css`. |
+| `globals.css` | Site-wide only: tokens, reset, reduced-motion, the desk background (a fixed warm gradient with grain) behind every page but the homepage. Everything homepage-specific lives in `_home/home.css`. |
+| `clay.css` | The clay theme the tool pages and the workspace share, in the components layer (so a Tailwind utility on the same element wins): `.clay` (raised slab), `.clay-well` (pressed in), `.sheet` (paper), `.clay-btn` / `.clay-primary` / `.clay-ghost` / `.clay-key` / `.clay-chip`, `.clay-input` / `.clay-field` / `.clay-select`, `.clay-card` (a choice; `aria-pressed`/`aria-checked`/`data-selected` press it in), `.bead`, `.grip`, `.desk`, `.clay-window` (dialogs). Warm shadows only, one light from the top left; the `--away` colour stays reserved for what leaves the device. |
 | `opengraph-image.tsx` | OG image, rendered with `satori` — can't resolve CSS custom properties, so `lib/site.ts`'s `BRAND` colors are duplicated here as literal hex, deliberately. |
 | `robots.ts`, `sitemap.ts` | SEO. |
 | `privacy/page.tsx` | Static prose + the privacy-flow SVG diagram. |
@@ -426,10 +442,11 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `figures/layout.tsx` | Route metadata shim. |
 | `figures/_components/AddToPaper.tsx` | Puts the figure as a PDF into a `/write` project's `figures/` and copies the LaTeX. |
 | `write/page.tsx` | Project list, template picker, zip import; `?journal=` preselects a template, `?p=` reopens a project; the network trace, passed down. |
-| `write/_components/Workspace.tsx` | One open project: the toolbar, file tree, editor and PDF (a draggable split), diagnostics, the status bar, and the tool windows over it. Owns the tools' hooks (the one route that imports another route's `_components/`), the compiled PDF as a `File`, the text files' contents for the Insert menu, and figure insertion. |
-| `write/_components/Toolbar.tsx`, `StatusBar.tsx`, `CommandPalette.tsx`, `CompileFirst.tsx` | The shell: back / rename / journal chip / Insert / tools / engine / Compile / ⌘K; the status line (compile status, counts, word count, saved, a running tool, what was sent); the ⌘K palette; the "Compile first" notice. |
+| `write/_components/Workspace.tsx` | One open project, full screen: the tray, the files/outline slab, the source and PDF sheets (a draggable split, or one of them alone), diagnostics, the status line, and the tool windows over it. Owns the tools' hooks (the one route that imports another route's `_components/`), the compiled PDF as a `File`, the text files' contents (for suggestions, the outline and the word count), the remembered view settings, auto-compile and figure insertion. |
+| `write/_components/Toolbar.tsx`, `StatusBar.tsx`, `CommandPalette.tsx`, `Shortcuts.tsx`, `CompileFirst.tsx` | The shell: home / back / rename / journal chip / tools / files toggle / view / Compile / ⌘K; the status line (compile status, counts, the paper's word count and limit, saved, a running tool, the engine, auto-compile, what was sent, the shortcuts key); the ⌘K palette; the keyboard shortcuts window; the "Compile first" notice. |
+| `write/_components/EditorFormatBar.tsx`, `latexCompletions.ts`, `Outline.tsx` | The formatting bar over the source (wrap or insert; Cite/Ref/Figure lists, a table-size grid); the suggestions inside `\cite{`, `\ref{`, `\begin{` and after `\`; the Outline tab. |
 | `write/_components/MatchWindow.tsx`, `ReviewWindow.tsx`, `FiguresWindow.tsx`, `ChecksWindow.tsx`, `JournalWindow.tsx`, `useChecks.ts` | The windows' bodies (dynamic imports) over the shared hooks; `useChecks` runs the format and rules checks over the PDF text. |
-| `write/_components/LatexEditor.tsx`, `FileTree.tsx`, `PdfPane.tsx`, `Diagnostics.tsx`, `TemplatePicker.tsx`, `StorageBanner.tsx`, `download.ts` | The workspace's pieces. |
+| `write/_components/LatexEditor.tsx`, `FileTree.tsx`, `PdfPane.tsx`, `Diagnostics.tsx`, `TemplatePicker.tsx`, `StorageBanner.tsx`, `download.ts` | The workspace's pieces. `LatexEditor`'s handle: goto (mid-screen), insert, wrap, insertBlock, comment, focus. |
 | `write/layout.tsx` | Route metadata shim. |
 
 **`src/app/_home/`** — homepage-only, a Next "private folder" (excluded
@@ -446,7 +463,8 @@ from routing; nothing outside `app/page.tsx` imports from it).
 
 | File | What |
 |---|---|
-| `PageHeader.tsx` | The brand/nav/title header shared by every non-homepage route; 3 content-width tiers. |
+| `PageHeader.tsx` | Every non-homepage route's header: a sticky clay tray (home, the five tools with the current one pressed in, privacy) the same width on every page, then the h1 with its tool's bead; 3 content-width tiers for the h1. |
+| `Step.tsx` | A numbered step of a tool page on a clay slab (Review, Figures). |
 | `NetworkTrace.tsx` | `useNetworkTrace()` + `<NetworkTracePanel>` — the fetch-instrumentation that makes `/match` and `/review`'s privacy claims checkable on the page itself. |
 | `JournalResultRow.tsx` | `JournalResultTitle` (prerendered-link-vs-expand-button) + `JournalResultChips` (metadata chips), shared by `/journals` and `/match`. |
 | `Dialog.tsx` | The modal window primitive on the native `<dialog>` (`showModal()`: focus trap, Escape, top layer, focus restore), used by the writing workspace's windows and palette. |
@@ -507,7 +525,7 @@ real technical concern, not a speculative grouping).
 | `texRunner.ts` | The TeX worker lifecycle: `compileProject()`, supersession, deadline, the all-packs retry. Talks to `public/texWorker.js`. |
 | `texLog.ts` | `parseTexLog()` — errors, warnings and missing packages with file and line. |
 | `projectStore.ts` | `/write` projects in the Origin Private File System (`ProjectMeta` carries the target journal's id and name); `autosaver()`; zip export/import. |
-| `texSource.ts` | Pure LaTeX-source helpers for the workspace: a rough word count, `.bib` keys, labels, `findQuoteInTex`, the figure snippet and the next free figure path, the Insert snippets. |
+| `texSource.ts` | Pure LaTeX-source helpers for the workspace: a rough word count, `.bib` keys and entries, labels, the outline, `\input`s and the paper's files, `findQuoteInTex`, the figure and table snippets, the next free figure path. |
 | `templateCatalog.ts` | `loadTemplates()`, `templateForJournal()`, `starterProject()`. |
 | `zip.ts` | `zipFiles()`, `unzipFiles()`, `flattenSingleRoot()` over fflate. |
 

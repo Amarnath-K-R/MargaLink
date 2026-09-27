@@ -22,6 +22,7 @@ export default function StatusBar({
   onEngine,
   auto,
   onAuto,
+  onShortcuts,
 }: {
   status: string | null;
   errors: number;
@@ -36,6 +37,7 @@ export default function StatusBar({
   onEngine: (engine: ProjectMeta["engine"]) => void;
   auto: boolean;
   onAuto: (on: boolean) => void;
+  onShortcuts: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-2 text-xs text-ink-soft">
@@ -88,6 +90,9 @@ export default function StatusBar({
       <span className={sent > 0 ? "text-away" : ""}>
         {sent === 0 ? "Nothing from this paper has been sent." : `${sent} request${sent === 1 ? "" : "s"} carried text you agreed to send.`}
       </span>
+      <button type="button" onClick={onShortcuts} aria-label="Keyboard shortcuts" title="Keyboard shortcuts" className="clay-key h-6 min-w-6 px-1.5 text-[11px]">
+        ?
+      </button>
     </div>
   );
 }

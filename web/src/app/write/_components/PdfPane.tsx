@@ -1,11 +1,13 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Download } from "lucide-react";
 
 // The compiled PDF on a paper sheet, in the browser's own viewer (zoom,
 // search, print). The last good PDF stays while a newer compile fails.
-// Before the first compile the sheet shows a sketch of a page, and `hint`.
-export default function PdfPane({ url, name, hint }: { url: string | null; name: string; hint?: string | null }) {
+// Before the first compile the sheet shows a sketch of a page, `hint`, and
+// `extra` (the workspace's one-time tips).
+export default function PdfPane({ url, name, hint, extra }: { url: string | null; name: string; hint?: string | null; extra?: ReactNode }) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="flex h-7 items-center justify-between px-1.5 text-xs text-ink-soft">
@@ -36,6 +38,7 @@ export default function PdfPane({ url, name, hint }: { url: string | null; name:
               Press Compile, or <kbd className="clay-key h-6 min-w-0 cursor-default px-1.5 text-[11px]">⌘S</kbd> in the editor.
             </p>
             {hint && <p className="mt-3 max-w-xs text-xs leading-relaxed text-ink-soft">{hint}</p>}
+            {extra}
           </div>
         )}
       </div>

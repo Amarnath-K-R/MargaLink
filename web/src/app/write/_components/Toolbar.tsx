@@ -5,7 +5,7 @@ import Link from "next/link";
 import { BarChart3, BookOpen, ChevronDown, Code, Columns2, FileCheck2, FileText, ListChecks, Loader2, PanelLeft, Play, ScanSearch } from "lucide-react";
 import type { ProjectMeta } from "@/lib/projectStore";
 
-export type Tool = "match" | "review" | "figures" | "checks" | "journal" | "palette";
+export type Tool = "match" | "review" | "figures" | "checks" | "journal" | "palette" | "shortcuts";
 export type View = "source" | "split" | "pdf";
 
 // Each tool's bead is a tint from the homepage's clay palette. The Journal
