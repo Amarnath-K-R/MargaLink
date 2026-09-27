@@ -418,7 +418,7 @@ export default function GuidePage() {
                 <strong>Decimal mark</strong> — dot (1.5) or comma (1,5).
               </>,
               <>
-                <strong>Thousands separator</strong> — none, comma, dot, space…
+                <strong>Thousands separator</strong> — none, comma, dot, space or apostrophe.
               </>,
               <>
                 <strong>Missing-value markers</strong> — what counts as an empty cell (NA, N/A, NULL, #N/A, -…).

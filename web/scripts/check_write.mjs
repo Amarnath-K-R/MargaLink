@@ -366,7 +366,12 @@ check("\\cite{ suggests the project's .bib keys", (await page.locator(".cm-toolt
 await page.keyboard.press("Escape");
 await page.getByRole("tab", { name: /Outline/ }).click();
 await page.locator('[data-testid="outline"] button', { hasText: "Methods" }).click();
-check("the outline jumps to a section", ((await page.locator(".cm-activeLine").first().textContent()) ?? "").includes("\\section{Methods}"));
+check(
+  "the outline jumps to a section",
+  await page // the jump runs on the next tick after the click
+    .waitForFunction(() => document.querySelector(".cm-activeLine")?.textContent?.includes("\\section{Methods}"), null, { timeout: 3000 })
+    .then(() => true, () => false),
+);
 await page.getByRole("tab", { name: /Files/ }).click();
 await page.getByRole("button", { name: "PDF only" }).click();
 check("the PDF-only view hides the source", !(await page.locator('[data-testid="latex-editor"]').isVisible()));

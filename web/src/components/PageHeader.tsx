@@ -50,6 +50,10 @@ export default function PageHeader({
   const current = TOOL_NAV.find((t) => t.id === tool);
   return (
     <>
+      {/* The first tab stop: past the tray's eight links, straight to the page. */}
+      <a href="#content" className="clay-btn clay-primary fixed left-4 top-4 z-50 -translate-y-24 focus:translate-y-0">
+        Skip to content
+      </a>
       {/* Wider than the page's column: the tray is the same size on every route.
           A sibling of the <header>, not inside it, so it sticks for the whole page. */}
       <div className="sticky top-3 z-30 mx-[calc((100%_-_min(100vw_-_1.5rem,76rem))/2)] mb-12 sm:mb-14">
@@ -81,7 +85,7 @@ export default function PageHeader({
           </Link>
         </nav>
       </div>
-      <header className={`flex items-start gap-5 ${HEADER_SPACING[width]}`}>
+      <header id="content" className={`flex scroll-mt-24 items-start gap-5 ${HEADER_SPACING[width]}`}>
         {current && (
           <span aria-hidden className="bead mt-1.5 hidden h-12 w-12 shrink-0 sm:grid" style={{ background: current.bead }}>
             <current.Icon size={22} strokeWidth={1.8} />
