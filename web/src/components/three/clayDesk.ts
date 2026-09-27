@@ -1018,7 +1018,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       return true;
     };
     for (const pr of props) {
-      pr.obj.visible = anchor(pr.x, pr.z, 0, 1, anchored);
+      pr.obj.visible = anchor(pr.x, pr.z, 0, 1, anchored) && tilt < 0.5; // out of the way over the book
       pr.obj.position.x = anchored.x;
       pr.obj.position.z = anchored.z;
       pr.obj.scale.setScalar(pr.s * anchorScale);

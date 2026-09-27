@@ -429,5 +429,7 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
   .book-sticky { display: none; }
   .book-cards { display: grid; gap: 44px; margin: 0 auto; padding: 0; list-style: none; }
   .book-card h3 { margin: 14px 0 0; color: var(--ink); font-family: var(--font-serif); font-size: 44px; font-weight: 500; letter-spacing: -.05em; line-height: 1; }
-  .book-card p { margin: 12px 0 16px; color: var(--ink-soft); font-size: 17px; line-height: 1.5; }
+  .book-card p { margin: 12px 0 0; color: var(--ink-soft); font-size: 17px; line-height: 1.5; }
+  .book-card-points { display: grid; gap: 6px; margin: 14px 0 18px; padding: 0; list-style: none; color: var(--ink); font-size: 15px; }
+  .book-card-points li::before { content: "✓"; margin-right: 8px; color: var(--accent); font-weight: 600; }
 }

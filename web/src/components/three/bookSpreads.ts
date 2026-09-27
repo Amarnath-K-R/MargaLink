@@ -1,12 +1,25 @@
 // The homepage book: one spread per tool, showcase-level only (a name, one
-// line, a link) — the details live on the tool pages. Shared by the 3D book
+// line, three plain benefits, a picture and a link) — the details live on
+// the tool pages. Shared by the 3D book
 // (book.ts, bookPages.ts) and the page's caption (page.tsx), with the scroll
 // timing both read, so the caption always names the spread on screen.
 
 export const SPREADS = [
-  { n: "03", tool: "Review", lead: "Get it", cut: "reviewed.", line: "A second read before you submit.", href: "/review", art: "review" },
-  { n: "04", tool: "Write", lead: "Write it in their", cut: "template.", line: "Your journal's format, from the first draft.", href: "/write", art: "write" },
-  { n: "05", tool: "Figures", lead: "Make the", cut: "figures.", line: "Publication-ready, straight from your data.", href: "/figures", art: "figures" },
+  {
+    n: "03", tool: "Review", lead: "Get it", cut: "reviewed.", line: "A second read before you submit.",
+    points: ["Comments, section by section", "Checks that your numbers add up", "Runs only when you ask"],
+    caption: "Comments in the margin, like a colleague's.", href: "/review", art: "review",
+  },
+  {
+    n: "04", tool: "Write", lead: "Write it in their", cut: "template.", line: "Your journal's format, from the first draft.",
+    points: ["Publisher templates, ready to fill", "Compiles right in your browser", "Drafts stay on your device"],
+    caption: "Their template, your words.", href: "/write", art: "write",
+  },
+  {
+    n: "05", tool: "Figures", lead: "Make the", cut: "figures.", line: "Publication-ready, straight from your data.",
+    points: ["Charts from your spreadsheet", "Start from a gallery of templates", "Your numbers stay in the tab"],
+    caption: "Your data, in their style.", href: "/figures", art: "figures",
+  },
 ] as const;
 
 export type Spread = (typeof SPREADS)[number];

@@ -133,6 +133,11 @@ function Home() {
                   {s.lead} <mark className="gap-cut">{s.cut}</mark>
                 </h3>
                 <p>{s.line}</p>
+                <ul className="book-card-points">
+                  {s.points.map((pt) => (
+                    <li key={pt}>{pt}</li>
+                  ))}
+                </ul>
                 <Link href={s.href} className="landing-link">
                   Open {s.tool} <ArrowUpRight size={15} />
                 </Link>
