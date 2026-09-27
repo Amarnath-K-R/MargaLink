@@ -24,8 +24,7 @@ const bodyRequests = [];
 page.on("request", (r) => {
   if (r.postData()) bodyRequests.push(`${r.method()} ${r.url()}`);
 });
-let promptAnswer = ""; // what the next window.prompt() gets; confirms are accepted
-page.on("dialog", (d) => void (d.type() === "prompt" ? d.accept(promptAnswer) : d.accept()));
+page.on("dialog", (d) => void d.accept()); // a project's delete still confirms in the browser
 
 // The Review window's passes go to a mocked /api/review (the shape check_review.mjs
 // uses): every extract quotes its chunk's first sentence (skipping the all-caps
@@ -153,25 +152,30 @@ check("IEEEtran compiles after a plain article in the same session", (await pdfB
 
 // --- file operations don't lose or clobber anything ---
 const tree = page.locator('[data-testid="file-tree"]');
-promptAnswer = "IEEEtran.bst";
-await tree.getByRole("button", { name: "New file" }).click();
+const newFile = async (name) => {
+  await tree.getByRole("button", { name: "New file" }).click();
+  await tree.getByLabel("New file name").fill(name);
+  await tree.getByLabel("New file name").press("Enter");
+};
+await newFile("IEEEtran.bst");
 await page.waitForSelector("text=IEEEtran.bst already exists");
 check("New file refuses an existing name", true);
 
-promptAnswer = "notes.tex";
-await tree.getByRole("button", { name: "New file" }).click();
+await newFile("notes.tex");
 await page.waitForSelector('[data-testid="file-tree"] button[title="notes.tex"]');
 await page.click('[data-testid="latex-editor"] .cm-content');
 await page.keyboard.type("unsaved words");
 await tree.getByRole("button", { name: "Delete notes.tex" }).click();
+await tree.getByRole("button", { name: "Confirm delete notes.tex" }).click();
 await page.waitForTimeout(1500); // past the autosave delay
 await page.click("text=← All projects");
 await page.click('[data-testid="project-list"] button:text-is("New IEEE Transactions (IEEEtran) paper")');
 await page.waitForSelector('[data-testid="file-tree"] button[title="main.tex"]');
 check("a deleted file stays deleted", (await page.locator('[data-testid="file-tree"] button[title="notes.tex"]').count()) === 0);
 
-promptAnswer = "paper.tex";
 await tree.getByRole("button", { name: "Rename main.tex" }).click();
+await tree.getByLabel("New name for main.tex").fill("paper.tex");
+await tree.getByLabel("New name for main.tex").press("Enter");
 await page.waitForSelector('[data-testid="file-tree"] button[title="paper.tex"]');
 await page.click("button:has-text('Compile')");
 await compiled();
@@ -361,7 +365,7 @@ await context.close();
   await p.waitForSelector('[data-testid="latex-editor"] .cm-content');
   await p.click("button:has-text('Compile')");
   const reported = await p.waitForSelector("text=The TeX engine couldn't load", { timeout: 60_000 }).then(() => true, () => false);
-  check("a failed engine download is reported, and Compile is usable again", reported && (await p.locator("button:has-text('Compile')").isEnabled()));
+  check("a failed engine download is reported, and Compile is usable again", reported && (await p.getByRole("button", { name: "Compile", exact: true }).isEnabled()));
   await browser.close();
 }
 
