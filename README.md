@@ -22,9 +22,10 @@ Two disclosed exceptions: an opt-in AI review sends paper text to
 Anthropic's API, and the figure studio's opt-in "Ask Claude" sends a
 spreadsheet's schema and your request (never its values; category labels
 only if you tick a box). Figures themselves are drawn on your device, and the LaTeX writing
-workspace compiles and stores papers on your device too. Both sit behind an explicit consent step that
-names exactly what happens before anything is sent. See
-`docs/ARCHITECTURE.md`.
+workspace compiles and stores papers on your device too — and opens the other tools from inside
+it (matching and the checks read the compiled PDF, on-device; the two opt-in AI features sit
+behind their notices). Both AI features sit behind an explicit consent step that names exactly
+what happens before anything is sent. See `docs/ARCHITECTURE.md`.
 
 ## Layout
 

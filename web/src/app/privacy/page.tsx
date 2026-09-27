@@ -186,7 +186,12 @@ export default function PrivacyPage() {
       <p className="mt-3 text-ink-soft">
         The writing workspace compiles your LaTeX in your browser, with TeX Live running on your
         device. Your manuscript, figures and bibliography are kept in this browser&apos;s own storage
-        on this device — never on a server, and never sent anywhere. There is no AI in the editor.
+        on this device — never on a server. The workspace has no AI writing help: nothing rewrites
+        your text. The other tools open inside it as windows: matching and the format and
+        journal-rules checks read the PDF you compiled, on your device; the AI review and the figure
+        window&apos;s Ask Claude are the same two opt-in exceptions described above, behind the same
+        notices, and nothing is sent until you confirm one of them. The workspace&apos;s status line
+        and its network panel say when a request carried something you agreed to send.
       </p>
       <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
         <li>
@@ -200,8 +205,8 @@ export default function PrivacyPage() {
           zip to continue.
         </li>
         <li>
-          &quot;Add to a paper&quot; in the figure studio moves a figure between the two tools inside
-          your browser; nothing is uploaded.
+          Figures made in the workspace&apos;s figure window, or added from the figure studio, are
+          written straight into the project&apos;s figures folder in your browser; nothing is uploaded.
         </li>
       </ul>
 

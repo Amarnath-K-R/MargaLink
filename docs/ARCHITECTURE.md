@@ -289,7 +289,8 @@ and `/figures` doesn't claim it does.
 
 `/write` is a single-author LaTeX workspace: start from a journal's
 template (or import a zip), edit in CodeMirror, compile to PDF, back up
-as a zip. No server, no AI.
+as a zip. No server; no AI in the editor. It is also the hub: the other
+tools open as windows over it (see **Windows** below).
 
 - **Engine.** TeX Live 2023 compiled to WebAssembly by the BusyTeX
   project — its MIT-licensed core build (`busytex.js`/`.wasm`, the
@@ -328,8 +329,41 @@ as a zip. No server, no AI.
   pages. `templateCatalog.ts` maps a journal's publisher to one, so
   `/write?journal=<id>` preselects it.
 
-`/write`'s trace panel covers the page's own fetches (template files);
-the engine is fetched by the worker, like `/figures`' runtime.
+- **Windows.** The toolbar's Match, Review, Figures, Checks and Journal
+  open in a native `<dialog>` (`components/Dialog.tsx`: focus trap,
+  Escape, focus back to the editor). Each body is a `next/dynamic`
+  import, so pdf.js, the matching model and the figure studio load only
+  when asked for. Tool state lives in hooks mounted by `Workspace`
+  (`useMatch`, `useReview`, `useFigures` — the same hooks the standalone
+  pages render — plus `useChecks`), so closing a window keeps its
+  results and a running review carries on (the status bar shows it).
+  `Workspace` is keyed by project id so nothing leaks between projects.
+- **Paper text.** Match, Review and Checks read the last compiled PDF
+  (`store.lastPdf` or the latest `CompileResult.pdf`) through the same
+  `extractFromFile` pipeline as an upload — headings from fonts,
+  references from the compiled bibliography — so they say "Compile
+  first" until there is one. `extract.ts` destroys its pdf.js task after
+  reading (the workspace extracts once per compile). No LaTeX→text
+  detex: `texSource.ts` only has a rough word count for the status bar.
+- **Insert.** `texSource.ts` (pure, selfchecked) gives the Insert menu its
+  citation keys (from the project's `.bib` files) and labels, the
+  figure/table/equation/section snippets, and `findQuoteInTex`, which
+  turns a review citation into a line for "Jump to source" (best effort:
+  first six words of three letters or more, then the last six).
+- **Figures.** "Insert into paper" writes the 300 dpi PDF and a data-free
+  recipe (`figures/<name>.figure.json`, the same shape `RecipeImportExport`
+  saves) into the project and drops a figure block at the cursor; opening
+  the recipe offers "Edit in the figure studio". Pyodide loads only once a
+  spreadsheet is attached; Insert waits for a running compile, so the two
+  peak-memory jobs don't overlap.
+- **URL.** `/write?p=<id>` reopens a project (a reload, or the figure
+  studio's link); `/write?journal=<id>` (from a match result or a journal
+  page) preselects a template for a new one.
+
+`/write`'s trace panel covers the page's own fetches (templates, the
+index, the matching model); the engines are fetched by workers, like
+`/figures`' runtime. Its copy is conditional: once a review or Ask Claude
+ran, it says what those requests carried.
 
 ## The invariant that keeps `src/lib/` and `functions/` from duplicating types
 
@@ -368,28 +402,33 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `privacy/page.tsx` | Static prose + the privacy-flow SVG diagram. |
 | `journal/[id]/page.tsx` | Static-generated per-journal page (`generateStaticParams` from `getPrerenderedJournals()`). |
 | `journals/page.tsx`, `journals/layout.tsx` | Browse/search/filter the full journal index. |
-| `match/page.tsx` | Orchestrates read → embed → topics → references → rank. `process()` stays here rather than moving to `lib/`: it interleaves ~8 `setState` calls with async steps, and the out-of-order-result guard (`matchSeq`) has to move with that state, not get separated from it. |
+| `match/page.tsx` | JSX over `useMatch()`: the input, the network trace it proves, the results. |
+| `match/_components/useMatch.ts` | The whole run — read → embed → topics → references → rank, the filter re-rank with its out-of-order guard (`matchSeq`), the rules checks — as one hook, so the writing workspace's Match window shares it. It interleaves ~8 `setState` calls with async steps, so it stays with its state rather than moving to `lib/`. |
 | `match/_components/MatchFilters.tsx` | The 5 filter controls + `FEE_PRESETS`/`SPEED_PRESETS`. |
-| `match/_components/MatchResults.tsx` | The results list with fit badges, built on the shared `JournalResultTitle`/`JournalResultChips`. |
+| `match/_components/MatchResults.tsx` | The results list with fit badges, built on the shared `JournalResultTitle`/`JournalResultChips`. On `/match` rows link on to `/review` and `/write?journal=`; inside the workspace `onReview`/`onSetTarget`/`expandOnly` keep everything on the page. |
 | `match/_components/PaperInput.tsx`, `WhatWeRead.tsx`, `WhyThisJournal.tsx` | File-or-paste entry; what the matcher read (with a paste correction); the per-result reasons. |
 | `match/_components/FormatCheckPanel.tsx` | The 9-row structural-check `<dl>`. |
 | `match/_components/ProcessingTrace.tsx` | The live "On this device" step log + error text. |
 | `match/layout.tsx` | Route metadata shim. |
-| `review/page.tsx` | Orchestrates upload → journal pick → structural check → AI review consent/request. |
-| `review/_components/JournalPicker.tsx` | The hand-verified-journal grid. |
+| `review/page.tsx` | JSX over `useReview()`: upload, journal pick, structural check, then `ReviewRunner`. |
+| `review/_components/useReview.ts`, `ReviewRunner.tsx` | The flow (attach, journal, outline edits, the passes with cancel and resume) as a hook, and the run's controls, consent notice, progress and result as one component — shared with the workspace's Review window (`onFile` can keep the project's target journal; `onCitation` adds "Jump to source"). |
+| `review/_components/JournalPicker.tsx` | The hand-verified-journal grid (`showMatchLink` off inside the workspace). |
 | `review/_components/TierPicker.tsx` | The quick/standard/thorough grid; owns `TIER_OPTIONS`. |
 | `review/_components/OutlineEditor.tsx` | The detected outline before consent: per-section type, merge, add heading, "Don't send". |
 | `review/layout.tsx` | Route metadata shim. |
-| `figures/page.tsx` | The studio: upload → data prep → Describe/Gallery → panel editor → live local preview → export. Owns the spec, the debounced render loop and recipes. |
+| `figures/page.tsx` | Header, `FigureStudio` over `useFigures()`, the trace, and "Add to a paper" in the export bar's slot. |
+| `figures/_components/useFigures.ts`, `FigureStudio.tsx` | The studio's state (upload → data prep → spec, the debounced render loop, recipes, export) as a hook, and its body as a component — shared with the workspace's Figures window. |
 | `figures/_components/DataPrep.tsx` | Sheet, header row, number format, missing-value markers, per-column types, wide→long, the parsed preview table. |
 | `figures/_components/Describe.tsx` | The request box, Ask Claude (spec) / custom tweak (hook), the labels opt-in, the live `[data-testid="figure-payload"]` preview. |
 | `figures/_components/Gallery.tsx` | Template thumbnails; picking one calls `bindTemplate`. |
 | `figures/_components/PanelEditor.tsx`, `StyleBar.tsx` | Per-panel controls (family, roles, axes, summary, order, overlays, statistics, annotations) and whole-figure style/size/palette/grid. |
-| `figures/_components/FigurePreview.tsx`, `ExportBar.tsx`, `RecipeImportExport.tsx` | The live image with local-only error details and test results; PNG/TIFF/SVG/PDF export; recipe save/load. |
+| `figures/_components/FigurePreview.tsx`, `ExportBar.tsx`, `RecipeImportExport.tsx` | The live image with local-only error details and test results; PNG/TIFF/SVG/PDF export (with a `children` slot beside Export); recipe save/load. |
 | `figures/layout.tsx` | Route metadata shim. |
 | `figures/_components/AddToPaper.tsx` | Puts the figure as a PDF into a `/write` project's `figures/` and copies the LaTeX. |
-| `write/page.tsx` | Project list, template picker, zip import; `?journal=` preselects a template. |
-| `write/_components/Workspace.tsx` | One open project: file tree, editor, compile, PDF, diagnostics, backup. |
+| `write/page.tsx` | Project list, template picker, zip import; `?journal=` preselects a template, `?p=` reopens a project; the network trace, passed down. |
+| `write/_components/Workspace.tsx` | One open project: the toolbar, file tree, editor and PDF (a draggable split), diagnostics, the status bar, and the tool windows over it. Owns the tools' hooks (the one route that imports another route's `_components/`), the compiled PDF as a `File`, the text files' contents for the Insert menu, and figure insertion. |
+| `write/_components/Toolbar.tsx`, `StatusBar.tsx`, `CommandPalette.tsx`, `CompileFirst.tsx` | The shell: back / rename / journal chip / Insert / tools / engine / Compile / ⌘K; the status line (compile status, counts, word count, saved, a running tool, what was sent); the ⌘K palette; the "Compile first" notice. |
+| `write/_components/MatchWindow.tsx`, `ReviewWindow.tsx`, `FiguresWindow.tsx`, `ChecksWindow.tsx`, `JournalWindow.tsx`, `useChecks.ts` | The windows' bodies (dynamic imports) over the shared hooks; `useChecks` runs the format and rules checks over the PDF text. |
 | `write/_components/LatexEditor.tsx`, `FileTree.tsx`, `PdfPane.tsx`, `Diagnostics.tsx`, `TemplatePicker.tsx`, `StorageBanner.tsx`, `download.ts` | The workspace's pieces. |
 | `write/layout.tsx` | Route metadata shim. |
 
@@ -410,6 +449,7 @@ from routing; nothing outside `app/page.tsx` imports from it).
 | `PageHeader.tsx` | The brand/nav/title header shared by every non-homepage route; 3 content-width tiers. |
 | `NetworkTrace.tsx` | `useNetworkTrace()` + `<NetworkTracePanel>` — the fetch-instrumentation that makes `/match` and `/review`'s privacy claims checkable on the page itself. |
 | `JournalResultRow.tsx` | `JournalResultTitle` (prerendered-link-vs-expand-button) + `JournalResultChips` (metadata chips), shared by `/journals` and `/match`. |
+| `Dialog.tsx` | The modal window primitive on the native `<dialog>` (`showModal()`: focus trap, Escape, top layer, focus restore), used by the writing workspace's windows and palette. |
 | `ErrorText.tsx` | The one `role="alert"` error paragraph. |
 | `IntroSequence.tsx` | The first-visit intro: a transparent layer over the landing (the question, then the landing's own wordmark builds, then the desk settles) — timing, dismissal, `sessionStorage` memory. |
 | `ClayDesk.tsx` | Thin shell over `components/three/clayDesk.ts`: the landing's desk. It plays the intro (held floating while `.intro-overlay` is up, then settling), and on scroll morphs: every object leaves the frame, the paper stack rises, faces the camera and settles right, then writes itself in place — its top sheet is a canvas texture laid out as the manuscript (`three/paperText.ts`), placeholder bars replaced by text as it types. `_home/TypedPaper.tsx` is the phone version. |
@@ -466,7 +506,8 @@ real technical concern, not a speculative grouping).
 | `texEngine.ts` | The engine's R2 URL, release, files and data packs; `packsFor()`. |
 | `texRunner.ts` | The TeX worker lifecycle: `compileProject()`, supersession, deadline, the all-packs retry. Talks to `public/texWorker.js`. |
 | `texLog.ts` | `parseTexLog()` — errors, warnings and missing packages with file and line. |
-| `projectStore.ts` | `/write` projects in the Origin Private File System; `autosaver()`; zip export/import. |
+| `projectStore.ts` | `/write` projects in the Origin Private File System (`ProjectMeta` carries the target journal's id and name); `autosaver()`; zip export/import. |
+| `texSource.ts` | Pure LaTeX-source helpers for the workspace: a rough word count, `.bib` keys, labels, `findQuoteInTex`, the figure snippet and the next free figure path, the Insert snippets. |
 | `templateCatalog.ts` | `loadTemplates()`, `templateForJournal()`, `starterProject()`. |
 | `zip.ts` | `zipFiles()`, `unzipFiles()`, `flattenSingleRoot()` over fflate. |
 

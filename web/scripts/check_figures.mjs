@@ -233,7 +233,7 @@ await page.screenshot({ path: `${SCRATCH}/figures.png`, fullPage: true });
   await w.goto("http://localhost:3000/write");
   await w.getByRole("button", { name: "New Plain article paper" }).click();
   await w.waitForSelector('[data-testid="file-tree"] button[title="figures/figure.pdf"]');
-  check("/write lists the added figure under Insert figure", (await w.locator('select[aria-label="Insert figure"] option').allTextContents()).includes("figure.pdf"));
+  check("/write lists the added figure under Insert", (await w.locator('select[aria-label="Insert"] option').allTextContents()).includes("figure.pdf"));
   await w.close();
 }
 await context.close();

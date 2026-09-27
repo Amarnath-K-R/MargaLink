@@ -25,7 +25,12 @@ runs in a Web Worker (`public/texWorker.js`, driven by `texRunner.ts`). The
 engine and its data packs are public files on our Cloudflare R2 bucket
 (`texEngine.ts` names the URL; `scripts/publish_busytex.sh` uploads them,
 with pinned sizes and a total cap) — a public-asset origin, fetched with
-bodyless GETs, never anything from a paper.
+bodyless GETs, never anything from a paper. The workspace is also the hub:
+match, review, figures, checks and journal open as windows over it. Matching
+and the checks read the compiled PDF on-device (rule 1 unchanged); the two
+rule-3 exceptions are reachable from there through the same `ReviewConsent`
+/ `FigureConsent` components, and the page's trace panel and status bar say
+when something was sent.
 
 **The two disclosed exceptions (rule 3):** two features send something to
 Anthropic's Claude API. Both are opt-in, both sit behind an explicit
