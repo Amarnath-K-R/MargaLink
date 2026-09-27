@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import ErrorText from "@/components/ErrorText";
 import type { ImageFormat } from "@/lib/figureRunner";
-import AddToPaper from "./AddToPaper";
 
 const FORMATS: { value: ImageFormat; label: string; mime: string }[] = [
   { value: "png", label: "PNG", mime: "image/png" },
@@ -19,12 +18,16 @@ function toBlobUrl(base64: string, mime: string): string {
 
 // Publication export at the journal width the style sets, drawn again at
 // full resolution in the worker. Files are handed over as blob: URLs.
+// `children` sits beside the Export button: the page's "Add to a paper",
+// the writing workspace's "Insert into paper".
 export default function ExportBar({
   disabled,
   onExport,
+  children,
 }: {
   disabled: boolean;
   onExport: (formats: ImageFormat[], dpi: number) => Promise<Partial<Record<ImageFormat, string>>>;
+  children?: ReactNode;
 }) {
   const [formats, setFormats] = useState<ImageFormat[]>(["png", "pdf"]);
   const [dpi, setDpi] = useState(300);
@@ -81,14 +84,7 @@ export default function ExportBar({
         >
           {busy ? "Exporting…" : "Export"}
         </button>
-        <AddToPaper
-          disabled={disabled}
-          getPdf={async () => {
-            const pdf = (await onExport(["pdf"], 300)).pdf;
-            if (!pdf) throw new Error("The PDF export came back empty — try Export first to see why.");
-            return Uint8Array.from(atob(pdf), (c) => c.charCodeAt(0));
-          }}
-        />
+        {children}
       </div>
       {error && <ErrorText>{error}</ErrorText>}
       {links.length > 0 && (
