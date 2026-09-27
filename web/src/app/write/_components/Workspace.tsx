@@ -20,7 +20,7 @@ import LatexEditor, { type EditorHandle, type LineMark } from "./LatexEditor.tsx
 import PdfPane from "./PdfPane.tsx";
 import Diagnostics from "./Diagnostics.tsx";
 import StorageBanner from "./StorageBanner.tsx";
-import Toolbar, { type InsertGroup, type Tool } from "./Toolbar.tsx";
+import Toolbar, { type Tool, type View } from "./Toolbar.tsx";
 import StatusBar from "./StatusBar.tsx";
 import EditorFormatBar from "./EditorFormatBar.tsx";
 import Outline from "./Outline.tsx";
@@ -44,6 +44,43 @@ const TEXT = /\.(tex|bib|cls|sty|bst|txt|md|def|cfg|json)$/i;
 const IMAGE = /\.(png|jpe?g|pdf|eps)$/i;
 const FIRST_RUN_KEY = "margalink-tex-cached";
 const SPLIT_KEY = "margalink-write-split";
+const VIEW_KEY = "margalink-write-view";
+const FILES_KEY = "margalink-write-files";
+const AUTO_KEY = "margalink-write-autocompile";
+
+// A choice remembered in this browser, read once when the workspace opens.
+function useStored<T extends string>(key: string, fallback: T, allowed: readonly T[]) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const v = localStorage.getItem(key) as T | null;
+      return v && allowed.includes(v) ? v : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+  const set = useCallback(
+    (next: T) => {
+      setValue(next);
+      try {
+        localStorage.setItem(key, next);
+      } catch {
+        // private window or blocked storage: the choice lasts this visit
+      }
+    },
+    [key],
+  );
+  return [value, set] as const;
+}
+
+// The md+ grid for each view, with and without the files column.
+const GRID: Record<`${View}:${"open" | "closed"}`, string> = {
+  "split:open": "md:grid-cols-[13.5rem_minmax(0,var(--split))_0.5rem_minmax(0,1fr)]",
+  "split:closed": "md:grid-cols-[minmax(0,var(--split))_0.5rem_minmax(0,1fr)]",
+  "source:open": "md:grid-cols-[13.5rem_minmax(0,1fr)]",
+  "source:closed": "md:grid-cols-[minmax(0,1fr)]",
+  "pdf:open": "md:grid-cols-[13.5rem_minmax(0,1fr)]",
+  "pdf:closed": "md:grid-cols-[minmax(0,1fr)]",
+};
 const clampSplit = (v: number) => Math.min(0.75, Math.max(0.25, v));
 
 const STAGE_TEXT: Record<TexStage, (d?: string) => string> = {
@@ -102,7 +139,11 @@ export default function Workspace({
   });
   const [tool, setTool] = useState<Tool | null>(null);
   const [pendingRecipe, setPendingRecipe] = useState<string | null>(null);
-  const [leftTab, setLeftTab] = useState<"files" | "outline">("files"); // a .figure.json to reopen in the Figures window
+  const [leftTab, setLeftTab] = useState<"files" | "outline">("files");
+  const [view, setView] = useStored<View>(VIEW_KEY, "split", ["source", "split", "pdf"]);
+  const [filesPanel, setFilesPanel] = useStored(FILES_KEY, "open", ["open", "closed"] as const);
+  const [auto, setAuto] = useStored(AUTO_KEY, "off", ["on", "off"] as const);
+  const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null); // a .figure.json to reopen in the Figures window
   // Every text file's content (the Insert menu's citation keys and labels
   // come from these); refreshed on load, on save, after a compile.
   const [sources, setSources] = useState<Record<string, string>>({});
@@ -304,9 +345,15 @@ export default function Workspace({
     editSeq.current++;
     setDirty(true);
     saver()(project.id, path, t);
-    if (wordsTimer.current) clearTimeout(wordsTimer.current);
-    wordsTimer.current = setTimeout(() => setWords(texWordCount(t)), 300);
+    if (/\.tex$/i.test(path)) {
+      if (wordsTimer.current) clearTimeout(wordsTimer.current);
+      wordsTimer.current = setTimeout(() => setWords(texWordCount(t)), 300);
+    }
+    // Auto-compile: 2 s after the last keystroke, unless one is running.
+    if (autoTimer.current) clearTimeout(autoTimer.current);
+    if (auto === "on") autoTimer.current = setTimeout(() => !busyRef.current && void compile(), 2000);
   };
+  useEffect(() => () => void (autoTimer.current && clearTimeout(autoTimer.current)), []);
 
   const marks: LineMark[] = diagnostics
     .filter((d) => d.line && (d.file ?? project.main) === active)
@@ -359,21 +406,13 @@ export default function Workspace({
   );
   const completionData = useMemo(() => ({ entries: bib, labels }), [bib, labels]);
 
-  const insertGroups = useMemo<InsertGroup[]>(() => {
-    const groups: InsertGroup[] = [];
-    if (figures.length) groups.push({ label: "Figures", items: figures.map((f) => ({ value: `fig:${f}`, label: f.replace(/^figures\//, "") })) });
-    groups.push({
-      label: "Structure",
-      items: [
-        { value: "snip:table", label: "Table" },
-        { value: "snip:equation", label: "Equation" },
-        { value: "snip:section", label: "Section" },
-      ],
-    });
-    if (bib.length) groups.push({ label: "Citations", items: bib.map((e) => ({ value: `cite:${e.key}`, label: e.key })) });
-    if (labels.length) groups.push({ label: "Cross-references", items: labels.map((l) => ({ value: `ref:${l}`, label: l })) });
-    return groups;
-  }, [figures, bib, labels]);
+  // The whole paper's length (the open file counted live), and the target journal's limit.
+  const paperWords = useMemo(() => {
+    const inPaper = paperFiles(project.main, sources);
+    if (inPaper.length === 0) return words;
+    return inPaper.reduce((n, f) => n + (f === active && words !== null ? words : texWordCount(sources[f])), 0);
+  }, [project.main, sources, active, words]);
+  const wordLimit = rules?.wordLimit ? { limit: rules.wordLimit, journal: rules.journalName } : null;
 
   const insert = useCallback(
     (value: string) => {
@@ -399,9 +438,14 @@ export default function Workspace({
       { id: "pdf", label: "Download PDF", run: () => pdfBytes && downloadBytes(`${safeName(project.name)}.pdf`, pdfBytes, "application/pdf"), disabled: !pdfBytes },
       { id: "pdftex", label: "Switch to pdfLaTeX", run: () => void setEngine("pdftex"), disabled: project.engine === "pdftex" },
       { id: "xetex", label: "Switch to XeLaTeX", run: () => void setEngine("xetex"), disabled: project.engine === "xetex" },
+      { id: "view-source", label: "Show the source only", run: () => setView("source"), disabled: view === "source" },
+      { id: "view-split", label: "Show source and PDF side by side", run: () => setView("split"), disabled: view === "split" },
+      { id: "view-pdf", label: "Show the PDF only", run: () => setView("pdf"), disabled: view === "pdf" },
+      { id: "files", label: filesPanel === "open" ? "Hide the files" : "Show the files", run: () => setFilesPanel(filesPanel === "open" ? "closed" : "open") },
+      { id: "auto", label: auto === "on" ? "Turn auto-compile off" : "Turn auto-compile on", run: () => setAuto(auto === "on" ? "off" : "on") },
       { id: "projects", label: "All projects", run: onClose },
     ],
-    [compile, busy, insert, texOpen, figures, backup, pdfBytes, project.name, project.engine, setEngine, onClose],
+    [compile, busy, insert, texOpen, figures, backup, pdfBytes, project.name, project.engine, setEngine, onClose, view, setView, filesPanel, setFilesPanel, auto, setAuto],
   );
 
   const journalLabel = project.journalName ?? (project.journalId ? "Target journal" : "No target journal");
@@ -497,20 +541,20 @@ export default function Workspace({
         onBack={onClose}
         onRename={(name) => void rename(name)}
         journalLabel={journalLabel}
-        insertGroups={insertGroups}
-        insertDisabled={!texOpen}
-        onInsert={insert}
         onTool={setTool}
-        onEngine={(e) => void setEngine(e)}
+        view={view}
+        onView={setView}
+        filesOpen={filesPanel === "open"}
+        onToggleFiles={() => setFilesPanel(filesPanel === "open" ? "closed" : "open")}
         busy={busy}
         onCompile={() => void compile()}
       />
       <p className="px-2 text-sm text-ink-soft md:hidden">Editing needs a larger screen — here is this project&apos;s last compiled PDF.</p>
       <div
-        className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-3 md:grid-cols-[13.5rem_minmax(0,var(--split))_0.5rem_minmax(0,1fr)] md:gap-x-2"
+        className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-3 md:gap-x-2 ${GRID[`${view}:${filesPanel}`]}`}
         style={{ "--split": `${split / (1 - split)}fr` } as CSSProperties}
       >
-        <aside className="clay hidden min-h-0 flex-col p-3 md:mr-1 md:flex">
+        <aside className={`clay hidden min-h-0 flex-col p-3 md:mr-1 ${filesPanel === "open" ? "md:flex" : ""}`}>
           <div role="tablist" aria-label="Files or outline" className="clay-well mb-3 grid grid-cols-2 gap-1 rounded-full p-1 text-xs">
             {(["files", "outline"] as const).map((t) => (
               <button
@@ -574,7 +618,12 @@ export default function Workspace({
           </div>
           <StorageBanner compact onBackup={() => void backup()} />
         </aside>
-        <section ref={editorCol} aria-label="Source" className="hidden min-h-0 min-w-0 flex-col gap-2 md:flex">
+        {/* Hidden, not unmounted, in the PDF view: the editor keeps its undo history. */}
+        <section
+          ref={editorCol}
+          aria-label="Source"
+          className={`hidden min-h-0 min-w-0 flex-col gap-2 ${view === "pdf" ? "" : "md:flex"} ${view === "source" ? "md:mx-auto md:w-full md:max-w-5xl" : ""}`}
+        >
           <div className="flex min-h-9 flex-wrap items-center gap-2 px-1.5 text-xs text-ink-soft">
             <FileText size={13} strokeWidth={1.9} className="shrink-0" />
             <span className="truncate font-mono text-ink">{active}</span>
@@ -651,9 +700,9 @@ export default function Workspace({
           onPointerCancel={() => {
             dragging.current = false;
           }}
-          className="grip hidden md:block"
+          className={`grip hidden ${view === "split" ? "md:block" : ""}`}
         />
-        <section ref={pdfCol} aria-label="Preview" className="min-h-0 min-w-0">
+        <section ref={pdfCol} aria-label="Preview" className={`min-h-0 min-w-0 ${view === "source" ? "md:hidden" : ""}`}>
           <PdfPane
             url={pdfUrl}
             name={`${safeName(project.name)}.pdf`}
@@ -666,7 +715,15 @@ export default function Workspace({
         status={status}
         errors={diagnostics.filter((d) => d.kind !== "warning").length}
         warnings={diagnostics.filter((d) => d.kind === "warning").length}
-        words={words}
+        words={paperWords}
+        wordLimit={wordLimit}
+        engine={project.engine}
+        onEngine={(e) => void setEngine(e)}
+        auto={auto === "on"}
+        onAuto={(on) => {
+          setAuto(on ? "on" : "off");
+          if (!on && autoTimer.current) clearTimeout(autoTimer.current);
+        }}
         dirty={dirty}
         running={running}
         sent={calls.filter((c) => c.hadBody).length}

@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BarChart3, BookOpen, ChevronDown, FileCheck2, ListChecks, Loader2, Play, ScanSearch } from "lucide-react";
+import { BarChart3, BookOpen, ChevronDown, Code, Columns2, FileCheck2, FileText, ListChecks, Loader2, PanelLeft, Play, ScanSearch } from "lucide-react";
 import type { ProjectMeta } from "@/lib/projectStore";
 
 export type Tool = "match" | "review" | "figures" | "checks" | "journal" | "palette";
-export type InsertGroup = { label: string; items: { value: string; label: string }[] };
+export type View = "source" | "split" | "pdf";
 
 // Each tool's bead is a tint from the homepage's clay palette. The Journal
 // window opens from the target-journal chip.
@@ -18,17 +18,24 @@ const TOOLS: { id: Tool; label: string; Icon: typeof ScanSearch; bead: string }[
 ];
 
 // The workspace's top tray: home, back, the project's name (click to rename),
-// its target journal, the Insert menu, the tools, the engine, Compile, ⌘K.
+// its target journal, the tools, the files toggle and the view (source,
+// both, PDF), Compile, ⌘K. Inserting lives on the source's formatting bar;
+// the engine on the status line.
+const VIEWS: { id: View; label: string; Icon: typeof Code }[] = [
+  { id: "source", label: "Source only", Icon: Code },
+  { id: "split", label: "Source and PDF", Icon: Columns2 },
+  { id: "pdf", label: "PDF only", Icon: FileText },
+];
 export default function Toolbar({
   project,
   onBack,
   onRename,
   journalLabel,
-  insertGroups,
-  insertDisabled,
-  onInsert,
   onTool,
-  onEngine,
+  view,
+  onView,
+  filesOpen,
+  onToggleFiles,
   busy,
   onCompile,
 }: {
@@ -36,11 +43,11 @@ export default function Toolbar({
   onBack: () => void;
   onRename: (name: string) => void;
   journalLabel: string;
-  insertGroups: InsertGroup[];
-  insertDisabled: boolean;
-  onInsert: (value: string) => void;
   onTool: (tool: Tool) => void;
-  onEngine: (engine: ProjectMeta["engine"]) => void;
+  view: View;
+  onView: (view: View) => void;
+  filesOpen: boolean;
+  onToggleFiles: () => void;
   busy: boolean;
   onCompile: () => void;
 }) {
@@ -93,25 +100,6 @@ export default function Toolbar({
       </button>
 
 
-      <select
-        aria-label="Insert"
-        value=""
-        disabled={insertDisabled}
-        title={insertDisabled ? "Open a .tex file to insert into it" : undefined}
-        onChange={(e) => e.target.value && onInsert(e.target.value)}
-        className="clay-btn clay-select w-[6.75rem] shrink-0 text-xs"
-      >
-        <option value="">Insert…</option>
-        {insertGroups.map((g) => (
-          <optgroup key={g.label} label={g.label}>
-            {g.items.map((it) => (
-              <option key={it.value} value={it.value}>
-                {it.label}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
       <div className="hidden shrink-0 items-center md:flex" role="group" aria-label="Tools">
         {TOOLS.map(({ id, label, Icon, bead }) => (
           <button key={id} type="button" onClick={() => onTool(id)} className="clay-ghost text-xs">
@@ -124,16 +112,32 @@ export default function Toolbar({
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        <select
-          aria-label="TeX engine"
-          title="TeX engine"
-          value={project.engine}
-          onChange={(e) => onEngine(e.target.value as ProjectMeta["engine"])}
-          className="clay-btn clay-select text-xs text-ink-soft"
-        >
-          <option value="pdftex">pdfLaTeX</option>
-          <option value="xetex">XeLaTeX</option>
-        </select>
+        <div role="group" aria-label="View" className="clay-well hidden items-center gap-0.5 rounded-full p-1 md:flex">
+          <button
+            type="button"
+            aria-label="Files"
+            title={filesOpen ? "Hide the files" : "Show the files"}
+            aria-pressed={filesOpen}
+            onClick={onToggleFiles}
+            className="grid h-7 w-8 place-items-center rounded-full text-ink-soft transition-colors hover:text-ink aria-pressed:bg-white aria-pressed:text-ink aria-pressed:shadow-[0_1px_2px_rgba(58,44,28,.14),0_3px_8px_-2px_rgba(58,44,28,.14)]"
+          >
+            <PanelLeft size={14} strokeWidth={2} />
+          </button>
+          <span aria-hidden className="mx-0.5 h-4 w-px bg-line" />
+          {VIEWS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              aria-label={label}
+              title={label}
+              aria-pressed={view === id}
+              onClick={() => onView(id)}
+              className="grid h-7 w-8 place-items-center rounded-full text-ink-soft transition-colors hover:text-ink aria-pressed:bg-white aria-pressed:text-accent aria-pressed:shadow-[0_1px_2px_rgba(58,44,28,.14),0_3px_8px_-2px_rgba(58,44,28,.14)]"
+            >
+              <Icon size={14} strokeWidth={2} />
+            </button>
+          ))}
+        </div>
         <button type="button" onClick={onCompile} disabled={busy} title="Compile (⌘S)" className="clay-btn clay-primary px-4 font-medium">
           {busy ? <Loader2 size={14} strokeWidth={2.2} className="animate-spin" /> : <Play size={13} strokeWidth={2.4} className="fill-current" />}
           {busy ? "Compiling…" : "Compile"}

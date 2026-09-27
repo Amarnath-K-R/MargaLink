@@ -213,10 +213,10 @@ const savedOnHide = await page.evaluate(async () => {
 await page.evaluate(() => Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true }));
 check("hiding the tab saves the latest edit", savedOnHide.startsWith("% saved on hide"));
 
-// --- Insert is clearly unavailable while a binary file is open ---
+// --- the formatting bar is there for a .tex file only ---
 await page.setInputFiles('input[aria-label="Upload files to this project"]', { name: "plot.png", mimeType: "image/png", buffer: Buffer.from("not really a png") });
 await page.click('[data-testid="file-tree"] button[title="figures/plot.png"]');
-check("Insert is disabled with a binary file open", await page.locator('select[aria-label="Insert"]').isDisabled());
+check("no formatting bar with a binary file open", (await page.locator('[role="toolbar"][aria-label="Formatting"]').count()) === 0);
 
 // --- the hub shell: the project's URL, the command palette, a tool window ---
 check("the URL carries the open project", page.url().includes("?p="));
