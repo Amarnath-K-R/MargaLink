@@ -349,6 +349,29 @@ await page.getByRole("dialog", { name: "Figures" }).locator('[data-testid="figur
 check("a saved recipe reopens in the figure studio, replacing the changed figure", true);
 await page.keyboard.press("Escape");
 await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+
+// --- writing aids: the formatting bar, suggestions, the outline, the views ---
+await page.click('[data-testid="file-tree"] button[title="main.tex"]');
+await page.click('[data-testid="latex-editor"] .cm-line:has-text("Start here")');
+await page.keyboard.press("End");
+await page.keyboard.press("Enter");
+await page.keyboard.type("Key finding");
+await page.keyboard.press("Shift+Home");
+await page.getByRole("button", { name: "Bold", exact: true }).click();
+check("Bold wraps the selection", (await page.locator('[data-testid="latex-editor"] .cm-content').textContent()).includes("\\textbf{Key finding}"));
+await page.keyboard.press("End");
+await page.keyboard.type(" \\cite{");
+await page.waitForSelector(".cm-tooltip-autocomplete", { timeout: 5000 }).catch(() => {});
+check("\\cite{ suggests the project's .bib keys", (await page.locator(".cm-tooltip-autocomplete li").allTextContents()).some((t) => t.startsWith("knuth1984")));
+await page.keyboard.press("Escape");
+await page.getByRole("tab", { name: /Outline/ }).click();
+await page.locator('[data-testid="outline"] button', { hasText: "Methods" }).click();
+check("the outline jumps to a section", ((await page.locator(".cm-activeLine").first().textContent()) ?? "").includes("\\section{Methods}"));
+await page.getByRole("tab", { name: /Files/ }).click();
+await page.getByRole("button", { name: "PDF only" }).click();
+check("the PDF-only view hides the source", !(await page.locator('[data-testid="latex-editor"]').isVisible()));
+await page.getByRole("button", { name: "Source and PDF" }).click();
+check("the split view brings it back", await page.locator('[data-testid="latex-editor"]').isVisible());
 check(`no page errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
 
 await context.close();

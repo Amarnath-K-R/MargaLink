@@ -348,10 +348,13 @@ export default function Workspace({
     editSeq.current++;
     setDirty(true);
     saver()(project.id, path, t);
-    if (/\.tex$/i.test(path)) {
-      if (wordsTimer.current) clearTimeout(wordsTimer.current);
-      wordsTimer.current = setTimeout(() => setWords(texWordCount(t)), 300);
-    }
+    // The outline, suggestions and word count follow the text as it's typed (after a
+    // 300 ms pause), not only once it's saved.
+    if (wordsTimer.current) clearTimeout(wordsTimer.current);
+    wordsTimer.current = setTimeout(() => {
+      setSources((s) => ({ ...s, [path]: t }));
+      if (/\.tex$/i.test(path)) setWords(texWordCount(t));
+    }, 300);
     // Auto-compile: 2 s after the last keystroke, unless one is running.
     if (autoTimer.current) clearTimeout(autoTimer.current);
     if (auto === "on") autoTimer.current = setTimeout(() => !busyRef.current && void compile(), 2000);
@@ -385,10 +388,10 @@ export default function Workspace({
 
   // Open a file at a line: the diagnostics' and the review's "jump to source".
   const goto = useCallback(
-    async (file: string, line: number | null) => {
+    async (file: string, line: number | null, near?: string) => {
       const target = files.includes(file) ? file : project.main;
       if (target !== active) await open(target);
-      if (line) setTimeout(() => editor.current?.goto(line), 0);
+      if (line) setTimeout(() => editor.current?.goto(line, near), 0);
     },
     [files, project.main, active, open],
   );
@@ -573,7 +576,7 @@ export default function Workspace({
               </button>
             ))}
           </div>
-          {leftTab === "outline" && <Outline items={outline} main={project.main} onOpen={(f, line) => void goto(f, line)} />}
+          {leftTab === "outline" && <Outline items={outline} main={project.main} onOpen={(f, line, title) => void goto(f, line, title)} />}
           <div className={leftTab === "files" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
             <FileTree
               files={files}

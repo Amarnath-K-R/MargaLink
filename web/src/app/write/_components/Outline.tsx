@@ -4,8 +4,9 @@ import type { OutlineItem } from "@/lib/texSource";
 
 // The paper's headings in reading order (the main file, then what it
 // \inputs), indented by level relative to the top level used; a click opens
-// the heading's file at its line. Built from the saved text, so a heading
-// being typed appears once it's saved (a second or so).
+// the heading's file at its line. It follows the text as typed (after a
+// short pause); a click finds the heading near
+// its line even if lines moved meanwhile.
 export default function Outline({
   items,
   main,
@@ -13,7 +14,7 @@ export default function Outline({
 }: {
   items: (OutlineItem & { file: string })[];
   main: string;
-  onOpen: (file: string, line: number) => void;
+  onOpen: (file: string, line: number, title: string) => void;
 }) {
   if (items.length === 0) {
     return (
@@ -32,7 +33,7 @@ export default function Outline({
             <li key={`${it.file}:${it.line}:${i}`}>
               <button
                 type="button"
-                onClick={() => onOpen(it.file, it.line)}
+                onClick={() => onOpen(it.file, it.line, it.title)}
                 title={`${it.file}, line ${it.line}`}
                 style={{ paddingLeft: `${0.5 + depth * 0.75}rem` }}
                 className={`flex w-full items-baseline gap-2 rounded-[10px] py-1.5 pr-2 text-left transition-colors hover:bg-white/60 ${

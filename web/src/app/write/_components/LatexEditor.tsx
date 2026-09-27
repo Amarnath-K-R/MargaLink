@@ -11,7 +11,9 @@ import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
 
 export type EditorHandle = {
-  goto(line: number): void;
+  // Puts the cursor on a line mid-screen; with `near`, on the closest line
+  // (within 40) that contains that text, in case lines moved since `line` was read.
+  goto(line: number, near?: string): void;
   insert(text: string): void;
   focus(): void;
   // Wraps the selection (or a selected placeholder) in `before`…`after`.
@@ -121,9 +123,19 @@ export default function LatexEditor({
     const v = new EditorView({ parent: host.current, state: EditorState.create({ doc: text, extensions: extensions() }) });
     view.current = v;
     handleRef.current = {
-      goto(line) {
+      goto(line, near) {
         const doc = v.state.doc;
-        const l = doc.line(Math.min(Math.max(1, line), doc.lines));
+        let n = Math.min(Math.max(1, line), doc.lines);
+        if (near) {
+          for (let d = 0; d <= 40; d++) {
+            const hit = [n - d, n + d].find((k) => k >= 1 && k <= doc.lines && doc.line(k).text.includes(near));
+            if (hit) {
+              n = hit;
+              break;
+            }
+          }
+        }
+        const l = doc.line(n);
         v.dispatch({ selection: { anchor: l.from }, effects: EditorView.scrollIntoView(l.from, { y: "center" }) }); // mid-screen, not at an edge
         v.focus();
       },
