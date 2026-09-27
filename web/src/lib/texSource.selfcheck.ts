@@ -1,7 +1,7 @@
 // Runnable check for texSource.ts: the LaTeX-source helpers the workspace's
 // toolbar, status bar and review window use. Run: node src/lib/texSource.selfcheck.ts
 import assert from "node:assert/strict";
-import { bibKeys, figureSnippet, findQuoteInTex, nextFigurePath, texLabels, texWordCount } from "./texSource.ts";
+import { bibEntries, bibKeys, figureSnippet, findQuoteInTex, nextFigurePath, paperFiles, texInputs, texLabels, texOutline, texWordCount } from "./texSource.ts";
 
 // 1. word count: comments, the preamble, commands and citations don't count; brace contents do
 {
@@ -66,6 +66,56 @@ The final sentence of the paragraph ends with these exact closing words.`;
   assert.equal(nextFigurePath([]), "figures/figure.pdf");
   assert.equal(nextFigurePath(["figures/figure.pdf", "main.tex"]), "figures/figure-2.pdf");
   assert.equal(nextFigurePath(["figures/figure.pdf", "figures/figure-2.pdf"]), "figures/figure-3.pdf");
+}
+
+// 6. the outline: sectioning commands in order, levels by command, starred and [short] forms, titles unwrapped, comments ignored
+{
+  const tex = `\\documentclass{article}
+\\begin{document}
+\\section{Introduction}
+% \\section{Commented out}
+\\subsection*{Background and aims}
+\\section[Short]{A long title with \\emph{emphasis} and {braces}}
+\\paragraph{A note.}
+\\chapter{Ch}
+\\end{document}`;
+  assert.deepEqual(texOutline(tex), [
+    { level: 2, title: "Introduction", line: 3 },
+    { level: 3, title: "Background and aims", line: 5 },
+    { level: 2, title: "A long title with emphasis and braces", line: 6 },
+    { level: 5, title: "A note.", line: 7 },
+    { level: 1, title: "Ch", line: 8 },
+  ]);
+  assert.deepEqual(texOutline("no sections here"), []);
+}
+
+// 7. inputs: \input and \include with braces, .tex added when missing, not from comments
+{
+  assert.deepEqual(texInputs("\\input{sections/intro}\n% \\input{old}\n\\include{methods.tex}\n\\input{sections/intro}"), ["sections/intro.tex", "methods.tex"]);
+}
+
+// 8. the paper's files: main, then what it inputs (depth first, in order), existing files only, no loops
+{
+  const sources = { "main.tex": "\\input{a}\n\\input{missing}\n\\include{b}", "a.tex": "\\input{c}\n\\input{main}", "b.tex": "", "c.tex": "" };
+  assert.deepEqual(paperFiles("main.tex", sources), ["main.tex", "a.tex", "c.tex", "b.tex"]);
+  assert.deepEqual(paperFiles("gone.tex", sources), []);
+}
+
+// 9. bib entries with their titles (for suggestions): braces and quotes, nested braces dropped, no title → null
+{
+  const bib = `@article{rao2024,
+  title = {Soil {Microbial} Communities},
+  year = 2024
+}
+@comment{ignore me}
+@book{lee, title="Quoted Title"}
+@misc{notitle,
+  year = 1999 }`;
+  assert.deepEqual(bibEntries(bib), [
+    { key: "rao2024", title: "Soil Microbial Communities" },
+    { key: "lee", title: "Quoted Title" },
+    { key: "notitle", title: null },
+  ]);
 }
 
 console.log("texSource.selfcheck: OK");

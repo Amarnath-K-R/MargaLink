@@ -28,8 +28,8 @@ updated in the same commit.
    commands. Keys and labels come from the files already in memory (`sources`) — no reparse on
    every keystroke, no remount.
 3. **An outline** beside the files: the left slab gets two tabs, Files and Outline. Outline lists
-   the paper's sectioning commands in reading order — following `\input`/`\include` one level from
-   the main file — indented by level; clicking one opens its file at that line.
+   the paper's sectioning commands in reading order — following `\input`/`\include` from the main
+   file, depth first — indented by level; clicking one opens its file at that line.
 4. **Views**: Source · Split · PDF (a segmented control in the tray, remembered per browser) and a
    files-panel toggle. The engine choice moves to the status line (it's rarely changed), freeing the
    tray.
@@ -49,8 +49,8 @@ updated in the same commit.
 
 - **W1 — texSource helpers.** `texOutline(tex)` → `{level, title, line}[]` (part…subparagraph,
   starred forms, optional short titles, comments ignored); `texInputs(tex)` → the files `\input`/
-  `\include`d, in order, `.tex` added when missing; `paperFiles(main, sources)` → main plus its
-  inputs that exist. Selfcheck first (cases: levels, starred, `[short]{long}`, commented, inputs with
+  `\include`d, in order, `.tex` added when missing; `paperFiles(main, sources)` → main plus what it inputs,
+  depth first, existing files only, loops cut; `bibEntries(bib)` → keys with titles. Selfcheck first (cases: levels, starred, `[short]{long}`, commented, inputs with
   and without extension, a missing input skipped). Commit `Write (1/7): outline and inputs helpers`.
 - **W2 — formatting bar.** `EditorHandle` gains `wrap(before, after, placeholder)` and
   `insertBlock(text)`; `EditorFormatBar.tsx` (clay chips, popovers for Section/Cite/Ref/Figure/
