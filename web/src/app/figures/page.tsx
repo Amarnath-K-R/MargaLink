@@ -14,7 +14,7 @@ export default function FiguresPage() {
   const f = useFigures();
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 pt-3 pb-20">
+    <main className="mx-auto w-full max-w-7xl px-6 pt-3 pb-20">
       <PageHeader
         width="4xl" tool="figures"
         title="Make a figure."
@@ -40,7 +40,7 @@ export default function FiguresPage() {
       />
 
 
-      <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
+      <footer className="mt-16 border-t border-line/80 pt-6 text-sm text-ink-soft">
         <p>
           <Link href="/privacy" className="text-accent hover:underline">
             How privacy works

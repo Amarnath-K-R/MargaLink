@@ -51,7 +51,7 @@ export default function Describe({
     else setPending(mode);
   }
 
-  const button = "rounded-sm border border-line bg-paper-alt px-4 py-2 text-sm hover:border-accent disabled:cursor-not-allowed disabled:opacity-60";
+  const button = "clay-btn h-9 px-4 text-sm";
   return (
     <div data-testid="describe">
       <label className="flex flex-col gap-1 text-sm text-ink-soft">
@@ -63,7 +63,7 @@ export default function Describe({
           value={request}
           onChange={(e) => setRequest(e.target.value)}
           placeholder="e.g. Two panels: change by arm as bars with points and Welch brackets against Placebo; dose against change with a regression line."
-          className="rounded-sm border border-line bg-paper px-3 py-2 text-ink"
+          className="clay-input text-ink"
         />
       </label>
       <label className="mt-3 flex items-start gap-2 text-sm">
@@ -104,7 +104,7 @@ export default function Describe({
       {summary && <p className="mt-3 text-sm" data-testid="claude-summary">Claude: {summary}</p>}
       <details className="mt-3 text-sm">
         <summary className="cursor-pointer text-accent">Exactly what would be sent</summary>
-        <pre data-testid="figure-payload" className="mt-2 max-h-72 overflow-auto rounded-sm border border-line bg-paper-alt p-3 text-xs">
+        <pre data-testid="figure-payload" className="clay-well mt-2 max-h-72 overflow-auto p-3 text-xs">
           {JSON.stringify(payload, null, 2)}
         </pre>
         <p className="mt-1 text-xs text-ink-soft">The custom-tweak button sends the same, with &quot;mode&quot;: &quot;hook&quot;.</p>

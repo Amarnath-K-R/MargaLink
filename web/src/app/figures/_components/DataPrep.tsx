@@ -2,7 +2,7 @@
 
 import { DTYPES, type Dataset, type Dtype, type PrepOptions, type Workbook } from "@/lib/spreadsheet";
 
-const input = "rounded-sm border border-line bg-paper px-2 py-1.5 text-sm";
+const input = "clay-field";
 const THOUSANDS: { value: PrepOptions["thousands"]; label: string }[] = [
   { value: "", label: "None" },
   { value: ",", label: "Comma (1,234)" },
@@ -133,7 +133,7 @@ export default function DataPrep({
       </details>
 
       {dataset && (
-        <div className="mt-4 overflow-x-auto">
+        <div className="sheet mt-5 overflow-x-auto p-3">
           <table data-testid="preview-table" className="w-full border-collapse text-left text-xs">
             <thead>
               <tr>
@@ -143,7 +143,7 @@ export default function DataPrep({
                     <select
                       aria-label={`Type of ${c.name}`}
                       data-dtype={c.dtype}
-                      className="mt-1 rounded-sm border border-line bg-paper px-1 py-0.5 font-normal"
+                      className="clay-field mt-1.5 h-7 text-xs font-normal"
                       value={options.typeOverrides[c.name] ?? ""}
                       onChange={(e) => setOverride(c.name, e.target.value)}
                     >

@@ -6,7 +6,7 @@ import type { Template } from "@/lib/figureTemplates";
 // to your columns (figureTemplates.ts bindTemplate) — no request.
 export default function Gallery({ templates, selected, onPick }: { templates: Template[]; selected: string | null; onPick: (t: Template) => void }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3" data-testid="gallery">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 2xl:grid-cols-3" data-testid="gallery">
       {templates.map((t) => (
         <button
           key={t.id}
@@ -14,12 +14,12 @@ export default function Gallery({ templates, selected, onPick }: { templates: Te
           onClick={() => onPick(t)}
           aria-pressed={selected === t.id}
           data-template={t.id}
-          className={`rounded-sm border p-2 text-left text-sm transition-colors ${selected === t.id ? "border-accent bg-accent-soft" : "border-line bg-paper-alt hover:border-accent"}`}
+          className="clay-card p-2.5 text-sm"
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- a static thumbnail; images are unoptimized in this static export */}
-          <img src={`/figure-gallery/${t.id}.png`} alt="" loading="lazy" className="aspect-[4/3] w-full rounded-sm bg-white object-contain" />
-          <p className="mt-2 font-medium">{t.title}</p>
-          <p className="mt-0.5 text-xs text-ink-soft">{t.description}</p>
+          <img src={`/figure-gallery/${t.id}.png`} alt="" loading="lazy" className="aspect-[4/3] w-full rounded-xl bg-white object-contain shadow-[0_0_0_1px_rgba(58,44,28,.06)]" />
+          <p className="mt-2.5 px-1 font-medium">{t.title}</p>
+          <p className="mt-0.5 px-1 pb-1 text-xs leading-relaxed text-ink-soft">{t.description}</p>
         </button>
       ))}
     </div>

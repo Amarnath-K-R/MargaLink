@@ -36,7 +36,7 @@ const TEST_LABEL: Record<Test, string> = {
   anova: "One-way ANOVA", kruskal: "Kruskal–Wallis", pearson: "Pearson r", spearman: "Spearman ρ", logrank: "Log-rank",
 };
 
-const field = "rounded-sm border border-line bg-paper px-2 py-1 text-sm";
+const field = "clay-field";
 const label = "flex flex-col gap-1 text-xs text-ink-soft";
 
 function NumField({ name, value, onChange, step }: { name: string; value: number | null; onChange: (v: number | null) => void; step?: number }) {
@@ -57,7 +57,7 @@ function NumField({ name, value, onChange, step }: { name: string; value: number
 
 function Section({ title, children, open }: { title: string; children: React.ReactNode; open?: boolean }) {
   return (
-    <details className="border-t border-line py-3" open={open}>
+    <details className="border-t border-line/70 py-3" open={open}>
       <summary className="cursor-pointer text-sm font-medium">{title}</summary>
       <div className="mt-3 flex flex-col gap-3">{children}</div>
     </details>
@@ -145,14 +145,14 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
 
   return (
     <div data-testid="panel-editor">
-      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
         {FAMILIES.map((fam) => (
           <button
             key={fam}
             type="button"
             onClick={() => changeFamily(fam)}
             aria-pressed={f === fam}
-            className={`rounded-sm border px-2 py-1.5 text-xs ${f === fam ? "border-accent bg-accent-soft" : "border-line bg-paper-alt hover:border-accent"}`}
+            className="clay-card rounded-xl px-2 py-2 text-center text-xs"
           >
             {FAMILY_LABEL[fam]}
           </button>
@@ -391,7 +391,7 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
                     type="button"
                     disabled={pairA === pairB || panel.stats.explicit.length >= LIMITS.explicit}
                     onClick={() => set({ stats: { ...panel.stats, explicit: [...panel.stats.explicit, { a: pairA, b: pairB }] } })}
-                    className="rounded-sm border border-line bg-paper-alt px-2 py-1 text-xs hover:border-accent disabled:opacity-50"
+                    className="clay-btn h-7 px-3 text-xs"
                   >
                     Add pair
                   </button>
@@ -405,7 +405,7 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
         {f !== "heatmap" && (
           <Section title={`Annotations (${panel.annotations.length})`}>
             {panel.annotations.map((a, i) => (
-              <div key={i} className="flex flex-wrap items-end gap-2 border-l-2 border-line pl-2">
+              <div key={i} className="clay-well flex flex-wrap items-end gap-2 rounded-xl p-2.5">
                 <label className={label}>
                   Kind
                   <select aria-label="Annotation kind" className={field} value={a.kind} onChange={(e) => setAnn(i, { kind: e.target.value as Annotation["kind"] })}>
@@ -446,7 +446,7 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
               type="button"
               disabled={panel.annotations.length >= LIMITS.annotations}
               onClick={() => set({ annotations: [...panel.annotations, { kind: "hline", text: "", x: null, y: 0, x2: null, y2: null, xGroup: null }] })}
-              className="self-start rounded-sm border border-line bg-paper-alt px-2 py-1 text-xs hover:border-accent disabled:opacity-50"
+              className="clay-btn h-7 self-start px-3 text-xs"
             >
               Add annotation
             </button>

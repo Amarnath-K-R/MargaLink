@@ -66,10 +66,10 @@ export default function RecipeImportExport({
   return (
     <div data-testid="recipe">
       <div className="flex flex-wrap gap-3 text-sm">
-        <button type="button" onClick={download} className="rounded-sm border border-line bg-paper-alt px-3 py-1.5 hover:border-accent">
+        <button type="button" onClick={download} className="clay-btn">
           Save recipe
         </button>
-        <button type="button" onClick={() => inputRef.current?.click()} className="rounded-sm border border-line bg-paper-alt px-3 py-1.5 hover:border-accent">
+        <button type="button" onClick={() => inputRef.current?.click()} className="clay-btn">
           Load recipe
         </button>
         <input

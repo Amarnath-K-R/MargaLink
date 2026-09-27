@@ -58,9 +58,9 @@ export default function ExportBar({
 
   return (
     <div data-testid="export-bar">
-      <div className="flex flex-wrap items-center gap-4 text-sm">
+      <div className="clay flex flex-wrap items-center gap-2 px-3 py-3 text-sm">
         {FORMATS.map((f) => (
-          <label key={f.value} className="flex items-center gap-1.5">
+          <label key={f.value} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full px-2.5 hover:bg-white/60 has-[:checked]:bg-accent-soft has-[:checked]:text-accent">
             <input
               type="checkbox"
               checked={formats.includes(f.value)}
@@ -69,28 +69,30 @@ export default function ExportBar({
             {f.label}
           </label>
         ))}
-        <label className="flex items-center gap-1.5">
+        <label className="flex items-center gap-2 pl-1 text-ink-soft">
           Resolution
-          <select className="rounded-sm border border-line bg-paper px-2 py-1" value={dpi} onChange={(e) => setDpi(Number(e.target.value))}>
+          <select className="clay-field text-ink" value={dpi} onChange={(e) => setDpi(Number(e.target.value))}>
             <option value={300}>300 dpi</option>
             <option value={600}>600 dpi</option>
           </select>
         </label>
-        <button
-          type="button"
-          onClick={() => void run()}
-          disabled={disabled || busy || formats.length === 0}
-          className="rounded-sm border border-line bg-paper-alt px-4 py-1.5 hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {busy ? "Exporting…" : "Export"}
-        </button>
-        {children}
+        <div className="mt-1 flex w-full flex-wrap items-start gap-2 border-t border-line/70 pt-3">
+          <button
+            type="button"
+            onClick={() => void run()}
+            disabled={disabled || busy || formats.length === 0}
+            className="clay-btn clay-primary px-5 font-medium"
+          >
+            {busy ? "Exporting…" : "Export"}
+          </button>
+          {children}
+        </div>
       </div>
       {error && <ErrorText>{error}</ErrorText>}
       {links.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-4 text-sm">
+        <div className="mt-3 flex flex-wrap gap-2 text-sm">
           {links.map((l) => (
-            <a key={l.format} href={l.url} download={`figure.${l.format}`} className="text-accent hover:underline">
+            <a key={l.format} href={l.url} download={`figure.${l.format}`} className="clay-chip">
               Download {l.format.toUpperCase()} ({l.kb.toLocaleString()} KB)
             </a>
           ))}

@@ -21,8 +21,12 @@ export default function FigureConsent({
   onCancel: () => void;
 }) {
   return (
-    <div className="mt-3 rounded-sm border border-line bg-paper-alt p-4" role="alertdialog" aria-label="Ask Claude consent">
-      <p className="text-sm font-medium">Send a description of your data and figure to Claude?</p>
+    <div className="sheet mt-4 border-l-4 border-away p-5" role="alertdialog" aria-label="Ask Claude consent">
+      <p className="mb-2 flex items-center gap-2 text-xs font-medium text-away">
+        <span aria-hidden className="h-2 w-2 rounded-full bg-away shadow-[0_0_0_4px_rgba(161,90,63,.12)]" />
+        Sends a description off this device
+      </p>
+      <p className="font-serif text-lg font-medium">Send a description of your data and figure to Claude?</p>
       <p className="mt-2 text-sm text-ink-soft">
         This sends your column names, their types, the row count and the request you typed to Anthropic&apos;s Claude API. Claude also
         receives the current figure description (chart types, column bindings, axis settings) — never titles or notes you typed, never
@@ -43,11 +47,11 @@ export default function FigureConsent({
           {Object.keys(labels).length === 0 && <p className="text-ink-soft">(none of your columns qualify, so no labels will be sent)</p>}
         </div>
       )}
-      <div className="mt-3 flex gap-4 text-sm">
-        <button type="button" onClick={onConfirm} className="text-accent hover:underline">
+      <div className="mt-4 flex flex-wrap gap-3 text-sm">
+        <button type="button" onClick={onConfirm} className="clay-btn clay-primary h-10 px-5 font-medium">
           Send it and ask Claude
         </button>
-        <button type="button" onClick={onCancel} className="text-ink-soft hover:underline">
+        <button type="button" onClick={onCancel} className="clay-btn h-10 px-5">
           Cancel
         </button>
       </div>

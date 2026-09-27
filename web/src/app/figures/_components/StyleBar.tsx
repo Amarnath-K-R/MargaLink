@@ -2,7 +2,7 @@
 
 import { LIMITS, PALETTES, SIZE_PRESETS, STYLE_PRESETS, type FigureSpec } from "@/lib/figureSpec";
 
-const field = "rounded-sm border border-line bg-paper px-2 py-1 text-sm";
+const field = "clay-field";
 const label = "flex flex-col gap-1 text-xs text-ink-soft";
 const STYLE_LABEL: Record<FigureSpec["style"], string> = {
   nature: "Nature (7 pt sans, a b c)",
@@ -86,7 +86,7 @@ export default function StyleBar({ spec, onChange }: { spec: FigureSpec; onChang
                 aria-label={`Colour ${i + 1}`}
                 value={c}
                 onChange={(e) => set({ colors: spec.colors.map((x, j) => (j === i ? e.target.value : x)) })}
-                className="h-7 w-7 cursor-pointer border border-line"
+                className="h-7 w-7 cursor-pointer rounded-full border-0 bg-transparent p-0 shadow-[0_1px_3px_rgba(58,44,28,.25)]"
               />
             ))}
           </div>

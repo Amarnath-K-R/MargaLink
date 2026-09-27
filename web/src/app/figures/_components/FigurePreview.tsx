@@ -28,16 +28,21 @@ export default function FigurePreview({ state, problem }: { state: PreviewState;
   const tests = state.meta?.panels.flatMap((p, i) => p.tests.map((t) => ({ ...t, panel: i }))) ?? [];
   return (
     <div data-testid="figure-preview" data-busy={state.busy} data-panels={state.meta?.panels.length ?? 0}>
-      <div className="relative min-h-40 rounded-sm border border-line bg-white p-2">
+      <div className="sheet relative min-h-40 bg-white p-3">
         {state.png ? (
           // eslint-disable-next-line @next/next/no-img-element -- a runtime data: URI; images are unoptimized in this static export
           <img data-testid="figure-image" src={`data:image/png;base64,${state.png}`} alt="Figure preview" className={`mx-auto max-w-full ${state.busy ? "opacity-60" : ""}`} />
         ) : (
           <p className="p-6 text-center text-sm text-ink-soft">{state.busy ? "Drawing your figure…" : "Pick a starting point to see your figure here."}</p>
         )}
-        {state.busy && state.stage && <p className="absolute bottom-2 left-3 text-xs text-ink-soft">{STAGE_LABEL[state.stage]}</p>}
+        {state.busy && state.stage && (
+          <p className="absolute bottom-3 left-3 flex items-center gap-2 rounded-full bg-paper/90 px-3 py-1 text-xs text-ink-soft shadow-[0_1px_3px_rgba(58,44,28,.15)]">
+            <span aria-hidden className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" />
+            {STAGE_LABEL[state.stage]}
+          </p>
+        )}
       </div>
-      <p className="mt-2 text-xs text-ink-soft">Rendered on this device — no request is made for previews or exports.</p>
+      <p className="mt-2.5 text-xs text-ink-soft">Rendered on this device — no request is made for previews or exports.</p>
       {problem && <ErrorText>{problem}</ErrorText>}
       {state.hookWarning && <p className="mt-2 text-sm text-ink-soft" data-testid="hook-warning">{state.hookWarning}</p>}
       {state.error && (
@@ -46,7 +51,7 @@ export default function FigurePreview({ state, problem }: { state: PreviewState;
           {state.error.traceback && (
             <details className="mt-1 text-xs">
               <summary className="cursor-pointer text-ink-soft">Technical details (stays on this device)</summary>
-              <pre className="mt-1 max-h-60 overflow-auto rounded-sm border border-line bg-paper-alt p-2">{state.error.traceback}</pre>
+              <pre className="clay-well mt-1 max-h-60 overflow-auto p-3">{state.error.traceback}</pre>
             </details>
           )}
         </div>

@@ -55,7 +55,7 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
         type="button"
         onClick={() => void open()}
         disabled={disabled || busy}
-        className="rounded-sm border border-line bg-paper-alt px-4 py-1.5 hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+        className="clay-btn"
       >
         {busy ? "Adding…" : "Add to a paper"}
       </button>
@@ -72,7 +72,7 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
           <ul className="mt-2 space-y-1">
             {projects.map((p) => (
               <li key={p.id}>
-                <button type="button" onClick={() => void add(p)} disabled={busy} className="text-accent hover:underline">
+                <button type="button" onClick={() => void add(p)} disabled={busy} className="clay-chip">
                   {p.name}
                 </button>
               </li>
@@ -83,7 +83,7 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
         <div className="mt-2 text-ink-soft" role="status">
           Added to {done.project} as <code className="font-mono text-xs">{done.path}</code>.{" "}
           {done.copied ? "The LaTeX to include it is on your clipboard." : "Paste this where it goes:"}
-          {!done.copied && <pre className="mt-1 overflow-x-auto rounded-sm border border-line p-2 font-mono text-xs">{done.tex}</pre>}{" "}
+          {!done.copied && <pre className="clay-well mt-1 overflow-x-auto p-2 font-mono text-xs">{done.tex}</pre>}{" "}
           <Link href={`/write?p=${done.id}`} className="text-accent hover:underline">
             Open it in the workspace →
           </Link>
