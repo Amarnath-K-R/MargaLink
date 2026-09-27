@@ -1,22 +1,34 @@
 import Link from "next/link";
 import { JOURNAL_RULES } from "@/lib/journalRules";
 
+// `showMatchLink` false inside the writing workspace, where leaving for
+// /match would close the project (its Match window is a click away instead).
 export default function JournalPicker({
   selectedJournalId,
   onSelect,
+  showMatchLink = true,
 }: {
   selectedJournalId: string | null;
   onSelect: (journalId: string) => void;
+  showMatchLink?: boolean;
 }) {
   return (
     <section className="mt-12 border-t border-line pt-8">
       <p className="mb-3 text-sm font-medium text-accent">2. Choose a journal</p>
       <p className="mb-4 text-sm text-ink-soft">
-        Only journals with hand-verified guidelines are listed here — see{" "}
-        <Link href="/match" className="text-accent hover:underline">
-          match your paper
-        </Link>{" "}
-        instead if you want ranked suggestions across the full index.
+        Only journals with hand-verified guidelines are listed here
+        {showMatchLink ? (
+          <>
+            {" "}
+            — see{" "}
+            <Link href="/match" className="text-accent hover:underline">
+              match your paper
+            </Link>{" "}
+            instead if you want ranked suggestions across the full index.
+          </>
+        ) : (
+          "."
+        )}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         {JOURNAL_RULES.map((j) => (

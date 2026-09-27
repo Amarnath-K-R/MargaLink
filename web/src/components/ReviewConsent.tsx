@@ -28,7 +28,7 @@ export default function ReviewConsent({
     <div className="mt-3 rounded-sm border border-line bg-paper-alt p-4" role="alertdialog" aria-label="Review consent">
       <p className="text-sm font-medium">Send this paper&apos;s text to Claude for a {tier} review?</p>
       <p className="mt-2 text-sm text-ink-soft">
-        Unlike matching and the checks above, this sends your paper&apos;s text to
+        Unlike matching and the structural checks, this sends your paper&apos;s text to
         Anthropic&apos;s Claude API in {passCount} short requests — one per section, then one
         cross-check over the numbers found — to review it against {journalName}&apos;s
         guidelines, at {tier} depth. Author names and email addresses are stripped first, on a

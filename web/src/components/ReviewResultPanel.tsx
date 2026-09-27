@@ -5,13 +5,20 @@ import type { Citation, ReviewResult } from "@/lib/reviewTypes";
 // cross-section findings can only point at those verified quotes by id
 // (validateSynthesisOutput in reviewPasses.ts) — showing the real quote, not
 // just a description, is what lets you check a finding yourself at a glance.
-function CitationList({ citations }: { citations: Citation[] }) {
+// `onCitation` (the writing workspace): a "Jump to source" that finds the
+// quoted passage in the LaTeX.
+function CitationList({ citations, onCitation }: { citations: Citation[]; onCitation?: (c: Citation) => void }) {
   if (citations.length === 0) return null;
   return (
     <ul className="mt-1 space-y-1">
       {citations.map((c, i) => (
         <li key={i} className="border-l-2 border-line pl-2 text-xs italic text-ink-soft">
           &ldquo;{c.quote}&rdquo; <span className="not-italic">— {c.section}</span>
+          {onCitation && (
+            <button type="button" onClick={() => onCitation(c)} className="ml-2 not-italic text-accent hover:underline">
+              Jump to source
+            </button>
+          )}
         </li>
       ))}
     </ul>
@@ -26,7 +33,7 @@ function coverageLine({ reviewed, failed, pending, skipped }: ReviewResult["cove
   return `${line}.`;
 }
 
-export default function ReviewResultPanel({ result, partial = false }: { result: ReviewResult; partial?: boolean }) {
+export default function ReviewResultPanel({ result, partial = false, onCitation }: { result: ReviewResult; partial?: boolean; onCitation?: (c: Citation) => void }) {
   const fit = result.journalFit;
   const fitColor = fit?.assessment === "good" ? "text-accent" : fit?.assessment === "poor" ? "text-away" : "text-ink-soft";
   return (
@@ -49,7 +56,7 @@ export default function ReviewResultPanel({ result, partial = false }: { result:
             {result.summary.map((item, i) => (
               <li key={i}>
                 <span className={item.severity === "major" ? "text-away" : "text-ink-soft"}>{item.text}</span>
-                <CitationList citations={item.citations} />
+                <CitationList citations={item.citations} onCitation={onCitation} />
               </li>
             ))}
           </ol>
@@ -63,7 +70,7 @@ export default function ReviewResultPanel({ result, partial = false }: { result:
             {result.inconsistencies.map((item, i) => (
               <li key={i}>
                 {item.description}
-                <CitationList citations={item.citations} />
+                <CitationList citations={item.citations} onCitation={onCitation} />
               </li>
             ))}
           </ul>
@@ -77,7 +84,7 @@ export default function ReviewResultPanel({ result, partial = false }: { result:
             {result.statisticalReporting.map((item, i) => (
               <li key={i}>
                 <span className={item.severity === "major" ? "text-away" : ""}>{item.description}</span>
-                <CitationList citations={item.citations} />
+                <CitationList citations={item.citations} onCitation={onCitation} />
               </li>
             ))}
           </ul>
