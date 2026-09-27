@@ -124,7 +124,7 @@ export default function LatexEditor({
       goto(line) {
         const doc = v.state.doc;
         const l = doc.line(Math.min(Math.max(1, line), doc.lines));
-        v.dispatch({ selection: { anchor: l.from }, scrollIntoView: true });
+        v.dispatch({ selection: { anchor: l.from }, effects: EditorView.scrollIntoView(l.from, { y: "center" }) }); // mid-screen, not at an edge
         v.focus();
       },
       insert(snippet) {

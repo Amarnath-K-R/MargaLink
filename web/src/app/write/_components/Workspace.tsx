@@ -9,7 +9,7 @@ import { packsFor } from "@/lib/texEngine";
 import type { TexDiagnostic } from "@/lib/texLog";
 import { findJournalRules } from "@/lib/journalRules";
 import type { Template } from "@/lib/templateCatalog";
-import { bibEntries, citeSnippet, figureSnippet, nextFigurePath, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/texSource";
+import { bibEntries, paperFiles, texOutline, citeSnippet, figureSnippet, nextFigurePath, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/texSource";
 import type { Recipe } from "@/app/figures/_components/RecipeImportExport.tsx";
 import type { NetworkCall } from "@/components/NetworkTrace";
 import Dialog from "@/components/Dialog";
@@ -23,6 +23,7 @@ import StorageBanner from "./StorageBanner.tsx";
 import Toolbar, { type InsertGroup, type Tool } from "./Toolbar.tsx";
 import StatusBar from "./StatusBar.tsx";
 import EditorFormatBar from "./EditorFormatBar.tsx";
+import Outline from "./Outline.tsx";
 import CommandPalette, { type Command } from "./CommandPalette.tsx";
 import { useChecks } from "./useChecks.ts";
 import { useMatch } from "@/app/match/_components/useMatch.ts";
@@ -100,7 +101,8 @@ export default function Workspace({
     }
   });
   const [tool, setTool] = useState<Tool | null>(null);
-  const [pendingRecipe, setPendingRecipe] = useState<string | null>(null); // a .figure.json to reopen in the Figures window
+  const [pendingRecipe, setPendingRecipe] = useState<string | null>(null);
+  const [leftTab, setLeftTab] = useState<"files" | "outline">("files"); // a .figure.json to reopen in the Figures window
   // Every text file's content (the Insert menu's citation keys and labels
   // come from these); refreshed on load, on save, after a compile.
   const [sources, setSources] = useState<Record<string, string>>({});
@@ -350,6 +352,11 @@ export default function Workspace({
   }, [sources]);
   const labels = useMemo(() => [...new Set(Object.entries(sources).flatMap(([p, t]) => (/\.tex$/i.test(p) ? texLabels(t) : [])))], [sources]);
 
+  // The paper's headings, following \input from the main file.
+  const outline = useMemo(
+    () => paperFiles(project.main, sources).flatMap((f) => texOutline(sources[f]).map((o) => ({ ...o, file: f }))),
+    [project.main, sources],
+  );
   const completionData = useMemo(() => ({ entries: bib, labels }), [bib, labels]);
 
   const insertGroups = useMemo<InsertGroup[]>(() => {
@@ -504,54 +511,67 @@ export default function Workspace({
         style={{ "--split": `${split / (1 - split)}fr` } as CSSProperties}
       >
         <aside className="clay hidden min-h-0 flex-col p-3 md:mr-1 md:flex">
-          <p className="mb-2 flex items-baseline justify-between px-1 text-xs text-ink-soft">
-            <span className="font-medium">Files</span>
-            <span className="font-mono text-[11px]">{files.length}</span>
-          </p>
-          <FileTree
-            files={files}
-            active={active}
-            main={project.main}
-            onOpen={(p) => void open(p)}
-            onCreate={(p) =>
-              void guarded(async () => {
-                if (await store.exists(project.id, p)) throw new Error(`${p} already exists.`);
-                await store.write(project.id, p, "");
-                await refresh();
-                await open(p);
-              })()
-            }
-            onUpload={(list) =>
-              void guarded(async () => {
-                // an upload with an existing name replaces that file: a new version of a figure
-                for (const f of Array.from(list)) {
-                  const path = IMAGE.test(f.name) ? `figures/${f.name}` : f.name;
-                  await store.write(project.id, path, new Uint8Array(await f.arrayBuffer()));
-                }
-                await refresh();
-              })()
-            }
-            onRename={(from, to) =>
-              void guarded(async () => {
-                await saver().flush();
-                await store.rename(project.id, from, to);
-                if (from === project.main) {
-                  await store.setMeta(project.id, { main: to });
-                  onMeta(await store.meta(project.id));
-                }
-                await refresh();
-                if (active === from) await open(to);
-              })()
-            }
-            onDelete={(p) =>
-              void guarded(async () => {
-                await saver().flush(); // an edit still pending for this file must not write it back
-                await store.deleteFile(project.id, p);
-                await refresh();
-                if (active === p) await open(project.main);
-              })()
-            }
-          />
+          <div role="tablist" aria-label="Files or outline" className="clay-well mb-3 grid grid-cols-2 gap-1 rounded-full p-1 text-xs">
+            {(["files", "outline"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={leftTab === t}
+                onClick={() => setLeftTab(t)}
+                className={`rounded-full py-1.5 transition-colors ${leftTab === t ? "bg-white text-ink shadow-[0_1px_2px_rgba(58,44,28,.14),0_3px_8px_-2px_rgba(58,44,28,.14)]" : "text-ink-soft hover:text-ink"}`}
+              >
+                {t === "files" ? `Files · ${files.length}` : `Outline · ${outline.length}`}
+              </button>
+            ))}
+          </div>
+          {leftTab === "outline" && <Outline items={outline} main={project.main} onOpen={(f, line) => void goto(f, line)} />}
+          <div className={leftTab === "files" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+            <FileTree
+              files={files}
+              active={active}
+              main={project.main}
+              onOpen={(p) => void open(p)}
+              onCreate={(p) =>
+                void guarded(async () => {
+                  if (await store.exists(project.id, p)) throw new Error(`${p} already exists.`);
+                  await store.write(project.id, p, "");
+                  await refresh();
+                  await open(p);
+                })()
+              }
+              onUpload={(list) =>
+                void guarded(async () => {
+                  // an upload with an existing name replaces that file: a new version of a figure
+                  for (const f of Array.from(list)) {
+                    const path = IMAGE.test(f.name) ? `figures/${f.name}` : f.name;
+                    await store.write(project.id, path, new Uint8Array(await f.arrayBuffer()));
+                  }
+                  await refresh();
+                })()
+              }
+              onRename={(from, to) =>
+                void guarded(async () => {
+                  await saver().flush();
+                  await store.rename(project.id, from, to);
+                  if (from === project.main) {
+                    await store.setMeta(project.id, { main: to });
+                    onMeta(await store.meta(project.id));
+                  }
+                  await refresh();
+                  if (active === from) await open(to);
+                })()
+              }
+              onDelete={(p) =>
+                void guarded(async () => {
+                  await saver().flush(); // an edit still pending for this file must not write it back
+                  await store.deleteFile(project.id, p);
+                  await refresh();
+                  if (active === p) await open(project.main);
+                })()
+              }
+            />
+          </div>
           <StorageBanner compact onBackup={() => void backup()} />
         </aside>
         <section ref={editorCol} aria-label="Source" className="hidden min-h-0 min-w-0 flex-col gap-2 md:flex">
