@@ -300,6 +300,35 @@ check(
 );
 check("the status bar says something was sent", (await page.locator('[data-testid="workspace"]').textContent()).includes("carried text you agreed to send"));
 check(`the review's requests are the only ones with a body (${bodyRequests.length})`, bodyRequests.length > 0 && bodyRequests.every((u) => u.endsWith("/api/review")));
+
+// --- the Figures window: a figure from a spreadsheet, inserted into the paper (the plain article loads graphicx), reopened from its recipe ---
+await page.click("text=← All projects");
+await page.click('[data-testid="project-list"] button:text-is("New Plain article paper")');
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+await page.click('[data-testid="latex-editor"] .cm-content');
+await page.keyboard.press("ControlOrMeta+End"); // the file ends "\end{document}\n": up one line puts the figure inside the document
+await page.keyboard.press("ArrowUp");
+await page.click('[role="group"][aria-label="Tools"] button:has-text("Figures")');
+const figuresWindow = page.getByRole("dialog", { name: "Figures" });
+const [csvChooser] = await Promise.all([page.waitForEvent("filechooser"), figuresWindow.getByText("Drop a CSV or XLSX").click()]);
+await csvChooser.setFiles(new URL("./fixtures/messy.csv", import.meta.url).pathname);
+await figuresWindow.locator('[data-testid="preview-table"]').waitFor({ timeout: 15_000 });
+await figuresWindow.locator('[data-template="box"]').click();
+await figuresWindow.locator('[data-testid="figure-image"]').waitFor({ timeout: 180_000 }); // first run fetches the figure engine into this profile
+await figuresWindow.getByRole("button", { name: "Insert into paper" }).click();
+await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 90_000 });
+await page.waitForSelector('[data-testid="file-tree"] button[title="figures/figure.pdf"]');
+check("the figure and its recipe are in the project", (await page.locator('[data-testid="file-tree"] button[title="figures/figure.figure.json"]').count()) === 1);
+check("the figure block is in the editor", (await page.locator('[data-testid="latex-editor"] .cm-content').textContent()).includes("figures/figure.pdf"));
+await page.click("button:has-text('Compile')");
+await compiled();
+check("the paper compiles with the inserted figure", (await pdfBytes()) > 10_000);
+await page.click('[data-testid="file-tree"] button[title="figures/figure.figure.json"]');
+await page.getByRole("button", { name: "Edit in the figure studio" }).click();
+await page.getByRole("dialog", { name: "Figures" }).locator('[data-testid="figure-preview"][data-panels="1"]').waitFor({ timeout: 60_000 });
+check("a saved recipe reopens in the figure studio", true);
+await page.keyboard.press("Escape");
+await page.waitForFunction(() => !document.querySelector("dialog[open]"));
 check(`no page errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
 
 await context.close();

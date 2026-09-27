@@ -8,7 +8,8 @@ import { packsFor } from "@/lib/texEngine";
 import type { TexDiagnostic } from "@/lib/texLog";
 import { findJournalRules } from "@/lib/journalRules";
 import type { Template } from "@/lib/templateCatalog";
-import { bibKeys, citeSnippet, figureSnippet, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/texSource";
+import { bibKeys, citeSnippet, figureSnippet, nextFigurePath, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/texSource";
+import type { Recipe } from "@/app/figures/_components/RecipeImportExport.tsx";
 import type { NetworkCall } from "@/components/NetworkTrace";
 import Dialog from "@/components/Dialog";
 import ErrorText from "@/components/ErrorText";
@@ -24,6 +25,7 @@ import CommandPalette, { type Command } from "./CommandPalette.tsx";
 import { useChecks } from "./useChecks.ts";
 import { useMatch } from "@/app/match/_components/useMatch.ts";
 import { useReview } from "@/app/review/_components/useReview.ts";
+import { useFigures } from "@/app/figures/_components/useFigures.ts";
 import { downloadBytes, safeName } from "./download.ts";
 
 // Each window's body loads only when it opens, so the tools' code (pdf.js,
@@ -33,8 +35,9 @@ const ChecksWindow = dynamic(() => import("./ChecksWindow.tsx"), { ssr: false, l
 const JournalWindow = dynamic(() => import("./JournalWindow.tsx"), { ssr: false, loading });
 const MatchWindow = dynamic(() => import("./MatchWindow.tsx"), { ssr: false, loading });
 const ReviewWindow = dynamic(() => import("./ReviewWindow.tsx"), { ssr: false, loading });
+const FiguresWindow = dynamic(() => import("./FiguresWindow.tsx"), { ssr: false, loading });
 
-const TEXT = /\.(tex|bib|cls|sty|bst|txt|md|def|cfg)$/i;
+const TEXT = /\.(tex|bib|cls|sty|bst|txt|md|def|cfg|json)$/i;
 const IMAGE = /\.(png|jpe?g|pdf|eps)$/i;
 const FIRST_RUN_KEY = "margalink-tex-cached";
 const SPLIT_KEY = "margalink-write-split";
@@ -95,6 +98,7 @@ export default function Workspace({
     }
   });
   const [tool, setTool] = useState<Tool | null>(null);
+  const [pendingRecipe, setPendingRecipe] = useState<string | null>(null); // a .figure.json to reopen in the Figures window
   // Every text file's content (the Insert menu's citation keys and labels
   // come from these); refreshed on load, on save, after a compile.
   const [sources, setSources] = useState<Record<string, string>>({});
@@ -225,6 +229,7 @@ export default function Workspace({
   const checks = useChecks();
   const match = useMatch();
   const review = useReview();
+  const studio = useFigures();
   const rules = project.journalId ? findJournalRules(project.journalId) : undefined;
   const setTarget = async (j: Journal | null) => {
     await store.setMeta(project.id, { journalId: j?.id ?? null, journalName: j?.display_name ?? null });
@@ -241,7 +246,9 @@ export default function Workspace({
     ? { label: review.progress ? `Reviewing ${review.progress.done} of ${review.progress.total}…` : "Reviewing…", onOpen: () => setTool("review") }
     : match.busy
       ? { label: "Matching…", onOpen: () => setTool("match") }
-      : null;
+      : studio.preview.busy
+        ? { label: "Drawing the figure…", onOpen: () => setTool("figures") }
+        : null;
 
   const compile = useCallback(async () => {
     if (busyRef.current) return;
@@ -377,8 +384,37 @@ export default function Workspace({
 
   const journalLabel = project.journalName ?? (project.journalId ? "Target journal" : "No target journal");
 
+  // A figure from the window: its PDF and recipe into figures/, the tree
+  // refreshed, a figure block at the cursor (or on the clipboard when no
+  // .tex is open).
+  const insertFigure = async (pdf: Uint8Array, recipe: Recipe) => {
+    const path = nextFigurePath(files);
+    await store.write(project.id, path, pdf);
+    await store.write(project.id, path.replace(/\.pdf$/, ".figure.json"), JSON.stringify(recipe, null, 2));
+    await refresh();
+    closeTool();
+    if (texOpen) setTimeout(() => insert(`fig:${path}`), 0);
+    else {
+      const copied = await navigator.clipboard.writeText(figureSnippet(path)).then(() => true, () => false);
+      setStatus(`Added ${path}.${copied ? " The LaTeX to include it is on your clipboard." : ""}`);
+    }
+  };
+
   const windowBody = (t: Tool) => {
     switch (t) {
+      case "figures":
+        return (
+          <FiguresWindow
+            figures={studio}
+            pendingRecipe={pendingRecipe}
+            onRecipeApplied={(note) => {
+              setPendingRecipe(null);
+              if (note) setStatus(note);
+            }}
+            compiling={busy}
+            onInsert={insertFigure}
+          />
+        );
       case "match":
         return (
           <MatchWindow
@@ -504,6 +540,21 @@ export default function Workspace({
           />
         </div>
         <div ref={editorCol} className="hidden min-w-0 md:block">
+          {doc?.path === active && /\.figure\.json$/i.test(active) && (
+            <p className="mb-2 text-sm text-ink-soft">
+              This is a figure&apos;s recipe (its settings, never its data).{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingRecipe(doc.text);
+                  setTool("figures");
+                }}
+                className="text-accent hover:underline"
+              >
+                Edit in the figure studio
+              </button>
+            </p>
+          )}
           {!TEXT.test(active) ? (
             <p className="rounded-sm border border-line p-4 text-sm text-ink-soft">{active} isn&apos;t a text file — it&apos;s used by your paper as it is.</p>
           ) : doc?.path === active ? (
