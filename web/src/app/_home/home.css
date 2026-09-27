@@ -353,19 +353,14 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
 
 /* After the closing section: two beats while the desk path winds on to the book (wider screens). */
 .path-gap { display: flex; flex-direction: column; justify-content: space-around; min-height: 160svh; padding: 8svh 0; }
-/* Each beat sits on a clay slab: a lit top edge, its front face showing
-   (the desk camera looks down at it) and a soft shadow down-right, the key
-   light's direction — so the copy is an object on the desk, not text over it. */
-.gap-beat {
-  position: relative; z-index: 3; width: fit-content; max-width: 37em; padding: 34px 40px 38px; border-radius: 30px;
-  background: linear-gradient(165deg, #f9f7f2 0%, #f1eee7 100%);
-  box-shadow:
-    inset 0 2px 1px rgba(255, 255, 255, .95),
-    inset 0 -4px 10px rgba(120, 100, 70, .07),
-    0 11px 0 #ddd6c9,
-    0 13px 3px rgba(58, 44, 28, .14),
-    18px 38px 56px rgba(58, 44, 28, .2);
-}
+/* Each beat is written on paper: a white sheet with a second one askew under
+   it, like the desk's paper stacks, each casting its shadow down-right (the
+   key light's direction) — the copy is an object on the desk, not text over it. */
+.gap-beat { position: relative; z-index: 3; width: fit-content; max-width: 37em; padding: 34px 40px 38px; }
+.gap-beat::before, .gap-beat::after { content: ""; position: absolute; inset: 0; border-radius: 3px; background: #fff; }
+.gap-beat::after { z-index: -1; box-shadow: 0 1px 2px rgba(58, 44, 28, .1), 12px 22px 40px rgba(58, 44, 28, .15); }
+.gap-beat::before { z-index: -2; transform: translate(9px, 10px) rotate(-1.4deg); box-shadow: 0 1px 2px rgba(58, 44, 28, .1), 10px 18px 32px rgba(58, 44, 28, .12); }
+.gap-beat-right::before { transform: translate(-9px, 10px) rotate(1.4deg); }
 .gap-beat-right { align-self: flex-end; text-align: right; }
 .gap-step { font-family: var(--font-mono); font-size: 14px; color: var(--accent); }
 .margalink-page .gap-beat h2 { margin-top: 12px; font-size: clamp(48px, 5.4vw, 84px); }
