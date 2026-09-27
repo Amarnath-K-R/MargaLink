@@ -1,12 +1,18 @@
 import Link from "next/link";
 import type { MatchResult } from "@/lib/match";
 import { findJournalRules, type JournalRules } from "@/lib/journalRules";
+import { shortId } from "@/lib/journalUrl";
 import type { RulesCheckResult } from "@/lib/rulesCheck";
 import JournalDetail from "@/components/JournalDetail";
 import WhyThisJournal from "./WhyThisJournal.tsx";
 import { JournalResultTitle, JournalResultChips } from "@/components/JournalResultRow";
 import RulesCheckPanel from "@/components/RulesCheckPanel";
 
+// The ranked list. On /match each row links on to the review and writing
+// pages; inside the writing workspace's Match window the callbacks below
+// keep everything on the page (`onReview` opens its Review window,
+// `onSetTarget` makes the journal the project's target, `expandOnly` shows
+// details inline instead of leaving for the journal page).
 export default function MatchResults({
   results,
   expandedResultId,
@@ -17,6 +23,10 @@ export default function MatchResults({
   openWhyId,
   onToggleWhy,
   topicNames,
+  onReview,
+  onSetTarget,
+  targetJournalId,
+  expandOnly = false,
 }: {
   results: MatchResult[];
   expandedResultId: string | null;
@@ -27,6 +37,10 @@ export default function MatchResults({
   openWhyId: string | null;
   onToggleWhy: (id: string) => void;
   topicNames: Record<string, string>;
+  onReview?: (journalId: string) => void;
+  onSetTarget?: (id: string, name: string) => void;
+  targetJournalId?: string | null;
+  expandOnly?: boolean;
 }) {
   if (results.length === 0) {
     return <p className="text-ink-soft">No journals match these filters. Try widening them.</p>;
@@ -44,7 +58,7 @@ export default function MatchResults({
             <div className="flex items-baseline justify-between gap-4">
               <span className="flex gap-3">
                 <span className="text-ink-soft">{i + 1}</span>
-                <JournalResultTitle journal={r} expanded={expanded} onToggleExpand={() => onToggleExpand(r.id)} />
+                <JournalResultTitle journal={r} expanded={expanded} onToggleExpand={() => onToggleExpand(r.id)} expandOnly={expandOnly} />
               </span>
               <FitBadge r={r} />
             </div>
@@ -80,11 +94,35 @@ export default function MatchResults({
             )}
             {journalRules && (
               <div className="pl-6">
-                <Link href="/review" className="mt-1.5 inline-block text-xs text-accent hover:underline">
-                  AI review available for {journalRules.journalName} →
-                </Link>
+                {onReview ? (
+                  <button type="button" onClick={() => onReview(r.id)} className="mt-1.5 text-xs text-accent hover:underline">
+                    AI review available for {journalRules.journalName} →
+                  </button>
+                ) : (
+                  <Link href="/review" className="mt-1.5 inline-block text-xs text-accent hover:underline">
+                    AI review available for {journalRules.journalName} →
+                  </Link>
+                )}
               </div>
             )}
+            <div className="pl-6">
+              {onSetTarget ? (
+                <button
+                  type="button"
+                  onClick={() => onSetTarget(r.id, r.display_name)}
+                  aria-pressed={targetJournalId === r.id}
+                  className={`mt-1.5 text-xs hover:underline ${targetJournalId === r.id ? "text-ink" : "text-accent"}`}
+                >
+                  {targetJournalId === r.id ? "Target journal ✓" : "Set as target journal"}
+                </button>
+              ) : (
+                !onReview && (
+                  <Link href={`/write?journal=${shortId(r.id)}`} className="mt-1.5 inline-block text-xs text-accent hover:underline">
+                    Write for this journal →
+                  </Link>
+                )
+              )}
+            </div>
           </li>
         );
       })}

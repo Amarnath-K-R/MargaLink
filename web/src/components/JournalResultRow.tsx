@@ -16,16 +16,20 @@ import type { JournalMeta } from "@/lib/match";
 // already showed a publication_time_weeks chip that journals didn't,
 // despite both having the data — journals now shows it too.
 
+// `expandOnly`: never link away (inside the writing workspace, leaving the
+// page would close the project); expand the details in place instead.
 export function JournalResultTitle({
   journal,
   expanded,
   onToggleExpand,
+  expandOnly = false,
 }: {
   journal: JournalMeta;
   expanded: boolean;
   onToggleExpand: () => void;
+  expandOnly?: boolean;
 }) {
-  if (isPrerendered(journal)) {
+  if (isPrerendered(journal) && !expandOnly) {
     return (
       <Link href={journalHref(journal.id)} className="hover:underline">
         {journal.display_name}
