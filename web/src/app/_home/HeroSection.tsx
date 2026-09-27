@@ -42,7 +42,7 @@ export default function HeroSection({
             <span /> Marga is Sanskrit for “path” <span />
           </p>
           <p className="landing-deck landing-in" style={{ animationDelay: "480ms" }}>
-            Find the journals that fit your paper, check it against their rules, write it in their template — without
+            Find the journals that fit your paper, check it against their rules, write it in their template, without
             your manuscript ever leaving the browser.
           </p>
         </div>

@@ -213,8 +213,8 @@ function artReview(c: C, W: number, off: number, f: Fonts) {
   c.fillStyle = INK;
   c.font = `italic 400 28px ${f.serif}`;
   c.fillText("Strong", 26, 62);
-  c.fillText("results —", 26, 100);
-  c.fillText("sharpen intro", 26, 138);
+  c.fillText("results!", 26, 100);
+  c.fillText("Sharpen intro", 26, 138);
   c.restore();
 }
 
@@ -435,7 +435,7 @@ export function drawPage(c: C, W: number, H: number, spec: PageSpec, f: Fonts) {
     // the figure caption
     c.fillStyle = SOFT;
     c.font = `italic 400 30px ${f.serif}`;
-    const text = `Fig. ${Number(spec.spread.n)} — ${spec.spread.caption}`;
+    const text = `Fig. ${Number(spec.spread.n)}. ${spec.spread.caption}`;
     wrap(c, text, W - 250).forEach((line, i) => c.fillText(line, 150, H - 196 + i * 40));
   }
   // page number, outer corner

@@ -26,7 +26,7 @@ export default function Image() {
           Get your paper ready to submit.
         </div>
         <div style={{ fontSize: 32, color: BRAND.inkSoft, marginTop: 28, display: "flex" }}>
-          Match it to a journal, check its format — never leaving your device.
+          Match it to a journal and check its format, never leaving your device.
         </div>
       </div>
     ),

@@ -21,7 +21,7 @@ const GAP_BEATS = [
     kicker: "Browse journals",
     lead: "Find where it",
     cut: "fits.",
-    text: "Browse journals by field, fees, open access and indexing — no upload needed.",
+    text: "Browse journals by field, fees, open access and indexing. No upload needed.",
     tags: ["Field & topics", "APC fees", "Open access", "Indexed in", "Review speed"],
   },
   {
@@ -154,7 +154,7 @@ function Home() {
                 <br />
                 <mark className="gap-cut">Not this time.</mark>
               </h2>
-              <p>Unlock your paper&apos;s true potential. Find the journal it fits, meet its format and get a second read — before an editor does.</p>
+              <p>Unlock your paper&apos;s true potential. Find the journal it fits, meet its format and get a second read before an editor does.</p>
               <div className="finale-actions">
                 <Link href="/match" className="button button-primary">
                   Find my journal <ArrowUpRight size={16} />
@@ -166,7 +166,7 @@ function Home() {
               <dl className="finale-proof">
                 <div>
                   <dt>0</dt>
-                  <dd>uploads — matching runs in your browser</dd>
+                  <dd>uploads. Matching runs in your browser</dd>
                 </div>
                 <div>
                   <dt>5</dt>

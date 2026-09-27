@@ -9,7 +9,7 @@ const TOOLS = [
     href: "/journals",
     icon: BookOpen,
     title: "Browse journals",
-    description: "Fees, fields, indexing — no upload needed.",
+    description: "Fees, fields and indexing. No upload needed.",
   },
   {
     href: "/match",
@@ -27,7 +27,7 @@ const TOOLS = [
     href: "/figures",
     icon: BarChart3,
     title: "Make figures",
-    description: "Publication-ready charts — your data never leaves the tab.",
+    description: "Publication-ready charts. Your data never leaves the tab.",
   },
   {
     href: "/write",
