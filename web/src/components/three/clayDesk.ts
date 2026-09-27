@@ -383,7 +383,7 @@ function pin(THREE: T) {
 // Each sits at a home spot (x, z) on the desk; buildDesk places it each frame
 // so it moves with the page's copy (see `anchor`). `tick`: its own small idle
 // motion; `pass` runs -1 → 1 as the view goes by.
-type Prop = { obj: THREE_NS.Group; x: number; z: number; tick: (ms: number, pass: number, still: boolean) => void };
+type Prop = { obj: THREE_NS.Group; x: number; z: number; s: number; tick: (ms: number, pass: number, still: boolean) => void };
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
 
 function books(THREE: T) {
@@ -531,7 +531,7 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
     obj.rotation.y = rotY;
     obj.scale.setScalar(scale * 1.6);
     obj.visible = false;
-    out.push({ obj, x, z, tick });
+    out.push({ obj, x, z, s: scale * 1.6, tick });
   };
   place(books(THREE), -4.6, at(0), 0.35, 1);
   place(eraser(THREE), -0.9, at(0.2), -0.3, 1);
@@ -949,6 +949,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
   const anchorHit = new THREE.Vector3();
   const anchored = new THREE.Vector3();
   const alongX = new THREE.Vector3(1, 0, 0);
+  const viewDir = new THREE.Vector3();
   let typeStart: number | null = null;
   let typed = 0;
   let finaleStart: number | null = null;
@@ -1000,6 +1001,10 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
     camera.position.set(cam.x, cam.y, cam.z + pan);
     camera.lookAt(look.x, look.y, look.z + pan);
     camera.updateMatrixWorld();
+    camera.getWorldDirection(viewDir);
+    // …and scaled by their distance from the camera, so they keep the size
+    // they'd have at the view's centre instead of shrinking up the screen.
+    let anchorScale = 1;
     const anchor = (x: number, z: number, y0: number, w: number, out: THREE_NS.Vector3) => {
       anchorNdc.set(x, y0, viewZ).project(camera);
       const ndcY = (-2 * (z - viewZ) * ppu) / scroll.vh;
@@ -1008,12 +1013,15 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       anchorHit.copy(camera.position).addScaledVector(anchorRay, (y0 - camera.position.y) / anchorRay.y);
       const k = w * (1 - tilt);
       out.set(x + (anchorHit.x - x) * k, y0, z + (anchorHit.z - z) * k);
+      anchorRay.set(x, y0, viewZ).sub(camera.position);
+      anchorScale = anchorHit.copy(out).sub(camera.position).dot(viewDir) / anchorRay.dot(viewDir);
       return true;
     };
     for (const pr of props) {
       pr.obj.visible = anchor(pr.x, pr.z, 0, 1, anchored);
       pr.obj.position.x = anchored.x;
       pr.obj.position.z = anchored.z;
+      pr.obj.scale.setScalar(pr.s * anchorScale);
       pr.tick(ms, (viewZ - pr.z) / 8, reducedMotion);
     }
     // leg 1's dashes follow their anchored points, turned along the new line
@@ -1022,6 +1030,7 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       if (ds.leg !== 1 || ds.w <= 0) continue;
       ds.ok = anchor(ds.home.x, ds.home.z, ds.home.y, ds.w, anchored);
       ds.d.position.copy(anchored);
+      ds.d.scale.setScalar(anchorScale);
       if (prev) {
         anchorRay.subVectors(ds.d.position, prev.d.position).normalize();
         prev.d.quaternion.setFromUnitVectors(alongX, anchorRay);
