@@ -3,10 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ProjectStore, type ProjectMeta } from "@/lib/projectStore";
+import { figureSnippet, nextFigurePath } from "@/lib/texSource";
 import ErrorText from "@/components/ErrorText";
-
-const snippet = (path: string, label: string) =>
-  `\\begin{figure}[t]\n  \\centering\n  \\includegraphics[width=\\linewidth]{${path}}\n  \\caption{Caption.}\n  \\label{fig:${label}}\n\\end{figure}\n`;
 
 // Puts the figure (as a 300 dpi PDF) into one of this browser's /write
 // projects, under figures/, and copies the LaTeX that includes it. Nothing
@@ -35,12 +33,9 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
     setBusy(true);
     setError(null);
     try {
-      const existing = new Set(await store.files(p.id));
-      let label = "figure";
-      for (let n = 2; existing.has(`figures/${label}.pdf`); n++) label = `figure-${n}`;
-      const path = `figures/${label}.pdf`;
+      const path = nextFigurePath(await store.files(p.id));
       await store.write(p.id, path, await getPdf());
-      const tex = snippet(path, label);
+      const tex = figureSnippet(path);
       const copied = await navigator.clipboard.writeText(tex).then(
         () => true,
         () => false,

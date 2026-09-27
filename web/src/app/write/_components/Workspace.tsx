@@ -11,6 +11,7 @@ import PdfPane from "./PdfPane.tsx";
 import Diagnostics from "./Diagnostics.tsx";
 import StorageBanner from "./StorageBanner.tsx";
 import { downloadBytes, safeName } from "./download.ts";
+import { figureSnippet } from "@/lib/texSource";
 
 const TEXT = /\.(tex|bib|cls|sty|bst|txt|md|def|cfg)$/i;
 const IMAGE = /\.(png|jpe?g|pdf|eps)$/i;
@@ -20,11 +21,6 @@ const STAGE_TEXT: Record<TexStage, (d?: string) => string> = {
   "loading-engine": () => "Loading TeX…",
   "loading-package": (d) => (d === "all" ? "This template needs more of TeX Live — loading it (about 110 MB, once)…" : "Loading TeX packages…"),
   running: (d) => `Running ${d ?? "TeX"}…`,
-};
-
-const figureSnippet = (path: string) => {
-  const label = path.replace(/^.*\//, "").replace(/\.[^.]+$/, "").replace(/[^\w-]/g, "-");
-  return `\\begin{figure}[t]\n  \\centering\n  \\includegraphics[width=\\linewidth]{${path}}\n  \\caption{Caption.}\n  \\label{fig:${label}}\n\\end{figure}\n`;
 };
 
 // One open project: files on the left, the source editor in the middle, the

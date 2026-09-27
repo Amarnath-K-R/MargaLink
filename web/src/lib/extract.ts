@@ -28,35 +28,41 @@ async function extractFromPdf(file: File, withHeadings: boolean): Promise<Extrac
   ).toString();
 
   const buf = await file.arrayBuffer();
-  const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+  const task = pdfjsLib.getDocument({ data: buf });
+  const doc = await task.promise;
 
   const pageTexts: string[] = [];
   const fontLines: LineFontInfo[] = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    // Loads the page's fonts so their real names ("GillSans-Bold") are known.
-    if (withHeadings) await page.getOperatorList();
-    const content = await page.getTextContent();
-    if (withHeadings) {
-      const realFont = (id: string) => {
-        try {
-          return (page.commonObjs.get(id) as { name?: string } | undefined)?.name ?? id;
-        } catch {
-          return id;
-        }
-      };
-      fontLines.push(...linesFromTextItems(content.items.filter((it) => "str" in it) as Parameters<typeof linesFromTextItems>[0], realFont));
+  try {
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      // Loads the page's fonts so their real names ("GillSans-Bold") are known.
+      if (withHeadings) await page.getOperatorList();
+      const content = await page.getTextContent();
+      if (withHeadings) {
+        const realFont = (id: string) => {
+          try {
+            return (page.commonObjs.get(id) as { name?: string } | undefined)?.name ?? id;
+          } catch {
+            return id;
+          }
+        };
+        fontLines.push(...linesFromTextItems(content.items.filter((it) => "str" in it) as Parameters<typeof linesFromTextItems>[0], realFont));
+      }
+      // Join items with a plain space, but insert a real newline wherever
+      // pdf.js marks a line ending (hasEOL) — without this, "Abstract" on its
+      // own line collapses into running prose and no heading regex can find
+      // it (caught by a real end-to-end PDF, not just the sample-text tests).
+      let pageText = "";
+      for (const item of content.items) {
+        if (!("str" in item)) continue;
+        pageText += item.str + (item.hasEOL ? "\n" : " ");
+      }
+      pageTexts.push(pageText);
     }
-    // Join items with a plain space, but insert a real newline wherever
-    // pdf.js marks a line ending (hasEOL) — without this, "Abstract" on its
-    // own line collapses into running prose and no heading regex can find
-    // it (caught by a real end-to-end PDF, not just the sample-text tests).
-    let pageText = "";
-    for (const item of content.items) {
-      if (!("str" in item)) continue;
-      pageText += item.str + (item.hasEOL ? "\n" : " ");
-    }
-    pageTexts.push(pageText);
+  } finally {
+    // The workspace extracts once per compile; without this each extraction leaves a pdf.js worker behind.
+    await task.destroy();
   }
   const fullText = pageTexts.join("\n\n").replace(/[ \t]+/g, " ").trim();
 
