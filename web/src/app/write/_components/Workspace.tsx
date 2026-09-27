@@ -1,14 +1,18 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { autosaver, type ProjectMeta, type ProjectStore } from "@/lib/projectStore";
 import { compileProject, TexCompileError, type TexStage } from "@/lib/texRunner";
 import { packsFor } from "@/lib/texEngine";
 import type { TexDiagnostic } from "@/lib/texLog";
+import { findJournalRules } from "@/lib/journalRules";
+import type { Template } from "@/lib/templateCatalog";
 import { bibKeys, citeSnippet, figureSnippet, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/texSource";
 import type { NetworkCall } from "@/components/NetworkTrace";
 import Dialog from "@/components/Dialog";
 import ErrorText from "@/components/ErrorText";
+import type { Journal } from "../page.tsx";
 import FileTree from "./FileTree.tsx";
 import LatexEditor, { type EditorHandle, type LineMark } from "./LatexEditor.tsx";
 import PdfPane from "./PdfPane.tsx";
@@ -17,7 +21,14 @@ import StorageBanner from "./StorageBanner.tsx";
 import Toolbar, { type InsertGroup, type Tool } from "./Toolbar.tsx";
 import StatusBar from "./StatusBar.tsx";
 import CommandPalette, { type Command } from "./CommandPalette.tsx";
+import { useChecks } from "./useChecks.ts";
 import { downloadBytes, safeName } from "./download.ts";
+
+// Each window's body loads only when it opens, so the tools' code (pdf.js,
+// the matching model, the figure studio) stays out of the page until asked for.
+const loading = () => <p className="text-sm text-ink-soft">Loading…</p>;
+const ChecksWindow = dynamic(() => import("./ChecksWindow.tsx"), { ssr: false, loading });
+const JournalWindow = dynamic(() => import("./JournalWindow.tsx"), { ssr: false, loading });
 
 const TEXT = /\.(tex|bib|cls|sty|bst|txt|md|def|cfg)$/i;
 const IMAGE = /\.(png|jpe?g|pdf|eps)$/i;
@@ -42,8 +53,26 @@ const WINDOWS: { tool: Exclude<Tool, "palette">; title: string; size: "lg" | "fu
 // One open project: the toolbar, files on the left, the source editor and
 // the PDF side by side (the split drags), the compiler's diagnostics under
 // the editor, a status line, and the other tools as windows over it all.
-// `calls` is the page's network trace, for the status line's "sent" count.
-export default function Workspace({ store, project, calls, onClose, onMeta }: { store: ProjectStore; project: ProjectMeta; calls: NetworkCall[]; onClose: () => void; onMeta: (m: ProjectMeta) => void }) {
+// `calls` is the page's network trace, for the status line's "sent" count;
+// `onCreateFromTemplate` starts a new project (the Journal window offers
+// the target's template that way — this project is never rewritten).
+export default function Workspace({
+  store,
+  project,
+  calls,
+  templates,
+  onClose,
+  onMeta,
+  onCreateFromTemplate,
+}: {
+  store: ProjectStore;
+  project: ProjectMeta;
+  calls: NetworkCall[];
+  templates: Template[];
+  onClose: () => void;
+  onMeta: (m: ProjectMeta) => void;
+  onCreateFromTemplate: (t: Template, journal: Journal) => void;
+}) {
   const [files, setFiles] = useState<string[]>([]);
   const [active, setActive] = useState(project.main);
   // The open file's text as loaded; the editor mounts once it's here.
@@ -186,6 +215,15 @@ export default function Workspace({ store, project, calls, onClose, onMeta }: { 
   // The PDF as a blob URL for the preview, and as a File for the tools that read it.
   const pdfUrl = useMemo(() => (pdfBytes ? URL.createObjectURL(new Blob([pdfBytes.slice()], { type: "application/pdf" })) : null), [pdfBytes]);
   useEffect(() => () => void (pdfUrl && URL.revokeObjectURL(pdfUrl)), [pdfUrl]);
+  const pdfFile = useMemo(() => (pdfBytes ? new File([pdfBytes.slice()], "paper.pdf", { type: "application/pdf" }) : null), [pdfBytes]);
+
+  // The tools' state lives here, so a window keeps its results when closed.
+  const checks = useChecks();
+  const rules = project.journalId ? findJournalRules(project.journalId) : undefined;
+  const setTarget = async (j: Journal | null) => {
+    await store.setMeta(project.id, { journalId: j?.id ?? null, journalName: j?.display_name ?? null });
+    onMeta(await store.meta(project.id));
+  };
 
   const compile = useCallback(async () => {
     if (busyRef.current) return;
@@ -310,6 +348,30 @@ export default function Workspace({ store, project, calls, onClose, onMeta }: { 
   );
 
   const journalLabel = project.journalName ?? (project.journalId ? "Target journal" : "No target journal");
+
+  const windowBody = (t: Tool) => {
+    switch (t) {
+      case "checks":
+        return <ChecksWindow checks={checks} pdfFile={pdfFile} compiling={busy} onCompile={() => void compile()} rules={rules} targetName={project.journalName ?? null} />;
+      case "journal":
+        return (
+          <JournalWindow
+            journalId={project.journalId}
+            journalName={project.journalName ?? null}
+            templates={templates}
+            currentTemplateId={project.templateId}
+            onChange={(j) => void setTarget(j)}
+            onNewFromTemplate={(tmpl, j) => {
+              setTool(null);
+              onCreateFromTemplate(tmpl, j);
+            }}
+            onOpenMatch={() => setTool("match")}
+          />
+        );
+      default:
+        return <p className="text-sm text-ink-soft">This window is on its way.</p>;
+    }
+  };
 
   return (
     <div data-testid="workspace">
@@ -451,7 +513,7 @@ export default function Workspace({ store, project, calls, onClose, onMeta }: { 
 
       {WINDOWS.map((w) => (
         <Dialog key={w.tool} open={tool === w.tool} onClose={closeTool} title={w.title} size={w.size}>
-          <p className="text-sm text-ink-soft">This window is on its way.</p>
+          {tool === w.tool && windowBody(w.tool)}
         </Dialog>
       ))}
       <CommandPalette open={tool === "palette"} onClose={closeTool} commands={commands} />

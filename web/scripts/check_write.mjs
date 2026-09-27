@@ -199,9 +199,35 @@ await page.keyboard.type("checks");
 await page.keyboard.press("Enter");
 await page.getByRole("dialog", { name: "Checks" }).waitFor();
 check("a command opens its window", true);
+await page.waitForSelector('[data-testid="checks"] dl');
+check("Checks reads the compiled PDF on this device", (await page.locator('[data-testid="checks"]').textContent()).includes("Word count"));
 await page.keyboard.press("Escape");
 await page.waitForFunction(() => !document.querySelector("dialog[open]"));
-check("Escape closes the window and focus returns to the editor", await page.evaluate(() => !!document.activeElement?.closest('[data-testid="latex-editor"]')));
+check(
+  "Escape closes the window and focus returns to the editor",
+  await page.waitForFunction(() => !!document.activeElement?.closest('[data-testid="latex-editor"]'), null, { timeout: 3000 }).then(() => true, () => false),
+);
+
+// --- the Journal window sets the project's target journal (needs the index) ---
+const hasIndex = await page.evaluate(() => fetch("/index/meta.json").then((r) => r.ok, () => false));
+if (hasIndex) {
+  await page.click('[role="group"][aria-label="Tools"] button:has-text("Journal")');
+  const journalWindow = page.getByRole("dialog", { name: "Journal" });
+  await journalWindow.getByLabel("Search journals").fill("JAMA Neurology");
+  await journalWindow.getByRole("button", { name: /^JAMA Neurology/ }).click();
+  // the target is written to the project's metadata, then shown on the chip
+  const chipSet = await page
+    .waitForFunction(() => document.querySelector('button[aria-label="Target journal"]')?.textContent?.includes("JAMA Neurology"), null, { timeout: 10_000 })
+    .then(() => true, async () => {
+      await page.screenshot({ path: `${SCRATCH}/write-journal-failed.png` });
+      return false;
+    });
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+  check("the Journal window sets the target journal", chipSet);
+} else {
+  console.log("skip the Journal window (no index built)");
+}
 
 check(`no request carried a body${bodyRequests.length ? `: ${bodyRequests.join(", ")}` : ""}`, bodyRequests.length === 0);
 check(`no page errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);

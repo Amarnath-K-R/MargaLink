@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getAllJournals, getPrerenderedJournals, getTopicNames } from "@/lib/journalsServer";
@@ -32,6 +33,11 @@ export default async function JournalPage(props: PageProps<"/journal/[id]">) {
   return (
     <main className="mx-auto w-full max-w-2xl px-6 py-14 sm:py-20">
       <PageHeader width="2xl" links={[{ href: "/journals", label: "← Browse journals" }]} title={journal.display_name} />
+      <p className="mb-6 text-sm">
+        <Link href={`/write?journal=${id}`} className="text-accent hover:underline">
+          Write a paper for this journal →
+        </Link>
+      </p>
       <JournalDetail journal={journal} topicNames={getTopicNames()} />
     </main>
   );

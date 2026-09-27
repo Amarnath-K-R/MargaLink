@@ -139,6 +139,8 @@ export default function WritePage() {
           store={store}
           project={openProject}
           calls={calls}
+          templates={templates}
+          onCreateFromTemplate={(t, j) => void create(t, j)}
           onMeta={setOpenProject}
           onClose={() => {
             setOpenProject(null);
