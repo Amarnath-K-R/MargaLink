@@ -9,11 +9,9 @@ export default function JournalDetail({ journal, topicNames }: { journal: Journa
   const recentTopics = (journal.topics ?? []).filter(([id]) => topicNames?.[id]).slice(0, 4);
   return (
     <>
-      {journal.host_organization_name && (
-        <p className="mt-2 text-ink-soft">{journal.host_organization_name}</p>
-      )}
+      {journal.host_organization_name && <p className="text-ink-soft">{journal.host_organization_name}</p>}
 
-      <dl className="mt-6">
+      <dl className={journal.host_organization_name ? "mt-5" : ""}>
         {journal.field && <Row label="Field" value={journal.field} />}
         {recentTopics.length > 0 && (
           <Row
@@ -50,13 +48,13 @@ export default function JournalDetail({ journal, topicNames }: { journal: Journa
         {journal.country_code && <Row label="Country" value={countryName(journal.country_code)} />}
       </dl>
 
-      <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
+      <div className="mt-6 flex flex-wrap gap-2">
         {journal.homepage_url && (
           <a
             href={journal.homepage_url}
             target="_blank"
             rel="noopener noreferrer nofollow"
-            className="text-accent hover:underline"
+            className="clay-chip"
           >
             Visit the journal&apos;s official page
           </a>
@@ -66,14 +64,14 @@ export default function JournalDetail({ journal, topicNames }: { journal: Journa
             href={journal.review_url}
             target="_blank"
             rel="noopener noreferrer nofollow"
-            className="text-accent hover:underline"
+            className="clay-chip"
           >
             Peer review policy
           </a>
         )}
       </div>
 
-      <p className="mt-6 border-t border-line pt-4 text-sm text-ink-soft">
+      <p className="mt-6 border-t border-line/70 pt-4 text-xs leading-relaxed text-ink-soft">
         This information comes from OpenAlex
         {journal.publication_time_weeks != null || journal.license_type ? " and DOAJ" : ""}, and
         hasn&apos;t been independently verified. The journal&apos;s own page is the final
@@ -92,11 +90,12 @@ function countryName(code: string): string {
   }
 }
 
+// The value is right-aligned, so a long one (recent topics) wraps under itself.
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex justify-between border-t border-line py-3 first:border-t-0 first:pt-0">
-      <dt className="text-ink-soft">{label}</dt>
-      <dd className={mono ? "font-mono text-sm" : ""}>{value}</dd>
+    <div className="flex justify-between gap-6 border-t border-line/70 py-2.5 first:border-t-0 first:pt-0">
+      <dt className="shrink-0 text-ink-soft">{label}</dt>
+      <dd className={`text-right ${mono ? "font-mono text-sm" : ""}`}>{value}</dd>
     </div>
   );
 }

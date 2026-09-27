@@ -21,14 +21,17 @@ export default function StorageBanner({ onBackup, compact = false }: { onBackup?
     );
   }
   return (
-    <p data-testid="storage-banner" className="rounded-sm border border-line bg-paper-alt px-3 py-2 text-sm text-ink-soft">
-      Saved in this browser on this device only — nothing is uploaded. Clearing your browser&apos;s site data deletes it, so download a
-      backup before you do, or to move to another computer.{" "}
-      {onBackup && (
-        <button type="button" onClick={onBackup} className="text-accent hover:underline">
-          Download backup
-        </button>
-      )}
+    <p data-testid="storage-banner" className="clay-well flex gap-3 rounded-2xl px-4 py-3 text-sm leading-relaxed text-ink-soft">
+      <HardDrive aria-hidden size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-accent" />
+      <span>
+        Saved in this browser on this device only — nothing is uploaded. Clearing your browser&apos;s site data deletes it, so download a
+        backup before you do, or to move to another computer.{" "}
+        {onBackup && (
+          <button type="button" onClick={onBackup} className="text-accent hover:underline">
+            Download backup
+          </button>
+        )}
+      </span>
     </p>
   );
 }

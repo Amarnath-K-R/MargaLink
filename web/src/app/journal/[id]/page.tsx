@@ -33,12 +33,17 @@ export default async function JournalPage(props: PageProps<"/journal/[id]">) {
   return (
     <main className="mx-auto w-full max-w-2xl px-6 pt-3 pb-20">
       <PageHeader width="2xl" tool="journals" title={journal.display_name} />
-      <p className="mb-6 text-sm">
-        <Link href={`/write?journal=${id}`} className="text-accent hover:underline">
+      <p className="mb-8 mt-6 flex flex-wrap gap-3 text-sm">
+        <Link href={`/write?journal=${id}`} className="clay-btn clay-primary h-10 px-5 font-medium">
           Write a paper for this journal →
         </Link>
+        <Link href="/journals" className="clay-btn h-10 px-5">
+          ← All journals
+        </Link>
       </p>
-      <JournalDetail journal={journal} topicNames={getTopicNames()} />
+      <div className="sheet p-6 sm:p-8">
+        <JournalDetail journal={journal} topicNames={getTopicNames()} />
+      </div>
     </main>
   );
 }

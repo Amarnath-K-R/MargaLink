@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ProjectStore, type ProjectMeta } from "@/lib/projectStore";
 import { loadTemplates, starterProject, templateForJournal, type Template } from "@/lib/templateCatalog";
@@ -134,7 +135,7 @@ export default function WritePage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-6 pt-3 pb-20">
+    <main className="mx-auto w-full max-w-5xl px-6 pt-3 pb-20">
       <PageHeader
         width="4xl" tool="write"
         title="Write your paper."
@@ -147,76 +148,78 @@ export default function WritePage() {
       />
       {error && <ErrorText>{error}</ErrorText>}
 
-        <div className="max-w-4xl">
-          <StorageBanner />
-          {projects.length > 0 && (
-            <section className="mt-10">
-              <h2 className="mb-3 text-sm font-medium text-accent">Your projects</h2>
-              <ul data-testid="project-list" className="divide-y divide-line border-y border-line">
-                {projects.map((p) => (
-                  <li key={p.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
-                    <button type="button" onClick={() => setOpenProject(p)} className="font-medium hover:underline">
-                      {p.name}
+      <div className="space-y-6">
+        <StorageBanner />
+        {projects.length > 0 && (
+          <section className="clay p-6 sm:p-8">
+            <h2 className="mb-5 font-serif text-xl font-medium tracking-[-0.01em]">Your projects</h2>
+            <ul data-testid="project-list" className="grid gap-3 sm:grid-cols-2">
+              {projects.map((p) => (
+                <li key={p.id} className="sheet flex flex-col gap-3 p-5 text-sm">
+                  <button type="button" onClick={() => setOpenProject(p)} className="text-left font-serif text-lg font-medium leading-snug hover:text-accent">
+                    {p.name}
+                  </button>
+                  <span className="-mt-2 text-xs text-ink-soft">
+                    {p.journalName ? `${p.journalName} · ` : ""}edited {new Date(p.updatedAt).toLocaleString()}
+                  </span>
+                  <span className="mt-auto flex gap-2 pt-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={async () => store && downloadBytes(`${safeName(p.name)}.zip`, await store.exportZip(p.id), "application/zip")}
+                      className="clay-chip"
+                    >
+                      Download backup
                     </button>
-                    <span className="text-xs text-ink-soft">edited {new Date(p.updatedAt).toLocaleString()}</span>
-                    <span className="ml-auto flex gap-3 text-xs">
-                      <button
-                        type="button"
-                        onClick={async () => store && downloadBytes(`${safeName(p.name)}.zip`, await store.exportZip(p.id), "application/zip")}
-                        className="text-accent hover:underline"
-                      >
-                        Download backup
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!store || !window.confirm(`Delete "${p.name}" from this browser? This can't be undone.`)) return;
-                          await store.remove(p.id);
-                          void refresh(store);
-                        }}
-                        className="text-ink-soft hover:text-ink"
-                      >
-                        Delete
-                      </button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          <section className="mt-10">
-            <h2 className="mb-3 text-sm font-medium text-accent">Start a new paper</h2>
-            <TemplatePicker
-              templates={templates}
-              recommended={recommended}
-              journalName={journal?.display_name ?? null}
-              busy={busy || !store}
-              onPick={(t) => void create(t)}
-              onUpload={() => upload.current?.click()}
-            />
-            <p className="mt-4 text-sm">
-              <button type="button" onClick={() => upload.current?.click()} disabled={!store} className="text-accent hover:underline disabled:opacity-60">
-                Import a .zip
-              </button>{" "}
-              <span className="text-ink-soft">— a publisher&apos;s template, an Overleaf download, or a MargaLink backup.</span>
-            </p>
-            <input
-              ref={upload}
-              type="file"
-              accept=".zip,application/zip"
-              aria-label="Import a zip"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                e.target.value = "";
-                if (f) void importZip(f);
-              }}
-            />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!store || !window.confirm(`Delete "${p.name}" from this browser? This can't be undone.`)) return;
+                        await store.remove(p.id);
+                        void refresh(store);
+                      }}
+                      className="clay-chip bg-transparent text-ink-soft hover:bg-[#ebe8df]"
+                    >
+                      Delete
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
           </section>
-        </div>
+        )}
+        <section className="clay p-6 sm:p-8">
+          <h2 className="mb-5 font-serif text-xl font-medium tracking-[-0.01em]">Start a new paper</h2>
+          <TemplatePicker
+            templates={templates}
+            recommended={recommended}
+            journalName={journal?.display_name ?? null}
+            busy={busy || !store}
+            onPick={(t) => void create(t)}
+            onUpload={() => upload.current?.click()}
+          />
+          <p className="mt-6 flex flex-wrap items-center gap-3 border-t border-line/70 pt-5 text-sm">
+            <button type="button" onClick={() => upload.current?.click()} disabled={!store} className="clay-btn">
+              <Upload size={14} strokeWidth={2} />
+              Import a .zip
+            </button>
+            <span className="text-ink-soft">A publisher&apos;s template, an Overleaf download, or a MargaLink backup.</span>
+          </p>
+          <input
+            ref={upload}
+            type="file"
+            accept=".zip,application/zip"
+            aria-label="Import a zip"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void importZip(f);
+            }}
+          />
+        </section>
+      </div>
 
-
-      <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
+      <footer className="mt-16 border-t border-line/80 pt-6 text-sm text-ink-soft">
         <Link href="/privacy" className="text-accent hover:underline">
           How privacy works
         </Link>

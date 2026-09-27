@@ -24,7 +24,7 @@ export default function TemplatePicker({
   return (
     <div data-testid="template-picker">
       {journalName && (
-        <p className="mb-3 text-sm">
+        <p className="mb-4 text-sm">
           For <span className="font-medium">{journalName}</span>
           {recommended ? (
             <>
@@ -44,14 +44,15 @@ export default function TemplatePicker({
             disabled={busy}
             onClick={() => onPick(t)}
             data-template={t.id}
-            className={`rounded-sm border p-3 text-left text-sm transition-colors disabled:opacity-60 ${recommended?.id === t.id ? "border-accent bg-accent-soft" : "border-line bg-paper-alt hover:border-accent"}`}
+            data-selected={recommended?.id === t.id}
+            className="clay-card px-5 py-4 text-sm disabled:opacity-60"
           >
-            <p className="font-medium">{t.name}</p>
-            <p className="mt-1 text-xs text-ink-soft">{t.note}</p>
+            <p className="font-serif text-[1.05rem] font-medium">{t.name}</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-soft">{t.note}</p>
           </button>
         ))}
       </div>
-      <div className="mt-4 text-sm">
+      <div className="mt-6 text-sm">
         <p className="text-ink-soft">
           Other publishers share their templates only on their own sites — download the zip there, then{" "}
           <button type="button" onClick={onUpload} className="text-accent hover:underline">
@@ -59,10 +60,16 @@ export default function TemplatePicker({
           </button>
           :
         </p>
-        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        <ul className="mt-3 flex flex-wrap gap-2">
           {linked.map((t) => (
-            <li key={t.id} className={recommended?.id === t.id ? "font-medium" : ""}>
-              <a href={t.publisherUrl ?? "#"} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline" title={t.note}>
+            <li key={t.id}>
+              <a
+                href={t.publisherUrl ?? "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`clay-chip ${recommended?.id === t.id ? "font-medium ring-1 ring-accent/60" : ""}`}
+                title={t.note}
+              >
                 {t.name}
               </a>
             </li>
