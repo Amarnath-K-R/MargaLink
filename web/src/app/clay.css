@@ -1,0 +1,264 @@
+/* The clay theme, shared by the tool pages and the writing workspace, in the
+   homepage's palette and light: raised clay for chrome (trays, slabs,
+   buttons, windows), white paper sheets for the things you read. Warm
+   shadows only (rgba(58,44,28,…)), one light source from the top left.
+   In the components layer, so a Tailwind utility on the same element
+   (h-7, px-2.5, text-xs…) wins over these defaults. */
+
+@layer components {
+  .desk {
+    isolation: isolate;
+    background: radial-gradient(130% 100% at 30% 0%, #f7f6f1 0%, var(--paper) 50%, #e8e4da 100%);
+  }
+  .desk::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.22;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.15'/%3E%3C/svg%3E");
+  }
+
+  /* Raised clay: a matte, slightly domed surface. */
+  .clay {
+    border-radius: 20px;
+    background: linear-gradient(160deg, #fdfcf8 0%, #f2f0e9 100%);
+    box-shadow:
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+      inset 0 -4px 8px rgba(120, 100, 70, 0.07),
+      0 1px 2px rgba(58, 44, 28, 0.08),
+      0 12px 28px -8px rgba(58, 44, 28, 0.18);
+  }
+
+  /* Pressed into the clay: wells for the active file, inputs, notes. */
+  .clay-well {
+    border-radius: 12px;
+    background: #ebe8df;
+    box-shadow:
+      inset 0 2px 4px rgba(58, 44, 28, 0.12),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  /* A paper sheet lying on the desk. */
+  .sheet {
+    overflow: hidden;
+    border-radius: 12px;
+    background: var(--white);
+    box-shadow:
+      0 0 0 1px rgba(58, 44, 28, 0.05),
+      0 1px 2px rgba(58, 44, 28, 0.08),
+      0 22px 44px -16px rgba(58, 44, 28, 0.26);
+  }
+
+  /* Buttons: a clay pill that lifts on hover and presses in on click. */
+  .clay-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    height: 2.125rem;
+    padding: 0 0.85rem;
+    border-radius: 999px;
+    background: linear-gradient(170deg, #fefdf9 0%, #eeebe3 100%);
+    color: var(--ink);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow:
+      inset 0 1px 0 #fff,
+      inset 0 -2px 4px rgba(120, 100, 70, 0.1),
+      0 1px 1.5px rgba(58, 44, 28, 0.14),
+      0 4px 10px -3px rgba(58, 44, 28, 0.16);
+    transition: transform 0.18s var(--ease), box-shadow 0.18s ease, color 0.18s ease, background 0.18s ease;
+  }
+  .clay-btn:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      inset 0 1px 0 #fff,
+      inset 0 -2px 4px rgba(120, 100, 70, 0.1),
+      0 2px 3px rgba(58, 44, 28, 0.14),
+      0 8px 16px -4px rgba(58, 44, 28, 0.2);
+  }
+  .clay-btn:active {
+    transform: translateY(1px);
+    box-shadow:
+      inset 0 2px 5px rgba(58, 44, 28, 0.18),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.7);
+  }
+  .clay-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .clay-btn:focus-visible,
+  .clay-key:focus-visible,
+  .clay-ghost:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Flat until touched: the tools inside the tray. */
+  .clay-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    height: 2.125rem;
+    padding: 0 0.7rem 0 0.35rem;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s var(--ease);
+  }
+  .clay-ghost:hover {
+    background: linear-gradient(170deg, #fefdf9 0%, #eeebe3 100%);
+    box-shadow:
+      inset 0 1px 0 #fff,
+      0 1px 1.5px rgba(58, 44, 28, 0.12),
+      0 4px 10px -3px rgba(58, 44, 28, 0.14);
+  }
+  .clay-ghost:active {
+    transform: translateY(1px);
+    box-shadow: inset 0 2px 5px rgba(58, 44, 28, 0.16);
+  }
+
+  /* The one strong object: Compile. */
+  .clay-primary {
+    background: linear-gradient(170deg, #3b7888 0%, var(--accent) 100%);
+    color: var(--white);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      inset 0 -3px 6px rgba(0, 0, 0, 0.18),
+      0 2px 3px rgba(44, 95, 111, 0.25),
+      0 8px 18px -4px rgba(44, 95, 111, 0.45);
+  }
+  .clay-primary:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      inset 0 -3px 6px rgba(0, 0, 0, 0.18),
+      0 3px 4px rgba(44, 95, 111, 0.25),
+      0 12px 24px -6px rgba(44, 95, 111, 0.5);
+  }
+  .clay-primary:active {
+    box-shadow:
+      inset 0 3px 6px rgba(0, 0, 0, 0.28),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.15);
+  }
+
+  /* A native select dressed as a clay pill. */
+  .clay-select {
+    appearance: none;
+    padding-right: 1.9rem;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23565b66' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"),
+      linear-gradient(170deg, #fefdf9 0%, #eeebe3 100%);
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center, 0 0;
+  }
+
+  /* A keycap: ⌘K. */
+  .clay-key {
+    display: inline-grid;
+    place-items: center;
+    min-width: 2.5rem;
+    height: 2.125rem;
+    padding: 0 0.5rem;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #fefdf9 0%, #ebe8e0 100%);
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    cursor: pointer;
+    box-shadow:
+      inset 0 1px 0 #fff,
+      inset 0 -3px 0 rgba(120, 100, 70, 0.16),
+      0 2px 4px rgba(58, 44, 28, 0.16);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .clay-key:active {
+    transform: translateY(2px);
+    box-shadow:
+      inset 0 1px 0 #fff,
+      inset 0 -1px 0 rgba(120, 100, 70, 0.16),
+      0 1px 1px rgba(58, 44, 28, 0.14);
+  }
+
+  /* A small clay bead behind a tool's icon. */
+  .bead {
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 999px;
+    color: var(--accent);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.65),
+      inset 0 -2px 3px rgba(58, 44, 28, 0.14),
+      0 1px 2px rgba(58, 44, 28, 0.18);
+  }
+
+  /* The split handle: a clay pill in the gutter. */
+  .grip {
+    position: relative;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .grip::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 6px;
+    height: 48px;
+    border-radius: 999px;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(90deg, #fbfaf5, #e6e2d8);
+    box-shadow:
+      0 1px 2px rgba(58, 44, 28, 0.2),
+      0 4px 8px -2px rgba(58, 44, 28, 0.16);
+    transition: background 0.18s ease, height 0.18s var(--ease);
+  }
+  .grip:hover::after,
+  .grip:focus-visible::after {
+    height: 72px;
+    background: linear-gradient(90deg, #5d8f9b, var(--accent));
+  }
+  .grip:focus-visible {
+    outline: none;
+  }
+
+  /* Windows over the desk. */
+  .clay-window {
+    border: 0;
+    border-radius: 26px;
+    background: var(--paper);
+    box-shadow:
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+      0 10px 24px rgba(58, 44, 28, 0.14),
+      0 44px 90px -24px rgba(27, 31, 39, 0.45);
+    animation: clayWindowIn 0.28s var(--ease);
+  }
+  .clay-window::backdrop {
+    background: rgba(40, 34, 26, 0.3);
+    backdrop-filter: blur(4px);
+  }
+
+  .pulse-dot {
+    animation: clayPulse 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes clayWindowIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+}
+
+@keyframes clayPulse {
+  50% {
+    opacity: 0.35;
+  }
+}

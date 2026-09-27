@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Serif, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { SITE_URL, SITE_NAME, SITE_TITLE, SITE_DESCRIPTION } from "@/lib/site";
 import "./globals.css";
+import "./clay.css";
 
 const plexSerif = IBM_Plex_Serif({
   variable: "--font-serif",

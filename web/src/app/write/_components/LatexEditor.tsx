@@ -44,7 +44,16 @@ export default function LatexEditor({
     EditorView.updateListener.of((u) => {
       if (u.docChanged) cbRef.current.onChange(u.state.doc.toString());
     }),
-    EditorView.theme({ "&": { height: "100%", fontSize: "13px" }, ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" } }),
+    // Sits on a paper sheet: no background of its own, a quiet gutter, a teal active line.
+    EditorView.theme({
+      "&": { height: "100%", fontSize: "13px", backgroundColor: "transparent" },
+      "&.cm-focused": { outline: "none" },
+      ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: "1.6" },
+      ".cm-content": { padding: "14px 0" },
+      ".cm-gutters": { backgroundColor: "transparent", borderRight: "1px solid rgba(58,44,28,.07)", color: "#a3a097" },
+      ".cm-activeLine": { backgroundColor: "rgba(44,95,111,.045)" },
+      ".cm-activeLineGutter": { backgroundColor: "rgba(44,95,111,.08)", color: "#2c5f6f" },
+    }),
   ];
 
   useEffect(() => {
@@ -85,5 +94,5 @@ export default function LatexEditor({
     v.dispatch(setDiagnostics(v.state, diags));
   }, [marks]);
 
-  return <div ref={host} data-testid="latex-editor" className="h-full min-h-[24rem] overflow-hidden rounded-sm border border-line bg-white" />;
+  return <div ref={host} data-testid="latex-editor" className="h-full overflow-hidden" />;
 }

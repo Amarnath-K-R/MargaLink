@@ -1,0 +1,14 @@
+import { chromium } from "playwright";
+const [S, name] = process.argv.slice(2);
+const ctx = await chromium.launchPersistentContext(process.cwd() + "/.smoke/write-profile", { viewport: { width: 1440, height: 900 } });
+const page = ctx.pages()[0] ?? (await ctx.newPage());
+await page.goto("http://localhost:3000/write");
+await page.waitForSelector('[data-testid="project-list"] button');
+await page.locator('[data-testid="project-list"] li button').first().click();
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+await page.waitForTimeout(800);
+await page.screenshot({ path: `${S}/${name}-a.png` });
+await page.keyboard.press("ControlOrMeta+k");
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${S}/${name}-b.png` });
+await ctx.close();

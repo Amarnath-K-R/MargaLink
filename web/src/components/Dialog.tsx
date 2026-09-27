@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 
-// A modal window over the page, on the native <dialog>: showModal() gives
+// A modal window over the page (a clay panel — `.clay-window` in clay.css), on the native <dialog>: showModal() gives
 // the focus trap (the rest of the page goes inert), Escape, the top layer
 // and focus back to the opener on close — no library. Focus lands on the
 // first [data-autofocus] inside, else the heading. `open` false renders nothing.
@@ -49,18 +49,18 @@ export default function Dialog({
         onClose();
       }}
       onClick={(e) => e.target === e.currentTarget && onClose()} // the backdrop: only the <dialog> itself is under the pointer there
-      className={`m-auto max-h-none max-w-none rounded-sm border border-line bg-paper p-0 text-ink shadow-[0_24px_60px_rgba(27,31,39,.25)] backdrop:bg-ink/40 ${SIZES[size]}`}
+      className={`clay-window m-auto max-h-none max-w-none p-0 text-ink ${SIZES[size]}`}
     >
       <div className="flex h-full max-h-[inherit] flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-line px-4 py-2.5">
-          <h2 tabIndex={-1} className="font-serif text-lg font-medium outline-none">
+        <header className="flex items-center justify-between gap-4 px-6 pb-2 pt-5">
+          <h2 tabIndex={-1} className="font-serif text-xl font-medium tracking-[-0.01em] outline-none">
             {title}
           </h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded-sm p-1 text-ink-soft hover:text-ink">
-            <X size={18} strokeWidth={1.8} />
+          <button type="button" onClick={onClose} aria-label="Close" className="clay-btn h-8 w-8 justify-center p-0 text-ink-soft">
+            <X size={15} strokeWidth={2} />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-auto p-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-auto px-6 pb-6 pt-2">{children}</div>
       </div>
     </dialog>
   );

@@ -12,6 +12,7 @@ export default function StatusBar({
   dirty,
   running,
   sent,
+  busy,
 }: {
   status: string | null;
   errors: number;
@@ -20,11 +21,15 @@ export default function StatusBar({
   dirty: boolean;
   running: { label: string; onOpen: () => void } | null;
   sent: number;
+  busy: boolean;
 }) {
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-2 text-xs text-ink-soft">
-      <span data-testid="compile-status" aria-live="polite" className="min-h-4">
-        {status}
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-2 text-xs text-ink-soft">
+      <span className="flex items-center gap-2">
+        <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${busy ? "pulse-dot bg-accent" : errors > 0 ? "bg-ink" : "bg-accent/70"}`} />
+        <span data-testid="compile-status" aria-live="polite" className="min-h-4">
+          {status}
+        </span>
       </span>
       {(errors > 0 || warnings > 0) && (
         <span>
@@ -36,7 +41,7 @@ export default function StatusBar({
       {words !== null && <span>≈ {words.toLocaleString()} words (this file)</span>}
       <span>{dirty ? "Unsaved edit" : "Saved"}</span>
       {running && (
-        <button type="button" onClick={running.onOpen} className="rounded-sm border border-line bg-paper-alt px-2 py-0.5 text-accent hover:border-accent">
+        <button type="button" onClick={running.onOpen} className="clay-btn h-6 px-2.5 text-xs text-accent">
           {running.label}
         </button>
       )}

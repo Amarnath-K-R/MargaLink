@@ -114,6 +114,25 @@ export default function WritePage() {
 
   const recommended = journal && templates.length ? templateForJournal(journal.host, templates) : null;
 
+  // An open project is a full-screen app: no page header, nothing to scroll past.
+  if (store && openProject) {
+    return (
+      <Workspace
+        key={openProject.id}
+        store={store}
+        project={openProject}
+        calls={calls}
+        templates={templates}
+        onCreateFromTemplate={(t, j) => void create(t, j)}
+        onMeta={setOpenProject}
+        onClose={() => {
+          setOpenProject(null);
+          void refresh(store);
+        }}
+      />
+    );
+  }
+
   return (
     <main className="mx-auto w-full max-w-7xl px-6 py-14 sm:py-20">
       <PageHeader
@@ -133,21 +152,6 @@ export default function WritePage() {
       />
       {error && <ErrorText>{error}</ErrorText>}
 
-      {store && openProject ? (
-        <Workspace
-          key={openProject.id}
-          store={store}
-          project={openProject}
-          calls={calls}
-          templates={templates}
-          onCreateFromTemplate={(t, j) => void create(t, j)}
-          onMeta={setOpenProject}
-          onClose={() => {
-            setOpenProject(null);
-            void refresh(store);
-          }}
-        />
-      ) : (
         <div className="max-w-4xl">
           <StorageBanner />
           {projects.length > 0 && (
@@ -215,7 +219,6 @@ export default function WritePage() {
             />
           </section>
         </div>
-      )}
 
 
       <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">

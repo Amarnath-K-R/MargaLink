@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { FileText } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { autosaver, type ProjectMeta, type ProjectStore } from "@/lib/projectStore";
 import { compileProject, TexCompileError, type TexStage } from "@/lib/texRunner";
@@ -472,7 +473,8 @@ export default function Workspace({
   };
 
   return (
-    <div data-testid="workspace">
+    // The whole viewport: the page behind it (and its scroll) is out of play.
+    <div data-testid="workspace" className="desk fixed inset-0 flex flex-col gap-3 p-3">
       <Toolbar
         project={project}
         onBack={onClose}
@@ -486,18 +488,16 @@ export default function Workspace({
         busy={busy}
         onCompile={() => void compile()}
       />
-      <div className="my-3">
-        <StorageBanner onBackup={() => void backup()} />
-      </div>
-      {firstRun && !busy && (
-        <p className="mb-3 text-sm text-ink-soft">
-          The first compile downloads the TeX engine (about 140 MB). Your browser keeps it, so later compiles take a second or two.
-        </p>
-      )}
-
-      <p className="mb-3 text-sm text-ink-soft md:hidden">Editing needs a larger screen — here is this project&apos;s last compiled PDF.</p>
-      <div className="grid gap-4 md:grid-cols-[12rem_minmax(0,var(--split))_0.375rem_minmax(0,1fr)]" style={{ "--split": `${split / (1 - split)}fr` } as CSSProperties}>
-        <div className="hidden md:block">
+      <p className="px-2 text-sm text-ink-soft md:hidden">Editing needs a larger screen — here is this project&apos;s last compiled PDF.</p>
+      <div
+        className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-3 md:grid-cols-[13.5rem_minmax(0,var(--split))_0.5rem_minmax(0,1fr)] md:gap-x-2"
+        style={{ "--split": `${split / (1 - split)}fr` } as CSSProperties}
+      >
+        <aside className="clay hidden min-h-0 flex-col p-3 md:mr-1 md:flex">
+          <p className="mb-2 flex items-baseline justify-between px-1 text-xs text-ink-soft">
+            <span className="font-medium">Files</span>
+            <span className="font-mono text-[11px]">{files.length}</span>
+          </p>
           <FileTree
             files={files}
             active={active}
@@ -542,37 +542,42 @@ export default function Workspace({
               })()
             }
           />
-        </div>
-        <div ref={editorCol} className="hidden min-w-0 md:block">
-          {doc?.path === active && /\.figure\.json$/i.test(active) && (
-            <p className="mb-2 text-sm text-ink-soft">
-              This is a figure&apos;s recipe (its settings, never its data).{" "}
-              <button
-                type="button"
-                onClick={() => {
-                  setPendingRecipe(doc.text);
-                  setTool("figures");
-                }}
-                className="text-accent hover:underline"
-              >
-                Edit in the figure studio
-              </button>
-            </p>
-          )}
-          {!TEXT.test(active) ? (
-            <p className="rounded-sm border border-line p-4 text-sm text-ink-soft">{active} isn&apos;t a text file — it&apos;s used by your paper as it is.</p>
-          ) : doc?.path === active ? (
-            <div className="h-[70vh]">
-              <LatexEditor key={doc.path} text={doc.text} marks={marks} onChange={(t) => onEdit(doc.path, t)} onSave={() => void compile()} handleRef={editor} />
-            </div>
-          ) : (
-            <div className="h-[70vh] rounded-sm border border-line" />
-          )}
-          {error && <ErrorText>{error}</ErrorText>}
-          <div className="mt-3">
-            <Diagnostics items={diagnostics} log={log} onOpen={(file, line) => void goto(file ?? project.main, line)} />
+          <StorageBanner compact onBackup={() => void backup()} />
+        </aside>
+        <section ref={editorCol} aria-label="Source" className="hidden min-h-0 min-w-0 flex-col gap-2 md:flex">
+          <div className="flex h-7 items-center gap-2 px-1.5 text-xs text-ink-soft">
+            <FileText size={13} strokeWidth={1.9} className="shrink-0" />
+            <span className="truncate font-mono text-ink">{active}</span>
+            {doc?.path === active && /\.figure\.json$/i.test(active) && (
+              <span className="ml-auto flex items-center gap-2">
+                <span className="hidden lg:inline">A figure&apos;s recipe: its settings, never its data.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingRecipe(doc.text);
+                    setTool("figures");
+                  }}
+                  className="clay-btn h-7 px-2.5 text-xs text-accent"
+                >
+                  Edit in the figure studio
+                </button>
+              </span>
+            )}
           </div>
-        </div>
+          <div className="sheet min-h-0 flex-1">
+            {!TEXT.test(active) ? (
+              <p className="p-6 text-sm text-ink-soft">{active} isn&apos;t a text file — it&apos;s used by your paper as it is.</p>
+            ) : doc?.path === active ? (
+              <LatexEditor key={doc.path} text={doc.text} marks={marks} onChange={(t) => onEdit(doc.path, t)} onSave={() => void compile()} handleRef={editor} />
+            ) : null}
+          </div>
+          {error && <ErrorText>{error}</ErrorText>}
+          {diagnostics.length > 0 && (
+            <div className="clay max-h-[32%] shrink-0 overflow-auto rounded-2xl px-4 py-3">
+              <Diagnostics items={diagnostics} log={log} onOpen={(file, line) => void goto(file ?? project.main, line)} />
+            </div>
+          )}
+        </section>
         {/* ponytail: the split's clamp (25–75 %) is its only minimum; add a px floor if a narrow window ever squeezes the editor */}
         <div
           role="separator"
@@ -599,11 +604,18 @@ export default function Workspace({
             if (e.key === "ArrowLeft") setSplit((s) => clampSplit(s - 0.05));
             if (e.key === "ArrowRight") setSplit((s) => clampSplit(s + 0.05));
           }}
-          className="hidden h-[70vh] cursor-col-resize rounded-sm bg-line hover:bg-accent focus-visible:bg-accent md:block"
+          onPointerCancel={() => {
+            dragging.current = false;
+          }}
+          className="grip hidden md:block"
         />
-        <div ref={pdfCol} className="h-[70vh] min-w-0">
-          <PdfPane url={pdfUrl} name={`${safeName(project.name)}.pdf`} />
-        </div>
+        <section ref={pdfCol} aria-label="Preview" className="min-h-0 min-w-0">
+          <PdfPane
+            url={pdfUrl}
+            name={`${safeName(project.name)}.pdf`}
+            hint={firstRun && !busy ? "The first compile downloads the TeX engine (about 140 MB). Your browser keeps it, so later compiles take a second or two." : null}
+          />
+        </section>
       </div>
 
       <StatusBar
@@ -614,6 +626,7 @@ export default function Workspace({
         dirty={dirty}
         running={running}
         sent={calls.filter((c) => c.hadBody).length}
+        busy={busy}
       />
 
       {WINDOWS.map((w) => (

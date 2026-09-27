@@ -244,7 +244,7 @@ check(
 // --- the Journal window sets the project's target journal (needs the index) ---
 const hasIndex = await page.evaluate(() => fetch("/index/meta.json").then((r) => r.ok, () => false));
 if (hasIndex) {
-  await page.click('[role="group"][aria-label="Tools"] button:has-text("Journal")');
+  await page.click('button[aria-label="Target journal"]');
   const journalWindow = page.getByRole("dialog", { name: "Journal" });
   await journalWindow.getByLabel("Search journals").fill("JAMA Neurology");
   await journalWindow.getByRole("button", { name: /^JAMA Neurology/ }).click();

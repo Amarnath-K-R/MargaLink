@@ -46,7 +46,7 @@ export default function CommandPalette({ open, onClose, commands }: { open: bool
             run(shown[at]);
           }
         }}
-        className="w-full rounded-sm border border-line bg-paper px-3 py-2 text-sm"
+        className="clay-well w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-ink-soft/70"
       />
       <ul role="listbox" aria-label="Commands" className="mt-2 max-h-[50vh] overflow-auto text-sm">
         {shown.length === 0 && <li className="px-3 py-2 text-ink-soft">No command matches.</li>}
@@ -58,7 +58,7 @@ export default function CommandPalette({ open, onClose, commands }: { open: bool
             aria-disabled={c.disabled || undefined}
             onMouseEnter={() => setCursor(i)}
             onClick={() => run(c)}
-            className={`flex cursor-pointer items-baseline justify-between gap-4 rounded-sm px-3 py-1.5 ${i === at ? "bg-accent-soft" : ""} ${c.disabled ? "opacity-50" : ""}`}
+            className={`flex cursor-pointer items-baseline justify-between gap-4 rounded-[10px] px-3 py-2 ${i === at ? "bg-accent-soft text-accent" : ""} ${c.disabled ? "opacity-50" : ""}`}
           >
             <span>{c.label}</span>
             {c.hint && <span className="font-mono text-xs text-ink-soft">{c.hint}</span>}
