@@ -9,7 +9,7 @@ import { packsFor } from "@/lib/texEngine";
 import type { TexDiagnostic } from "@/lib/texLog";
 import { findJournalRules } from "@/lib/journalRules";
 import type { Template } from "@/lib/templateCatalog";
-import { bibKeys, citeSnippet, figureSnippet, nextFigurePath, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/texSource";
+import { bibEntries, citeSnippet, figureSnippet, nextFigurePath, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/texSource";
 import type { Recipe } from "@/app/figures/_components/RecipeImportExport.tsx";
 import type { NetworkCall } from "@/components/NetworkTrace";
 import Dialog from "@/components/Dialog";
@@ -22,6 +22,7 @@ import Diagnostics from "./Diagnostics.tsx";
 import StorageBanner from "./StorageBanner.tsx";
 import Toolbar, { type InsertGroup, type Tool } from "./Toolbar.tsx";
 import StatusBar from "./StatusBar.tsx";
+import EditorFormatBar from "./EditorFormatBar.tsx";
 import CommandPalette, { type Command } from "./CommandPalette.tsx";
 import { useChecks } from "./useChecks.ts";
 import { useMatch } from "@/app/match/_components/useMatch.ts";
@@ -340,6 +341,15 @@ export default function Workspace({
     [files, project.main, active, open],
   );
 
+  // The project's citation keys (with titles) and labels, from the files in memory.
+  const bib = useMemo(() => {
+    const seen = new Set<string>();
+    return Object.entries(sources)
+      .flatMap(([p, t]) => (/\.bib$/i.test(p) ? bibEntries(t) : []))
+      .filter((e) => !seen.has(e.key) && (seen.add(e.key), true));
+  }, [sources]);
+  const labels = useMemo(() => [...new Set(Object.entries(sources).flatMap(([p, t]) => (/\.tex$/i.test(p) ? texLabels(t) : [])))], [sources]);
+
   const insertGroups = useMemo<InsertGroup[]>(() => {
     const groups: InsertGroup[] = [];
     if (figures.length) groups.push({ label: "Figures", items: figures.map((f) => ({ value: `fig:${f}`, label: f.replace(/^figures\//, "") })) });
@@ -351,12 +361,10 @@ export default function Workspace({
         { value: "snip:section", label: "Section" },
       ],
     });
-    const keys = [...new Set(Object.entries(sources).flatMap(([p, t]) => (/\.bib$/i.test(p) ? bibKeys(t) : [])))];
-    if (keys.length) groups.push({ label: "Citations", items: keys.map((k) => ({ value: `cite:${k}`, label: k })) });
-    const labels = [...new Set(Object.entries(sources).flatMap(([p, t]) => (/\.tex$/i.test(p) ? texLabels(t) : [])))];
+    if (bib.length) groups.push({ label: "Citations", items: bib.map((e) => ({ value: `cite:${e.key}`, label: e.key })) });
     if (labels.length) groups.push({ label: "Cross-references", items: labels.map((l) => ({ value: `ref:${l}`, label: l })) });
     return groups;
-  }, [figures, sources]);
+  }, [figures, bib, labels]);
 
   const insert = useCallback(
     (value: string) => {
@@ -545,9 +553,23 @@ export default function Workspace({
           <StorageBanner compact onBackup={() => void backup()} />
         </aside>
         <section ref={editorCol} aria-label="Source" className="hidden min-h-0 min-w-0 flex-col gap-2 md:flex">
-          <div className="flex h-7 items-center gap-2 px-1.5 text-xs text-ink-soft">
+          <div className="flex min-h-9 flex-wrap items-center gap-2 px-1.5 text-xs text-ink-soft">
             <FileText size={13} strokeWidth={1.9} className="shrink-0" />
             <span className="truncate font-mono text-ink">{active}</span>
+            {texOpen && (
+              <span className="ml-auto">
+                <EditorFormatBar
+                  onWrap={(b, a, ph) => editor.current?.wrap(b, a, ph)}
+                  onBlock={(t, sel) => editor.current?.insertBlock(t, sel)}
+                  onComment={() => editor.current?.comment()}
+                  onInsert={insert}
+                  entries={bib}
+                  labels={labels}
+                  figures={figures}
+                  onOpenFigures={() => setTool("figures")}
+                />
+              </span>
+            )}
             {doc?.path === active && /\.figure\.json$/i.test(active) && (
               <span className="ml-auto flex items-center gap-2">
                 <span className="hidden lg:inline">A figure&apos;s recipe: its settings, never its data.</span>

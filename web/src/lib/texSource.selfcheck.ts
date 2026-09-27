@@ -1,7 +1,7 @@
 // Runnable check for texSource.ts: the LaTeX-source helpers the workspace's
 // toolbar, status bar and review window use. Run: node src/lib/texSource.selfcheck.ts
 import assert from "node:assert/strict";
-import { bibEntries, bibKeys, figureSnippet, findQuoteInTex, nextFigurePath, paperFiles, texInputs, texLabels, texOutline, texWordCount } from "./texSource.ts";
+import { bibEntries, bibKeys, figureSnippet, tableSnippet, findQuoteInTex, nextFigurePath, paperFiles, texInputs, texLabels, texOutline, texWordCount } from "./texSource.ts";
 
 // 1. word count: comments, the preamble, commands and citations don't count; brace contents do
 {
@@ -116,6 +116,15 @@ The final sentence of the paragraph ends with these exact closing words.`;
     { key: "lee", title: "Quoted Title" },
     { key: "notitle", title: null },
   ]);
+}
+
+// 10. a table of a chosen size: one column spec letter per column, a header row, and the body rows
+{
+  const t = tableSnippet(3, 2);
+  assert.ok(t.includes("\\begin{tabular}{ll}"));
+  assert.equal((t.match(/\\\\$/gm) ?? []).length, 3); // three rows end in \\
+  assert.ok(t.includes("Column 1 & Column 2 \\\\"));
+  assert.ok(t.includes("\\caption{Caption.}") && t.includes("\\label{tab:"));
 }
 
 console.log("texSource.selfcheck: OK");

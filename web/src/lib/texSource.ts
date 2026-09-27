@@ -208,5 +208,26 @@ export const SNIPPETS = {
   section: `\\section{Section title}\n\n`,
 } as const;
 
+// A table with `rows` rows (the first a header) and `cols` left-aligned
+// columns, in a floating table with a caption to replace.
+export function tableSnippet(rows: number, cols: number): string {
+  const header = Array.from({ length: cols }, (_, i) => `Column ${i + 1}`).join(" & ");
+  const body = Array.from({ length: Math.max(0, rows - 1) }, () => "    " + Array.from({ length: cols }, () => " ").join(" & ") + " \\\\");
+  return [
+    "\\begin{table}[t]",
+    "  \\centering",
+    "  \\caption{Caption.}",
+    "  \\label{tab:table}",
+    `  \\begin{tabular}{${"l".repeat(cols)}}`,
+    "    \\hline",
+    `    ${header} \\\\`,
+    "    \\hline",
+    ...body,
+    "    \\hline",
+    "  \\end{tabular}",
+    "\\end{table}",
+  ].join("\n");
+}
+
 export const citeSnippet = (key: string) => `\\cite{${key}}`;
 export const refSnippet = (label: string) => `\\ref{${label}}`;

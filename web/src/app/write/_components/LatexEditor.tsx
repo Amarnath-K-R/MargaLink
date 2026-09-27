@@ -2,13 +2,51 @@
 
 import { useEffect, useRef } from "react";
 import { EditorView, basicSetup } from "codemirror";
-import { EditorState } from "@codemirror/state";
+import { EditorSelection, EditorState, Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
+import { toggleComment } from "@codemirror/commands";
 import { StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
 
-export type EditorHandle = { goto(line: number): void; insert(text: string): void; focus(): void };
+export type EditorHandle = {
+  goto(line: number): void;
+  insert(text: string): void;
+  focus(): void;
+  // Wraps the selection (or a selected placeholder) in `before`…`after`.
+  wrap(before: string, after: string, placeholder: string): void;
+  // Inserts `text` on lines of its own at the cursor, selecting `select` inside it.
+  insertBlock(text: string, select?: string): void;
+  comment(): void;
+};
+
+function wrapIn(v: EditorView, before: string, after: string, placeholder: string) {
+  v.dispatch(
+    v.state.changeByRange((r) => {
+      const inner = r.empty ? placeholder : v.state.sliceDoc(r.from, r.to);
+      return {
+        changes: { from: r.from, to: r.to, insert: before + inner + after },
+        range: EditorSelection.range(r.from + before.length, r.from + before.length + inner.length),
+      };
+    }),
+  );
+  v.focus();
+}
+
+function blockAt(v: EditorView, text: string, select?: string) {
+  const at = v.state.selection.main.head;
+  const line = v.state.doc.lineAt(at);
+  const lead = line.text.slice(0, at - line.from).trim() ? "\n" : "";
+  const tail = line.text.slice(at - line.from).trim() ? "\n" : "";
+  const insert = lead + text + tail;
+  const i = select ? insert.indexOf(select) : -1;
+  v.dispatch({
+    changes: { from: at, insert },
+    selection: i >= 0 ? EditorSelection.range(at + i, at + i + select!.length) : EditorSelection.cursor(at + insert.length),
+    scrollIntoView: true,
+  });
+  v.focus();
+}
 export type LineMark = { line: number; message: string; severity: "error" | "warning" };
 
 // The LaTeX source editor: CodeMirror 6 with the stex mode, a gutter marker on
@@ -41,6 +79,13 @@ export default function LatexEditor({
     lintGutter(),
     EditorView.lineWrapping,
     keymap.of([{ key: "Mod-s", preventDefault: true, run: () => (cbRef.current.onSave(), true) }]),
+    // Above basicSetup's own Mod-i (select the enclosing syntax node).
+    Prec.highest(
+      keymap.of([
+        { key: "Mod-b", preventDefault: true, run: (v) => (wrapIn(v, "\\textbf{", "}", "bold text"), true) },
+        { key: "Mod-i", preventDefault: true, run: (v) => (wrapIn(v, "\\textit{", "}", "italic text"), true) },
+      ]),
+    ),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) cbRef.current.onChange(u.state.doc.toString());
     }),
@@ -73,6 +118,16 @@ export default function LatexEditor({
         v.focus();
       },
       focus() {
+        v.focus();
+      },
+      wrap(before, after, placeholder) {
+        wrapIn(v, before, after, placeholder);
+      },
+      insertBlock(text, select) {
+        blockAt(v, text, select);
+      },
+      comment() {
+        toggleComment(v);
         v.focus();
       },
     };
