@@ -5,8 +5,8 @@ import type { OutlineItem } from "@/lib/texSource";
 // The paper's headings in reading order (the main file, then what it
 // \inputs), indented by level relative to the top level used; a click opens
 // the heading's file at its line. It follows the text as typed (after a
-// short pause); a click finds the heading near
-// its line even if lines moved meanwhile.
+// short pause); a click finds the heading near its line even if lines
+// moved meanwhile.
 export default function Outline({
   items,
   main,

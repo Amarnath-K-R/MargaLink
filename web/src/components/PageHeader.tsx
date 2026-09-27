@@ -1,9 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BarChart3, BookOpen, FileCheck2, PenLine, ScanSearch } from "lucide-react";
+import { BarChart3, BookOpen, CircleHelp, FileCheck2, PenLine, ScanSearch, ShieldCheck } from "lucide-react";
 
 // The shared header for every non-homepage route: a sticky clay tray (home,
-// the five tools with the current one pressed in, privacy) that is the same
+// the five tools with the current one pressed in, the guide, privacy) that is the same
 // width on every page, so moving between tools feels like one app; then the
 // page's h1 with its tool's bead, and an optional subtitle. The h1 keeps
 // three content-width tiers, matched to what each route renders; each page
@@ -37,11 +37,13 @@ export type ToolId = (typeof TOOL_NAV)[number]["id"];
 export default function PageHeader({
   width,
   tool,
+  page,
   title,
   subtitle,
 }: {
   width: keyof typeof TITLE_CLASS;
   tool?: ToolId;
+  page?: "guide" | "architecture" | "privacy"; // a non-tool page to show as current
   title: ReactNode;
   subtitle?: ReactNode;
 }) {
@@ -68,8 +70,14 @@ export default function PageHeader({
               </Link>
             ))}
           </div>
-          <Link href="/privacy" aria-current={tool === undefined ? "page" : undefined} className="clay-ghost shrink-0 px-3 text-xs text-ink-soft">
-            Privacy
+          {/* Words from sm up; on a phone an icon each, so all five tools still fit. */}
+          <Link href="/guide" aria-current={page === "guide" ? "page" : undefined} className="clay-ghost shrink-0 px-2.5 text-xs text-ink-soft sm:px-3">
+            <CircleHelp size={15} strokeWidth={1.9} className="sm:hidden" />
+            <span className="sr-only sm:not-sr-only">Guide</span>
+          </Link>
+          <Link href="/privacy" aria-current={page === "privacy" ? "page" : undefined} className="clay-ghost shrink-0 px-2.5 text-xs text-ink-soft sm:px-3">
+            <ShieldCheck size={15} strokeWidth={1.9} className="sm:hidden" />
+            <span className="sr-only sm:not-sr-only">Privacy</span>
           </Link>
         </nav>
       </div>

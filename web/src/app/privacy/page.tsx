@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <main className="mx-auto w-full max-w-2xl px-6 pt-3 pb-20">
-      <PageHeader
+      <PageHeader page="privacy"
         width="2xl"
         title="How privacy works"
         subtitle={<p className="mt-3 text-lg text-ink-soft">Three rules, two disclosed exceptions, and one diagram of what actually happens.</p>}
