@@ -27,6 +27,38 @@ page.on("request", (r) => {
 let promptAnswer = ""; // what the next window.prompt() gets; confirms are accepted
 page.on("dialog", (d) => void (d.type() === "prompt" ? d.accept(promptAnswer) : d.accept()));
 
+// The Review window's passes go to a mocked /api/review (the shape check_review.mjs
+// uses): every extract quotes its chunk's first sentence (skipping the all-caps
+// running head IEEEtran prints, which no source line spells the same way), the
+// cross-check cites the first two. Never a real Anthropic call.
+const firstSentence = (t) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12 && l !== l.toUpperCase()) ?? t.trim()).split(". ")[0];
+await page.route("**/api/review", async (route) => {
+  const req = route.request().postDataJSON();
+  if (req.pass === "extract") {
+    const q = firstSentence(req.chunk.text);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        claims: [{ quote: q, measure: `count in ${req.chunk.id}`, values: [{ value: 1, unit: null }] }],
+        statisticalReporting: [{ description: `Result reported without a confidence interval in ${req.chunk.title}`, severity: "minor", quote: q }],
+        notes: [],
+      }),
+    });
+  }
+  const ids = req.ledger.slice(0, 2).map((e) => e.id);
+  return route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      journalFit: { assessment: "possible", explanation: "Scope overlaps the journal's remit." },
+      inconsistencies: ids.length === 2 ? [{ description: "The sample size is stated differently in two places.", claimIds: ids }] : [],
+      summary: [{ text: "Reconcile the sample size across sections.", severity: "major", refs: ids }],
+      otherObservations: ["Consider adding a limitations paragraph."],
+    }),
+  });
+});
+
 let failed = false;
 function check(label, ok) {
   console.log(`${ok ? "ok  " : "FAIL"} ${label}`);
@@ -51,6 +83,7 @@ await page.goto("http://localhost:3000/templates/templates.json");
 await page.evaluate(async () => {
   const root = await navigator.storage.getDirectory();
   await root.removeEntry("margalink-write", { recursive: true }).catch(() => {});
+  localStorage.removeItem("margalink-review-uses"); // the review step below counts one; the profile persists
 });
 await page.goto("http://localhost:3000/write");
 await page.waitForSelector("text=Write your paper.");
@@ -243,10 +276,30 @@ if (hasIndex) {
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector("dialog[open]"));
 } else {
-  console.log("skip the Journal window (no index built)");
+  console.log("skip the Journal and Match windows (no index built)");
 }
+check(`no request carried a body before the review${bodyRequests.length ? `: ${bodyRequests.join(", ")}` : ""}`, bodyRequests.length === 0);
 
-check(`no request carried a body${bodyRequests.length ? `: ${bodyRequests.join(", ")}` : ""}`, bodyRequests.length === 0);
+// --- the Review window: the compiled PDF against a pilot journal, through the consent notice; Jump to source ---
+await page.click('[role="group"][aria-label="Tools"] button:has-text("Review")');
+const reviewWindow = page.getByRole("dialog", { name: "Review" });
+await reviewWindow.getByRole("button", { name: /^JAMA/ }).click(); // the target isn't a pilot journal, so the picker shows
+await reviewWindow.getByRole("button", { name: /^Get a standard review by Claude$/ }).click();
+await reviewWindow.locator('[role="alertdialog"]').waitFor();
+check("the consent notice appears inside the window", /in \d+ short requests/.test(await reviewWindow.locator('[role="alertdialog"]').innerText()));
+await reviewWindow.getByText("Send it and review").click();
+await reviewWindow.locator('[data-testid="review-coverage"]').waitFor({ timeout: 60_000 });
+await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });
+const jumps = reviewWindow.getByRole("button", { name: "Jump to source" });
+check("review citations offer Jump to source", (await jumps.count()) >= 1);
+await jumps.first().click();
+await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 }).catch(() => {});
+check(
+  "Jump to source closes the window and lands in the editor",
+  await page.waitForFunction(() => !document.querySelector("dialog[open]") && !!document.activeElement?.closest(".cm-content"), null, { timeout: 5000 }).then(() => true, () => false),
+);
+check("the status bar says something was sent", (await page.locator('[data-testid="workspace"]').textContent()).includes("carried text you agreed to send"));
+check(`the review's requests are the only ones with a body (${bodyRequests.length})`, bodyRequests.length > 0 && bodyRequests.every((u) => u.endsWith("/api/review")));
 check(`no page errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
 
 await context.close();

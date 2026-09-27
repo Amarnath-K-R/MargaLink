@@ -32,6 +32,7 @@ const loading = () => <p className="text-sm text-ink-soft">Loading…</p>;
 const ChecksWindow = dynamic(() => import("./ChecksWindow.tsx"), { ssr: false, loading });
 const JournalWindow = dynamic(() => import("./JournalWindow.tsx"), { ssr: false, loading });
 const MatchWindow = dynamic(() => import("./MatchWindow.tsx"), { ssr: false, loading });
+const ReviewWindow = dynamic(() => import("./ReviewWindow.tsx"), { ssr: false, loading });
 
 const TEXT = /\.(tex|bib|cls|sty|bst|txt|md|def|cfg)$/i;
 const IMAGE = /\.(png|jpe?g|pdf|eps)$/i;
@@ -235,6 +236,12 @@ export default function Workspace({
     else review.selectJournal(journalId);
     setTool("review");
   };
+  // A tool still working after its window was closed: shown on the status bar, click to reopen.
+  const running = review.reviewLoading
+    ? { label: review.progress ? `Reviewing ${review.progress.done} of ${review.progress.total}…` : "Reviewing…", onOpen: () => setTool("review") }
+    : match.busy
+      ? { label: "Matching…", onOpen: () => setTool("match") }
+      : null;
 
   const compile = useCallback(async () => {
     if (busyRef.current) return;
@@ -311,6 +318,16 @@ export default function Workspace({
     setTimeout(() => editor.current?.focus(), 0);
   }, []);
 
+  // Open a file at a line: the diagnostics' and the review's "jump to source".
+  const goto = useCallback(
+    async (file: string, line: number | null) => {
+      const target = files.includes(file) ? file : project.main;
+      if (target !== active) await open(target);
+      if (line) setTimeout(() => editor.current?.goto(line), 0);
+    },
+    [files, project.main, active, open],
+  );
+
   const insertGroups = useMemo<InsertGroup[]>(() => {
     const groups: InsertGroup[] = [];
     if (figures.length) groups.push({ label: "Figures", items: figures.map((f) => ({ value: `fig:${f}`, label: f.replace(/^figures\//, "") })) });
@@ -372,6 +389,24 @@ export default function Workspace({
             targetJournalId={project.journalId}
             onSetTarget={(id, name) => void setTarget({ id, display_name: name, host: null })}
             onReview={openReview}
+          />
+        );
+      case "review":
+        return (
+          <ReviewWindow
+            review={review}
+            pdfFile={pdfFile}
+            compiling={busy}
+            onCompile={() => void compile()}
+            pilotId={rules ? project.journalId : null}
+            targetName={project.journalName ?? null}
+            texFiles={[project.main, active, ...Object.keys(sources)]
+              .filter((p, i, all) => /\.tex$/i.test(p) && p in sources && all.indexOf(p) === i)
+              .map((path) => ({ path, text: sources[path] }))}
+            onGoto={(path, line) => {
+              closeTool();
+              void goto(path, line);
+            }}
           />
         );
       case "checks":
@@ -480,15 +515,7 @@ export default function Workspace({
           )}
           {error && <ErrorText>{error}</ErrorText>}
           <div className="mt-3">
-            <Diagnostics
-              items={diagnostics}
-              log={log}
-              onOpen={async (file, line) => {
-                const target = file ?? project.main;
-                if (target !== active && files.includes(target)) await open(target);
-                if (line) setTimeout(() => editor.current?.goto(line), 0);
-              }}
-            />
+            <Diagnostics items={diagnostics} log={log} onOpen={(file, line) => void goto(file ?? project.main, line)} />
           </div>
         </div>
         {/* ponytail: the split's clamp (25–75 %) is its only minimum; add a px floor if a narrow window ever squeezes the editor */}
@@ -530,7 +557,7 @@ export default function Workspace({
         warnings={diagnostics.filter((d) => d.kind === "warning").length}
         words={words}
         dirty={dirty}
-        running={null}
+        running={running}
         sent={calls.filter((c) => c.hadBody).length}
       />
 

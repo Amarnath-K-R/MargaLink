@@ -55,6 +55,8 @@ The final sentence of the paragraph ends with these exact closing words.`;
   assert.equal(findQuoteInTex(tex, "the hidden sentence lives only in a comment"), null);
   assert.equal(findQuoteInTex(tex, "Some totally different opening phrase words but ends with these exact closing words"), 6); // first six miss, last six hit
   assert.equal(findQuoteInTex(tex, ""), null);
+  // short words ("of", "for") sit in the source too — the needle and the haystack must drop them alike
+  assert.equal(findQuoteInTex("\\documentclass{IEEEtran}\n\\title{Bare Demo of IEEEtran.cls for IEEE Journals}", "Bare Demo of IEEEtran.cls for IEEE Journals"), 2);
 }
 
 // 5. figure snippets and the next free figure path

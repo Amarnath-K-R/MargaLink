@@ -46,7 +46,9 @@ export function texLabels(tex: string): string[] {
   return out;
 }
 
-// Plain lowercase words, with the markup that a PDF's text wouldn't show removed.
+// Plain lowercase words of three letters or more (the source and the quote
+// are reduced alike, so "of" and "a" can't keep them apart), with the markup
+// that a PDF's text wouldn't show removed.
 function plainWords(line: string): string {
   let s = uncomment(line).replace(/\\(?:cite\w*|ref|eqref|autoref|label)\*?(?:\[[^\]]*\])*\{[^}]*\}/g, " ");
   for (let i = 0; i < 5; i++) s = s.replace(/\\[A-Za-z@]+\*?(?:\[[^\]]*\])?\{([^{}]*)\}/g, "$1");
@@ -54,8 +56,9 @@ function plainWords(line: string): string {
     .replace(/\\[A-Za-z@]+\*?/g, " ")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
+    .split(" ")
+    .filter((w) => w.length >= 3)
+    .join(" ");
 }
 
 // Where a quote (as the reviewer saw it in the PDF's text) starts in the
@@ -70,7 +73,7 @@ export function findQuoteInTex(tex: string, quote: string): number | null {
     starts[i] = joined.length;
     joined += (i ? " " : "") + l;
   });
-  const words = plainWords(quote).split(" ").filter((w) => w.length >= 3);
+  const words = plainWords(quote).split(" ").filter(Boolean);
   if (!words.length) return null;
   for (const needle of [words.slice(0, 6).join(" "), words.slice(-6).join(" ")]) {
     const at = joined.indexOf(needle);
