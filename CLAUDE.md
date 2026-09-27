@@ -14,10 +14,7 @@ In practice: extraction (`web/src/lib/extract.ts`), embedding
 (`embed.ts`), ranking (`match.ts`), the rule-based format check
 (`formatCheck.ts`) and journal-rules check (`rulesCheck.ts`) all run in the
 browser — no network calls during any of them carry the paper's text, only
-the public model weights and public journal index. `match/page.tsx`
-instruments `fetch()` for the whole page lifetime (not just one run) and
-shows every request made, so this is checkable on the page itself, not just
-asserted here.
+the public model weights and public journal index.
 
 `/write` (the LaTeX workspace) keeps rule 1 the same way: projects live in
 the browser's Origin Private File System (`projectStore.ts`), and TeX Live
@@ -29,8 +26,8 @@ bodyless GETs, never anything from a paper. The workspace is also the hub:
 match, review, figures, checks and journal open as windows over it. Matching
 and the checks read the compiled PDF on-device (rule 1 unchanged); the two
 rule-3 exceptions are reachable from there through the same `ReviewConsent`
-/ `FigureConsent` components, and the page's trace panel and status bar say
-when something was sent.
+/ `FigureConsent` components, and the status bar says when something was
+sent.
 
 **The two disclosed exceptions (rule 3):** two features send something to
 Anthropic's Claude API. Both are opt-in, both sit behind an explicit

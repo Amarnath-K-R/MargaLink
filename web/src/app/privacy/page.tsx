@@ -191,7 +191,7 @@ export default function PrivacyPage() {
         journal-rules checks read the PDF you compiled, on your device; the AI review and the figure
         window&apos;s Ask Claude are the same two opt-in exceptions described above, behind the same
         notices, and nothing is sent until you confirm one of them. The workspace&apos;s status line
-        and its network panel say when a request carried something you agreed to send.
+        says when a request carried something you agreed to send.
       </p>
       <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
         <li>

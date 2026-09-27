@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
 import PageHeader from "@/components/PageHeader";
 import MatchFilters from "./_components/MatchFilters.tsx";
 import MatchResults from "./_components/MatchResults.tsx";
@@ -15,7 +14,6 @@ import { useMatch } from "./_components/useMatch.ts";
 // writing workspace's Match window); this page adds the input, the network
 // trace it proves, and the results.
 export default function MatchPage() {
-  const { calls, resetCalls } = useNetworkTrace();
   const m = useMatch();
 
   return (
@@ -35,22 +33,15 @@ export default function MatchPage() {
         <PaperInput
           busy={m.busy}
           onFile={(file) => {
-            resetCalls();
             void m.process(file);
           }}
           onPaste={(text) => {
-            resetCalls();
             void m.processPasted(text, false);
           }}
         />
         <ProcessingTrace trace={m.trace} busy={m.busy} showError={m.stage === "error"} errorMsg={m.errorMsg} />
       </div>
 
-      <NetworkTracePanel calls={calls}>
-        {calls.filter((c) => c.hadBody).length === 0
-          ? "None of these carried your paper's text — they fetch the public model, the journal index and the topic list."
-          : "Warning: a request above carried a body — this should never happen for matching."}
-      </NetworkTracePanel>
 
       {m.query && <WhatWeRead query={m.query} refs={m.refs} topics={m.paperTopics} busy={m.busy} onCorrect={(text) => void m.processPasted(text, true)} />}
 

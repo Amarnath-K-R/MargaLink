@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
 import PageHeader from "@/components/PageHeader";
 import AddToPaper from "./_components/AddToPaper";
 import FigureStudio from "./_components/FigureStudio";
@@ -12,7 +11,6 @@ import { useFigures } from "./_components/useFigures.ts";
 // FigureStudio over useFigures (shared with the writing workspace's Figures
 // window); this page adds the header, the network trace and "Add to a paper".
 export default function FiguresPage() {
-  const { calls } = useNetworkTrace();
   const f = useFigures();
 
   return (
@@ -45,11 +43,6 @@ export default function FiguresPage() {
         }
       />
 
-      <NetworkTracePanel calls={calls}>
-        {calls.filter((c) => c.hadBody).length === 0
-          ? "Live previews and exports make no request — they're drawn on this device. The figure engine, fonts and template pictures are fetched without any of your data."
-          : "Live previews and exports make no request. The one request with a body is the Ask Claude call you confirmed — its exact contents are shown above."}
-      </NetworkTracePanel>
 
       <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
         <p>

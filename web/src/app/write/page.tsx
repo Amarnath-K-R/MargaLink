@@ -6,7 +6,7 @@ import { ProjectStore, type ProjectMeta } from "@/lib/projectStore";
 import { loadTemplates, starterProject, templateForJournal, type Template } from "@/lib/templateCatalog";
 import { loadMeta } from "@/lib/match";
 import { errorMessage } from "@/lib/errorMessage";
-import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
+import { useNetworkTrace } from "@/components/NetworkTrace";
 import PageHeader from "@/components/PageHeader";
 import ErrorText from "@/components/ErrorText";
 import TemplatePicker from "./_components/TemplatePicker.tsx";
@@ -217,11 +217,6 @@ export default function WritePage() {
         </div>
       )}
 
-      <NetworkTracePanel calls={calls}>
-        {calls.some((c) => c.hadBody)
-          ? "Requests with a body are the ones you confirmed: an AI review sends the paper's text one section at a time, then one cross-check; Ask Claude in the figure window sends a description of your data, never its values."
-          : "These fetch templates, the journal index and the matching model. The TeX engine, its packages and the figure engine are fetched by workers — public files only. Nothing from your paper is sent unless you ask for an AI review or use Ask Claude in the figure window, each behind its own notice."}
-      </NetworkTracePanel>
 
       <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
         <Link href="/privacy" className="text-accent hover:underline">

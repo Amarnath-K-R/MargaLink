@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { ReactNode } from "react";
 
 export type NetworkCall = { method: string; url: string; hadBody: boolean };
 
@@ -31,33 +30,4 @@ export function useNetworkTrace() {
   // every render.
   const resetCalls = useCallback(() => setCalls([]), []);
   return { calls, resetCalls };
-}
-
-// `children` is the trailing sentence — it differs per page (match reasons
-// about whether any request carried a body at all; review reasons about
-// the one request that's expected to, once consent is given), so it's the
-// caller's to write, not this component's.
-export function NetworkTracePanel({
-  calls,
-  className = "mt-10 rounded-sm border border-line bg-paper-alt p-4 text-sm",
-  children,
-}: {
-  calls: NetworkCall[];
-  className?: string;
-  children: ReactNode;
-}) {
-  if (calls.length === 0) return null;
-  return (
-    <div className={className}>
-      <p className="mb-2 font-medium">Network requests made during this run</p>
-      <ul className="space-y-1 font-mono text-xs text-ink-soft">
-        {calls.map((c, i) => (
-          <li key={i}>
-            {c.method} {c.url} — {c.hadBody ? "had a body" : "no body sent"}
-          </li>
-        ))}
-      </ul>
-      <p className="mt-2 text-ink-soft">{children}</p>
-    </div>
-  );
 }

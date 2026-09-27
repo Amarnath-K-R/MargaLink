@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import ErrorText from "@/components/ErrorText";
-import { NetworkTracePanel, useNetworkTrace } from "@/components/NetworkTrace";
 import PageHeader from "@/components/PageHeader";
 import PaperDropzone from "@/components/PaperDropzone";
 import RulesCheckPanel from "@/components/RulesCheckPanel";
@@ -16,7 +15,6 @@ import { useReview } from "./_components/useReview.ts";
 // journal happening to land in anyone's top-10 matches. The flow itself
 // lives in useReview (shared with the writing workspace's Review window).
 export default function ReviewPage() {
-  const { calls } = useNetworkTrace();
   const r = useReview();
 
   return (
@@ -65,11 +63,6 @@ export default function ReviewPage() {
         </section>
       )}
 
-      <NetworkTracePanel calls={calls} className="mt-12 rounded-sm border border-line bg-paper-alt p-4 text-sm">
-        {calls.some((c) => c.hadBody)
-          ? "Requests with a body only happen after you confirm the consent notice above — one per section reviewed, then one for the cross-check."
-          : "No request has carried a body yet."}
-      </NetworkTracePanel>
 
       <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
         <p>
