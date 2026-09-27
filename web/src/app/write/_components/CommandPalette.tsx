@@ -12,13 +12,19 @@ export default function CommandPalette({ open, onClose, commands }: { open: bool
   const [cursor, setCursor] = useState(0);
   const shown = (open ? commands() : []).filter((c) => c.label.toLowerCase().includes(q.trim().toLowerCase()));
   const at = Math.min(cursor, Math.max(0, shown.length - 1));
+  // Every open starts blank.
+  const close = () => {
+    setQ("");
+    setCursor(0);
+    onClose();
+  };
   const run = (c: Command | undefined) => {
     if (!c || c.disabled) return;
-    onClose();
+    close();
     c.run();
   };
   return (
-    <Dialog open={open} onClose={onClose} title="Commands" size="md">
+    <Dialog open={open} onClose={close} title="Commands" size="md">
       <input
         data-autofocus
         aria-label="Search commands"

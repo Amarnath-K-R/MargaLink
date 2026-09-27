@@ -35,7 +35,9 @@ export function useChecks() {
         setRules(journalRules ? checkRules(t, journalRules) : null);
         setRulesFor(journalRules?.journalId ?? null);
       } catch (err) {
-        setSource(file); // don't retry the same PDF in a loop
+        // Mark this PDF and these rules as tried, so the window doesn't retry in a loop.
+        setSource(file);
+        setRulesFor(journalRules?.journalId ?? null);
         setError(errorMessage(err));
       } finally {
         setBusy(false);

@@ -62,7 +62,10 @@ export default function Toolbar({
             onBlur={(e) => commit(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") commit(e.currentTarget.value);
-              if (e.key === "Escape") setRenaming(false);
+              if (e.key === "Escape") {
+                e.currentTarget.value = project.name; // Chrome blurs a removed input: the blur must find nothing to commit
+                setRenaming(false);
+              }
             }}
             className="w-64 rounded-sm border border-line bg-paper px-1.5 py-0.5 font-serif text-xl"
           />

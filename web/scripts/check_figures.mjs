@@ -100,6 +100,7 @@ check(`four downloads (${names.join(", ")})`, ["figure.png", "figure.tiff", "fig
 await bar.getByRole("button", { name: "Add to a paper" }).click();
 await page.locator('[data-testid="add-to-paper"]').getByRole("button", { name: "New Plain article paper" }).click();
 await page.waitForSelector('[data-testid="add-to-paper"]:has-text("figures/figure.pdf")', { timeout: 60000 });
+check("Add to a paper links to that project in the workspace", (await page.locator('[data-testid="add-to-paper"] a[href^="/write?p="]').count()) === 1);
 
 // --- part 2: editors ---
 const preview = page.locator('[data-testid="figure-preview"]');

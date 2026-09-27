@@ -29,11 +29,11 @@ async function extractFromPdf(file: File, withHeadings: boolean): Promise<Extrac
 
   const buf = await file.arrayBuffer();
   const task = pdfjsLib.getDocument({ data: buf });
-  const doc = await task.promise;
 
   const pageTexts: string[] = [];
   const fontLines: LineFontInfo[] = [];
   try {
+    const doc = await task.promise; // inside the try: a document that fails to load still gets its task destroyed
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       // Loads the page's fonts so their real names ("GillSans-Bold") are known.

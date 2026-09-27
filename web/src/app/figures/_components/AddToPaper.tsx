@@ -13,7 +13,7 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
   const [store, setStore] = useState<ProjectStore | null>(null);
   const [projects, setProjects] = useState<ProjectMeta[] | null>(null);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ project: string; path: string; copied: boolean; tex: string } | null>(null);
+  const [done, setDone] = useState<{ id: string; project: string; path: string; copied: boolean; tex: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function open() {
@@ -40,7 +40,7 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
         () => true,
         () => false,
       );
-      setDone({ project: p.name, path, copied, tex });
+      setDone({ id: p.id, project: p.name, path, copied, tex });
       setProjects(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -83,7 +83,10 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
         <div className="mt-2 text-ink-soft" role="status">
           Added to {done.project} as <code className="font-mono text-xs">{done.path}</code>.{" "}
           {done.copied ? "The LaTeX to include it is on your clipboard." : "Paste this where it goes:"}
-          {!done.copied && <pre className="mt-1 overflow-x-auto rounded-sm border border-line p-2 font-mono text-xs">{done.tex}</pre>}
+          {!done.copied && <pre className="mt-1 overflow-x-auto rounded-sm border border-line p-2 font-mono text-xs">{done.tex}</pre>}{" "}
+          <Link href={`/write?p=${done.id}`} className="text-accent hover:underline">
+            Open it in the workspace →
+          </Link>
         </div>
       )}
       {error && <ErrorText>{error}</ErrorText>}

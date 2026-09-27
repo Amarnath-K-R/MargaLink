@@ -43,7 +43,7 @@ export default function ReviewWindow({
   }, [pdfFile, source, busy, onFile, pilotId]);
 
   if (!pdfFile) return <CompileFirst compiling={compiling} onCompile={onCompile} />;
-  const stale = r.source !== null && r.source !== pdfFile;
+  const stale = r.source !== null && r.source !== pdfFile && !r.reviewLoading; // loading a new draft would abort a run that costs a review
   const onTarget = !!pilotId && !!r.selectedJournalId && shortId(r.selectedJournalId) === shortId(pilotId);
   const jump = (c: Citation) => {
     for (const f of texFiles) {

@@ -235,9 +235,13 @@ export default function Workspace({
     await store.setMeta(project.id, { journalId: j?.id ?? null, journalName: j?.display_name ?? null });
     onMeta(await store.meta(project.id));
   };
-  // From a match result: the Review window, loaded with this PDF against that journal.
+  // From a match result: the Review window, loaded with this PDF against that
+  // journal — unless a review is running, which changing the journal would
+  // abort (and it costs one of the free reviews): then just show it.
   const openReview = (journalId: string) => {
-    if (pdfFile && review.source !== pdfFile) void review.onFile(pdfFile, { journalId });
+    if (review.reviewLoading) {
+      // keep the run
+    } else if (pdfFile && review.source !== pdfFile) void review.onFile(pdfFile, { journalId });
     else review.selectJournal(journalId);
     setTool("review");
   };
@@ -359,11 +363,11 @@ export default function Workspace({
       const snippet =
         kind === "fig" ? figureSnippet(rest) : kind === "snip" ? SNIPPETS[rest as keyof typeof SNIPPETS] : kind === "cite" ? citeSnippet(rest) : refSnippet(rest);
       editor.current?.insert(snippet);
-      if (kind === "fig" && !/^\s*\\usepackage(\[[^\]]*\])?\{[^}]*graphicx/m.test(sources[project.main] ?? "")) {
-        setStatus("Add \\usepackage{graphicx} to the preamble to use the figure.");
-      }
+      // The hint looks at every text file: a class (elsarticle, acmart) may load graphicx itself.
+      const loadsGraphicx = Object.values(sources).some((t) => /^\s*\\(?:usepackage|RequirePackage)(?:\[[^\]]*\])?\{[^}]*graphicx/m.test(t));
+      if (kind === "fig" && !loadsGraphicx) setStatus("Add \\usepackage{graphicx} to the preamble to use the figure.");
     },
-    [sources, project.main],
+    [sources],
   );
 
   // Built when the palette opens (it calls this), not on every render.

@@ -283,7 +283,17 @@ check(`no request carried a body before the review${bodyRequests.length ? `: ${b
 // --- the Review window: the compiled PDF against a pilot journal, through the consent notice; Jump to source ---
 await page.click('[role="group"][aria-label="Tools"] button:has-text("Review")');
 const reviewWindow = page.getByRole("dialog", { name: "Review" });
-await reviewWindow.getByRole("button", { name: /^JAMA/ }).click(); // the target isn't a pilot journal, so the picker shows
+// The window loads the PDF, then either reviews against the target (when it is a pilot journal) or shows the picker.
+await page.waitForFunction(
+  () => {
+    const w = document.querySelector('[data-testid="review-window"]');
+    return !!w && (w.textContent.includes("(your target journal)") || [...w.querySelectorAll("button")].some((b) => b.textContent.startsWith("JAMA")));
+  },
+  null,
+  { timeout: 30_000 },
+);
+// "(your target journal)" is the on-target line; the picker's explanation says "Your target journal, X, isn't…" without the parentheses
+if (!(await reviewWindow.getByText("(your target journal)").count())) await reviewWindow.getByRole("button", { name: /^JAMA/ }).click();
 await reviewWindow.getByRole("button", { name: /^Get a standard review by Claude$/ }).click();
 await reviewWindow.locator('[role="alertdialog"]').waitFor();
 check("the consent notice appears inside the window", /in \d+ short requests/.test(await reviewWindow.locator('[role="alertdialog"]').innerText()));
@@ -323,10 +333,16 @@ check("the figure block is in the editor", (await page.locator('[data-testid="la
 await page.click("button:has-text('Compile')");
 await compiled();
 check("the paper compiles with the inserted figure", (await pdfBytes()) > 10_000);
+// change the studio's figure (a second panel), then reopening the saved recipe must bring back the one-panel figure it stored
+await page.click('[role="group"][aria-label="Tools"] button:has-text("Figures")');
+await page.getByRole("dialog", { name: "Figures" }).getByRole("button", { name: "Add panel" }).click();
+await page.getByRole("dialog", { name: "Figures" }).locator('[data-testid="figure-preview"][data-panels="2"]').waitFor({ timeout: 60_000 });
+await page.keyboard.press("Escape");
+await page.waitForFunction(() => !document.querySelector("dialog[open]"));
 await page.click('[data-testid="file-tree"] button[title="figures/figure.figure.json"]');
 await page.getByRole("button", { name: "Edit in the figure studio" }).click();
 await page.getByRole("dialog", { name: "Figures" }).locator('[data-testid="figure-preview"][data-panels="1"]').waitFor({ timeout: 60_000 });
-check("a saved recipe reopens in the figure studio", true);
+check("a saved recipe reopens in the figure studio, replacing the changed figure", true);
 await page.keyboard.press("Escape");
 await page.waitForFunction(() => !document.querySelector("dialog[open]"));
 check(`no page errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
