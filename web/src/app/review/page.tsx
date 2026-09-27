@@ -18,14 +18,9 @@ export default function ReviewPage() {
   const r = useReview();
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-14 sm:py-20">
+    <main className="mx-auto w-full max-w-4xl px-6 pt-3 pb-20">
       <PageHeader
-        width="4xl"
-        links={[
-          { href: "/", label: "← Back" },
-          { href: "/figures", label: "Make figures" },
-          { href: "/privacy", label: "How privacy works" },
-        ]}
+        width="4xl" tool="review"
         title="Get it reviewed."
         subtitle={
           <p className="mt-3 max-w-md text-lg text-ink-soft">

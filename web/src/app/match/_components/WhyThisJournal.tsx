@@ -6,11 +6,11 @@ import type { RankedJournal } from "@/lib/rank";
 export default function WhyThisJournal({ r }: { r: RankedJournal }) {
   const { why } = r;
   return (
-    <div data-testid="why" className="mt-2 rounded-sm border border-line bg-paper-alt p-3 text-xs">
+    <div data-testid="why" className="clay-well mt-3 rounded-2xl p-4 text-xs">
       {why.topics.length > 0 && (
         <div>
           <p className="text-ink-soft">Topics you share with its recent papers</p>
-          <ul className="mt-1 space-y-1.5">
+          <ul className="mt-2 space-y-2.5">
             {why.topics.map((t) => (
               <li key={t.id}>
                 <p>{t.name}</p>
@@ -40,8 +40,8 @@ function Bar({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-2">
       <span className="w-20 text-ink-soft">{label}</span>
-      <span className="h-1.5 flex-1 rounded-sm bg-line" aria-hidden>
-        <span className="block h-1.5 rounded-sm bg-accent" style={{ width: `${Math.max(2, Math.round(value * 100))}%` }} />
+      <span className="h-2 flex-1 rounded-full bg-[#dcd8ce] shadow-[inset_0_1px_2px_rgba(58,44,28,.15)]" aria-hidden>
+        <span className="block h-2 rounded-full bg-gradient-to-r from-[#5d8f9b] to-accent" style={{ width: `${Math.max(2, Math.round(value * 100))}%` }} />
       </span>
       <span className="w-9 text-right tabular-nums">{Math.round(value * 100)}%</span>
     </div>

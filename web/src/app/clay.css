@@ -52,6 +52,63 @@
       0 22px 44px -16px rgba(58, 44, 28, 0.26);
   }
 
+  /* Text fields: pressed into the clay, a teal ring on focus. */
+  .clay-input {
+    border-radius: 12px;
+    background: #f4f2eb;
+    padding: 0.5rem 0.8rem;
+    color: var(--ink);
+    outline: none;
+    box-shadow:
+      inset 0 2px 3px rgba(58, 44, 28, 0.1),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.85);
+    transition: box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .clay-input::placeholder {
+    color: rgba(86, 91, 102, 0.7);
+  }
+  .clay-input:focus {
+    background: #fbfaf6;
+    box-shadow:
+      inset 0 2px 3px rgba(58, 44, 28, 0.08),
+      0 0 0 2px rgba(44, 95, 111, 0.45);
+  }
+
+  /* A choice: a clay card that lifts on hover; chosen, it's pressed in and teal. */
+  .clay-card {
+    border-radius: 18px;
+    background: linear-gradient(160deg, #fdfcf8 0%, #f1efe8 100%);
+    text-align: left;
+    box-shadow:
+      inset 0 1px 0 #fff,
+      inset 0 -3px 6px rgba(120, 100, 70, 0.07),
+      0 1px 2px rgba(58, 44, 28, 0.1),
+      0 8px 18px -8px rgba(58, 44, 28, 0.2);
+    transition: transform 0.2s var(--ease), box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .clay-card:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      inset 0 1px 0 #fff,
+      inset 0 -3px 6px rgba(120, 100, 70, 0.07),
+      0 2px 3px rgba(58, 44, 28, 0.1),
+      0 14px 26px -10px rgba(58, 44, 28, 0.26);
+  }
+  .clay-card[aria-pressed="true"],
+  .clay-card[aria-checked="true"],
+  .clay-card[data-selected="true"] {
+    transform: none;
+    background: linear-gradient(160deg, #e6f0f0 0%, #d9e7e8 100%);
+    box-shadow:
+      inset 0 0 0 1.5px rgba(44, 95, 111, 0.55),
+      inset 0 3px 6px rgba(44, 95, 111, 0.12),
+      0 1px 1px rgba(58, 44, 28, 0.06);
+  }
+  .clay-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
   /* Buttons: a clay pill that lifts on hover and presses in on click. */
   .clay-btn {
     display: inline-flex;
@@ -122,6 +179,46 @@
   .clay-ghost:active {
     transform: translateY(1px);
     box-shadow: inset 0 2px 5px rgba(58, 44, 28, 0.16);
+  }
+
+  /* The current page in a nav tray: pressed in. */
+  .clay-ghost[aria-current="page"] {
+    background: #ebe8df;
+    color: var(--accent);
+    box-shadow:
+      inset 0 2px 4px rgba(58, 44, 28, 0.13),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.8);
+  }
+  .clay-ghost[aria-current="page"]:hover {
+    transform: none;
+  }
+
+  /* A small action inside a card: flat and tinted; open, it's pressed in. */
+  .clay-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    height: 1.75rem;
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    background: rgba(221, 230, 230, 0.55);
+    color: var(--accent);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+  }
+  .clay-chip:hover {
+    background: var(--accent-soft);
+  }
+  .clay-chip[aria-expanded="true"],
+  .clay-chip[aria-pressed="true"] {
+    background: #cfe0e1;
+    box-shadow: inset 0 1px 3px rgba(44, 95, 111, 0.2);
+  }
+  .clay-chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 
   /* The one strong object: Compile. */

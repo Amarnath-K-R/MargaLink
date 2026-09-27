@@ -1,17 +1,17 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { BarChart3, BookOpen, FileCheck2, PenLine, ScanSearch } from "lucide-react";
 
-// The shared header shell for every non-homepage route (match, review,
-// journals, privacy, journal/[id]): a MargaLink wordmark + nav links, an
-// h1, and an optional subtitle. Three content-width tiers, matched to what
-// each route actually renders — a real reason, not inconsistency, so this
-// intentionally doesn't force one width everywhere. Each page still owns
-// its own <main className="max-w-{width}">; this only sizes the header
-// block itself, tied to the same tier so the two can't drift apart.
+// The shared header for every non-homepage route: a sticky clay tray (home,
+// the five tools with the current one pressed in, privacy) that is the same
+// width on every page, so moving between tools feels like one app; then the
+// page's h1 with its tool's bead, and an optional subtitle. The h1 keeps
+// three content-width tiers, matched to what each route renders; each page
+// still owns its own <main className="max-w-{width}">.
 const TITLE_CLASS = {
-  "2xl": "font-serif text-3xl font-medium sm:text-4xl", // privacy, a single journal
-  "3xl": "font-serif text-3xl font-medium sm:text-4xl", // journals (a list)
-  "4xl": "font-serif text-4xl font-medium leading-tight sm:text-5xl", // match, review (tool layouts)
+  "2xl": "font-serif text-3xl font-medium tracking-[-0.015em] sm:text-4xl", // privacy, a single journal
+  "3xl": "font-serif text-3xl font-medium tracking-[-0.015em] sm:text-4xl", // journals (a list)
+  "4xl": "font-serif text-4xl font-medium leading-tight tracking-[-0.02em] sm:text-5xl", // the tools
 } as const;
 
 // match/review/journals rely on the header's own bottom margin for the gap
@@ -23,35 +23,67 @@ const HEADER_SPACING = {
   "4xl": "mb-12",
 } as const;
 
-export type PageHeaderLink = { href: string; label: string };
+// Each tool's bead is a tint from the homepage's clay palette (the writing
+// workspace's toolbar uses the same ones).
+export const TOOL_NAV = [
+  { id: "journals", href: "/journals", label: "Journals", Icon: BookOpen, bead: "#efe3cf" },
+  { id: "match", href: "/match", label: "Match", Icon: ScanSearch, bead: "#cfe0e1" },
+  { id: "review", href: "/review", label: "Review", Icon: FileCheck2, bead: "#ecdcc0" },
+  { id: "figures", href: "/figures", label: "Figures", Icon: BarChart3, bead: "#f1d2c2" },
+  { id: "write", href: "/write", label: "Write", Icon: PenLine, bead: "#dde6e6" },
+] as const;
+export type ToolId = (typeof TOOL_NAV)[number]["id"];
 
 export default function PageHeader({
   width,
-  links,
+  tool,
   title,
   subtitle,
 }: {
   width: keyof typeof TITLE_CLASS;
-  links: PageHeaderLink[];
+  tool?: ToolId;
   title: ReactNode;
   subtitle?: ReactNode;
 }) {
+  const current = TOOL_NAV.find((t) => t.id === tool);
   return (
-    <header className={HEADER_SPACING[width]}>
-      <div className="mb-8 flex items-baseline justify-between">
-        <Link href="/" className="font-serif text-lg font-medium">
-          MargaLink
-        </Link>
-        <nav className="flex gap-5 text-sm text-ink-soft">
-          {links.map((link) => (
-            <Link key={link.href} href={link.href} className="hover:text-ink">
-              {link.label}
-            </Link>
-          ))}
+    <>
+      {/* Wider than the page's column: the tray is the same size on every route.
+          A sibling of the <header>, not inside it, so it sticks for the whole page. */}
+      <div className="sticky top-3 z-30 mx-[calc((100%_-_min(100vw_-_1.5rem,76rem))/2)] mb-12 sm:mb-14">
+        <nav aria-label="MargaLink" className="clay flex items-center gap-1.5 px-2.5 py-2">
+          <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-xl pr-2">
+            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-accent font-serif text-base font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,.3),inset_0_-2px_4px_rgba(0,0,0,.2),0_3px_8px_-2px_rgba(44,95,111,.45)]">
+              M
+            </span>
+            <span className="hidden font-serif text-[1.05rem] font-medium tracking-[-0.01em] md:inline">MargaLink</span>
+          </Link>
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5 overflow-x-auto">
+            {TOOL_NAV.map(({ id, href, label, Icon, bead }) => (
+              <Link key={id} href={href} aria-current={id === tool ? "page" : undefined} className="clay-ghost shrink-0 text-xs">
+                <span className="bead" style={{ background: bead }}>
+                  <Icon size={13} strokeWidth={2} />
+                </span>
+                <span className="sr-only sm:not-sr-only">{label}</span>
+              </Link>
+            ))}
+          </div>
+          <Link href="/privacy" aria-current={tool === undefined ? "page" : undefined} className="clay-ghost shrink-0 px-3 text-xs text-ink-soft">
+            Privacy
+          </Link>
         </nav>
       </div>
-      <h1 className={TITLE_CLASS[width]}>{title}</h1>
-      {subtitle}
-    </header>
+      <header className={`flex items-start gap-5 ${HEADER_SPACING[width]}`}>
+        {current && (
+          <span aria-hidden className="bead mt-1.5 hidden h-12 w-12 shrink-0 sm:grid" style={{ background: current.bead }}>
+            <current.Icon size={22} strokeWidth={1.8} />
+          </span>
+        )}
+        <div className="min-w-0">
+          <h1 className={TITLE_CLASS[width]}>{title}</h1>
+          {subtitle}
+        </div>
+      </header>
+    </>
   );
 }

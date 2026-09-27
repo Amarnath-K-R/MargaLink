@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Upload } from "lucide-react";
 
 // Shared upload control for /match, /review, and /figures — drag/drop or
 // click, a real <button> (not a div[role=button]) so keyboard activation
@@ -48,9 +49,13 @@ export default function PaperDropzone({
         handleFiles(e.dataTransfer.files);
       }}
       onClick={() => inputRef.current?.click()}
-      className={`flex h-56 flex-col items-center justify-center gap-2 rounded-sm border text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${
+      className={`group flex h-56 w-full flex-col items-center justify-center gap-2 rounded-[20px] text-center transition-[background,box-shadow] duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${
         busy ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-      } ${dragOver ? "border-accent bg-accent-soft" : "border-line bg-paper-alt"}`}
+      } ${
+        dragOver
+          ? "bg-accent-soft shadow-[inset_0_0_0_2px_rgba(44,95,111,.55),inset_0_3px_8px_rgba(44,95,111,.15)]"
+          : "bg-[#ebe8df] shadow-[inset_0_3px_7px_rgba(58,44,28,.13),inset_0_-1px_0_rgba(255,255,255,.85)] hover:bg-[#e8e5db]"
+      }`}
     >
       <input
         ref={inputRef}
@@ -59,7 +64,14 @@ export default function PaperDropzone({
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
-      <p className="font-medium">{title}</p>
+      <span
+        aria-hidden
+        className={`bead mb-1 h-12 w-12 transition-transform duration-200 ${dragOver ? "-translate-y-1" : "group-hover:-translate-y-0.5"}`}
+        style={{ background: "#fbfaf6" }}
+      >
+        <Upload size={20} strokeWidth={1.8} />
+      </span>
+      <p className="font-serif text-lg font-medium">{title}</p>
       <p className="text-sm text-ink-soft">{hint}</p>
     </button>
   );

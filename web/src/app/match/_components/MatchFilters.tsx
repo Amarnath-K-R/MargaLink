@@ -25,13 +25,13 @@ export default function MatchFilters({
   onChange: (next: JournalFilters) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-end gap-4 text-sm">
+    <div className="clay flex flex-wrap items-end gap-x-4 gap-y-3 px-4 py-3 text-sm">
       <label className="flex flex-col gap-1">
-        <span className="text-ink-soft">Field</span>
+        <span className="pl-1 text-xs text-ink-soft">Field</span>
         <select
           value={filters.field ?? ""}
           onChange={(e) => onChange({ ...filters, field: e.target.value || undefined })}
-          className="rounded-sm border border-line bg-paper px-2 py-1.5"
+          className="clay-btn clay-select w-52 truncate text-sm"
         >
           <option value="">All fields</option>
           {availableFields.map((f) => (
@@ -42,14 +42,14 @@ export default function MatchFilters({
         </select>
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-ink-soft">Fee</span>
+        <span className="pl-1 text-xs text-ink-soft">Fee</span>
         <select
           value={filters.maxFeeUsd === undefined ? "" : String(filters.maxFeeUsd)}
           onChange={(e) => {
             const v = e.target.value;
             onChange({ ...filters, maxFeeUsd: v === "" ? undefined : Number(v) });
           }}
-          className="rounded-sm border border-line bg-paper px-2 py-1.5"
+          className="clay-btn clay-select text-sm"
         >
           {FEE_PRESETS.map((p) => (
             <option key={p.label} value={p.value === undefined ? "" : String(p.value)}>
@@ -59,14 +59,14 @@ export default function MatchFilters({
         </select>
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-ink-soft">Speed</span>
+        <span className="pl-1 text-xs text-ink-soft">Speed</span>
         <select
           value={filters.maxPublicationWeeks === undefined ? "" : String(filters.maxPublicationWeeks)}
           onChange={(e) => {
             const v = e.target.value;
             onChange({ ...filters, maxPublicationWeeks: v === "" ? undefined : Number(v) });
           }}
-          className="rounded-sm border border-line bg-paper px-2 py-1.5"
+          className="clay-btn clay-select text-sm"
         >
           {SPEED_PRESETS.map((p) => (
             <option key={p.label} value={p.value === undefined ? "" : String(p.value)}>
@@ -75,7 +75,7 @@ export default function MatchFilters({
           ))}
         </select>
       </label>
-      <label className="flex items-center gap-2 pb-1.5">
+      <label className="flex h-[2.125rem] cursor-pointer items-center gap-2 rounded-full px-3 hover:bg-white/60 has-[:checked]:bg-accent-soft has-[:checked]:text-accent">
         <input
           type="checkbox"
           checked={filters.openAccessOnly ?? false}
@@ -83,7 +83,7 @@ export default function MatchFilters({
         />
         <span>Open access (DOAJ) only</span>
       </label>
-      <label className="flex items-center gap-2 pb-1.5">
+      <label className="flex h-[2.125rem] cursor-pointer items-center gap-2 rounded-full px-3 hover:bg-white/60 has-[:checked]:bg-accent-soft has-[:checked]:text-accent">
         <input
           type="checkbox"
           checked={filters.medlineOnly ?? false}

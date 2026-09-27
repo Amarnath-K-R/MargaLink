@@ -31,8 +31,8 @@ export default async function JournalPage(props: PageProps<"/journal/[id]">) {
   if (!journal) notFound();
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-6 py-14 sm:py-20">
-      <PageHeader width="2xl" links={[{ href: "/journals", label: "← Browse journals" }]} title={journal.display_name} />
+    <main className="mx-auto w-full max-w-2xl px-6 pt-3 pb-20">
+      <PageHeader width="2xl" tool="journals" title={journal.display_name} />
       <p className="mb-6 text-sm">
         <Link href={`/write?journal=${id}`} className="text-accent hover:underline">
           Write a paper for this journal →

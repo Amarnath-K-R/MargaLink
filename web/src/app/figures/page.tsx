@@ -14,13 +14,9 @@ export default function FiguresPage() {
   const f = useFigures();
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-14 sm:py-20">
+    <main className="mx-auto w-full max-w-6xl px-6 pt-3 pb-20">
       <PageHeader
-        width="4xl"
-        links={[
-          { href: "/", label: "← Back" },
-          { href: "/privacy", label: "How privacy works" },
-        ]}
+        width="4xl" tool="figures"
         title="Make a figure."
         subtitle={
           <p className="mt-3 max-w-md text-lg text-ink-soft">

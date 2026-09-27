@@ -29,7 +29,26 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
-body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-sans); }
+/* The clay desk, fixed to the viewport so long pages don't stretch it; the
+   homepage paints its own. Grain sits behind everything (clay.css's .desk
+   does the same for the full-screen workspace). */
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  background: radial-gradient(130% 100% at 30% 0%, #f7f6f1 0%, var(--paper) 50%, #e8e4da 100%) fixed var(--paper);
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.22;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.15'/%3E%3C/svg%3E");
+}
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 button, a { font: inherit; }
 button { border: 0; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }

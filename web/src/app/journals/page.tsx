@@ -36,10 +36,9 @@ export default function JournalsPage() {
   const shown = filtered.slice(0, DISPLAY_CAP);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-14 sm:py-20">
+    <main className="mx-auto w-full max-w-3xl px-6 pt-3 pb-20">
       <PageHeader
-        width="3xl"
-        links={[{ href: "/privacy", label: "How privacy works" }]}
+        width="3xl" tool="journals"
         title="Browse journals"
         subtitle={
           <p className="mt-2 text-ink-soft">

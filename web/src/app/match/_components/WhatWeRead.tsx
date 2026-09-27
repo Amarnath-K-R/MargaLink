@@ -23,17 +23,17 @@ export default function WhatWeRead({
   const [text, setText] = useState("");
   const abstract = query.abstract ?? "";
   return (
-    <section data-testid="what-we-read" className="mt-10 rounded-sm border border-line bg-paper-alt p-4 text-sm">
-      <h2 className="font-medium">What we read</h2>
+    <section data-testid="what-we-read" className="sheet mt-8 p-6 text-sm sm:p-8">
+      <h2 className="text-xs font-medium text-accent">What we read</h2>
       {query.source === "fallback" && (
         <p className="mt-2 text-ink-soft">
           We couldn&apos;t find an abstract heading, so we matched on the start of the paper with author and contact lines removed.
           Pasting your abstract below will usually match better.
         </p>
       )}
-      {query.title && <p className="mt-2 font-serif text-base">{query.title}</p>}
+      {query.title && <p className="mt-2 font-serif text-xl leading-snug">{query.title}</p>}
       {abstract && (
-        <p className="mt-1 text-ink-soft">
+        <p className="mt-2 leading-relaxed text-ink-soft">
           {open || abstract.length <= 300 ? abstract : `${abstract.slice(0, 300)}…`}{" "}
           {abstract.length > 300 && (
             <button type="button" onClick={() => setOpen(!open)} className="text-accent hover:underline">
@@ -42,7 +42,7 @@ export default function WhatWeRead({
           )}
         </p>
       )}
-      <dl className="mt-3 grid gap-1 text-xs text-ink-soft sm:grid-cols-[auto_1fr] sm:gap-x-4">
+      <dl className="mt-5 grid gap-1.5 border-t border-line/70 pt-4 text-xs text-ink-soft sm:grid-cols-[auto_1fr] sm:gap-x-6">
         {query.keywords.length > 0 && (
           <>
             <dt>Keywords</dt>
@@ -71,10 +71,10 @@ export default function WhatWeRead({
           </>
         )}
       </dl>
-      <details className="mt-3">
+      <details className="mt-4">
         <summary className="cursor-pointer text-accent">Not right? Paste your title and abstract</summary>
         <form
-          className="mt-2"
+          className="mt-3"
           onSubmit={(e) => {
             e.preventDefault();
             if (text.trim().length >= 50) onCorrect(text);
@@ -86,12 +86,12 @@ export default function WhatWeRead({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={"Title on the first line\nthen the abstract"}
-            className="w-full rounded-sm border border-line bg-paper px-3 py-2"
+            className="clay-input w-full"
           />
           <button
             type="submit"
             disabled={busy || text.trim().length < 50}
-            className="mt-2 rounded-sm border border-line bg-paper px-3 py-1.5 hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+            className="clay-btn mt-3"
           >
             Use this instead
           </button>

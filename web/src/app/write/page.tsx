@@ -134,14 +134,9 @@ export default function WritePage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-6 py-14 sm:py-20">
+    <main className="mx-auto w-full max-w-7xl px-6 pt-3 pb-20">
       <PageHeader
-        width="4xl"
-        links={[
-          { href: "/", label: "← Back" },
-          { href: "/match", label: "Find a journal" },
-          { href: "/privacy", label: "How privacy works" },
-        ]}
+        width="4xl" tool="write"
         title="Write your paper."
         subtitle={
           <p className="mt-3 max-w-xl text-lg text-ink-soft">

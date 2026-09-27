@@ -17,19 +17,14 @@ export default function MatchPage() {
   const m = useMatch();
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-14 sm:py-20">
+    <main className="mx-auto w-full max-w-5xl px-6 pt-3 pb-20">
       <PageHeader
-        width="4xl"
-        links={[
-          { href: "/", label: "← Back" },
-          { href: "/figures", label: "Make figures" },
-          { href: "/privacy", label: "How privacy works" },
-        ]}
+        width="4xl" tool="match"
         title="Find the right journal."
         subtitle={<p className="mt-3 max-w-md text-lg text-ink-soft">Nothing about your paper leaves this tab.</p>}
       />
 
-      <div className="grid gap-8 sm:grid-cols-[1fr_1.1fr]">
+      <section className="clay grid gap-8 p-6 sm:p-8 md:grid-cols-[1.15fr_1fr]">
         <PaperInput
           busy={m.busy}
           onFile={(file) => {
@@ -40,15 +35,18 @@ export default function MatchPage() {
           }}
         />
         <ProcessingTrace trace={m.trace} busy={m.busy} showError={m.stage === "error"} errorMsg={m.errorMsg} />
-      </div>
+      </section>
 
 
       {m.query && <WhatWeRead query={m.query} refs={m.refs} topics={m.paperTopics} busy={m.busy} onCorrect={(text) => void m.processPasted(text, true)} />}
 
       {m.matchInput && (
-        <section className="mt-12">
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-            <h2 className="font-serif text-xl font-medium">Best matches</h2>
+        <section className="mt-14">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-4">
+            <h2 className="font-serif text-2xl font-medium">Best matches</h2>
+            {m.results && <span className="text-sm text-ink-soft">{m.results.length} journals, best first</span>}
+          </div>
+          <div className="mb-5">
             <MatchFilters filters={m.filters} availableFields={m.availableFields} onChange={m.applyFilters} />
           </div>
 
@@ -68,7 +66,7 @@ export default function MatchPage() {
 
       {m.formatResult && <FormatCheckPanel result={m.formatResult} />}
 
-      <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
+      <footer className="mt-16 border-t border-line/80 pt-6 text-sm text-ink-soft">
         <p>
           {m.manifest
             ? `This build matches against ${m.manifest.journal_count.toLocaleString()} journals — embedded entirely on-device.`

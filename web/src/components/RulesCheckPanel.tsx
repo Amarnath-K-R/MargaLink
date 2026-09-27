@@ -3,7 +3,7 @@ import CheckRow from "./CheckRow";
 
 export default function RulesCheckPanel({ result }: { result: RulesCheckResult }) {
   return (
-    <div className="mt-2 rounded-sm border border-line bg-paper-alt p-4">
+    <div className="sheet mt-3 p-5">
       <p className="text-sm font-medium">
         {result.journalName} — {result.articleTypeLabel}
       </p>

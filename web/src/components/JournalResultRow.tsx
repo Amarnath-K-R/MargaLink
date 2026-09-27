@@ -58,10 +58,10 @@ export function JournalResultChips({ journal, indent = false }: { journal: Journ
     return null;
   }
   return (
-    <div className={`mt-1 flex flex-wrap gap-3 text-xs text-ink-soft${indent ? " pl-6" : ""}`}>
+    <div className={`mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-ink-soft${indent ? " pl-6" : ""}`}>
       {journal.field && <span>{journal.field}</span>}
-      {journal.is_in_doaj && <span className="text-accent">Open access (DOAJ)</span>}
-      {journal.medline_indexed && <span className="text-accent">MEDLINE</span>}
+      {journal.is_in_doaj && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-accent">Open access (DOAJ)</span>}
+      {journal.medline_indexed && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-accent">MEDLINE</span>}
       {journal.apc_usd != null && <span>${journal.apc_usd.toLocaleString()} fee</span>}
       {journal.publication_time_weeks != null && <span>~{journal.publication_time_weeks}wk to publish</span>}
     </div>

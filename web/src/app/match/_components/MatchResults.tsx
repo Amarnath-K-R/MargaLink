@@ -43,85 +43,69 @@ export default function MatchResults({
   expandOnly?: boolean;
 }) {
   if (results.length === 0) {
-    return <p className="text-ink-soft">No journals match these filters. Try widening them.</p>;
+    return <p className="clay-well px-5 py-6 text-center text-ink-soft">No journals match these filters. Try widening them.</p>;
   }
 
   return (
-    <ol data-testid="results">
+    <ol data-testid="results" className="space-y-3">
       {results.map((r, i) => {
         const expanded = expandedResultId === r.id;
         const journalRules: JournalRules | undefined = findJournalRules(r.id);
         const rulesOpen = openRulesCheckId === r.id;
         const rulesResult = rulesChecks[r.id];
         return (
-          <li key={r.id} className="border-t border-line py-3 first:border-t-0">
-            <div className="flex items-baseline justify-between gap-4">
-              <span className="flex gap-3">
-                <span className="text-ink-soft">{i + 1}</span>
-                <JournalResultTitle journal={r} expanded={expanded} onToggleExpand={() => onToggleExpand(r.id)} expandOnly={expandOnly} />
+          <li key={r.id} className="clay rounded-[18px] px-4 py-4 sm:px-5">
+            <div className="flex items-start gap-4">
+              <span aria-hidden className="bead mt-0.5 h-7 w-7 shrink-0 font-mono text-xs" style={{ background: i < 3 ? "#cfe0e1" : "#ebe8df" }}>
+                {i + 1}
               </span>
-              <FitBadge r={r} />
-            </div>
-            <JournalResultChips journal={r} indent />
-            {expanded && (
-              <div className="mt-3 rounded-sm border border-line bg-paper-alt p-4 pl-6">
-                <JournalDetail journal={r} topicNames={topicNames} />
-              </div>
-            )}
-            <div className="pl-6">
-              <button
-                type="button"
-                onClick={() => onToggleWhy(r.id)}
-                className="mt-1.5 text-xs text-accent hover:underline"
-                aria-expanded={openWhyId === r.id}
-              >
-                {openWhyId === r.id ? "Hide why" : "Why this journal"}
-              </button>
-              {openWhyId === r.id && <WhyThisJournal r={r} />}
-            </div>
-            {journalRules && (
-              <div className="pl-6">
-                <button
-                  type="button"
-                  onClick={() => onToggleRulesCheck(r.id)}
-                  className="mt-1.5 text-xs text-accent hover:underline"
-                  aria-expanded={rulesOpen}
-                >
-                  {rulesOpen ? "Hide" : "Check against"} {journalRules.journalName}&apos;s rules
-                </button>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-4">
+                  <span className="font-serif text-lg leading-snug">
+                    <JournalResultTitle journal={r} expanded={expanded} onToggleExpand={() => onToggleExpand(r.id)} expandOnly={expandOnly} />
+                  </span>
+                  <FitBadge r={r} />
+                </div>
+                <JournalResultChips journal={r} />
+                {expanded && (
+                  <div className="sheet mt-4 p-5 text-sm">
+                    <JournalDetail journal={r} topicNames={topicNames} />
+                  </div>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => onToggleWhy(r.id)} className="clay-chip" aria-expanded={openWhyId === r.id}>
+                    {openWhyId === r.id ? "Hide why" : "Why this journal"}
+                  </button>
+                  {journalRules && (
+                    <button type="button" onClick={() => onToggleRulesCheck(r.id)} className="clay-chip" aria-expanded={rulesOpen}>
+                      {rulesOpen ? "Hide" : "Check against"} {journalRules.journalName}&apos;s rules
+                    </button>
+                  )}
+                  {journalRules &&
+                    (onReview ? (
+                      <button type="button" onClick={() => onReview(r.id)} className="clay-chip">
+                        AI review available for {journalRules.journalName} →
+                      </button>
+                    ) : (
+                      <Link href="/review" className="clay-chip">
+                        AI review available for {journalRules.journalName} →
+                      </Link>
+                    ))}
+                  {onSetTarget ? (
+                    <button type="button" onClick={() => onSetTarget(r.id, r.display_name)} aria-pressed={targetJournalId === r.id} className="clay-chip">
+                      {targetJournalId === r.id ? "Target journal ✓" : "Set as target journal"}
+                    </button>
+                  ) : (
+                    !onReview && (
+                      <Link href={`/write?journal=${shortId(r.id)}`} className="clay-chip">
+                        Write for this journal →
+                      </Link>
+                    )
+                  )}
+                </div>
+                {openWhyId === r.id && <WhyThisJournal r={r} />}
                 {rulesOpen && rulesResult && <RulesCheckPanel result={rulesResult} />}
               </div>
-            )}
-            {journalRules && (
-              <div className="pl-6">
-                {onReview ? (
-                  <button type="button" onClick={() => onReview(r.id)} className="mt-1.5 text-xs text-accent hover:underline">
-                    AI review available for {journalRules.journalName} →
-                  </button>
-                ) : (
-                  <Link href="/review" className="mt-1.5 inline-block text-xs text-accent hover:underline">
-                    AI review available for {journalRules.journalName} →
-                  </Link>
-                )}
-              </div>
-            )}
-            <div className="pl-6">
-              {onSetTarget ? (
-                <button
-                  type="button"
-                  onClick={() => onSetTarget(r.id, r.display_name)}
-                  aria-pressed={targetJournalId === r.id}
-                  className={`mt-1.5 text-xs hover:underline ${targetJournalId === r.id ? "text-ink" : "text-accent"}`}
-                >
-                  {targetJournalId === r.id ? "Target journal ✓" : "Set as target journal"}
-                </button>
-              ) : (
-                !onReview && (
-                  <Link href={`/write?journal=${shortId(r.id)}`} className="mt-1.5 inline-block text-xs text-accent hover:underline">
-                    Write for this journal →
-                  </Link>
-                )
-              )}
             </div>
           </li>
         );
@@ -141,9 +125,14 @@ function FitBadge({ r }: { r: MatchResult }) {
       </span>
     );
   }
-  const tone = r.band === "strong" ? "border-accent text-accent" : r.band === "possible" ? "border-line text-ink" : "border-line text-ink-soft";
+  const tone =
+    r.band === "strong"
+      ? "bg-accent text-white shadow-[inset_0_1px_0_rgba(255,255,255,.25),0_2px_6px_-1px_rgba(44,95,111,.4)]"
+      : r.band === "possible"
+        ? "bg-[#ecdcc0] text-ink shadow-[inset_0_1px_0_rgba(255,255,255,.6),0_1px_3px_rgba(58,44,28,.15)]"
+        : "bg-[#ebe8df] text-ink-soft";
   return (
-    <span data-fit={r.band} className={`whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-xs ${tone}`}>
+    <span data-fit={r.band} className={`mt-0.5 shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs tabular-nums ${tone}`}>
       Fit {Math.round(r.fit * 100)} · {r.band}
     </span>
   );
