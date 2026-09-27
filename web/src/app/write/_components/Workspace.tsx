@@ -350,6 +350,8 @@ export default function Workspace({
   }, [sources]);
   const labels = useMemo(() => [...new Set(Object.entries(sources).flatMap(([p, t]) => (/\.tex$/i.test(p) ? texLabels(t) : [])))], [sources]);
 
+  const completionData = useMemo(() => ({ entries: bib, labels }), [bib, labels]);
+
   const insertGroups = useMemo<InsertGroup[]>(() => {
     const groups: InsertGroup[] = [];
     if (figures.length) groups.push({ label: "Figures", items: figures.map((f) => ({ value: `fig:${f}`, label: f.replace(/^figures\//, "") })) });
@@ -590,7 +592,7 @@ export default function Workspace({
             {!TEXT.test(active) ? (
               <p className="p-6 text-sm text-ink-soft">{active} isn&apos;t a text file — it&apos;s used by your paper as it is.</p>
             ) : doc?.path === active ? (
-              <LatexEditor key={doc.path} text={doc.text} marks={marks} onChange={(t) => onEdit(doc.path, t)} onSave={() => void compile()} handleRef={editor} />
+              <LatexEditor key={doc.path} text={doc.text} marks={marks} onChange={(t) => onEdit(doc.path, t)} onSave={() => void compile()} handleRef={editor} completions={completionData} />
             ) : null}
           </div>
           {error && <ErrorText>{error}</ErrorText>}

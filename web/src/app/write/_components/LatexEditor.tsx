@@ -5,6 +5,7 @@ import { EditorView, basicSetup } from "codemirror";
 import { EditorSelection, EditorState, Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
 import { toggleComment } from "@codemirror/commands";
+import { latexCompletions, type CompletionData } from "./latexCompletions.ts";
 import { StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
@@ -59,47 +60,61 @@ export default function LatexEditor({
   onChange,
   onSave,
   handleRef,
+  completions,
 }: {
   text: string;
   marks: LineMark[];
   onChange: (text: string) => void;
   onSave: () => void;
   handleRef: React.MutableRefObject<EditorHandle | null>;
+  completions: CompletionData; // the project's .bib entries and labels, read when a suggestion list opens
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const cbRef = useRef({ onChange, onSave });
+  const cbRef = useRef({ onChange, onSave, completions });
   useEffect(() => {
-    cbRef.current = { onChange, onSave };
+    cbRef.current = { onChange, onSave, completions };
   });
 
-  const extensions = () => [
-    basicSetup,
-    StreamLanguage.define(stex),
-    lintGutter(),
-    EditorView.lineWrapping,
-    keymap.of([{ key: "Mod-s", preventDefault: true, run: () => (cbRef.current.onSave(), true) }]),
-    // Above basicSetup's own Mod-i (select the enclosing syntax node).
-    Prec.highest(
-      keymap.of([
-        { key: "Mod-b", preventDefault: true, run: (v) => (wrapIn(v, "\\textbf{", "}", "bold text"), true) },
-        { key: "Mod-i", preventDefault: true, run: (v) => (wrapIn(v, "\\textit{", "}", "italic text"), true) },
-      ]),
-    ),
-    EditorView.updateListener.of((u) => {
-      if (u.docChanged) cbRef.current.onChange(u.state.doc.toString());
-    }),
-    // Sits on a paper sheet: no background of its own, a quiet gutter, a teal active line.
-    EditorView.theme({
-      "&": { height: "100%", fontSize: "13px", backgroundColor: "transparent" },
-      "&.cm-focused": { outline: "none" },
-      ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: "1.6" },
-      ".cm-content": { padding: "14px 0" },
-      ".cm-gutters": { backgroundColor: "transparent", borderRight: "1px solid rgba(58,44,28,.07)", color: "#a3a097" },
-      ".cm-activeLine": { backgroundColor: "rgba(44,95,111,.045)" },
-      ".cm-activeLineGutter": { backgroundColor: "rgba(44,95,111,.08)", color: "#2c5f6f" },
-    }),
-  ];
+  const extensions = () => {
+    // One source for the editor's life: autocompletion tells sources apart by identity, so a
+    // fresh function per lookup would restart every query and never show a list.
+    const suggest = latexCompletions(() => cbRef.current.completions);
+    return [
+      basicSetup,
+      StreamLanguage.define(stex),
+      lintGutter(),
+      EditorState.languageData.of(() => [{ autocomplete: suggest }]),
+      EditorView.lineWrapping,
+      keymap.of([{ key: "Mod-s", preventDefault: true, run: () => (cbRef.current.onSave(), true) }]),
+      // Above basicSetup's own Mod-i (select the enclosing syntax node).
+      Prec.highest(
+        keymap.of([
+          { key: "Mod-b", preventDefault: true, run: (v) => (wrapIn(v, "\\textbf{", "}", "bold text"), true) },
+          { key: "Mod-i", preventDefault: true, run: (v) => (wrapIn(v, "\\textit{", "}", "italic text"), true) },
+        ]),
+      ),
+      EditorView.updateListener.of((u) => {
+        if (u.docChanged) cbRef.current.onChange(u.state.doc.toString());
+      }),
+      // Sits on a paper sheet: no background of its own, a quiet gutter, a teal active line.
+      EditorView.theme({
+        "&": { height: "100%", fontSize: "13px", backgroundColor: "transparent" },
+        "&.cm-focused": { outline: "none" },
+        ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: "1.6" },
+        ".cm-content": { padding: "14px 0" },
+        ".cm-gutters": { backgroundColor: "transparent", borderRight: "1px solid rgba(58,44,28,.07)", color: "#a3a097" },
+        ".cm-activeLine": { backgroundColor: "rgba(44,95,111,.045)" },
+        ".cm-activeLineGutter": { backgroundColor: "rgba(44,95,111,.08)", color: "#2c5f6f" },
+        // Suggestions and hovers as small clay cards.
+        ".cm-tooltip": { border: "none", borderRadius: "12px", backgroundColor: "#fbfaf6", boxShadow: "0 1px 2px rgba(58,44,28,.12), 0 12px 28px -8px rgba(58,44,28,.28)", overflow: "hidden" },
+        ".cm-tooltip-autocomplete > ul": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", maxHeight: "16em" },
+        ".cm-tooltip-autocomplete > ul > li": { padding: "3px 10px" },
+        ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "#dde6e6", color: "#2c5f6f" },
+        ".cm-completionDetail": { fontStyle: "normal", color: "#565b66", marginLeft: "0.75em", fontFamily: "var(--font-sans)" },
+      }),
+    ];
+  };
 
   useEffect(() => {
     if (!host.current) return;
