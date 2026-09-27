@@ -38,6 +38,7 @@ what happens before anything is sent. See `docs/ARCHITECTURE.md`.
 | `web/src/lib/` | Framework-agnostic logic — matching (the ranker, topic estimates, reference lists), format checks, the AI review's sectioning/prompts/grounding/orchestration, the figure studio's spec/payload/prompt, the writing workspace's TeX runner and project storage. Kept flat by design. |
 | `web/functions/api/review.ts`, `web/functions/api/figure.ts` | The two server-side files — Cloudflare Pages Functions holding the Anthropic API key for the opt-in AI review and the opt-in figure generator. |
 | `docs/ARCHITECTURE.md` | Why the system is built this way, plus a one-line-per-file map of everything above — start here after this file. |
+| `/guide`, `/architecture` (in the app) | The illustrated user guide — every tool and option, on screenshots of the real UI (`web/scripts/guide_shots.mjs` re-makes them) — and a tour of this architecture for developers and reviewers, with diagrams and a review checklist. |
 
 ## Quickstart
 

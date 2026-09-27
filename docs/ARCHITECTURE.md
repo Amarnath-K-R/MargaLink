@@ -278,12 +278,9 @@ Costs: a spec call is roughly $0.02–0.04 (effort low); previews and
 exports are free and unlimited; 5 Claude calls per device, 200 per day
 globally (`figure-count:<date>` in `FIGURES_KV`).
 
-One honest caveat: `useNetworkTrace()` patches `fetch` on the main thread.
-The worker's fetches (Pyodide from jsDelivr, `figurelib.py`, fonts) happen
-off the main thread, so they don't appear in the page's trace panel. They
-are bodyless GETs for public, versioned assets — never anything from the
-dataset — but the panel's completeness guarantee doesn't extend there,
-and `/figures` doesn't claim it does.
+The worker's own fetches (Pyodide from jsDelivr, `figurelib.py`, fonts) happen
+off the main thread. They are bodyless GETs for public, versioned assets —
+never anything from the dataset.
 
 ### The writing workspace: LaTeX in the browser
 
@@ -415,10 +412,12 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `clay.css` | The clay theme the tool pages and the workspace share, in the components layer (so a Tailwind utility on the same element wins): `.clay` (raised slab), `.clay-well` (pressed in), `.sheet` (paper), `.clay-btn` / `.clay-primary` / `.clay-ghost` / `.clay-key` / `.clay-chip`, `.clay-input` / `.clay-field` / `.clay-select`, `.clay-card` (a choice; `aria-pressed`/`aria-checked`/`data-selected` press it in), `.bead`, `.grip`, `.desk`, `.clay-window` (dialogs). Warm shadows only, one light from the top left; the `--away` colour stays reserved for what leaves the device. |
 | `opengraph-image.tsx` | OG image, rendered with `satori` — can't resolve CSS custom properties, so `lib/site.ts`'s `BRAND` colors are duplicated here as literal hex, deliberately. |
 | `robots.ts`, `sitemap.ts` | SEO. |
+| `guide/page.tsx`, `guide/shots.json` | The user guide: every tool and option on screenshots of the real UI, with numbered markers whose positions `scripts/guide_shots.mjs` measures and writes to `shots.json` (the images are in `public/guide/`). Re-run the script after a screen changes. |
+| `architecture/page.tsx` | The developers' and reviewers' tour: the system diagram, the privacy rules in code, each tool's pipeline, the design system, tests, deploying, a review checklist. This file stays the source; the page distills it. |
 | `privacy/page.tsx` | Static prose + the privacy-flow SVG diagram. |
 | `journal/[id]/page.tsx` | Static-generated per-journal page (`generateStaticParams` from `getPrerenderedJournals()`). |
 | `journals/page.tsx`, `journals/layout.tsx` | Browse/search/filter the full journal index. |
-| `match/page.tsx` | JSX over `useMatch()`: the input, the network trace it proves, the results. |
+| `match/page.tsx` | JSX over `useMatch()`: the input, the steps run on the device, the results. |
 | `match/_components/useMatch.ts` | The whole run — read → embed → topics → references → rank, the filter re-rank with its out-of-order guard (`matchSeq`), the rules checks — as one hook, so the writing workspace's Match window shares it. It interleaves ~8 `setState` calls with async steps, so it stays with its state rather than moving to `lib/`. |
 | `match/_components/MatchFilters.tsx` | The 5 filter controls + `FEE_PRESETS`/`SPEED_PRESETS`. |
 | `match/_components/MatchResults.tsx` | The results list with fit badges, built on the shared `JournalResultTitle`/`JournalResultChips`. On `/match` rows link on to `/review` and `/write?journal=`; inside the workspace `onReview`/`onSetTarget`/`expandOnly` keep everything on the page. |
@@ -432,7 +431,7 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `review/_components/TierPicker.tsx` | The quick/standard/thorough grid; owns `TIER_OPTIONS`. |
 | `review/_components/OutlineEditor.tsx` | The detected outline before consent: per-section type, merge, add heading, "Don't send". |
 | `review/layout.tsx` | Route metadata shim. |
-| `figures/page.tsx` | Header, `FigureStudio` over `useFigures()`, the trace, and "Add to a paper" in the export bar's slot. |
+| `figures/page.tsx` | Header, `FigureStudio` over `useFigures()`, and "Add to a paper" in the export bar's slot. |
 | `figures/_components/useFigures.ts`, `FigureStudio.tsx` | The studio's state (upload → data prep → spec, the debounced render loop, recipes, export) as a hook, and its body as a component — shared with the workspace's Figures window. |
 | `figures/_components/DataPrep.tsx` | Sheet, header row, number format, missing-value markers, per-column types, wide→long, the parsed preview table. |
 | `figures/_components/Describe.tsx` | The request box, Ask Claude (spec) / custom tweak (hook), the labels opt-in, the live `[data-testid="figure-payload"]` preview. |
@@ -441,7 +440,7 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `figures/_components/FigurePreview.tsx`, `ExportBar.tsx`, `RecipeImportExport.tsx` | The live image with local-only error details and test results; PNG/TIFF/SVG/PDF export (with a `children` slot beside Export); recipe save/load. |
 | `figures/layout.tsx` | Route metadata shim. |
 | `figures/_components/AddToPaper.tsx` | Puts the figure as a PDF into a `/write` project's `figures/` and copies the LaTeX. |
-| `write/page.tsx` | Project list, template picker, zip import; `?journal=` preselects a template, `?p=` reopens a project; the network trace, passed down. |
+| `write/page.tsx` | Project list, template picker, zip import; `?journal=` preselects a template, `?p=` reopens a project; an open project renders the full-screen `Workspace` alone. `useNetworkTrace()` counts requests with a body for the workspace's status line. |
 | `write/_components/Workspace.tsx` | One open project, full screen: the tray, the files/outline slab, the source and PDF sheets (a draggable split, or one of them alone), diagnostics, the status line, and the tool windows over it. Owns the tools' hooks (the one route that imports another route's `_components/`), the compiled PDF as a `File`, the text files' contents (for suggestions, the outline and the word count), the remembered view settings, auto-compile and figure insertion. |
 | `write/_components/Toolbar.tsx`, `StatusBar.tsx`, `CommandPalette.tsx`, `Shortcuts.tsx`, `CompileFirst.tsx` | The shell: home / back / rename / journal chip / tools / files toggle / view / Compile / ⌘K; the status line (compile status, counts, the paper's word count and limit, saved, a running tool, the engine, auto-compile, what was sent, the shortcuts key); the ⌘K palette; the keyboard shortcuts window; the "Compile first" notice. |
 | `write/_components/EditorFormatBar.tsx`, `latexCompletions.ts`, `Outline.tsx` | The formatting bar over the source (wrap or insert; Cite/Ref/Figure lists, a table-size grid); the suggestions inside `\cite{`, `\ref{`, `\begin{` and after `\`; the Outline tab. |
@@ -465,7 +464,8 @@ from routing; nothing outside `app/page.tsx` imports from it).
 |---|---|
 | `PageHeader.tsx` | Every non-homepage route's header: a sticky clay tray (home, the five tools with the current one pressed in, privacy) the same width on every page, then the h1 with its tool's bead; 3 content-width tiers for the h1. |
 | `Step.tsx` | A numbered step of a tool page on a clay slab (Review, Figures). |
-| `NetworkTrace.tsx` | `useNetworkTrace()` + `<NetworkTracePanel>` — the fetch-instrumentation that makes `/match` and `/review`'s privacy claims checkable on the page itself. |
+| `docs/Doc.tsx`, `docs/Art.tsx`, `docs/Diagrams.tsx` | The documentation pages' blocks (contents list, sections, screenshots with markers, option tables, asides), their clay illustrations (inline SVG) and diagrams. |
+| `NetworkTrace.tsx` | `useNetworkTrace()` — patches `fetch` for the page's lifetime; `/write` uses it to count requests that carried a body (the status line's "sent"). The on-page request list it once fed was removed on 2026-09-27. |
 | `JournalResultRow.tsx` | `JournalResultTitle` (prerendered-link-vs-expand-button) + `JournalResultChips` (metadata chips), shared by `/journals` and `/match`. |
 | `Dialog.tsx` | The modal window primitive on the native `<dialog>` (`showModal()`: focus trap, Escape, top layer, focus restore), used by the writing workspace's windows and palette. |
 | `ErrorText.tsx` | The one `role="alert"` error paragraph. |
