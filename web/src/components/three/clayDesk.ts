@@ -547,7 +547,7 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
   {
     const o = mug(THREE);
     const steam = o.userData.steam as THREE_NS.Mesh[];
-    place(o, 5.4, at(0.78), -0.4, 1, (ms, _p, still) => {
+    place(o, 5.4, at(0.92), -0.4, 1, (ms, _p, still) => {
       steam.forEach((m, i) => {
         const t = still ? 0.4 : ((ms / 2200 + i / 3) % 1);
         m.position.set(Math.sin(t * 6 + i) * 0.12, 1.2 + t * 1.3, 0);
@@ -556,8 +556,8 @@ function buildProps(THREE: T, zA: number, zB: number): Prop[] {
       });
     });
   }
-  place(magnifier(THREE), 2.6, at(1), Math.PI / 2, 1.1); // handle straight up
-  place(pencilCup(THREE), -5.8, at(1.5), 0.3, 0.85);
+  place(magnifier(THREE), 2.6, at(1.1), Math.PI / 2, 0.85); // handle straight up
+  place(pencilCup(THREE), -6.3, at(1.8), 0.3, 0.72);
   // rubber stamp: thumps down every couple of seconds, leaving its mark
   {
     const o = stamp(THREE);
@@ -897,12 +897,12 @@ export function buildDesk(THREE: T, renderer: THREE_NS.WebGLRenderer, layout: De
       V(-2.3, y, at(0.1)), // between the books and the eraser
       V(-2, y, at(0.3)),
       V(-1, y, at(0.42)), // under the eraser, past the notes
-      V(0, y, at(0.55)), // across between the beats
-      V(3.7, y, at(0.64)), // over the magnifier's handle, past the mug
-      V(4.1, y, at(0.92)),
-      V(4, y, at(1.12)), // round the magnifier
-      V(2.9, y, at(1.3)), // and under it
-      V(1.9, y, at(1.5)), // past the stamp
+      V(-0.5, y, at(0.63)), // across between the beats' slabs
+      V(3.2, y, at(0.66)), // over the magnifier's handle
+      V(4.15, y, at(0.95)), // past the mug
+      V(4, y, at(1.18)), // round the magnifier
+      V(2.8, y, at(1.35)), // and under it
+      V(1.9, y, at(1.52)), // past the stamp
       V(bp.x + 0.4, y, bp.z - 2.2),
       V(bp.x, y, bp.z - 0.8),
       V(bp.x, y, bp.z - 0.15), // under the book
