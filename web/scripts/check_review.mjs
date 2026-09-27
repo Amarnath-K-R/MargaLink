@@ -1,8 +1,8 @@
 // Dev-only: verify /review end to end against a mocked /api/review — upload,
 // journal, consent naming the request count, per-pass progress, a forced
 // failure on one section surfacing in coverage, Retry healing it, the
-// prioritized summary and grounded citations, the network panel listing
-// every pass, cancel, and the capacity stop. Never a real Anthropic call —
+// prioritized summary and grounded citations, cancel, and the capacity
+// stop. Never a real Anthropic call —
 // that's a manual gate (see docs/ARCHITECTURE.md's review section).
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
@@ -105,8 +105,6 @@ check("retry re-ran only the failed section + synthesis", extractCount === extra
 const summary = await page.locator('[data-testid="review-summary"]').innerText();
 check("prioritized summary rendered", summary.includes("Reconcile the sample size"));
 check("summary items carry grounded citations", (await page.locator('[data-testid="review-summary"] li li').count()) >= 1);
-const bodyCalls = await page.locator("text=had a body").count();
-check(`network panel lists every pass (${bodyCalls})`, bodyCalls === extractCount + synthCount);
 const uses = () => page.evaluate(() => localStorage.getItem("margalink-review-uses"));
 check("one device use recorded", (await uses()) === "1");
 

@@ -41,21 +41,21 @@ export default function OutlineEditor({
   const [heading, setHeading] = useState("");
   const excluded = rows.filter((r) => r.excluded).length;
   return (
-    <details className="mt-4 rounded-sm border border-line bg-paper-alt text-sm" data-testid="review-outline">
-      <summary className="cursor-pointer px-3 py-2">
+    <details className="clay-well mt-4 rounded-2xl text-sm" data-testid="review-outline">
+      <summary className="cursor-pointer px-4 py-3">
         <span className="font-medium">Detected outline</span>{" "}
         <span className="text-ink-soft">
           · {rows.length - excluded} section{rows.length - excluded === 1 ? "" : "s"}
           {excluded > 0 ? ` · ${excluded} excluded` : ""} · check or edit
         </span>
       </summary>
-      <div className="border-t border-line px-3 py-3">
+      <div className="border-t border-line/80 px-4 py-4">
         <p className="text-xs text-ink-soft">
           Taken from your document&apos;s own headings where it has them. Fix a section&apos;s type, merge
           a section into the one before it, or mark a section &ldquo;Don&apos;t send&rdquo; — it will
           never leave your device. This outline stays on your device too.
         </p>
-        <ul className="mt-3 divide-y divide-line">
+        <ul className="mt-3 divide-y divide-line/80">
           {rows.map((r, i) => (
             <li key={r.charStart} className={`flex flex-wrap items-center gap-2 py-2 ${r.excluded ? "opacity-60" : ""}`}>
               <span className="min-w-0 flex-1 truncate" title={r.title}>
@@ -69,7 +69,7 @@ export default function OutlineEditor({
                 aria-label={`Type of section: ${r.title}`}
                 value={r.excluded ? "excluded" : r.kind}
                 onChange={(e) => onKind(r.charStart, e.target.value as SectionKind | "excluded")}
-                className="rounded-sm border border-line bg-paper px-1 py-0.5 text-xs"
+                className="clay-btn clay-select h-7 text-xs"
               >
                 {KIND_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -78,7 +78,7 @@ export default function OutlineEditor({
                 ))}
               </select>
               {i > 0 && (
-                <button type="button" onClick={() => onMerge(r.charStart)} className="text-xs text-accent hover:underline">
+                <button type="button" onClick={() => onMerge(r.charStart)} className="clay-chip">
                   Merge into previous
                 </button>
               )}
@@ -100,9 +100,9 @@ export default function OutlineEditor({
             id="outline-add-heading"
             value={heading}
             onChange={(e) => setHeading(e.target.value)}
-            className="min-w-0 flex-1 rounded-sm border border-line bg-paper px-2 py-1 text-xs"
+            className="clay-input min-w-0 flex-1 py-1.5 text-xs"
           />
-          <button type="submit" className="text-xs text-accent hover:underline">
+          <button type="submit" className="clay-btn h-7 text-xs">
             Add heading
           </button>
           {edited && (

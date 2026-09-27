@@ -25,9 +25,13 @@ export default function ReviewConsent({
   onCancel: () => void;
 }) {
   return (
-    <div className="mt-3 rounded-sm border border-line bg-paper-alt p-4" role="alertdialog" aria-label="Review consent">
-      <p className="text-sm font-medium">Send this paper&apos;s text to Claude for a {tier} review?</p>
-      <p className="mt-2 text-sm text-ink-soft">
+    <div className="sheet mt-5 border-l-4 border-away p-5 sm:p-6" role="alertdialog" aria-label="Review consent">
+      <p className="mb-2 flex items-center gap-2 text-xs font-medium text-away">
+        <span aria-hidden className="h-2 w-2 rounded-full bg-away shadow-[0_0_0_4px_rgba(161,90,63,.12)]" />
+        Sends text off this device
+      </p>
+      <p className="font-serif text-lg font-medium">Send this paper&apos;s text to Claude for a {tier} review?</p>
+      <p className="mt-2 text-sm leading-relaxed text-ink-soft">
         Unlike matching and the structural checks, this sends your paper&apos;s text to
         Anthropic&apos;s Claude API in {passCount} short requests — one per section, then one
         cross-check over the numbers found — to review it against {journalName}&apos;s
@@ -44,11 +48,11 @@ export default function ReviewConsent({
         {reviewsRemaining === 1 ? "" : "s"} left on this device. Retrying a section that
         failed doesn&apos;t use another one.
       </p>
-      <div className="mt-3 flex gap-4 text-sm">
-        <button type="button" onClick={onConfirm} className="text-accent hover:underline">
+      <div className="mt-5 flex flex-wrap gap-3 text-sm">
+        <button type="button" onClick={onConfirm} className="clay-btn clay-primary h-10 px-5 font-medium">
           Send it and review
         </button>
-        <button type="button" onClick={onCancel} className="text-ink-soft hover:underline">
+        <button type="button" onClick={onCancel} className="clay-btn h-10 px-5">
           Cancel
         </button>
       </div>

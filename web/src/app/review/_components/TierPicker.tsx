@@ -12,18 +12,16 @@ export const TIER_OPTIONS: { value: ReviewTier; label: string; description: stri
 
 export default function TierPicker({ tier, onSelect }: { tier: ReviewTier; onSelect: (tier: ReviewTier) => void }) {
   return (
-    <div className="mt-4 grid gap-2 sm:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-3">
       {TIER_OPTIONS.map((opt) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onSelect(opt.value)}
           aria-pressed={tier === opt.value}
-          className={`rounded-sm border p-3 text-left text-sm transition-colors ${
-            tier === opt.value ? "border-accent bg-accent-soft" : "border-line bg-paper-alt hover:border-accent"
-          }`}
+          className="clay-card px-4 py-3.5 text-sm"
         >
-          <p className="font-medium">{opt.label}</p>
+          <p className="font-serif text-base font-medium">{opt.label}</p>
           <p className="mt-0.5 text-xs text-ink-soft">{opt.description}</p>
         </button>
       ))}

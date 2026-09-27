@@ -10,12 +10,12 @@ import type { Citation, ReviewResult } from "@/lib/reviewTypes";
 function CitationList({ citations, onCitation }: { citations: Citation[]; onCitation?: (c: Citation) => void }) {
   if (citations.length === 0) return null;
   return (
-    <ul className="mt-1 space-y-1">
+    <ul className="mt-2 space-y-1.5">
       {citations.map((c, i) => (
-        <li key={i} className="border-l-2 border-line pl-2 text-xs italic text-ink-soft">
+        <li key={i} className="border-l-2 border-accent/35 pl-3 text-xs italic leading-relaxed text-ink-soft">
           &ldquo;{c.quote}&rdquo; <span className="not-italic">— {c.section}</span>
           {onCitation && (
-            <button type="button" onClick={() => onCitation(c)} className="ml-2 not-italic text-accent hover:underline">
+            <button type="button" onClick={() => onCitation(c)} className="clay-chip ml-2 h-6 not-italic">
               Jump to source
             </button>
           )}
@@ -35,14 +35,17 @@ function coverageLine({ reviewed, failed, pending, skipped }: ReviewResult["cove
 
 export default function ReviewResultPanel({ result, partial = false, onCitation }: { result: ReviewResult; partial?: boolean; onCitation?: (c: Citation) => void }) {
   const fit = result.journalFit;
-  const fitColor = fit?.assessment === "good" ? "text-accent" : fit?.assessment === "poor" ? "text-away" : "text-ink-soft";
+  const fitTone =
+    fit?.assessment === "good" ? "bg-accent text-white" : fit?.assessment === "poor" ? "bg-[#f1d2c2] text-away" : "bg-[#ecdcc0] text-ink";
   return (
-    <div className="mt-4 rounded-sm border border-line bg-paper-alt p-4 text-sm">
-      <p>
-        <span className="font-medium">Journal fit: </span>
+    <div className="sheet mt-6 p-6 text-sm sm:p-8">
+      <p className="text-xs font-medium text-accent">The review</p>
+      <p className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 leading-relaxed">
+        <span className="font-serif text-lg font-medium">Journal fit</span>
         {fit ? (
           <>
-            <span className={fitColor}>{fit.assessment}</span> — {fit.explanation}
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${fitTone}`}>{fit.assessment}</span>
+            <span className="basis-full text-ink-soft">{fit.explanation}</span>
           </>
         ) : (
           <span className="text-ink-soft">pending cross-check</span>
@@ -50,9 +53,9 @@ export default function ReviewResultPanel({ result, partial = false, onCitation 
       </p>
 
       {result.summary.length > 0 && (
-        <div className="mt-3" data-testid="review-summary">
-          <p className="font-medium">Fix these first</p>
-          <ol className="mt-1 list-decimal space-y-3 pl-5">
+        <div className="mt-6 border-t border-line/70 pt-5" data-testid="review-summary">
+          <p className="font-serif text-lg font-medium">Fix these first</p>
+          <ol className="mt-2 list-decimal space-y-4 pl-5 marker:text-ink-soft">
             {result.summary.map((item, i) => (
               <li key={i}>
                 <span className={item.severity === "major" ? "text-away" : "text-ink-soft"}>{item.text}</span>
@@ -64,8 +67,8 @@ export default function ReviewResultPanel({ result, partial = false, onCitation 
       )}
 
       {result.inconsistencies.length > 0 && (
-        <div className="mt-3">
-          <p className="font-medium">Inconsistencies</p>
+        <div className="mt-6 border-t border-line/70 pt-5">
+          <p className="font-serif text-lg font-medium">Inconsistencies</p>
           <ul className="mt-1 list-disc space-y-3 pl-5 text-ink-soft">
             {result.inconsistencies.map((item, i) => (
               <li key={i}>
@@ -78,8 +81,8 @@ export default function ReviewResultPanel({ result, partial = false, onCitation 
       )}
 
       {result.statisticalReporting.length > 0 && (
-        <div className="mt-3">
-          <p className="font-medium">Statistical reporting</p>
+        <div className="mt-6 border-t border-line/70 pt-5">
+          <p className="font-serif text-lg font-medium">Statistical reporting</p>
           <ul className="mt-1 list-disc space-y-3 pl-5 text-ink-soft">
             {result.statisticalReporting.map((item, i) => (
               <li key={i}>
@@ -92,8 +95,8 @@ export default function ReviewResultPanel({ result, partial = false, onCitation 
       )}
 
       {result.otherObservations.length > 0 && (
-        <div className="mt-3">
-          <p className="font-medium">Other observations</p>
+        <div className="mt-6 border-t border-line/70 pt-5">
+          <p className="font-serif text-lg font-medium">Other observations</p>
           <ul className="mt-1 list-disc space-y-1 pl-5 text-ink-soft">
             {result.otherObservations.map((obs, i) => (
               <li key={i}>{obs}</li>
@@ -102,7 +105,7 @@ export default function ReviewResultPanel({ result, partial = false, onCitation 
         </div>
       )}
 
-      <p className="mt-3 text-xs text-ink-soft" data-testid="review-coverage">
+      <p className="mt-6 border-t border-line/70 pt-4 text-xs text-ink-soft" data-testid="review-coverage">
         {coverageLine(result.coverage)}
       </p>
       <p className="mt-1 text-xs text-ink-soft">

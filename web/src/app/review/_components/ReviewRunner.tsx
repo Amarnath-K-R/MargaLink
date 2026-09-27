@@ -32,30 +32,41 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
         />
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-4">
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => r.setConsentOpen(true)}
           disabled={r.reviewLoading || reviewsRemaining() <= 0}
-          className="rounded-sm border border-line bg-paper-alt px-4 py-2 text-sm hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+          className="clay-btn clay-primary h-11 px-6 text-sm font-medium"
         >
           {r.reviewLoading ? "Reviewing…" : reviewsRemaining() <= 0 ? "Pilot review limit reached on this device" : `Get a ${r.tier} review by Claude`}
         </button>
         {r.reviewLoading && (
-          <button type="button" onClick={r.cancel} className="text-sm text-ink-soft hover:underline">
+          <button type="button" onClick={r.cancel} className="clay-btn h-11 px-5 text-sm">
             Cancel
           </button>
         )}
         {r.canRetry && r.resumeState && (
-          <button type="button" onClick={() => void r.startReview(r.resumeState ?? undefined)} className="text-sm text-accent hover:underline">
+          <button type="button" onClick={() => void r.startReview(r.resumeState ?? undefined)} className="clay-btn h-11 px-5 text-sm text-accent">
             {r.unfinished ? "Resume review" : "Retry failed sections"}
           </button>
         )}
       </div>
       {r.progress && (
-        <p data-testid="review-progress" className="mt-2 text-sm text-ink-soft" aria-live="polite">
-          {r.progress.phase === "extract" ? `Reviewing ${r.progress.current ?? "the last sections"} (${r.progress.done} of ${r.progress.total})…` : `${r.progress.current}…`}
-        </p>
+        <div data-testid="review-progress" className="mt-4 max-w-xl" aria-live="polite">
+          <p className="flex items-center gap-2 text-sm text-ink-soft">
+            <span aria-hidden className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" />
+            {r.progress.phase === "extract" ? `Reviewing ${r.progress.current ?? "the last sections"} (${r.progress.done} of ${r.progress.total})…` : `${r.progress.current}…`}
+          </p>
+          {r.progress.phase === "extract" && r.progress.total > 0 && (
+            <span aria-hidden className="mt-2 block h-2 rounded-full bg-[#dcd8ce] shadow-[inset_0_1px_2px_rgba(58,44,28,.15)]">
+              <span
+                className="block h-2 rounded-full bg-gradient-to-r from-[#5d8f9b] to-accent transition-[width] duration-500"
+                style={{ width: `${Math.max(4, Math.round((r.progress.done / r.progress.total) * 100))}%` }}
+              />
+            </span>
+          )}
+        </div>
       )}
       {r.consentOpen && (
         <ReviewConsent

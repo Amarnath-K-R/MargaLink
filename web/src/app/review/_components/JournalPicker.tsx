@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { JOURNAL_RULES } from "@/lib/journalRules";
 
+// The pilot journals as clay cards. The caller supplies the heading.
 // `showMatchLink` false inside the writing workspace, where leaving for
 // /match would close the project (its Match window is a click away instead).
 export default function JournalPicker({
@@ -13,9 +14,8 @@ export default function JournalPicker({
   showMatchLink?: boolean;
 }) {
   return (
-    <section className="mt-12 border-t border-line pt-8">
-      <p className="mb-3 text-sm font-medium text-accent">2. Choose a journal</p>
-      <p className="mb-4 text-sm text-ink-soft">
+    <div>
+      <p className="mb-5 text-sm text-ink-soft">
         Only journals with hand-verified guidelines are listed here
         {showMatchLink ? (
           <>
@@ -37,17 +37,13 @@ export default function JournalPicker({
             type="button"
             onClick={() => onSelect(j.journalId)}
             aria-pressed={selectedJournalId === j.journalId}
-            className={`rounded-sm border p-4 text-left transition-colors ${
-              selectedJournalId === j.journalId
-                ? "border-accent bg-accent-soft"
-                : "border-line bg-paper-alt hover:border-accent"
-            }`}
+            className="clay-card px-5 py-4"
           >
-            <p className="font-serif font-medium">{j.journalName}</p>
-            <p className="mt-1 text-xs text-ink-soft">{j.scopeSummary}</p>
+            <p className="font-serif text-[1.05rem] font-medium">{j.journalName}</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-soft">{j.scopeSummary}</p>
           </button>
         ))}
       </div>
-    </section>
+    </div>
   );
 }
