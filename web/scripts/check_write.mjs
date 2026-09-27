@@ -106,7 +106,7 @@ await compiled();
 check("imported copy compiles (retried with every pack)", (await pdfBytes()) > 10_000);
 
 // --- a template that needs every pack, after a plain paper already started the engine ---
-await page.reload();
+await page.goto("http://localhost:3000/write"); // a plain reload would reopen the project the URL names
 await page.click('[data-template="article"]');
 await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
 await page.click("button:has-text('Compile')");
@@ -180,10 +180,28 @@ const savedOnHide = await page.evaluate(async () => {
 await page.evaluate(() => Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true }));
 check("hiding the tab saves the latest edit", savedOnHide.startsWith("% saved on hide"));
 
-// --- Insert figure is clearly unavailable while a binary file is open ---
+// --- Insert is clearly unavailable while a binary file is open ---
 await page.setInputFiles('input[aria-label="Upload files to this project"]', { name: "plot.png", mimeType: "image/png", buffer: Buffer.from("not really a png") });
 await page.click('[data-testid="file-tree"] button[title="figures/plot.png"]');
-check("Insert figure is disabled with a binary file open", await page.locator('select[aria-label="Insert figure"]').isDisabled());
+check("Insert is disabled with a binary file open", await page.locator('select[aria-label="Insert"]').isDisabled());
+
+// --- the hub shell: the project's URL, the command palette, a tool window ---
+check("the URL carries the open project", page.url().includes("?p="));
+const nameBefore = await page.locator('[data-testid="workspace"] h2').textContent();
+await page.reload();
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+check("reloading comes back to the same project", (await page.locator('[data-testid="workspace"] h2').textContent()) === nameBefore);
+await page.click('[data-testid="latex-editor"] .cm-content');
+await page.keyboard.press("ControlOrMeta+k");
+await page.getByRole("dialog", { name: "Commands" }).waitFor();
+check("⌘K opens the command palette with its search focused", (await page.evaluate(() => document.activeElement?.getAttribute("aria-label"))) === "Search commands");
+await page.keyboard.type("checks");
+await page.keyboard.press("Enter");
+await page.getByRole("dialog", { name: "Checks" }).waitFor();
+check("a command opens its window", true);
+await page.keyboard.press("Escape");
+await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+check("Escape closes the window and focus returns to the editor", await page.evaluate(() => !!document.activeElement?.closest('[data-testid="latex-editor"]')));
 
 check(`no request carried a body${bodyRequests.length ? `: ${bodyRequests.join(", ")}` : ""}`, bodyRequests.length === 0);
 check(`no page errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);

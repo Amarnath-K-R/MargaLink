@@ -23,6 +23,7 @@ export type ProjectMeta = {
   main: string;
   engine: "pdftex" | "xetex";
   journalId: string | null;
+  journalName?: string | null; // the target journal's name, so the workspace needn't load the whole index to show it
   templateId: string | null;
   packs?: string[]; // data packs the template needs up front (["all"] for classes like IEEEtran)
   createdAt: string;

@@ -8,7 +8,7 @@ import { StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
 
-export type EditorHandle = { goto(line: number): void; insert(text: string): void };
+export type EditorHandle = { goto(line: number): void; insert(text: string): void; focus(): void };
 export type LineMark = { line: number; message: string; severity: "error" | "warning" };
 
 // The LaTeX source editor: CodeMirror 6 with the stex mode, a gutter marker on
@@ -61,6 +61,9 @@ export default function LatexEditor({
       insert(snippet) {
         const at = v.state.selection.main.head;
         v.dispatch({ changes: { from: at, insert: snippet }, selection: { anchor: at + snippet.length } });
+        v.focus();
+      },
+      focus() {
         v.focus();
       },
     };

@@ -14,11 +14,14 @@ import StorageBanner from "./_components/StorageBanner.tsx";
 import Workspace from "./_components/Workspace.tsx";
 import { downloadBytes, safeName } from "./_components/download.ts";
 
-type Journal = { id: string; display_name: string; host: string | null };
+export type Journal = { id: string; display_name: string; host: string | null };
 
 // Write a paper in LaTeX, in the browser: start from a journal's template or
 // upload one, edit, compile with TeX Live running in a worker, download the
-// PDF. Projects live in this browser's own storage; nothing is uploaded.
+// PDF — and reach the other tools from windows over the workspace. Projects
+// live in this browser's own storage; nothing from a paper is sent unless
+// you ask for one of the two disclosed AI features. `?p=<id>` reopens a
+// project; `?journal=<id>` preselects a template for a new one.
 export default function WritePage() {
   const [store, setStore] = useState<ProjectStore | null>(null);
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
@@ -39,16 +42,20 @@ export default function WritePage() {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
     ProjectStore.open().then(
       (s) => {
         setStore(s);
         void refresh(s);
+        // ?p=<id> reopens a project (a reload, or a link from the figure studio).
+        const pid = params.get("p");
+        if (pid) s.meta(pid).then(setOpenProject, () => {});
       },
       (err) => setError(errorMessage(err)),
     );
     loadTemplates().then(setTemplates, (err) => setError(errorMessage(err)));
     // ?journal=<OpenAlex id> (from a match result or a journal page) preselects its template.
-    const id = new URLSearchParams(window.location.search).get("journal");
+    const id = params.get("journal");
     if (id) {
       void loadMeta().then((all) => {
         const j = all.find((m) => m.id === id || m.id.endsWith(`/${id}`));
@@ -57,15 +64,25 @@ export default function WritePage() {
     }
   }, [refresh]);
 
+  // The open project's id lives in the URL, so a reload comes back to it.
+  const openId = openProject?.id ?? null;
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (openId) url.searchParams.set("p", openId);
+    else if (url.searchParams.has("p")) url.searchParams.delete("p");
+    else return;
+    window.history.replaceState(null, "", url);
+  }, [openId]);
+
   const create = useCallback(
-    async (t: Template) => {
+    async (t: Template, j: Journal | null = journal) => {
       if (!store) return;
       setBusy(true);
       setError(null);
       try {
-        const files = await starterProject(t, journal);
-        const name = journal ? `Paper for ${journal.display_name}` : `New ${t.name} paper`;
-        const meta = await store.create({ name, main: t.main, engine: t.engine, journalId: journal?.id ?? null, templateId: t.id, packs: t.packs }, files);
+        const files = await starterProject(t, j);
+        const name = j ? `Paper for ${j.display_name}` : `New ${t.name} paper`;
+        const meta = await store.create({ name, main: t.main, engine: t.engine, journalId: j?.id ?? null, journalName: j?.display_name ?? null, templateId: t.id, packs: t.packs }, files);
         await refresh(store);
         setOpenProject(meta);
       } catch (err) {
@@ -118,8 +135,10 @@ export default function WritePage() {
 
       {store && openProject ? (
         <Workspace
+          key={openProject.id}
           store={store}
           project={openProject}
+          calls={calls}
           onMeta={setOpenProject}
           onClose={() => {
             setOpenProject(null);
@@ -197,8 +216,9 @@ export default function WritePage() {
       )}
 
       <NetworkTracePanel calls={calls}>
-        These fetch the template list and template files. The TeX engine and its packages are fetched by the compile worker — public
-        files only. Nothing from your paper is ever sent.
+        {calls.some((c) => c.hadBody)
+          ? "Requests with a body are the ones you confirmed: an AI review sends the paper's text one section at a time, then one cross-check; Ask Claude in the figure window sends a description of your data, never its values."
+          : "These fetch templates, the journal index and the matching model. The TeX engine, its packages and the figure engine are fetched by workers — public files only. Nothing from your paper is sent unless you ask for an AI review or use Ask Claude in the figure window, each behind its own notice."}
       </NetworkTracePanel>
 
       <footer className="mt-20 border-t border-line pt-6 text-sm text-ink-soft">
