@@ -22,6 +22,8 @@ import Toolbar, { type InsertGroup, type Tool } from "./Toolbar.tsx";
 import StatusBar from "./StatusBar.tsx";
 import CommandPalette, { type Command } from "./CommandPalette.tsx";
 import { useChecks } from "./useChecks.ts";
+import { useMatch } from "@/app/match/_components/useMatch.ts";
+import { useReview } from "@/app/review/_components/useReview.ts";
 import { downloadBytes, safeName } from "./download.ts";
 
 // Each window's body loads only when it opens, so the tools' code (pdf.js,
@@ -29,6 +31,7 @@ import { downloadBytes, safeName } from "./download.ts";
 const loading = () => <p className="text-sm text-ink-soft">Loading…</p>;
 const ChecksWindow = dynamic(() => import("./ChecksWindow.tsx"), { ssr: false, loading });
 const JournalWindow = dynamic(() => import("./JournalWindow.tsx"), { ssr: false, loading });
+const MatchWindow = dynamic(() => import("./MatchWindow.tsx"), { ssr: false, loading });
 
 const TEXT = /\.(tex|bib|cls|sty|bst|txt|md|def|cfg)$/i;
 const IMAGE = /\.(png|jpe?g|pdf|eps)$/i;
@@ -219,10 +222,18 @@ export default function Workspace({
 
   // The tools' state lives here, so a window keeps its results when closed.
   const checks = useChecks();
+  const match = useMatch();
+  const review = useReview();
   const rules = project.journalId ? findJournalRules(project.journalId) : undefined;
   const setTarget = async (j: Journal | null) => {
     await store.setMeta(project.id, { journalId: j?.id ?? null, journalName: j?.display_name ?? null });
     onMeta(await store.meta(project.id));
+  };
+  // From a match result: the Review window, loaded with this PDF against that journal.
+  const openReview = (journalId: string) => {
+    if (pdfFile && review.source !== pdfFile) void review.onFile(pdfFile, { journalId });
+    else review.selectJournal(journalId);
+    setTool("review");
   };
 
   const compile = useCallback(async () => {
@@ -351,6 +362,18 @@ export default function Workspace({
 
   const windowBody = (t: Tool) => {
     switch (t) {
+      case "match":
+        return (
+          <MatchWindow
+            match={match}
+            pdfFile={pdfFile}
+            compiling={busy}
+            onCompile={() => void compile()}
+            targetJournalId={project.journalId}
+            onSetTarget={(id, name) => void setTarget({ id, display_name: name, host: null })}
+            onReview={openReview}
+          />
+        );
       case "checks":
         return <ChecksWindow checks={checks} pdfFile={pdfFile} compiling={busy} onCompile={() => void compile()} rules={rules} targetName={project.journalName ?? null} />;
       case "journal":

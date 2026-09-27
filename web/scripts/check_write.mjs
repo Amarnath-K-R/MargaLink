@@ -225,6 +225,23 @@ if (hasIndex) {
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector("dialog[open]"));
   check("the Journal window sets the target journal", chipSet);
+
+  // --- the Match window: the compiled PDF against the index; a result becomes the target; results survive closing ---
+  await page.click('[role="group"][aria-label="Tools"] button:has-text("Match")');
+  const matchWindow = page.getByRole("dialog", { name: "Match" });
+  await matchWindow.getByRole("button", { name: "Find matching journals" }).click();
+  await matchWindow.locator("[data-testid=results] li").first().waitFor({ timeout: 180_000 }); // first run fetches the model into this profile
+  await matchWindow.getByRole("button", { name: "Set as target journal" }).first().click();
+  const targetFromMatch = await page
+    .waitForFunction(() => !document.querySelector('button[aria-label="Target journal"]')?.textContent?.includes("JAMA Neurology"), null, { timeout: 10_000 })
+    .then(() => true, () => false);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+  check("a match result becomes the target journal", targetFromMatch);
+  await page.click('[role="group"][aria-label="Tools"] button:has-text("Match")');
+  check("the Match window keeps its results when reopened", (await page.getByRole("dialog", { name: "Match" }).locator("[data-testid=results] li").count()) > 0);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector("dialog[open]"));
 } else {
   console.log("skip the Journal window (no index built)");
 }
