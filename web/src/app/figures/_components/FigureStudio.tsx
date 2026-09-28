@@ -79,7 +79,7 @@ export default function FigureStudio({ figures: f, exportExtra }: { figures: Fig
                 </div>
                 {f.hook && (
                   <details className="clay-well mt-6 rounded-2xl p-4 text-sm" data-testid="hook" open={!f.hookApproved}>
-                    <summary className="cursor-pointer font-medium">Custom tweak (Python){f.hookApproved ? " — running" : " — not running yet"}</summary>
+                    <summary className="cursor-pointer font-medium">Custom tweak (Python){f.hookApproved ? " (running)" : " (not running yet)"}</summary>
                     <pre className="sheet mt-3 max-h-60 overflow-auto p-3 text-xs">{f.hook}</pre>
                     {!f.hookApproved && (
                       <p className="mt-3 text-ink-soft">

@@ -62,7 +62,7 @@ export async function readWorkbook(file: File): Promise<Workbook> {
       const { default: readXlsxFile } = await import("read-excel-file/browser");
       sheets = (await readXlsxFile(file)) as { sheet: string; data: unknown[][] }[];
     } catch {
-      throw new Error("Couldn't read that spreadsheet — if it's an old .xls, re-save it as .xlsx.");
+      throw new Error("Couldn't read that spreadsheet. If it's an old .xls, re-save it as .xlsx.");
     }
     return { fileName: file.name, sheets: sheets.map((s) => ({ name: s.sheet, rows: s.data.map((row) => row.map(cellToString)) })) };
   }
@@ -173,7 +173,7 @@ export function prepareDataset(workbook: Workbook, opts: PrepOptions): Dataset {
     headers = normalizeHeaders(headers); // a stacked name may repeat an id column's
   }
   if (rows.length > MAX_ROWS) {
-    throw new Error(`That's more than ${MAX_ROWS.toLocaleString()} rows — try a summarized version.`);
+    throw new Error(`That's more than ${MAX_ROWS.toLocaleString()} rows. Try a summarized version.`);
   }
 
   const columns: ColumnSchema[] = headers.map((name, i) => ({

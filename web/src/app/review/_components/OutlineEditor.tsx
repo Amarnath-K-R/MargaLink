@@ -52,7 +52,7 @@ export default function OutlineEditor({
       <div className="border-t border-line/80 px-4 py-4">
         <p className="text-xs text-ink-soft">
           Taken from your document&apos;s own headings where it has them. Fix a section&apos;s type, merge
-          a section into the one before it, or mark a section &ldquo;Don&apos;t send&rdquo; — it will
+          a section into the one before it, or mark a section &ldquo;Don&apos;t send&rdquo;: it will
           never leave your device. This outline stays on your device too.
         </p>
         <ul className="mt-3 divide-y divide-line/80">
@@ -113,7 +113,7 @@ export default function OutlineEditor({
         </form>
         {unmatchedHeadings.length > 0 && (
           <p className="mt-2 text-xs text-away" role="status">
-            Couldn&apos;t find {unmatchedHeadings.map((h) => `“${h}”`).join(", ")} as a line in your paper — check the
+            Couldn&apos;t find {unmatchedHeadings.map((h) => `“${h}”`).join(", ")} as a line in your paper. Check the
             exact wording.
           </p>
         )}

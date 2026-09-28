@@ -108,7 +108,7 @@ export default function DataPrep({
       <details className="mt-4 text-sm" open={!!reshape}>
         <summary className="cursor-pointer text-accent">Stack columns (wide → long)</summary>
         <p className="mt-2 text-ink-soft">
-          Tick repeated measures (e.g. week1, week2, week3) to turn them into one row per measure — the shape most figures need.
+          Tick repeated measures (e.g. week1, week2, week3) to turn them into one row per measure, the shape most figures need.
         </p>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
           {sourceColumns.map((c) => (
@@ -166,7 +166,7 @@ export default function DataPrep({
                 <tr key={i}>
                   {row.map((cell, j) => (
                     <td key={j} className={`border-b border-line px-2 py-1 ${dataset.columns[j].dtype === "numeric" ? "text-right tabular-nums" : ""}`}>
-                      {cell === "" ? <span className="text-ink-soft">—</span> : cell}
+                      {cell === "" ? <span className="text-ink-soft">·</span> : cell}
                     </td>
                   ))}
                 </tr>

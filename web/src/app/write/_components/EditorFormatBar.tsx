@@ -109,7 +109,7 @@ export default function EditorFormatBar({
       <Popover id="figure" open={open} onToggle={toggle} label="Figure" title="Place a figure from figures/" icon={<ImageIcon size={14} strokeWidth={2.2} />}>
         {figures.length === 0 ? (
           <div className="p-2 text-xs leading-relaxed text-ink-soft">
-            No figures yet — make one, or upload an image into figures/.
+            No figures yet. Make one, or upload an image into figures/.
             <button type="button" className="clay-btn mt-2 h-7 w-full justify-center text-xs" onClick={done(onOpenFigures)}>
               Open Figures
             </button>

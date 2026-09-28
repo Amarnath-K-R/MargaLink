@@ -6,7 +6,7 @@ export default function FormatCheckPanel({ result }: { result: FormatCheckResult
     <section className="sheet mt-14 p-6 sm:p-8">
       <h2 className="font-serif text-2xl font-medium">Format check</h2>
       <p className="mt-1 text-sm text-ink-soft">
-        General structure, detected from your paper&apos;s text — not yet
+        General structure, detected from your paper&apos;s text, not yet
         checked against your chosen journal&apos;s specific limits.
       </p>
 

@@ -5,9 +5,9 @@
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://example-placeholder.margalink.invalid";
 
 export const SITE_NAME = "MargaLink";
-export const SITE_TITLE = "MargaLink — match, check, and review your paper without it leaving your device";
+export const SITE_TITLE = "MargaLink: match, check, and review your paper without it leaving your device";
 export const SITE_DESCRIPTION =
-  "Match your paper to a journal, check its format, and get it reviewed — all without your paper ever leaving your device.";
+  "Match your paper to a journal, check its format, and get it reviewed, all without your paper ever leaving your device.";
 
 // Mirrors globals.css's :root color tokens. Duplicated, not imported: this
 // feeds opengraph-image.tsx's satori-rendered image, which can't resolve

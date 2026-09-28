@@ -62,7 +62,7 @@ export function useMatch() {
       setQuery(q);
       setRefs(found);
       setStage("embedding");
-      log(q.source === "abstract" ? `Read title + abstract (${q.queryText.length.toLocaleString()} characters)` : q.source === "pasted" ? "Using the pasted title and abstract" : "No abstract heading found — using the start of the paper, author lines removed");
+      log(q.source === "abstract" ? `Read title + abstract (${q.queryText.length.toLocaleString()} characters)` : q.source === "pasted" ? "Using the pasted title and abstract" : "No abstract heading found, so using the start of the paper, author lines removed");
       log("Loading the embedding model (cached after first run)");
       const vector = await embed(q.queryText);
       log(`Computed a ${vector.length}-dimension vector on this device`);
@@ -106,7 +106,7 @@ export function useMatch() {
         const { fullText } = await extractFromFile(file);
         if (fullText.trim().length < 50) {
           throw new Error(
-            "Couldn't find readable text in this file. If it's a scanned PDF (no text layer), text extraction won't work on it — try a PDF exported directly from Word or LaTeX instead, or paste your title and abstract.",
+            "Couldn't find readable text in this file. If it's a scanned PDF (no text layer), text extraction won't work on it. Try a PDF exported directly from Word or LaTeX instead, or paste your title and abstract.",
           );
         }
         setFormatResult(checkFormat(fullText));
@@ -116,7 +116,7 @@ export function useMatch() {
         if (q.references) {
           const r = countCitedJournals(q.references, await loadNameIndex());
           found = { entries: r.entries, matched: r.matched, cited: r.counts };
-          log(`Read ${r.entries} references — ${r.matched} name a journal in the index`);
+          log(`Read ${r.entries} references; ${r.matched} name a journal in the index`);
         }
         await run(q, found, {});
       } catch (err) {

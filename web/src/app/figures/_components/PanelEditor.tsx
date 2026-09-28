@@ -424,7 +424,7 @@ export default function PanelEditor({ panel, onChange, dataset }: { panel: Panel
                   <label className={label}>
                     At group
                     <select aria-label="Annotation group" className={field} value={a.xGroup ?? ""} onChange={(e) => setAnn(i, { xGroup: e.target.value || null })}>
-                      <option value="">— use x —</option>
+                      <option value="">Same as x</option>
                       {groups.map((g, j) => (
                         <option key={j} value={`#${j}`}>
                           {g}

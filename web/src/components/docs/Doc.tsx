@@ -124,7 +124,7 @@ export function Shot({ name, alt, notes = [], caption }: { name: string; alt: st
             )}
           </div>
         ) : (
-          <p className="p-10 text-center text-sm text-ink-soft">Screenshot not generated yet — run scripts/guide_shots.mjs.</p>
+          <p className="p-10 text-center text-sm text-ink-soft">Screenshot not generated yet. Run scripts/guide_shots.mjs.</p>
         )}
       </div>
       {(notes.length > 0 || caption) && (

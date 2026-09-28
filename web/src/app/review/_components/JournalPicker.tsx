@@ -19,8 +19,7 @@ export default function JournalPicker({
         Only journals with hand-verified guidelines are listed here
         {showMatchLink ? (
           <>
-            {" "}
-            — see{" "}
+            ; see{" "}
             <Link href="/match" className="text-accent hover:underline">
               match your paper
             </Link>{" "}

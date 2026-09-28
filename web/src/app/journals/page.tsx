@@ -88,7 +88,7 @@ export default function JournalsPage() {
         {filtered.length === 0 && journals
           ? "No journals match."
           : filtered.length > DISPLAY_CAP
-            ? `Showing ${DISPLAY_CAP} of ${filtered.length.toLocaleString()} matches — narrow your search to see more.`
+            ? `Showing ${DISPLAY_CAP} of ${filtered.length.toLocaleString()} matches. Narrow your search to see more.`
             : `${filtered.length.toLocaleString()} match${filtered.length === 1 ? "" : "es"}.`}
       </p>
 

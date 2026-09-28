@@ -20,7 +20,7 @@ export default function FiguresPage() {
         title="Make a figure."
         subtitle={
           <p className="mt-3 max-w-md text-lg text-ink-soft">
-            Upload your data, start from a template, and export a journal-ready figure — drawn on this device, your values never leave this tab.
+            Upload your data, start from a template, and export a journal-ready figure, drawn on this device. Your values never leave this tab.
           </p>
         }
       />
@@ -32,7 +32,7 @@ export default function FiguresPage() {
             disabled={!f.spec || !!f.problem}
             getPdf={async () => {
               const pdf = (await f.onExport(["pdf"], 300)).pdf;
-              if (!pdf) throw new Error("The PDF export came back empty — try Export first to see why.");
+              if (!pdf) throw new Error("The PDF export came back empty. Try Export first to see why.");
               return Uint8Array.from(atob(pdf), (c) => c.charCodeAt(0));
             }}
           />
@@ -45,7 +45,7 @@ export default function FiguresPage() {
           <Link href="/privacy" className="text-accent hover:underline">
             How privacy works
           </Link>{" "}
-          — including the figure generator&apos;s exception.
+          , including the figure generator&apos;s exception.
         </p>
       </footer>
     </main>

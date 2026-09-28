@@ -6,7 +6,7 @@ import { Aside, DocBody, DocPart, DocSection, OptionTable, type TocItem } from "
 import { Steps, Swatches, SystemDiagram } from "@/components/docs/Diagrams";
 
 export const metadata: Metadata = {
-  title: "Architecture — MargaLink",
+  title: "Architecture | MargaLink",
   description: "How MargaLink is built, for developers and reviewers: what runs where, how each privacy rule is enforced in code, each tool's pipeline, the design system, the tests and the review checklist.",
 };
 
@@ -54,11 +54,11 @@ export default function ArchitecturePage() {
             <p>
               The web app is a Next.js <strong>static export</strong> on Cloudflare Pages. There is no application server and no database. The journal
               index is built offline by the Python pipeline ({code("pipeline/")}) and shipped as static files ({code("web/public/index/")}); the browser
-              downloads it once and does every match itself. That isn&apos;t an optimisation on top of a server design — a server that ranks journals
+              downloads it once and does every match itself. That isn&apos;t an optimisation on top of a server design: a server that ranks journals
               necessarily sees the paper, so keeping &ldquo;the paper never leaves the device&rdquo; absolute meant taking the server out of the path.
             </p>
             <p>
-              The two exceptions are Cloudflare Pages Functions — {code("functions/api/review.ts")} and {code("functions/api/figure.ts")} — for the two
+              The two exceptions are Cloudflare Pages Functions, {code("functions/api/review.ts")} and {code("functions/api/figure.ts")}, for the two
               features that need a language model. They exist because the browser must never hold the Anthropic API key. Both are stateless.
             </p>
           </DocPart>
@@ -113,7 +113,7 @@ export default function ArchitecturePage() {
           <Aside tone="away" title="What the two exceptions send">
             <p>
               <strong>The review:</strong> the paper&apos;s text (author lines stripped, best effort), one request per section chunk, then one over the
-              extracted claims — never the text again. Sections the user marks Don&apos;t send are never in any request.
+              extracted claims, never the text again. Sections the user marks Don&apos;t send are never in any request.
             </p>
             <p>
               <strong>Ask Claude:</strong> column names and inferred types, the row count, the request text, the current figure spec with typed text
@@ -123,15 +123,15 @@ export default function ArchitecturePage() {
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
-        <DocSection id="matching" title="Matching" icon={icon(ScanSearch)} tint="#cfe0e1" lead="A hybrid ranker over a static index — its weights and its fit scale measured on held-out papers, not chosen.">
+        <DocSection id="matching" title="Matching" icon={icon(ScanSearch)} tint="#cfe0e1" lead="A hybrid ranker over a static index, its weights and its fit scale measured on held-out papers rather than chosen.">
           <Steps
             tint="#cfe0e1"
             steps={[
-              { title: "Read the paper", detail: "PDF text via pdf.js, DOCX via mammoth — or pasted text as a first-class entry.", files: "extract.ts" },
-              { title: "Decide what to read", detail: "The title, the real abstract, keywords and the reference list — not the first few thousand characters, which are mostly authors.", files: "matchQuery.ts" },
+              { title: "Read the paper", detail: "PDF text via pdf.js, DOCX via mammoth, or pasted text as a first-class entry.", files: "extract.ts" },
+              { title: "Decide what to read", detail: "The title, the real abstract, keywords and the reference list; not the first few thousand characters, which are mostly authors.", files: "matchQuery.ts" },
               { title: "Embed", detail: "A small model (named in the manifest) turns the title and abstract into a 384-dimension vector, in the browser.", files: "embed.ts" },
               { title: "Topics and citations", detail: "The paper's likely research topics, and which journals its own references cite (a name counts only where a journal sits in a reference).", files: "topics.ts · references.ts" },
-              { title: "Rank", detail: "Four signals — embedding similarity to each journal's closest centre, topic overlap, citations, a small activity prior — fused with fitted weights.", files: "rank.ts" },
+              { title: "Rank", detail: "Four signals (embedding similarity to each journal's closest centre, topic overlap, citations, a small activity prior), fused with fitted weights.", files: "rank.ts" },
               { title: "Say how good a match is", detail: "A calibrated fit: \"Fit 78\" is as close as 78% of real paper→journal pairings. An uncalibrated build shows raw similarity.", files: "rank.ts · manifest.json" },
             ]}
           />
@@ -141,7 +141,7 @@ export default function ArchitecturePage() {
               recent-topic profile, alternate names, and the topic table. Shipped as int8 rather than float (about 1 point of accuracy for a quarter of
               the size); every file stays under Cloudflare&apos;s 25 MB cap. Journals whose papers don&apos;t cohere are dropped at build time, with
               reasons. {code("web/scripts/eval_match.ts")} runs the same {code("rank.ts")} over each journal&apos;s newest (never indexed) papers, fits
-              the weights and the fit scale, and writes both — with the measured accuracy — into the manifest.
+              the weights and the fit scale, and writes both, with the measured accuracy, into the manifest.
             </p>
             <p>
               Only the {code("2,000")} most-published journals get a prerendered page ({code("/journal/[id]")}): Cloudflare Pages caps a deployment at
@@ -160,14 +160,14 @@ export default function ArchitecturePage() {
               { title: "Find the sections", detail: "From the document's own headings (Word heading styles; a PDF's fonts), a word list otherwise. The user can fix the outline and mark sections Don't send.", files: "headingHints.ts · reviewSections.ts" },
               { title: "Extract, per chunk", detail: "≤16k-character chunks, up to 3 at a time: bounded lists of quantitative claims, each with a verbatim quote.", files: "reviewOrchestrator.ts → /api/review", away: true },
               { title: "Verify every quote", detail: "On the server, each quote is checked against that chunk only; a quote that isn't there is dropped. A truncated pass is retried once asking for fewer claims.", files: "reviewGrounding.ts" },
-              { title: "Cross-check the ledger", detail: "One pass over the claims ledger — never the text — finds inconsistencies and writes the prioritised summary. It can only cite ledger ids; unknown ids are dropped.", files: "reviewPasses.ts", away: true },
+              { title: "Cross-check the ledger", detail: "One pass over the claims ledger (never the text) finds inconsistencies and writes the prioritised summary. It can only cite ledger ids; unknown ids are dropped.", files: "reviewPasses.ts", away: true },
               { title: "Assemble", detail: "Findings with their verified quotes, and coverage: what was reviewed, what failed (retryable alone), what the depth skipped.", files: "reviewTypes.ts" },
             ]}
           />
           <DocPart title="Why it's built this way">
             <p>
               An early single-call version broke on long papers: thinking and the JSON answer shared one token budget, long text was cut, and one dropped
-              stream lost everything. It also showed three model failure modes the design now defends against — numbers attributed to the wrong section
+              stream lost everything. It also showed three model failure modes the design now defends against: numbers attributed to the wrong section
               (the abstract is its own labelled block), &ldquo;inconsistencies&rdquo; that reconciled on arithmetic (reconciliation is required before
               reporting), and quotes that appear nowhere (every quote is verified).
             </p>
@@ -194,7 +194,7 @@ export default function ArchitecturePage() {
           />
           <Aside title="Why labels are opt-in and tracebacks never leave">
             <p>
-              A category label is a value — a site name, a patient ID. A Python traceback can quote a cell verbatim. So labels go only when ticked (and
+              A category label is a value: a site name, a patient ID. A Python traceback can quote a cell verbatim. So labels go only when ticked (and
               are listed in the notice), and render errors are shown as prose built from an error code and column names, with the traceback behind a
               &ldquo;stays on this device&rdquo; disclosure.
             </p>
@@ -202,15 +202,15 @@ export default function ArchitecturePage() {
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
-        <DocSection id="writing" title="The writing workspace" icon={icon(PenLine)} tint="#dde6e6" lead="LaTeX in the browser, full screen — and the hub the other tools open inside.">
+        <DocSection id="writing" title="The writing workspace" icon={icon(PenLine)} tint="#dde6e6" lead="LaTeX in the browser, full screen, and the hub the other tools open inside.">
           <Steps
             tint="#dde6e6"
             steps={[
               { title: "Projects in the browser", detail: "Each project is a folder in the Origin Private File System, with the last PDF; saves are debounced; zips for backup and import.", files: "projectStore.ts · zip.ts" },
               { title: "Edit", detail: "CodeMirror with the stex mode, a formatting bar, suggestions from the project's .bib keys and labels, an outline following \\input, diagnostics in the gutter.", files: "LatexEditor.tsx · EditorFormatBar.tsx · latexCompletions.ts · texSource.ts" },
               { title: "Compile", detail: "A worker runs BusyTeX (pdfLaTeX or XeLaTeX); packs chosen from the \\usepackage lines; a missing file retries once with every pack; a 90 s deadline once TeX runs.", files: "texRunner.ts · texEngine.ts · texWorker.js" },
-              { title: "Read the compiled PDF", detail: "Match, Review and Checks read the last PDF through the same extraction as an upload — so they say Compile first until there is one.", files: "Workspace.tsx · extract.ts" },
-              { title: "Tools as windows", detail: "Native <dialog>s over the workspace; each body a dynamic import. The tools' state lives in hooks mounted by the workspace — the same hooks the tool pages use — so a closed window keeps its results.", files: "useMatch · useReview · useFigures · useChecks" },
+              { title: "Read the compiled PDF", detail: "Match, Review and Checks read the last PDF through the same extraction as an upload, so they say Compile first until there is one.", files: "Workspace.tsx · extract.ts" },
+              { title: "Tools as windows", detail: "Native <dialog>s over the workspace; each body a dynamic import. The tools' state lives in hooks mounted by the workspace (the same hooks the tool pages use), so a closed window keeps its results.", files: "useMatch · useReview · useFigures · useChecks" },
               { title: "Back into the paper", detail: "Insert into paper writes the figure's PDF and data-free recipe to figures/; review citations jump to their line; the target journal is kept in the project's meta.", files: "FiguresWindow.tsx · ReviewWindow.tsx" },
             ]}
           />
@@ -224,7 +224,7 @@ export default function ArchitecturePage() {
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
-        <DocSection id="design" title="The clay design system" icon={icon(Palette)} lead="One palette, one light, a handful of surfaces — shared by the tool pages, the workspace and these docs.">
+        <DocSection id="design" title="The clay design system" icon={icon(Palette)} lead="One palette, one light, a handful of surfaces, shared by the tool pages, the workspace and these docs.">
           <Swatches
             colors={[
               { name: "Paper", hex: "#f0efea", use: "the desk" },
@@ -238,11 +238,11 @@ export default function ArchitecturePage() {
             ]}
           />
           <OptionTable
-            title="app/clay.css — in the components layer, so a Tailwind utility on the same element wins"
+            title="app/clay.css: in the components layer, so a Tailwind utility on the same element wins"
             rows={[
               { name: ".clay", what: "A raised slab: matte gradient, a highlight on top, a warm shadow under. Trays, steps, cards." },
               { name: ".clay-well", what: "Pressed in: the current item, fields' surroundings, notes." },
-              { name: ".sheet", what: "A white paper sheet on the desk — what you read: sources, PDFs, results, reviews." },
+              { name: ".sheet", what: "A white paper sheet on the desk, for what you read: sources, PDFs, results, reviews." },
               { name: ".clay-btn · .clay-primary", what: "A pill that lifts on hover and presses in on click; the primary one is teal (one per screen)." },
               { name: ".clay-ghost · .clay-chip · .clay-key", what: "Flat until touched (tray items); small tinted actions inside cards; keycaps (⌘K, shortcuts)." },
               { name: ".clay-input · .clay-field · .clay-select", what: "Text fields and selects pressed into the clay, a teal ring on focus." },
@@ -265,14 +265,14 @@ export default function ArchitecturePage() {
               { name: "web/src/app/", what: "Routes. Each tool's page is JSX over a hook in its _components/ (useMatch, useReview, useFigures) that the workspace reuses. The homepage lives in _home/." },
               { name: "web/src/components/", what: "Shared pieces: PageHeader (the tray), Step, Dialog, the consent notices, result panels, docs/ (these pages' blocks), three/ (the homepage's 3D scenes)." },
               { name: "web/src/lib/", what: "Framework-agnostic logic, deliberately flat: match*/rank/topics/references, review*, figure*, tex*, projectStore, spreadsheet, journalRules. A relative lib import carries .ts (Node runs the selfchecks natively)." },
-              { name: "web/functions/api/", what: "review.ts and figure.ts — the only server code. They may import from src/lib/ only modules that are pure or isomorphic (no window, localStorage or fs)." },
+              { name: "web/functions/api/", what: "review.ts and figure.ts, the only server code. They may import from src/lib/ only modules that are pure or isomorphic (no window, localStorage or fs)." },
               { name: "web/public/", what: "The index, templates, the figure gallery, the TeX and figure workers, figurelib.py, fonts, the guide's screenshots." },
               { name: "pipeline/", what: "The offline Python (uv) pipeline: fetch from OpenAlex, enrich from DOAJ and NLM, k-means centres, quality filters, build the index." },
               { name: "web/scripts/", what: "The Playwright smokes (check_*.mjs), the ranker's evaluation (eval_match.ts), the guide's screenshots (guide_shots.mjs)." },
             ]}
           />
           <p className="text-sm text-ink-soft">
-            Start with {code("CLAUDE.md")} (the three rules), then {code("src/lib/rank.ts")}, then {code("docs/ARCHITECTURE.md")}&apos;s folder map — one
+            Start with {code("CLAUDE.md")} (the three rules), then {code("src/lib/rank.ts")}, then {code("docs/ARCHITECTURE.md")}&apos;s folder map, one
             line per file.
           </p>
         </DocSection>
@@ -282,7 +282,7 @@ export default function ArchitecturePage() {
           <OptionTable
             title="Commands"
             rows={[
-              { name: "npm run check", what: "Typecheck, lint, and every *.selfcheck.ts (plain Node, no framework) — grounding, payload sentinels, the ranker's drift guard, LaTeX helpers…", def: "web/ · CI" },
+              { name: "npm run check", what: "Typecheck, lint, and every *.selfcheck.ts (plain Node, no framework): grounding, payload sentinels, the ranker's drift guard, LaTeX helpers…", def: "web/ · CI" },
               { name: "npm run smoke", what: "The Playwright checks below, against a running dev server.", def: "web/ · local" },
               { name: "uv run selfcheck.py", what: "figurelib.py under CPython with Pyodide's library versions; and the pipeline's own checks.", def: "web/figurelib, pipeline · CI" },
             ]}
@@ -305,7 +305,7 @@ export default function ArchitecturePage() {
         <DocSection id="deploying" title="Deploying" icon={icon(Rocket)} lead="A static build to Cloudflare Pages, the two Functions alongside it.">
           <DocPart title="npm run deploy">
             <p>
-              Builds the static export, removes one oversized WASM file Next copies in (the ONNX runtime is loaded from a CDN instead — Pages rejects files
+              Builds the static export, removes one oversized WASM file Next copies in (the ONNX runtime is loaded from a CDN instead; Pages rejects files
               over 25 MB), then {code("wrangler pages deploy")}. The Functions need one secret, {code("ANTHROPIC_API_KEY")}, set in the Pages dashboard (
               {code("web/.dev.vars")} locally), and KV namespaces for the daily counters. The index must be built first ({code("pipeline/README.md")}); the
               TeX engine is published separately to R2 ({code("scripts/publish_busytex.sh")}).
@@ -317,14 +317,14 @@ export default function ArchitecturePage() {
         <DocSection id="checklist" title="Reviewing a change" icon={icon(ClipboardCheck)} lead="What to check before approving anything, in the order it matters.">
           <ol className="grid gap-3 md:grid-cols-2">
             {[
-              ["New requests", "Does anything new call fetch, XHR or a worker import? Every new request must be a bodyless GET for a public file — or go through one of the two notices."],
+              ["New requests", "Does anything new call fetch, XHR or a worker import? Every new request must be a bodyless GET for a public file, or go through one of the two notices."],
               ["Consent paths", "Can the review or Ask Claude start without a click on its notice? Is any new default on? Does the notice still say exactly what's sent?"],
               ["What's in a payload", "Does anything add a field to what's sent? The review's pass requests and Ask Claude's payload have exact shapes, checked on both sides."],
               ["Server state", "Does a Function now keep anything between requests beyond the daily counters?"],
               ["Functions' imports", "Anything new imported by functions/ must be pure or isomorphic."],
               ["Tests", "npm run check green; the smokes for the flows touched; a selfcheck for new pure logic, written first."],
-              ["The away colour", "Used only for what leaves the device — nothing else may borrow it."],
-              ["Docs", "ARCHITECTURE.md's folder map and sections, the privacy page, and this page and the guide still true — the guide's screenshots re-made with guide_shots.mjs if a screen changed."],
+              ["The away colour", "Used only for what leaves the device. Nothing else may borrow it."],
+              ["Docs", "ARCHITECTURE.md's folder map and sections, the privacy page, and this page and the guide still true, with the guide's screenshots re-made with guide_shots.mjs if a screen changed."],
             ].map(([t, d], i) => (
               <li key={t} className="clay flex gap-3 p-4 text-sm">
                 <span aria-hidden className="bead h-7 w-7 shrink-0 font-mono text-xs" style={{ background: "#ebe8df" }}>

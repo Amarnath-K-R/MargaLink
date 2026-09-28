@@ -8,7 +8,7 @@ const GROUPS: { title: string; keys: { combo: string[]; what: string }[] }[] = [
   {
     title: "Anywhere",
     keys: [
-      { combo: ["Mod", "K"], what: "Commands — every action, searchable" },
+      { combo: ["Mod", "K"], what: "Commands: every action, searchable" },
       { combo: ["Esc"], what: "Close a window" },
     ],
   },

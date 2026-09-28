@@ -18,9 +18,9 @@ function findJournal(id: string): JournalMeta | undefined {
 export async function generateMetadata(props: PageProps<"/journal/[id]">): Promise<Metadata> {
   const { id } = await props.params;
   const journal = findJournal(id);
-  if (!journal) return { title: "Journal not found — MargaLink" };
+  if (!journal) return { title: "Journal not found | MargaLink" };
   return {
-    title: `${journal.display_name} — MargaLink`,
+    title: `${journal.display_name} | MargaLink`,
     description: `Journal info and paper matching for ${journal.display_name}.`,
   };
 }

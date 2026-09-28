@@ -34,7 +34,7 @@ export default function ChecksWindow({
   if (!pdfFile) return <CompileFirst compiling={compiling} onCompile={onCompile} />;
   return (
     <div data-testid="checks" className="text-sm">
-      <p className="text-ink-soft">Read from the compiled PDF on this device — counts include headings, captions and references. Nothing is sent.</p>
+      <p className="text-ink-soft">Read from the compiled PDF on this device. Counts include headings, captions and references. Nothing is sent.</p>
       {checks.error && <ErrorText>{checks.error}</ErrorText>}
       {checks.busy && !checks.format && <p className="mt-3 text-ink-soft">Reading the PDF…</p>}
       {checks.format && <FormatCheckPanel result={checks.format} />}
@@ -45,7 +45,7 @@ export default function ChecksWindow({
         ) : (
           <p className="mt-1 text-ink-soft">
             {targetName
-              ? `${targetName} has no hand-verified rules here yet — set one of the pilot journals as the target (Journal window) to check its rules.`
+              ? `${targetName} has no hand-verified rules here yet. Set one of the pilot journals as the target (Journal window) to check its rules.`
               : "Set a pilot journal as the target (Journal window) to check its rules."}
           </p>
         )}

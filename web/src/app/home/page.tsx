@@ -8,7 +8,7 @@ import NewsRail from "./NewsRail.tsx";
 import { UPDATES } from "./updates.ts";
 
 export const metadata: Metadata = {
-  title: "Home — MargaLink",
+  title: "Home | MargaLink",
   description: "Start writing your paper, learn your way around MargaLink, and see what's new.",
 };
 
@@ -38,7 +38,7 @@ export default function HomeDashboard() {
             href="/write"
             art={<WriteArt bare />}
             title="Write your paper"
-            text="Your journal's LaTeX template, compiled in your browser — with matching, review, figures and checks a window away."
+            text="Your journal's LaTeX template, compiled in your browser, with matching, review, figures and checks a window away."
             cta="Open the workspace"
             primary
           />
@@ -46,7 +46,7 @@ export default function HomeDashboard() {
             href="/guide"
             art={<GuideArt bare />}
             title="Read the guide"
-            text="Every tool and every option, shown on the real screens — start here if you're new."
+            text="Every tool and every option, shown on the real screens. Start here if you're new."
             cta="Open the guide"
           />
         </div>
@@ -67,7 +67,7 @@ export default function HomeDashboard() {
               <h2 id="news-title" className="font-serif text-3xl font-medium tracking-[-0.015em]">
                 What&apos;s new
               </h2>
-              <p className="mt-1 text-ink-soft">New tools and changes, newest first — older ones to the right.</p>
+              <p className="mt-1 text-ink-soft">New tools and changes, newest first, older ones to the right.</p>
             </div>
           }
         />

@@ -13,7 +13,7 @@ function CitationList({ citations, onCitation }: { citations: Citation[]; onCita
     <ul className="mt-2 space-y-1.5">
       {citations.map((c, i) => (
         <li key={i} className="border-l-2 border-accent/35 pl-3 text-xs italic leading-relaxed text-ink-soft">
-          &ldquo;{c.quote}&rdquo; <span className="not-italic">— {c.section}</span>
+          &ldquo;{c.quote}&rdquo; <span className="not-italic">({c.section})</span>
           {onCitation && (
             <button type="button" onClick={() => onCitation(c)} className="clay-chip ml-2 h-6 not-italic">
               Jump to source
@@ -27,8 +27,8 @@ function CitationList({ citations, onCitation }: { citations: Citation[]; onCita
 
 function coverageLine({ reviewed, failed, pending, skipped }: ReviewResult["coverage"]): string {
   let line = `Reviewed ${reviewed.length} of ${reviewed.length + failed.length + pending.length} sections`;
-  if (failed.length) line += ` — ${failed.map((f) => `${f.title} couldn't be checked (${f.reason})`).join("; ")}`;
-  if (pending.length) line += ` — ${pending.length} not reviewed yet`;
+  if (failed.length) line += `; ${failed.map((f) => `${f.title} couldn't be checked (${f.reason})`).join("; ")}`;
+  if (pending.length) line += `; ${pending.length} not reviewed yet`;
   if (skipped.length) line += `. Not reviewed at this depth: ${skipped.map((s) => s.title).join(", ")}`;
   return `${line}.`;
 }
@@ -109,8 +109,8 @@ export default function ReviewResultPanel({ result, partial = false, onCitation 
         {coverageLine(result.coverage)}
       </p>
       <p className="mt-1 text-xs text-ink-soft">
-        LLM-generated — a second opinion to consider, not a guarantee of anything.
-        {partial ? " Results so far — the cross-check hasn't run yet." : ""}
+        LLM-generated: a second opinion to consider, not a guarantee of anything.
+        {partial ? " Results so far; the cross-check hasn't run yet." : ""}
       </p>
     </div>
   );

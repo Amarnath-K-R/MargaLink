@@ -71,7 +71,7 @@ export default function Describe({
         <span>
           Also send group labels{" "}
           <span className="text-ink-soft">
-            ({Object.keys(labels).length ? Object.keys(labels).join(", ") : "no column qualifies"}) — lets you name groups (“compare against Placebo”).
+            ({Object.keys(labels).length ? Object.keys(labels).join(", ") : "no column qualifies"}): lets you name groups (“compare against Placebo”).
             Only columns with at most 30 distinct values; a label can itself be sensitive, so this is off unless you tick it.
           </span>
         </span>

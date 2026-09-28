@@ -41,7 +41,7 @@ export function describeRenderError(code: string, d: Record<string, unknown>): s
     case "missing_column":
       return d.column ? `Column ${col} (for ${d.role}) isn't in the data.` : `Choose a column for "${d.role}".`;
     case "wrong_dtype":
-      return `Column ${col} can't be used for ${d.role} — it needs ${[d.expected].flat().join(" or ")} values.`;
+      return `Column ${col} can't be used for ${d.role}: it needs ${[d.expected].flat().join(" or ")} values.`;
     case "empty_after_na":
       return `No rows are left once empty cells in ${[d.columns].flat().map((c) => `"${c}"`).join(", ")} are dropped.`;
     case "unknown_group":

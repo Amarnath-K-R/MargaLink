@@ -394,7 +394,7 @@ export function checkSpecAgainstColumns(columns: ColumnSchema[], spec: FigureSpe
     }
     if (p.family === "heatmap") {
       const set = [p.roles.x, p.roles.y, p.roles.value].filter(Boolean).length;
-      if (set !== 0 && set !== 3) return `${where}a heatmap needs all of x, y and value — or none, for a correlation matrix.`;
+      if (set !== 0 && set !== 3) return `${where}a heatmap needs all of x, y and value, or none for a correlation matrix.`;
     }
     const layer = p.layers.find((l) => !layersFor(p.family).includes(l.kind));
     if (layer) return `${where}a ${p.family} panel can't have a "${layer.kind}" overlay.`;

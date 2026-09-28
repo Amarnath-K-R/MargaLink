@@ -29,7 +29,7 @@ export default function TemplatePicker({
           {recommended ? (
             <>
               : we suggest <span className="font-medium">{recommended.name}</span>
-              {!recommended.bundled && " — see the link below"}.
+              {!recommended.bundled && " (see the link below)"}.
             </>
           ) : (
             ": its publisher has no template we know of, so the plain article is a good start."
@@ -54,7 +54,7 @@ export default function TemplatePicker({
       </div>
       <div className="mt-6 text-sm">
         <p className="text-ink-soft">
-          Other publishers share their templates only on their own sites — download the zip there, then{" "}
+          Other publishers share their templates only on their own sites. Download the zip there, then{" "}
           <button type="button" onClick={onUpload} className="text-accent hover:underline">
             upload it here
           </button>

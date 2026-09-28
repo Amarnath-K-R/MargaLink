@@ -44,7 +44,7 @@ const parts = (path: string) => path.split("/").filter(Boolean);
 export function checkPath(path: string): void {
   const segs = path.split("/");
   if (!path || segs.some((s) => s === "" || s === "." || s === "..")) throw new Error(`"${path}" isn't a file name this project can use.`);
-  if (path === META || segs[0] === HIDDEN) throw new Error(`"${path}" is reserved — pick another name.`);
+  if (path === META || segs[0] === HIDDEN) throw new Error(`"${path}" is reserved. Pick another name.`);
 }
 
 export function findMainTex(entries: { path: string; text: string | null }[]): string | null {

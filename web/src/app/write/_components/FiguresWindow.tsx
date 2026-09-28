@@ -45,7 +45,7 @@ export default function FiguresWindow({
     setError(null);
     try {
       const pdf = (await f.onExport(["pdf"], 300)).pdf;
-      if (!pdf) throw new Error("The PDF export came back empty — try Export first to see why.");
+      if (!pdf) throw new Error("The PDF export came back empty. Try Export first to see why.");
       await onInsert(Uint8Array.from(atob(pdf), (c) => c.charCodeAt(0)), { version: 1, spec: f.spec, hook: f.hookApproved ? f.hook : null });
     } catch (err) {
       setError(errorMessage(err));

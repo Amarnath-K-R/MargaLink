@@ -87,7 +87,7 @@ const clampSplit = (v: number) => Math.min(0.75, Math.max(0.25, v));
 
 const STAGE_TEXT: Record<TexStage, (d?: string) => string> = {
   "loading-engine": () => "Loading TeX…",
-  "loading-package": (d) => (d === "all" ? "This template needs more of TeX Live — loading it (about 110 MB, once)…" : "Loading TeX packages…"),
+  "loading-package": (d) => (d === "all" ? "This template needs more of TeX Live: loading it (about 110 MB, once)…" : "Loading TeX packages…"),
   running: (d) => `Running ${d ?? "TeX"}…`,
 };
 
@@ -181,7 +181,7 @@ export default function Workspace({
   // render); one per project, since Workspace remounts per project.
   const saverRef = useRef<ReturnType<typeof autosaver> | null>(null);
   const saver = useCallback(
-    () => (saverRef.current ??= autosaver(write, undefined, undefined, undefined, () => setError("Couldn't save your last edit (is the disk full?). It will be retried — download a backup to be safe."))),
+    () => (saverRef.current ??= autosaver(write, undefined, undefined, undefined, () => setError("Couldn't save your last edit (is the disk full?). It will be retried; download a backup to be safe."))),
     [write],
   );
   // File operations report what went wrong instead of failing silently.
@@ -327,7 +327,7 @@ export default function Workspace({
         setStatus("Compiled.");
       } else {
         setStatus(null);
-        setError(result.diagnostics.find((d) => d.kind !== "warning")?.message ?? "The compile failed — see the log below.");
+        setError(result.diagnostics.find((d) => d.kind !== "warning")?.message ?? "The compile failed. See the log below.");
       }
       try {
         localStorage.setItem(FIRST_RUN_KEY, "1");
@@ -556,7 +556,7 @@ export default function Workspace({
         busy={busy}
         onCompile={() => void compile()}
       />
-      <p className="px-2 text-sm text-ink-soft md:hidden">Editing needs a larger screen — here is this project&apos;s last compiled PDF.</p>
+      <p className="px-2 text-sm text-ink-soft md:hidden">Editing needs a larger screen. Here is this project&apos;s last compiled PDF.</p>
       <div
         className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-3 md:gap-x-2 ${GRID[`${view}:${filesPanel}`]}`}
         style={{ "--split": `${split / (1 - split)}fr` } as CSSProperties}
@@ -666,7 +666,7 @@ export default function Workspace({
           </div>
           <div className="sheet min-h-0 flex-1">
             {!TEXT.test(active) ? (
-              <p className="p-6 text-sm text-ink-soft">{active} isn&apos;t a text file — it&apos;s used by your paper as it is.</p>
+              <p className="p-6 text-sm text-ink-soft">{active} isn&apos;t a text file; it&apos;s used by your paper as it is.</p>
             ) : doc?.path === active ? (
               <LatexEditor key={doc.path} text={doc.text} marks={marks} onChange={(t) => onEdit(doc.path, t)} onSave={() => void compile()} handleRef={editor} completions={completionData} />
             ) : null}

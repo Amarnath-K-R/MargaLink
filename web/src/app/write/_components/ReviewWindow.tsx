@@ -85,7 +85,7 @@ export default function ReviewWindow({
               {!onTarget && (
                 <p className="text-ink-soft">
                   {targetName
-                    ? `Your target journal, ${targetName}, isn't among the pilot journals with hand-verified guidelines yet — pick the closest.`
+                    ? `Your target journal, ${targetName}, isn't among the pilot journals with hand-verified guidelines yet. Pick the closest.`
                     : "Pick the journal to review against."}
                 </p>
               )}
@@ -98,7 +98,7 @@ export default function ReviewWindow({
       {r.selectedRules && r.rulesResult && (
         <section className="mt-10 border-t border-line pt-6">
           <h3 className="font-serif text-lg font-medium">Structural check</h3>
-          <p className="mt-1 text-ink-soft">Free, instant, and stays on your device — word count, reference style, required statements.</p>
+          <p className="mt-1 text-ink-soft">Free, instant, and stays on your device: word count, reference style, required statements.</p>
           <RulesCheckPanel result={r.rulesResult} />
         </section>
       )}
@@ -107,7 +107,7 @@ export default function ReviewWindow({
         <section className="mt-10 border-t border-line pt-6">
           <h3 className="font-serif text-lg font-medium">Get it reviewed</h3>
           <p className="mt-1 text-ink-soft">
-            An LLM review from Claude — inconsistencies, statistical reporting gaps, journal fit. The one feature that sends your paper&apos;s text off this
+            An LLM review from Claude: inconsistencies, statistical reporting gaps, journal fit. The one feature that sends your paper&apos;s text off this
             device, and only after you confirm the notice.
           </p>
           <ReviewRunner review={r} onCitation={jump} />

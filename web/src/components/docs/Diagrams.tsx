@@ -42,7 +42,7 @@ export function SystemDiagram() {
     { x: 256, y: 70, w: 196, h: 92, title: "Workers", lines: ["TeX Live (BusyTeX, WASM)", "Pyodide + figurelib.py", "pdf.js"] },
     { x: 44, y: 178, w: 196, h: 92, title: "On-device work", lines: ["read · embed · rank", "format & journal-rules checks", "LaTeX helpers, suggestions"] },
     { x: 256, y: 178, w: 196, h: 92, title: "Browser storage", lines: ["OPFS: projects, last PDF", "caches: index, model, engine", "localStorage: small settings"] },
-    { x: 44, y: 290, w: 408, h: 66, title: "Consent notices — the only way out", lines: ["ReviewConsent · FigureConsent: nothing is sent until a click"], tone: "away" },
+    { x: 44, y: 290, w: 408, h: 66, title: "Consent notices: the only way out", lines: ["ReviewConsent · FigureConsent: nothing is sent until a click"], tone: "away" },
   ];
   const outside: Box[] = [
     { x: 566, y: 30, w: 240, h: 76, title: "Cloudflare Pages", lines: ["the static site, /index, /templates,", "the figure gallery"] },
@@ -70,7 +70,7 @@ export function SystemDiagram() {
         </defs>
         <rect x="24" y="20" width="448" height="392" rx="22" fill="#f1eee6" stroke="#6f98a2" strokeWidth="1.5" strokeDasharray="6 6" />
         <text x="44" y="50" className="fill-accent font-sans" fontSize="13" fontWeight="600">
-          This device — the user&apos;s browser
+          This device: the user&apos;s browser
         </text>
         {device.map((b) => (
           <BoxShape key={b.title} b={b} id={id} />
@@ -84,7 +84,7 @@ export function SystemDiagram() {
         <Arrow id={id} d="M686 328 L 686 348" label="" lx={0} ly={0} away />
       </svg>
       <figcaption className="px-2 pt-3 text-xs leading-relaxed text-ink-soft">
-        Solid arrows are bodyless GETs for public files. The dashed ones carry something of the user&apos;s — only after a notice, only for the AI review
+        Solid arrows are bodyless GETs for public files. The dashed ones carry something of the user&apos;s, only after a notice, only for the AI review
         and Ask Claude.
       </figcaption>
     </figure>

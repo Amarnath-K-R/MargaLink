@@ -83,7 +83,7 @@ export async function askClaude(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (res.status === 429) throw new FigureCapacityError("This pilot is fully booked for today — try again tomorrow.");
+  if (res.status === 429) throw new FigureCapacityError("This pilot is fully booked for today. Try again tomorrow.");
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(detail && res.status < 500 ? detail : `Claude request failed (${res.status})${detail ? `: ${detail}` : ""}`);

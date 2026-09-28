@@ -5,7 +5,7 @@ export default function RulesCheckPanel({ result }: { result: RulesCheckResult }
   return (
     <div className="sheet mt-3 p-5">
       <p className="text-sm font-medium">
-        {result.journalName} — {result.articleTypeLabel}
+        {result.journalName}: {result.articleTypeLabel}
       </p>
       <dl className="mt-1">
         <CheckRow
@@ -29,7 +29,7 @@ export default function RulesCheckPanel({ result }: { result: RulesCheckResult }
         ))}
       </dl>
       <p className="mt-3 text-xs text-ink-soft">
-        Rule-based, not a guarantee — always confirm against the{" "}
+        Rule-based, not a guarantee. Always confirm against the{" "}
         <a href={result.guidelinesUrl} target="_blank" rel="noopener noreferrer nofollow" className="text-accent hover:underline">
           journal&apos;s own current guidelines
         </a>{" "}

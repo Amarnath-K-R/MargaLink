@@ -69,8 +69,8 @@ export default function MatchPage() {
       <footer className="mt-16 border-t border-line/80 pt-6 text-sm text-ink-soft">
         <p>
           {m.manifest
-            ? `This build matches against ${m.manifest.journal_count.toLocaleString()} journals — embedded entirely on-device.`
-            : "Matching runs against the full journal index — embedded entirely on-device."}{" "}
+            ? `This build matches against ${m.manifest.journal_count.toLocaleString()} journals, embedded entirely on-device.`
+            : "Matching runs against the full journal index, embedded entirely on-device."}{" "}
           {m.manifest?.ranking.accuracy && (
             <span data-testid="accuracy">
               Its real journal is in the top 10 for {Math.round(m.manifest.ranking.accuracy.top10 * 100)}% of{" "}

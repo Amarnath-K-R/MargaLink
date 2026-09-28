@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import PageHeader from "@/components/PageHeader";
 
 export const metadata: Metadata = {
-  title: "How privacy works — MargaLink",
+  title: "How privacy works | MargaLink",
   description: "What leaves your device when you use MargaLink, and what doesn't.",
 };
 
@@ -27,7 +27,7 @@ export default function PrivacyPage() {
         <li className="border-t border-line pt-4">
           <p className="font-medium">Nothing from a paper is stored anywhere.</p>
           <p className="mt-1 text-ink-soft">
-            Not on a server, not in an account — even if you sign in later,
+            Not on a server, not in an account. Even if you sign in later,
             paper content is never part of what&apos;s saved.
           </p>
         </li>
@@ -46,7 +46,7 @@ export default function PrivacyPage() {
               making figures from a spreadsheet
             </Link>
             . Both use a large language model, which can&apos;t run in a
-            browser — each asks first, in plain language, exactly what
+            browser. Each asks first, in plain language, exactly what
             it&apos;s about to send, before sending anything.
           </p>
         </li>
@@ -55,7 +55,7 @@ export default function PrivacyPage() {
       <h2 className="mt-12 font-serif text-xl font-medium">What actually happens</h2>
       <PrivacyDiagram />
       <p className="mt-4 text-sm text-ink-soft">
-        The embedding model and the journal index are public files — the same
+        The embedding model and the journal index are public files, the same
         ones for everyone, downloaded once and cached by your browser. Your
         paper never appears in either direction of those downloads. There is
         no MargaLink server in this loop at all: matching a paper to a
@@ -64,12 +64,11 @@ export default function PrivacyPage() {
 
       <h2 className="mt-12 font-serif text-xl font-medium">Why this is checkable, not just claimed</h2>
       <p className="mt-3 text-ink-soft">
-        Open your browser&apos;s network tab (or use the panel that appears on
-        the upload page after you run a match) and read the requests
+        Open your browser&apos;s network tab (in its developer tools) and read the requests
         yourself: every one is a plain <code className="font-mono text-sm">GET</code> for
         a public file, none carries a request body. The browser-side code
         that does the extracting, embedding, and ranking is what actually
-        ships to your browser — there&apos;s nothing hidden behind a server
+        ships to your browser; there&apos;s nothing hidden behind a server
         to take on faith.
       </p>
 
@@ -80,7 +79,7 @@ export default function PrivacyPage() {
         the same kind of list for each journal. Be clear about what that
         number list is: it carries the general topic of your paper, not the
         words. It can&apos;t be turned back into your original text in any
-        practical way — but it&apos;s still derived from your paper, so we
+        practical way, but it&apos;s still derived from your paper, so we
         don&apos;t send it anywhere either. The whole comparison happens
         locally, against the journal index already in your browser.
       </p>
@@ -93,7 +92,7 @@ export default function PrivacyPage() {
       </p>
       <p className="mt-3 text-ink-soft">
         How good is the matching? Every index build holds back each journal&apos;s most recent
-        papers — they are never part of the index — and checks how often each one&apos;s real
+        papers (they are never part of the index) and checks how often each one&apos;s real
         journal comes back in the top ten. That figure is shown at the bottom of the matching
         page for the build you are using. It measures papers that were published, so treat it
         as a guide, not a promise for yours.
@@ -103,7 +102,7 @@ export default function PrivacyPage() {
         The first exception: getting a paper reviewed
       </h2>
       <p className="mt-3 text-ink-soft">
-        Everything above — matching, the format check, the journal rules check — runs
+        Everything above (matching, the format check, the journal rules check) runs
         entirely on your device. Getting a paper reviewed is different: it sends your
         paper&apos;s text to Anthropic&apos;s Claude API, because that kind of review needs a
         large language model, and no model capable of it runs in a browser today. It only
@@ -112,7 +111,7 @@ export default function PrivacyPage() {
       <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
         <li>
           Nothing is sent until you confirm a plain-language notice naming exactly what&apos;s
-          about to happen — including how many requests it takes: one per section of your
+          about to happen, including how many requests it takes: one per section of your
           paper, then one over the numbers found. There is no default-on path.
         </li>
         <li>
@@ -125,17 +124,17 @@ export default function PrivacyPage() {
         </li>
         <li>
           Before sending, you can see how your paper was split into sections and mark any
-          section &ldquo;Don&apos;t send&rdquo; — it never leaves your device.
+          section &ldquo;Don&apos;t send&rdquo;; it never leaves your device.
         </li>
         <li>
-          Each request carries one section; the server reviews it and forgets it — MargaLink
+          Each request carries one section; the server reviews it and forgets it; MargaLink
           keeps nothing between requests. Anthropic retains API data only under its own API
           data policy.
         </li>
         <li>
-          Like every other request in MargaLink, these show up in the network-request log
-          on the review page, one line per request, when they happen — they aren&apos;t hidden from the same
-          transparency check the rest of the site relies on.
+          None of it is hidden: the notice says how many requests a review takes before you
+          send it, and in the writing workspace the status line counts every request that
+          carried text you agreed to send.
         </li>
       </ul>
 
@@ -144,11 +143,11 @@ export default function PrivacyPage() {
       </h2>
       <p className="mt-3 text-ink-soft">
         The figure studio turns a CSV or Excel file into a publication-ready figure. Reading your
-        file, drawing the figure, the statistics and every export happen in your browser — your
+        file, drawing the figure, the statistics and every export happen in your browser; your
         spreadsheet never leaves your device. Only one optional step sends anything: asking Claude
         to set up a figure from a description you type. What goes then is a description: your
         column names, their inferred types, how many rows you have, your request, and the current
-        figure settings (chart types, which columns go where, axis settings) — never a cell value,
+        figure settings (chart types, which columns go where, axis settings), never a cell value,
         and never titles or notes you typed.
       </p>
       <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
@@ -158,7 +157,7 @@ export default function PrivacyPage() {
         </li>
         <li>
           Group labels (like &quot;Placebo&quot; or a site name) are values too, so they&apos;re only
-          sent if you tick a separate box — and then the notice appears every time and lists the
+          sent if you tick a separate box, and then the notice appears every time and lists the
           exact labels. Only columns with at most 30 distinct values qualify, so ID-like columns
           never do.
         </li>
@@ -172,10 +171,9 @@ export default function PrivacyPage() {
           in a worker whose network access is switched off before any tweak can run.
         </li>
         <li>
-          The one honest caveat: drawing happens in a Web Worker that downloads its Python runtime,
-          the figure engine and fonts. Those are public files, never anything from your data, but
-          they&apos;re fetched off the main thread and so don&apos;t appear in the network-request log
-          the rest of this page points to.
+          Drawing happens in a Web Worker that downloads its Python runtime, the figure engine and
+          fonts: public files, never anything from your data. They appear in your browser&apos;s
+          network tab like any other request.
         </li>
       </ul>
 
@@ -185,7 +183,7 @@ export default function PrivacyPage() {
       <p className="mt-3 text-ink-soft">
         The writing workspace compiles your LaTeX in your browser, with TeX Live running on your
         device. Your manuscript, figures and bibliography are kept in this browser&apos;s own storage
-        on this device — never on a server. The workspace has no AI writing help: nothing rewrites
+        on this device, never on a server. The workspace has no AI writing help: nothing rewrites
         your text. The other tools open inside it as windows: matching and the format and
         journal-rules checks read the PDF you compiled, on your device; the AI review and the figure
         window&apos;s Ask Claude are the same two opt-in exceptions described above, behind the same
@@ -212,7 +210,7 @@ export default function PrivacyPage() {
       <h2 className="mt-12 font-serif text-xl font-medium">Accounts and payment</h2>
       <p className="mt-3 text-ink-soft">
         If accounts exist later, they&apos;ll need only an email address.
-        Payment details stay with the payment provider — MargaLink never
+        Payment details stay with the payment provider; MargaLink never
         sees or stores card numbers.
       </p>
     </main>
@@ -225,7 +223,7 @@ function PrivacyDiagram() {
       <svg
         viewBox="0 0 420 598"
         role="img"
-        aria-label="Diagram: inside your browser, a paper is extracted to text, embedded into a vector, then ranked against a journal index — all locally. Two public files (the embedding model and the journal index) download once into the browser. No MargaLink server is part of this flow."
+        aria-label="Diagram: inside your browser, a paper is extracted to text, embedded into a vector, then ranked against a journal index, all locally. Two public files (the embedding model and the journal index) download once into the browser. No MargaLink server is part of this flow."
         className="w-full h-auto"
         style={{ color: "var(--ink)" }}
       >
@@ -288,7 +286,7 @@ function PrivacyDiagram() {
       <figcaption className="mt-3 text-sm text-ink-soft">
         Everything that touches your paper happens inside the browser
         boundary. The only network traffic is two public, non-personal
-        downloads — there is no server in this loop to send your paper to.
+        downloads; there is no server in this loop to send your paper to.
       </figcaption>
     </figure>
   );

@@ -62,9 +62,9 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
       {projects &&
         (projects.length === 0 ? (
           <p className="mt-2 text-ink-soft">
-            No papers in this browser yet —{" "}
+            No papers in this browser yet.{" "}
             <Link href="/write" className="text-accent hover:underline">
-              start one
+              Start one
             </Link>
             .
           </p>

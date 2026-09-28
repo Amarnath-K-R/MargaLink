@@ -28,13 +28,13 @@ export default function ReviewPage() {
         title="Get it reviewed."
         subtitle={
           <p className="mt-3 max-w-md text-lg text-ink-soft">
-            Attach a paper, choose a journal, and get a structural check plus an AI review — checked against that journal&apos;s actual guidelines.
+            Attach a paper, choose a journal, and get a structural check plus an AI review, checked against that journal&apos;s actual guidelines.
           </p>
         }
       />
 
       <div className="space-y-6">
-        <Step n={1} tint={TINT} title="Attach your paper" hint="Read in this tab — nothing is sent until you ask for the AI review in step 3.">
+        <Step n={1} tint={TINT} title="Attach your paper" hint="Read in this tab. Nothing is sent until you ask for the AI review in step 3.">
           <PaperDropzone busy={r.busy} onFile={(file) => void r.onFile(file)} />
           {r.uploadError && <ErrorText>{r.uploadError}</ErrorText>}
           {r.fileName && !r.uploadError && (
@@ -53,7 +53,7 @@ export default function ReviewPage() {
             {r.selectedRules && r.rulesResult && (
               <div className="mt-8">
                 <h3 className="font-serif text-lg font-medium">Structural check</h3>
-                <p className="mt-1 text-sm text-ink-soft">Free, instant, and stays on your device — word count, reference style, required statements.</p>
+                <p className="mt-1 text-sm text-ink-soft">Free, instant, and stays on your device: word count, reference style, required statements.</p>
                 <RulesCheckPanel result={r.rulesResult} />
               </div>
             )}
@@ -67,7 +67,7 @@ export default function ReviewPage() {
             title="Get it reviewed"
             hint={
               <>
-                An LLM review from Claude — checking for inconsistencies, statistical reporting gaps, and journal fit. The one feature on MargaLink that
+                An LLM review from Claude that checks for inconsistencies, statistical reporting gaps, and journal fit. The one feature on MargaLink that
                 sends your paper&apos;s text off this device (the figure studio&apos;s &ldquo;Ask Claude&rdquo; is the other opt-in exception, and it never
                 sends a spreadsheet&apos;s values).
               </>
@@ -83,7 +83,7 @@ export default function ReviewPage() {
           <Link href="/privacy" className="text-accent hover:underline">
             How privacy works
           </Link>{" "}
-          — including the exception this page relies on.
+          , including the exception this page relies on.
         </p>
       </footer>
     </main>

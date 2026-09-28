@@ -50,7 +50,7 @@ export const JOURNAL_RULES: JournalRules[] = [
     requiredStatements: ["funding", "conflictsOfInterest", "dataAvailability", "ethics"],
     guidelinesUrl: "https://jamanetwork.com/journals/jama/pages/instructions-for-authors",
     asOf: ASOF,
-    scopeSummary: "General medicine — high-impact clinical research, broad readership across specialties.",
+    scopeSummary: "General medicine: high-impact clinical research, broad readership across specialties.",
   },
   {
     journalId: "S202381698",
@@ -61,7 +61,7 @@ export const JOURNAL_RULES: JournalRules[] = [
     requiredStatements: ["funding", "conflictsOfInterest", "dataAvailability", "ethics"],
     guidelinesUrl: "https://journals.plos.org/plosone/s/submission-guidelines",
     asOf: ASOF,
-    scopeSummary: "Multidisciplinary open access — publishes technically sound work in any scientific field, no novelty or impact bar.",
+    scopeSummary: "Multidisciplinary open access: publishes technically sound work in any scientific field, no novelty or impact bar.",
   },
   {
     journalId: "S2738950867",
@@ -72,7 +72,7 @@ export const JOURNAL_RULES: JournalRules[] = [
     requiredStatements: ["ethics", "conflictsOfInterest", "funding"],
     guidelinesUrl: "https://www.cureus.com/author_guide",
     asOf: ASOF,
-    scopeSummary: "Medical education and case-based content — rapid publication, case reports and smaller clinical studies.",
+    scopeSummary: "Medical education and case-based content: rapid publication, case reports and smaller clinical studies.",
   },
   {
     journalId: "S200437886",
@@ -83,7 +83,7 @@ export const JOURNAL_RULES: JournalRules[] = [
     requiredStatements: ["ethics", "conflictsOfInterest", "funding", "dataAvailability"],
     guidelinesUrl: "https://link.springer.com/journal/12889/submission-guidelines",
     asOf: ASOF,
-    scopeSummary: "Public health research — epidemiology, health policy, and health services across populations.",
+    scopeSummary: "Public health research: epidemiology, health policy, and health services across populations.",
   },
   {
     journalId: "S2485537415",
@@ -94,7 +94,7 @@ export const JOURNAL_RULES: JournalRules[] = [
     requiredStatements: [], // no standardized mandatory declarations section confirmed
     guidelinesUrl: "https://ieeeaccess.ieee.org/authors/submission-guidelines/",
     asOf: ASOF,
-    scopeSummary: "Multidisciplinary engineering and computer science — broad scope, emphasis on practical/applied contributions.",
+    scopeSummary: "Multidisciplinary engineering and computer science: broad scope, emphasis on practical/applied contributions.",
   },
   {
     journalId: "S9692511",
@@ -105,7 +105,7 @@ export const JOURNAL_RULES: JournalRules[] = [
     requiredStatements: ["ethics", "conflictsOfInterest", "funding"],
     guidelinesUrl: "https://www.frontiersin.org/journals/psychology/for-authors/author-guidelines",
     asOf: ASOF,
-    scopeSummary: "Psychology across all subfields — broad scope, open peer review process.",
+    scopeSummary: "Psychology across all subfields: broad scope, open peer review process.",
   },
   {
     journalId: "S64187185",
@@ -116,7 +116,7 @@ export const JOURNAL_RULES: JournalRules[] = [
     requiredStatements: ["conflictsOfInterest", "dataAvailability", "funding"],
     guidelinesUrl: "https://www.nature.com/ncomms/submit/article",
     asOf: ASOF,
-    scopeSummary: "Multidisciplinary — significant advances of interest to specialists within a field, high novelty bar.",
+    scopeSummary: "Multidisciplinary: significant advances of interest to specialists within a field, high novelty bar.",
   },
   {
     journalId: "S196734849",
@@ -127,7 +127,7 @@ export const JOURNAL_RULES: JournalRules[] = [
     requiredStatements: ["conflictsOfInterest", "dataAvailability", "funding"],
     guidelinesUrl: "https://www.nature.com/srep/author-instructions/submission-guidelines",
     asOf: ASOF,
-    scopeSummary: "Multidisciplinary, Nature-family — technically sound original research, no novelty/impact bar (similar spirit to PLOS ONE).",
+    scopeSummary: "Multidisciplinary, Nature-family: technically sound original research, no novelty/impact bar (similar spirit to PLOS ONE).",
   },
 ];
 

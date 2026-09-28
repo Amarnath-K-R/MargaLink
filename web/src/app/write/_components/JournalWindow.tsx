@@ -101,7 +101,7 @@ export default function JournalWindow({
             {!journal ? (
               <p className="mt-1 text-ink-soft">Once the index has loaded, its publisher&apos;s template shows here.</p>
             ) : !template ? (
-              <p className="mt-1 text-ink-soft">No template for this publisher is bundled — start from the plain article, or import the publisher&apos;s own.</p>
+              <p className="mt-1 text-ink-soft">No template for this publisher is bundled. Start from the plain article, or import the publisher&apos;s own.</p>
             ) : template.id === currentTemplateId ? (
               <p className="mt-1 text-ink-soft">This paper already uses the {template.name} template.</p>
             ) : template.bundled ? (

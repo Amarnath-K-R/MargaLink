@@ -179,7 +179,7 @@ async function attempt(endpoint: string, body: Req, timeoutMs: number, outer: Ab
     // Parsed here so a malformed 200 is a retryable failure for this pass, not a crash of the whole run.
     if (res.ok) return { ok: true, data: await res.json() };
     const detail = await res.text().catch(() => "");
-    if (res.status === 429) throw new ReviewCapacityError("This pilot is fully booked for today — try again tomorrow.");
+    if (res.status === 429) throw new ReviewCapacityError("This pilot is fully booked for today. Try again tomorrow.");
     if (res.status === 400 || res.status === 404 || res.status === 413) throw new FatalPassError(`Review request rejected (${res.status}): ${detail}`);
     // 422 = the model's output was truncated; not worth a same-size retry.
     return { ok: false, reason: `server error ${res.status}${detail ? `: ${detail}` : ""}`, retryable: res.status !== 422 };

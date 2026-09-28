@@ -33,10 +33,10 @@ export default function ReviewConsent({
       <p className="font-serif text-lg font-medium">Send this paper&apos;s text to Claude for a {tier} review?</p>
       <p className="mt-2 text-sm leading-relaxed text-ink-soft">
         Unlike matching and the structural checks, this sends your paper&apos;s text to
-        Anthropic&apos;s Claude API in {passCount} short requests — one per section, then one
-        cross-check over the numbers found — to review it against {journalName}&apos;s
+        Anthropic&apos;s Claude API in {passCount} short requests (one per section, then one
+        cross-check over the numbers found) to review it against {journalName}&apos;s
         guidelines, at {tier} depth. Author names and email addresses are stripped first, on a
-        best-effort basis — the paper&apos;s content itself is not. Anthropic doesn&apos;t use
+        best-effort basis; the paper&apos;s content itself is not. Anthropic doesn&apos;t use
         API data to train models and retains it only under its API data policy; MargaLink
         doesn&apos;t store it. This is the one feature in MargaLink that sends
         your paper&apos;s text off your device.

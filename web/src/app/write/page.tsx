@@ -141,7 +141,7 @@ export default function WritePage() {
         title="Write your paper."
         subtitle={
           <p className="mt-3 max-w-xl text-lg text-ink-soft">
-            Start from your journal&apos;s LaTeX template, write, and compile to PDF — TeX runs in your browser, and your manuscript never
+            Start from your journal&apos;s LaTeX template, write, and compile to PDF. TeX runs in your browser, and your manuscript never
             leaves this device.
           </p>
         }

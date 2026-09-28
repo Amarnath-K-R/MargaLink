@@ -4,7 +4,7 @@
 export default function CompileFirst({ compiling, onCompile }: { compiling: boolean; onCompile: () => void }) {
   return (
     <div className="rounded-sm border border-line bg-paper-alt p-4 text-sm">
-      <p>Compile the paper first — these read the compiled PDF, on this device.</p>
+      <p>Compile the paper first: these read the compiled PDF, on this device.</p>
       <button
         type="button"
         onClick={onCompile}

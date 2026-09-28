@@ -38,9 +38,9 @@ export default function MatchWindow({
           disabled={m.busy}
           className="rounded-sm border border-line bg-paper-alt px-4 py-1.5 hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {m.busy ? "Matching…" : stale ? "Draft changed — match again" : m.results ? "Match again" : "Find matching journals"}
+          {m.busy ? "Matching…" : stale ? "Draft changed: match again" : m.results ? "Match again" : "Find matching journals"}
         </button>
-        <span className="text-ink-soft">Matches the compiled PDF against the journal index — the paper never leaves this device.</span>
+        <span className="text-ink-soft">Matches the compiled PDF against the journal index; the paper never leaves this device.</span>
       </div>
 
       {m.stage !== "idle" && (

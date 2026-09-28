@@ -75,7 +75,7 @@ export default function JournalDetail({ journal, topicNames }: { journal: Journa
         This information comes from OpenAlex
         {journal.publication_time_weeks != null || journal.license_type ? " and DOAJ" : ""}, and
         hasn&apos;t been independently verified. The journal&apos;s own page is the final
-        authority — see the links above.
+        authority (see the links above).
       </p>
     </>
   );

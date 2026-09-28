@@ -10,7 +10,7 @@ import { NO_EDITS, buildOutline, chunkSections, type OutlineEdits } from "@/lib/
 import type { HeadingHint, ReviewProgress, ReviewResult, ReviewTier } from "@/lib/reviewTypes";
 import { errorMessage } from "@/lib/errorMessage";
 
-const TOO_LONG = "This paper is over 400,000 characters of text — split off supplementary material and try again.";
+const TOO_LONG = "This paper is over 400,000 characters of text. Split off supplementary material and try again.";
 
 // The review flow — attach, choose a journal, edit the outline, run the
 // passes with cancel and resume — as one hook, shared by the /review page
@@ -72,7 +72,7 @@ export function useReview() {
         const { fullText, headings: found } = await extractFromFile(file, { headings: true });
         if (fullText.trim().length < 50) {
           throw new Error(
-            "Couldn't find readable text in this file. If it's a scanned PDF (no text layer), text extraction won't work on it — try a PDF exported directly from Word or LaTeX instead.",
+            "Couldn't find readable text in this file. If it's a scanned PDF (no text layer), text extraction won't work on it. Try a PDF exported directly from Word or LaTeX instead.",
           );
         }
         const prepared = prepareForReview(fullText);
@@ -181,7 +181,7 @@ export function useReview() {
           setReviewResult(err.partial);
         }
         // The Function returns descriptive text on failure — surface it, not a generic message.
-        setReviewError(errorMessage(err, "Review failed — try again in a moment."));
+        setReviewError(errorMessage(err, "The review failed. Try again in a moment."));
       } finally {
         if (abortRef.current === ac) abortRef.current = null;
         setReviewLoading(false);

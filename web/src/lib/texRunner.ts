@@ -15,7 +15,7 @@ export type CompileResult = { pdf: Uint8Array | null; log: string; exitCode: num
 export type TexStage = "loading-engine" | "loading-package" | "running";
 
 const MESSAGES = {
-  timeout: "TeX ran for more than 90 seconds and was stopped — usually a macro that loops. Check your latest edit, then compile again.",
+  timeout: "TeX ran for more than 90 seconds and was stopped. It's usually a macro that loops. Check your latest edit, then compile again.",
   load_failed: "The TeX engine couldn't load. Check your connection and try again.",
   worker_failed: "The TeX engine stopped unexpectedly. Compile again to restart it.",
 } as const;
