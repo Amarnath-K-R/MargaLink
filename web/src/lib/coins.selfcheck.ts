@@ -30,6 +30,9 @@ assert.equal(proCoinsLeft([e("pack", 150), e("pro_grant", 100), e("pro_reversal"
 assert.equal(proCoinsLeft([e("pro_grant", 100), e("review", -30, "t1"), e("review_refund", 30, "t1")]), 100, "a refund of Pro coins is Pro coins again (it can still lapse)");
 assert.equal(proCoinsLeft([e("pack", 50), e("figure", -1, "f1"), e("pro_grant", 100), e("figure_refund", 1, "f1")]), 100, "a refund of pack coins stays pack coins");
 assert.equal(proCoinsLeft([e("pro_grant", 20), e("review", -30, "t2"), e("pack", 50), e("review_refund", 30, "t2")]), 20, "split payment, split refund");
+// the simulation's sequence: never more Pro coins than coins
+const seq = [e("welcome", 10), e("figure", -1, "f9"), e("pro_grant", 100), e("review", -10, "t9"), e("pro_reversal", -100), e("reinstated", 100), e("pro_reversal", -100), e("review_refund", 10, "t9")];
+assert.equal(proCoinsLeft(seq), 9, "at most the balance (9)");
 
 // the months a plan has earned: one per monthly period, twelve drips a year
 const t = (s: string) => Date.parse(s);
@@ -54,6 +57,7 @@ for (const bad of ["", "a@b", "a b@c.d", "@c.d", "a@@c.d", `${"a".repeat(250)}@b
 for (const k of ["welcome", "pack", "pro_grant", "pro_expire", "pro_reversal", "review", "review_refund", "figure", "figure_refund", "reversal", "reinstated", "admin"] as LedgerKind[]) {
   assert.ok(ledgerLabel(k).length > 0 && !ledgerLabel(k).includes("—"), k);
 }
+assert.equal(new NotEnoughCoinsError(1, 0).message, "This costs 1 M coin and you have 0.");
 const err = new NotEnoughCoinsError(9, 4);
 assert.equal(err.coins, 9); assert.equal(err.balance, 4); assert.ok(err instanceof Error);
 console.log("coins.selfcheck: OK");

@@ -6,8 +6,9 @@
 // scanner opening the link can't use it up.
 //
 // Limits, all keyed by fingerprints made with HASH_SECRET (never the address
-// or IP itself): 3 per address per 15 minutes and 10 a day; 10 an hour per
-// network (an IPv6 /64 is one); and for addresses without an account yet,
+// or IP itself): 3 per address per 15 minutes and 10 a day from any one
+// network, 30 a day per address in all; 10 an hour per network (an IPv6 /64
+// is one); and for addresses without an account yet,
 // 5 a day per network and 90 a day in all (Resend's free tier). Only new
 // addresses draw on that daily budget, so a flood of made-up addresses can't
 // lock out anyone who already has an account. While it's spent, or a
@@ -47,10 +48,14 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
 
   const db = env.DB;
   const who = await fingerprint(secret, email);
-  if (!(await rateLimit(db, `mail15:${who}`, 3, 15 * MIN, now)) || !(await rateLimit(db, `mailday:${who}`, 10, DAY, now))) {
-    return text("Too many sign-in emails for this address. Try again in 15 minutes.", 429);
-  }
   const net = await networkKey(secret, request, now);
+  // Per address *and* network, so a stranger asking for your links from
+  // their network can't lock you out of yours; plus a looser ceiling per
+  // address across all networks, against spamming an inbox.
+  if (!(await rateLimit(db, `mail15:${who}:${net}`, 3, 15 * MIN, now))) return text("Too many sign-in emails for this address. Try again in 15 minutes.", 429);
+  if (!(await rateLimit(db, `mailday:${who}:${net}`, 10, DAY, now)) || !(await rateLimit(db, `mailall:${who}`, 30, DAY, now))) {
+    return text("Too many sign-in emails for this address today. Try again tomorrow, or use Google.", 429);
+  }
   if (!(await rateLimit(db, `mailip:${net}`, 10, 60 * MIN, now))) return text("Too many sign-in emails from this network. Try again in an hour.", 429);
   const known = await db.prepare("SELECT 1 AS y FROM users WHERE email = ?").bind(email).first();
   if (!known) {

@@ -19,8 +19,10 @@ const kv = new Map<string, string>();
 const env = { DB: testD1(), ANTHROPIC_API_KEY: "k", REVIEWS_KV: { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v) } };
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
 let upstreamCalls = 0;
+let upstreamDown = false;
 globalThis.fetch = (async (_u: string, init?: RequestInit) => {
   upstreamCalls++;
+  if (upstreamDown) return new Response("overloaded", { status: 529 });
   const body = JSON.parse(init!.body as string);
   const name = body.tools[0].name;
   const out = name.includes("synth")
@@ -87,9 +89,17 @@ assert.equal(upstreamCalls, 0, "refused passes never reach Claude");
 r = await extract(t1.ticket, "s1");
 assert.equal(r.status, 200, await r.clone().text());
 assert.equal(upstreamCalls, 1);
-// the budget: 2n+2 extracts in all
-for (let i = 1; i < 2 * chunks.length + 2; i++) assert.equal((await extract(t1.ticket, "s2-p1")).status, 200, `pass ${i}`);
-assert.equal((await extract(t1.ticket, "s2-p1")).status, 403, "budget spent");
+// a section that came back isn't sent again; one that keeps failing gets 4 tries, then no more
+assert.equal((await extract(t1.ticket, "s1")).status, 409, "already delivered");
+assert.equal((await extract(t1.ticket, "s2-p1")).status, 200);
+upstreamDown = true;
+for (let i = 1; i <= 4; i++) assert.equal((await extract(t1.ticket, "s2-p2")).status, 502, `try ${i}`);
+upstreamDown = false;
+const callsBefore = upstreamCalls;
+r = await extract(t1.ticket, "s2-p2");
+assert.equal(r.status, 409, "no tries left for that section");
+assert.match(await r.text(), /no tries left/);
+assert.equal(upstreamCalls, callsBefore, "and it never reached Claude");
 
 // --- a pass refused by today's capacity doesn't use up the ticket
 const left = async (ticket: string) => (await env.DB.prepare("SELECT extract_left AS n FROM review_tickets WHERE id_hash = ?").bind(await sha256Hex(ticket)).first<{ n: number }>())?.n;
@@ -111,7 +121,7 @@ assert.equal((await extract(t2.ticket)).status, 429);
 assert.equal(await left(t2.ticket), t2left, "a capacity refusal spends no pass");
 kv.set(dayKey, usedBefore ?? "0");
 assert.equal((await extract(t2.ticket)).status, 200);
-assert.equal((await extract(t2.ticket)).status, 200, "the same section twice is delivered once");
+assert.equal((await extract(t2.ticket)).status, 409, "the same section isn't sent twice");
 r = await begin(annCookie);
 const t3 = (await r.json()) as { ticket: string; balance: number };
 for (const c of chunks) assert.equal((await extract(t3.ticket, c.id, "x".repeat(100))).status, 200);
@@ -119,10 +129,11 @@ assert.equal(t3.balance, 6);
 const later = Date.now() + REVIEW_TICKET_TTL_MS + 1000; // tickets expire on the handler's clock
 await sweepTickets(env.DB, later);
 await sweepTickets(env.DB, later);
-// t2: 1 of 3 sections, no cross-check: 3 of 4 parts undelivered, 6 * 3/4 = 4 back.
-// t3: every section but no cross-check: 1 of 4 parts, 6 * 1/4 = 1 back.
-// t1: finished, but section s2-p2 never came back: 1 of 4 parts, 1 back.
-assert.equal(await balance(env.DB, ann.id), 6 + 4 + 1 + 1, "refunds for what wasn't delivered, once");
+// Sections weigh by length (20k, 24k, 12k of 56k); the cross-check like an average one; rounded up.
+// t2: only s1 came back, no cross-check: 6 * (36k*3 + 56k) / (56k*4) = 4.4, so 5 back.
+// t3: every section but no cross-check: 6 * 56k / (56k*4) = 1.5, so 2 back.
+// t1: finished, but s2-p2 (12k) never came back: 6 * 36k / 224k = 0.96, so 1 back.
+assert.equal(await balance(env.DB, ann.id), 6 + 5 + 2 + 1, "refunds for what wasn't delivered, once");
 assert.equal((await extract(t2.ticket)).status, 403, "an expired ticket is gone");
 
 // --- no pass starts within five minutes of the ticket's end (a pass can run that long)
@@ -130,7 +141,24 @@ r = await begin(annCookie);
 const t4 = (await r.json()) as { ticket: string };
 const expires = (await env.DB.prepare("SELECT expires_at AS e FROM review_tickets WHERE id_hash = ?").bind(await sha256Hex(t4.ticket)).first<{ e: number }>())!.e;
 assert.equal(await claimReviewPass(env.DB, t4.ticket, ann.id, { pass: "synthesize", tier: "quick" }, expires - 6 * 60_000), null);
-assert.match((await claimReviewPass(env.DB, t4.ticket, ann.id, { pass: "synthesize", tier: "quick" }, expires - 4 * 60_000)) ?? "", /expired/);
+assert.match((await claimReviewPass(env.DB, t4.ticket, ann.id, { pass: "synthesize", tier: "quick" }, expires - 4 * 60_000))?.message ?? "", /expired/);
+
+// --- the audit's attack: one big section and many one-character ones buy almost nothing
+await credit(env.DB, ann.id, 20, "admin", "seed3", now);
+const decoys = [{ id: "s1", chars: 24_000 }, ...Array.from({ length: 249 }, (_, i) => ({ id: `s${i + 2}`, chars: 1 }))];
+r = await begin(annCookie, { chunks: decoys });
+const t5 = (await r.json()) as { ticket: string; coins: number; balance: number };
+assert.equal(t5.coins, 4);
+const big = "x".repeat(24_000);
+const calls0 = upstreamCalls;
+assert.equal((await extract(t5.ticket, "s1", big)).status, 200);
+for (let i = 0; i < 5; i++) assert.equal((await extract(t5.ticket, "s1", big)).status, 409, "the big section is sent once");
+assert.equal((await synthesize(t5.ticket)).status, 200);
+assert.equal((await synthesize(t5.ticket)).status, 409, "and cross-checked once");
+assert.equal(upstreamCalls - calls0, 2, "two calls for what was paid, not hundreds");
+await sweepTickets(env.DB, Date.now() + REVIEW_TICKET_TTL_MS + 1000);
+const t5refund = await env.DB.prepare("SELECT delta FROM coin_ledger WHERE kind = 'review_refund' AND ref = ?").bind(await sha256Hex(t5.ticket)).first<number>("delta");
+assert.equal(t5refund, 1, "the 249 decoys, a thousandth of the length, round up to a single coin back");
 
 // --- the global daily cap is checked before anything is charged
 const before = await balance(env.DB, ann.id);

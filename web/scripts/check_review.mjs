@@ -98,7 +98,7 @@ await page.click("text=Send it and review");
 await page.waitForSelector('[data-testid="review-coverage"]', { timeout: 30000 });
 await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 30000 });
 const coverage1 = await page.locator('[data-testid="review-coverage"]').innerText();
-check("failed section surfaces in coverage", /couldn't be checked \(server error 502/.test(coverage1));
+check("failed section surfaces in coverage", /couldn't be checked \(Claude didn't answer/.test(coverage1));
 check("synthesis still ran with the failure", synthCount === 1);
 
 healed = true;

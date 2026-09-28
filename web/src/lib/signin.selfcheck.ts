@@ -77,9 +77,27 @@ await env.DB.prepare("INSERT INTO magic_links (token_hash, email, next, expires_
 r = await run(emailVerify, post("/api/auth/email/verify", { token: "planted-token-planted-token-planted-token" }));
 assert.equal(((await r.json()) as { next: string }).next, "/home");
 
-// rate limits: three per address per 15 minutes
+// rate limits: three per address per 15 minutes from one network...
 for (let i = 0; i < 2; i++) assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "ann@example.org" }))).status, 200);
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "ann@example.org" }))).status, 429);
+r = await run(emailRequest, post("/api/auth/email/request", { email: "ann@example.org" }));
+assert.equal(r.status, 429);
+assert.match(await r.text(), /15 minutes/);
+// ...but a stranger's requests from their network don't lock the owner out of theirs
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "ann@example.org" }, "", "198.51.100.200"))).status, 200, "another network still gets a link");
+// the day's limit per network says "tomorrow", not "15 minutes"
+await env.DB.prepare("UPDATE rate_limits SET expires_at = 0 WHERE key LIKE 'mail15:%'").run();
+const { fingerprint, networkKey } = await import("./auth.ts");
+const annFp = await fingerprint("test-key", "ann@example.org");
+const annNet = await networkKey("test-key", new Request("https://m.test/", { headers: { "cf-connecting-ip": "203.0.113.1" } }), Date.now());
+await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 10, ?) ON CONFLICT(key) DO UPDATE SET count = 10").bind(`mailday:${annFp}:${annNet}`, Date.now() + 3_600_000).run();
+r = await run(emailRequest, post("/api/auth/email/request", { email: "ann@example.org" }));
+assert.equal(r.status, 429);
+assert.match(await r.text(), /tomorrow/);
+// and an address has a ceiling across all networks (30 a day), against spam
+await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 30, ?) ON CONFLICT(key) DO UPDATE SET count = 30").bind(`mailall:${annFp}`, Date.now() + 3_600_000).run();
+r = await run(emailRequest, post("/api/auth/email/request", { email: "ann@example.org" }, "", "192.0.2.77"));
+assert.equal(r.status, 429);
+assert.match(await r.text(), /tomorrow/);
 // not set up, and the localhost dev log
 assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "b@x.org" }), { ...env, RESEND_API_KEY: undefined })).status, 503);
 const logged: string[] = [];
@@ -158,7 +176,8 @@ assert.equal(((await (await run(me, get("/api/me", annCookie))).json()) as { bal
 // with Paddle configured, the page gets what Paddle.js needs (never a secret)
 const paddled = { ...env, PADDLE_ENV: "sandbox", PADDLE_CLIENT_TOKEN: "test_tok", PADDLE_PRICE_IDS: '{"S":"pri_s"}', PADDLE_API_KEY: "secret", PADDLE_WEBHOOK_SECRET: "secret" };
 const withPaddle = (await (await run(me, get("/api/me", annCookie), paddled)).json()) as { paddle: unknown };
-assert.deepEqual(withPaddle.paddle, { env: "sandbox", token: "test_tok", prices: { S: "pri_s" } });
+const { checkoutSig } = await import("./paddle.ts");
+assert.deepEqual(withPaddle.paddle, { env: "sandbox", token: "test_tok", prices: { S: "pri_s" }, checkout: await checkoutSig("test-key", annMe.user.id) });
 assert.ok(!JSON.stringify(withPaddle).includes("secret"));
 await run(logout, post("/api/auth/logout", { all: true }, annCookie));
 assert.deepEqual(await (await run(me, get("/api/me", annCookie))).json(), { user: null });

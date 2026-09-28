@@ -4,6 +4,10 @@
 // into ledger changes. Paddle is the merchant of record: it takes the
 // payment and the tax; we only ever see references and amounts.
 import { PACKS, PRO, type PackId } from "./coins.ts";
+import { fingerprint } from "./auth.ts";
+
+/** What /api/me gives the signed-in buyer to pass in custom_data: proof the checkout was theirs. */
+export const checkoutSig = (secret: string, userId: string) => fingerprint(secret, `checkout:${userId}`);
 
 const MAX_SKEW_S = 300;
 
@@ -64,22 +68,36 @@ const when = (v: unknown) => {
 
 /**
  * The ledger statements an event calls for (none for events we don't act
- * on), and whose Pro coins may now be due. Coins go to the user id our
- * checkout put in custom_data (Paddle copies it onto the subscription); a
- * pack's ledger ref is its transaction, a reversal's
- * "<transaction>:<adjustment>", so a retried or re-sent event never counts
- * twice.
+ * on), whose Pro coins may now be due, and whether to answer "not yet":
+ * an event that refers to something we haven't seen (a refund of a purchase,
+ * a dispute won before its chargeback) is left for Paddle to send again.
+ * Coins go to the account our checkout named in custom_data, and only with
+ * that account's signature (checkoutSig), so nobody can buy coins onto
+ * someone else's account; Paddle copies it onto the subscription. A pack's
+ * ledger ref is its transaction, a reversal's "<transaction>:<adjustment>",
+ * so a retried or re-sent event never counts twice.
  */
-export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: Record<string, Product>, now: number): Promise<{ statements: D1PreparedStatement[]; grantFor: string | null }> {
+export async function paddleStatements(
+  db: D1Database,
+  e: PaddleEvent,
+  prices: Record<string, Product>,
+  now: number,
+  secret: string | null,
+): Promise<{ statements: D1PreparedStatement[]; grantFor: string | null; retryLater?: boolean }> {
   const none = { statements: [], grantFor: null };
+  const later = { statements: [], grantFor: null, retryLater: true };
   const d = e.data;
-  // Our checkout names the account in custom_data; an event about a
-  // subscription we already know may not carry it, so it's looked up there.
+  const named = async (cd: unknown) => {
+    const userId = str(obj(cd).user_id);
+    const sig = str(obj(cd).sig);
+    return userId && sig && secret && sameText(sig, await checkoutSig(secret, userId)) ? userId : null;
+  };
+  // An event about a subscription we already know may not carry custom_data, so it's looked up there.
   const knownOwner = async (subId: string | null) =>
     subId ? await db.prepare("SELECT user_id AS u FROM subscriptions WHERE id = ?").bind(subId).first<string>("u") : null;
   if (e.event_type.startsWith("subscription.")) {
     const id = str(d.id);
-    const userId = str(obj(d.custom_data).user_id) ?? (await knownOwner(id));
+    const userId = (await named(d.custom_data)) ?? (await knownOwner(id));
     const priceId = str(obj(obj((d.items as unknown[] | undefined)?.[0]).price).id);
     const product = priceId ? prices[priceId] : undefined;
     if (!id || !userId || !product || !("pro" in product)) {
@@ -106,8 +124,9 @@ export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: R
   if (e.event_type === "transaction.completed" && d.subscription_id) {
     // A Pro payment adds nothing itself (the month's grant does); it's kept so a refund can find its month.
     const txn = str(d.id);
-    const userId = str(obj(d.custom_data).user_id) ?? (await knownOwner(str(d.subscription_id)));
-    if (!txn || !userId) return none;
+    const userId = (await named(d.custom_data)) ?? (await knownOwner(str(d.subscription_id)));
+    if (!txn) return none;
+    if (!userId) return later; // its subscription hasn't arrived yet
     return {
       statements: [
         db
@@ -123,7 +142,7 @@ export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: R
   if (e.event_type === "transaction.completed") {
     // A pack purchase; a quantity above one is that many packs.
     const txn = str(d.id);
-    const userId = str(obj(d.custom_data).user_id);
+    const userId = await named(d.custom_data);
     let coins = 0;
     let priceId: string | null = null;
     for (const item of (d.items as unknown[] | undefined) ?? []) {
@@ -169,7 +188,7 @@ export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: R
       )
       .bind(txn)
       .first<{ userId: string; coins: number; total: number; sub: string | null; start: number | null; interval: "month" | "year" | null }>();
-    if (!p) return none; // not ours, or the account is gone
+    if (!p) return later; // its purchase hasn't arrived yet (or never will: Paddle stops retrying in time)
     // Everything this purchase put in or took out of the ledger shares a ref prefix:
     // a pack's is its transaction; a Pro payment's, the billing period it paid for.
     const prefix = p.sub ? `${p.sub}:${p.start}:` : `${txn}:`;
@@ -177,6 +196,7 @@ export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: R
     const sum = (kinds: string) => `(SELECT COALESCE(SUM(delta), 0) FROM coin_ledger WHERE kind IN (${kinds}) AND substr(ref, 1, length(?5)) = ?5)`;
 
     if (action === "chargeback_reverse") {
+      if (!(await db.prepare("SELECT 1 AS y FROM adjustments WHERE txn_id = ? AND action = 'chargeback'").bind(txn).first())) return later;
       // A dispute won: give back what this purchase's chargebacks took, once,
       // and let a Pro period count as paid again.
       return {

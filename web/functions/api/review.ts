@@ -66,7 +66,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     req.pass === "extract" ? { pass: "extract", tier: req.tier, chunkId: req.chunk.id, chars: req.chunk.text.length } : { pass: "synthesize", tier: req.tier },
     Date.now(),
   );
-  if (refused) return new Response(refused, { status: 403 });
+  if (refused) return new Response(refused.message, { status: refused.status });
 
   // KV allows one write per second per key and the client runs 3 passes
   // concurrently — a lost increment under-counts slightly; acceptable for a
@@ -100,7 +100,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const status = err instanceof UpstreamError ? err.status : 502;
     const message = err instanceof Error ? err.message : String(err);
     console.error(`review ${req.pass} upstream failure ${status}: ${message}`);
-    return new Response(`Upstream review request failed (${status}): ${message}`, { status: 502 });
+    // The upstream's own error text stays in the log; the reader gets a plain sentence.
+    return new Response("Claude didn't answer this time. It's retried automatically.", { status: 502 });
   }
   if (toolInput === undefined) {
     return new Response(`Review model did not return structured output (stop_reason: ${stopReason ?? "unknown"})`, { status: 502 });
@@ -114,6 +115,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
     console.error(`review ${req.pass} malformed output: ${err instanceof Error ? err.stack : String(err)}`);
-    return new Response("Review response was malformed — try again in a moment.", { status: 502 });
+    return new Response("Claude's answer couldn't be read. It's retried automatically.", { status: 502 });
   }
 };

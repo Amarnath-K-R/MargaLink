@@ -36,7 +36,9 @@ assert.deepEqual(parsePriceIds(undefined), {});
 assert.deepEqual(parsePriceIds("not json"), {});
 
 // --- the webhook
-const env = { DB: testD1(), PADDLE_WEBHOOK_SECRET: SECRET, PADDLE_PRICE_IDS: PRICES };
+const env = { DB: testD1(), PADDLE_WEBHOOK_SECRET: SECRET, PADDLE_PRICE_IDS: PRICES, HASH_SECRET: "k" };
+// what /api/me hands the signed-in buyer, and the checkout passes back in custom_data
+const sigFor = (userId: string) => createHmac("sha256", "k").update(`checkout:${userId}`).digest("hex");
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
 const deliver = async (event: object, opts: { e?: object; header?: string } = {}) => {
   const raw = JSON.stringify(event);
@@ -48,7 +50,7 @@ const txn = (id: string, eventId: string, price: string, total: string, userId: 
   event_id: eventId,
   event_type: "transaction.completed",
   occurred_at: new Date().toISOString(),
-  data: { id, status: "completed", customer_id: "ctm_1", subscription_id: null, currency_code: "USD", custom_data: userId ? { user_id: userId } : null, items: [{ price: { id: price }, quantity: 1 }], details: { totals: { total } } },
+  data: { id, status: "completed", customer_id: "ctm_1", subscription_id: null, currency_code: "USD", custom_data: userId ? { user_id: userId, sig: sigFor(userId) } : null, items: [{ price: { id: price }, quantity: 1 }], details: { totals: { total } } },
 });
 const adj = (id: string, eventId: string, txnId: string, action: string, status: string, type: string, total: string, eventType = "adjustment.created") => ({
   event_id: eventId,
@@ -97,6 +99,32 @@ assert.equal((await deliver(txn("txn_6", "evt_k", "pri_s", "600", null))).status
 assert.equal((await deliver({ event_id: "evt_l", event_type: "customer.updated", occurred_at: "", data: {} })).status, 200);
 assert.equal(await balance(env.DB, u.id), before);
 assert.equal((await deliver({ nope: 1 })).status, 400);
+
+// custom_data names an account only with that account's signature: no crediting a stranger
+const forgedFor = await signInUser(env.DB, { email: "victim@x.org" }, now);
+const forged = txn("txn_forged", "evt_forged", "pri_s", "600", forgedFor.id);
+(forged.data.custom_data as { sig: string }).sig = sigFor(u.id); // signed for someone else
+assert.equal((await deliver(forged)).status, 200);
+const unsigned = txn("txn_unsigned", "evt_unsigned", "pri_s", "600", forgedFor.id);
+delete (unsigned.data.custom_data as { sig?: string }).sig;
+assert.equal((await deliver(unsigned)).status, 200);
+assert.equal(await balance(env.DB, forgedFor.id), 0, "neither credited");
+
+// events that arrive before what they refer to are answered "not yet", so Paddle sends them again
+const o = await signInUser(env.DB, { email: "olive@x.org" }, now);
+const early = adj("adj_o1", "evt_o1", "txn_o", "refund", "approved", "full", "600");
+assert.equal((await deliver(early)).status, 503, "a refund of a purchase not seen yet");
+await deliver(txn("txn_o", "evt_o0", "pri_s", "600", o.id));
+assert.equal(await balance(env.DB, o.id), 50);
+assert.equal((await deliver(early)).status, 200, "delivered again once the purchase is in");
+assert.equal(await balance(env.DB, o.id), 0);
+await deliver(txn("txn_o2", "evt_o2", "pri_s", "600", o.id));
+const reverseFirst = adj("adj_o3", "evt_o3", "txn_o2", "chargeback_reverse", "approved", "full", "600");
+assert.equal((await deliver(reverseFirst)).status, 503, "a dispute won before its chargeback arrived");
+await deliver(adj("adj_o4", "evt_o4", "txn_o2", "chargeback", "approved", "full", "600"));
+assert.equal(await balance(env.DB, o.id), 0);
+assert.equal((await deliver(reverseFirst)).status, 200);
+assert.equal(await balance(env.DB, o.id), 50, "restored once the chargeback is in");
 
 // a pack bought three at a time is three packs
 const q = await signInUser(env.DB, { email: "quinn@x.org" }, now);

@@ -5,15 +5,20 @@
 // no request at all. Also where lazy housekeeping happens: unfinished
 // reviews past their two hours are refunded, Pro's monthly coins are
 // granted when due, and the session is extended.
-import { getSession, HINT_COOKIE, readCookie, rollSession, sessionCookies, withCookies, type AccountEnv } from "../../src/lib/auth.ts";
+import { getSession, hashSecret, HINT_COOKIE, readCookie, rollSession, sessionCookies, withCookies, type AccountEnv } from "../../src/lib/auth.ts";
+import { checkoutSig } from "../../src/lib/paddle.ts";
 import { balance, grantDuePro, sweepTickets } from "../../src/lib/ledger.ts";
 
 type Env = AccountEnv & { PADDLE_ENV?: string; PADDLE_CLIENT_TOKEN?: string; PADDLE_PRICE_IDS?: string };
 
-function paddleConfig(env: Env) {
-  if (!env.PADDLE_CLIENT_TOKEN || !env.PADDLE_PRICE_IDS) return null;
+// `checkout`: this account's signature, which the checkout passes back in
+// custom_data so the webhook credits only the account that bought.
+async function paddleConfig(env: Env, request: Request, userId: string) {
+  const secret = hashSecret(env, request);
+  if (!env.PADDLE_CLIENT_TOKEN || !env.PADDLE_PRICE_IDS || !secret) return null;
   try {
-    return { env: env.PADDLE_ENV === "production" ? "production" : "sandbox", token: env.PADDLE_CLIENT_TOKEN, prices: JSON.parse(env.PADDLE_PRICE_IDS) as Record<string, string> };
+    const prices = JSON.parse(env.PADDLE_PRICE_IDS) as Record<string, string>;
+    return { env: env.PADDLE_ENV === "production" ? "production" : "sandbox", token: env.PADDLE_CLIENT_TOKEN, prices, checkout: await checkoutSig(secret, userId) };
   } catch {
     return null;
   }
@@ -30,6 +35,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .bind(s.userId)
     .first<{ interval: "month" | "year"; status: string; cancelAtEnd: number; periodEnd: number | null }>();
   const pro = sub ? { interval: sub.interval, status: sub.status, renews: sub.status === "active" && !sub.cancelAtEnd, periodEnd: sub.periodEnd } : null;
-  const body = { user: { id: s.userId, email: s.email }, balance: await balance(env.DB, s.userId), pro, paddle: paddleConfig(env) };
+  const body = { user: { id: s.userId, email: s.email }, balance: await balance(env.DB, s.userId), pro, paddle: await paddleConfig(env, request, s.userId) };
   return withCookies(Response.json(body), rolled ? sessionCookies(s.token) : []);
 };

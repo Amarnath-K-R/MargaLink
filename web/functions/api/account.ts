@@ -19,12 +19,36 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   if (new URL(request.url).searchParams.get("download") !== "1") {
     return Response.json({ email: s.email, balance: await balance(env.DB, s.userId), google, history: await history(env.DB, s.userId, 200) });
   }
-  const account = await env.DB.prepare("SELECT email, created_at AS createdAt, notice_version AS noticeVersion FROM users WHERE id = ?").bind(s.userId).first();
+  const account = await env.DB.prepare("SELECT id, email, created_at AS createdAt, notice_version AS noticeVersion FROM users WHERE id = ?").bind(s.userId).first();
+  const identities = (await env.DB.prepare("SELECT provider, subject FROM identities WHERE user_id = ?").bind(s.userId).all()).results;
   const sessions = (await env.DB.prepare("SELECT expires_at AS expiresAt FROM sessions WHERE user_id = ?").bind(s.userId).all()).results;
   const ledger = (await env.DB.prepare("SELECT kind, delta, ref, created_at AS at FROM coin_ledger WHERE user_id = ? ORDER BY id").bind(s.userId).all()).results;
-  const purchases = (await env.DB.prepare("SELECT txn_id AS txn, price_id AS price, coins, total, currency, subscription_id AS subscription, created_at AS at FROM purchases WHERE user_id = ?").bind(s.userId).all()).results;
-  const subscriptions = (await env.DB.prepare("SELECT id, interval, status, period_start AS periodStart, period_end AS periodEnd, cancel_at_end AS cancelAtEnd FROM subscriptions WHERE user_id = ?").bind(s.userId).all()).results;
-  const data = { exportedAt: new Date().toISOString(), account, signInWithGoogle: google, sessions, coins: { balance: await balance(env.DB, s.userId), ledger }, purchases, subscriptions };
+  const purchases = (
+    await env.DB.prepare(
+      "SELECT txn_id AS txn, customer_id AS customer, price_id AS price, coins, total, currency, subscription_id AS subscription, period_start AS periodStart, created_at AS at FROM purchases WHERE user_id = ?",
+    )
+      .bind(s.userId)
+      .all()
+  ).results;
+  const subscriptions = (
+    await env.DB.prepare("SELECT id, customer_id AS customer, price_id AS price, interval, status, period_start AS periodStart, period_end AS periodEnd, cancel_at_end AS cancelAtEnd FROM subscriptions WHERE user_id = ?")
+      .bind(s.userId)
+      .all()
+  ).results;
+  const adjustments = (
+    await env.DB.prepare("SELECT a.id, a.txn_id AS txn, a.action, a.share, a.coins, a.created_at AS at FROM adjustments a JOIN purchases p ON p.txn_id = a.txn_id WHERE p.user_id = ?").bind(s.userId).all()
+  ).results;
+  // A running review's ticket: section ids and lengths, tries, which came back. Never text.
+  const reviews = (
+    await env.DB.prepare(
+      `SELECT t.tier, t.coins, t.chunks, t.passes, t.synthesized, t.created_at AS startedAt, t.expires_at AS expiresAt,
+              (SELECT json_group_array(chunk_id) FROM review_deliveries d WHERE d.ticket = t.id_hash) AS delivered
+       FROM review_tickets t WHERE t.user_id = ?`,
+    )
+      .bind(s.userId)
+      .all()
+  ).results;
+  const data = { exportedAt: new Date().toISOString(), account, signInWithGoogle: google, identities, sessions, coins: { balance: await balance(env.DB, s.userId), ledger }, purchases, subscriptions, adjustments, reviews };
   return new Response(JSON.stringify(data, null, 2), {
     headers: { "content-type": "application/json", "content-disposition": 'attachment; filename="margalink-account-data.json"' },
   });
@@ -45,7 +69,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM users WHERE id = ?").bind(s.userId),
     env.DB.prepare("DELETE FROM magic_links WHERE email = ?").bind(s.email),
-    ...(fp ? [env.DB.prepare("DELETE FROM rate_limits WHERE key IN (?, ?)").bind(`mail15:${fp}`, `mailday:${fp}`)] : []),
+    // the address's counters: mail15:<fp>:<network>, mailday:<fp>:<network>, mailall:<fp>
+    ...(fp ? [env.DB.prepare("DELETE FROM rate_limits WHERE instr(key, ?) > 0").bind(`:${fp}`)] : []),
   ]);
   return withCookies(Response.json({ ok: true }), sessionCookies(null));
 };

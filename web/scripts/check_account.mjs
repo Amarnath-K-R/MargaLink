@@ -74,7 +74,7 @@ const watch = (page) => {
 // --- the account page, and buying a pack
 {
   const ctx = await browser.newContext();
-  const account = await mockAccount(ctx, { balance: 12, paddle: { env: "sandbox", token: "test_tok", prices: { S: "pri_s", M: "pri_m", L: "pri_l", PRO_MONTH: "pri_pm", PRO_YEAR: "pri_py" } } });
+  const account = await mockAccount(ctx, { balance: 12, paddle: { env: "sandbox", token: "test_tok", prices: { S: "pri_s", M: "pri_m", L: "pri_l", PRO_MONTH: "pri_pm", PRO_YEAR: "pri_py" }, checkout: "sig-smoke" } });
   await ctx.route("**/api/account", (r) =>
     r.fulfill({ json: { email: account.email, balance: account.balance, google: false, history: [{ kind: "welcome", label: "Welcome bonus", delta: 10, at: Date.now() }, { kind: "figure", label: "Ask Claude (figure)", delta: -1, at: Date.now() }] } }),
   );
@@ -105,7 +105,7 @@ const watch = (page) => {
   await page.locator('[data-pack="S"] button').click();
   await page.waitForFunction(() => window.__opened);
   const opened = await page.evaluate(() => ({ o: window.__opened, env: window.__env }));
-  check("the checkout names the pack, the account and the address", opened.o.items[0].priceId === "pri_s" && opened.o.customData.user_id === "user-smoke" && opened.o.customer.email === account.email && opened.env === "sandbox");
+  check("the checkout names the pack, the account and the address", opened.o.items[0].priceId === "pri_s" && opened.o.customData.user_id === "user-smoke" && opened.o.customData.sig === "sig-smoke" && opened.o.customer.email === account.email && opened.env === "sandbox");
   account.balance += 50; // the webhook's coins
   await page.waitForSelector('[data-pack="S"] >> text=Added. You now have 62 M coins.', { timeout: 20000 });
   check("the new coins show up after checkout", true);

@@ -6,7 +6,7 @@
 // acknowledged. Anything we don't act on is acknowledged too, or Paddle
 // would keep retrying it. Never logs a body.
 import { isPaddleEvent, paddleStatements, parsePriceIds, verifyPaddleSignature } from "../../../src/lib/paddle.ts";
-import { text, type AccountEnv } from "../../../src/lib/auth.ts";
+import { hashSecret, text, type AccountEnv } from "../../../src/lib/auth.ts";
 import { grantDuePro } from "../../../src/lib/ledger.ts";
 
 type Env = AccountEnv & { PADDLE_WEBHOOK_SECRET?: string; PADDLE_PRICE_IDS?: string };
@@ -25,7 +25,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!isPaddleEvent(event)) return text("Not a Paddle event", 400);
 
   if (await env.DB.prepare("SELECT 1 AS y FROM payment_events WHERE id = ?").bind(event.event_id).first()) return text("Already handled", 200);
-  const { statements, grantFor } = await paddleStatements(env.DB, event, parsePriceIds(env.PADDLE_PRICE_IDS), now);
+  const { statements, grantFor, retryLater } = await paddleStatements(env.DB, event, parsePriceIds(env.PADDLE_PRICE_IDS), now, hashSecret(env, request));
+  // Not recorded as handled: Paddle sends it again, by which time what it refers to has arrived.
+  if (retryLater) return text("Not yet: this refers to something that hasn't arrived", 503);
   // A plain INSERT: if another delivery of this event won the race, the
   // whole batch rolls back and the retry finds it handled.
   await env.DB.batch([env.DB.prepare("INSERT INTO payment_events (id, type, received_at) VALUES (?, ?, ?)").bind(event.event_id, event.event_type, now), ...statements]);

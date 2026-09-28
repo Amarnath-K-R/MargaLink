@@ -3,7 +3,7 @@
 // review, sent with every pass, reused by a resume), against a stubbed
 // fetch. Run directly:  node src/lib/reviewOrchestrator.selfcheck.ts
 import assert from "node:assert/strict";
-import { ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "./reviewOrchestrator.ts";
+import { ReviewEndedError, ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "./reviewOrchestrator.ts";
 import { NO_EDITS, buildOutline, chunkSections, splitIntoSections } from "./reviewSections.ts";
 import { ReviewCapacityError } from "./review.ts";
 import { NotEnoughCoinsError, SignInRequiredError, reviewPrice } from "./coins.ts";
@@ -125,7 +125,8 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   const { result } = await runReview(base);
   assert.equal(attempts.get("s2"), 3, "1 try + 2 retries");
   assert.deepEqual(result.coverage.failed.map((f) => f.id), ["s2"]);
-  assert.match(result.coverage.failed[0].reason, /502/);
+  assert.match(result.coverage.failed[0].reason, /Claude didn't answer/);
+  assert.ok(!/\d{3}/.test(result.coverage.failed[0].reason), "no raw status code in what the user reads");
   assert.ok(!synthCall().ledger.some((e) => e.id.startsWith("s2-")), "a failed chunk contributes nothing to the ledger");
 }
 // 4. 429 aborts everything
@@ -245,12 +246,21 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   assert.equal(starts.length, 0, "resuming it costs nothing more");
   assert.deepEqual([...new Set(tickets)], ["t-paid"], "on the ticket it paid for");
 }
-// 14b. a pass refused for the ticket (expired, used up) ends the run with the server's reason; signed out mid-run too
+// 14b. a pass refused for the ticket (expired, used up) ends the run with the server's reason, as a review that can't be resumed; signed out mid-run too
 {
   stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s1" ? text("This review's ticket has expired.", 403) : happy(req, attempt, null)));
-  await assert.rejects(runReview(base), /ticket has expired/);
+  await assert.rejects(runReview(base), (e: unknown) => e instanceof ReviewEndedError && /ticket has expired/.test(e.message));
   stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s1" ? text("Sign in to get a review.", 401) : happy(req, attempt, null)));
   await assert.rejects(runReview(base), SignInRequiredError);
+}
+// 14c. a section with no tries left (409) fails on its own; the rest of the run carries on
+{
+  stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s2" ? text("This section has no tries left.", 409) : happy(req, attempt, null)));
+  const { result } = await runReview(base);
+  assert.equal(attempts.get("s2"), 1, "not retried");
+  assert.deepEqual(result.coverage.failed.map((f) => f.id), ["s2"]);
+  assert.match(result.coverage.failed[0].reason, /no tries left/);
+  assert.ok(result.journalFit !== null, "the cross-check still ran");
 }
 // 15. a 400 (contract bug) aborts the whole run with the server's text
 {

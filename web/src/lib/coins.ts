@@ -77,7 +77,8 @@ export function proCoinsLeft(entries: { kind: LedgerKind; delta: number; ref: st
     else if (kind === "pro_reversal") take(-delta, true);
     else paidWithPro.set(ref, (paidWithPro.get(ref) ?? 0) + take(-delta, true));
   }
-  return Math.max(0, pro);
+  // Never more Pro coins than coins: a deficit elsewhere (a reversed payment) comes out of them too.
+  return Math.max(0, Math.min(pro, pro + other));
 }
 
 export type ProPeriod = { id: string; interval: "month" | "year"; periodStart: number; periodEnd: number; active: boolean };
@@ -148,7 +149,7 @@ export class NotEnoughCoinsError extends Error {
   coins: number;
   balance: number;
   constructor(coins: number, balance: number) {
-    super(`This costs ${coins} M coins and you have ${balance}.`);
+    super(`This costs ${coins} M coin${coins === 1 ? "" : "s"} and you have ${balance}.`);
     this.name = "NotEnoughCoinsError";
     this.coins = coins;
     this.balance = balance;

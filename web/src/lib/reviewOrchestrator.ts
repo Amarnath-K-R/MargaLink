@@ -69,6 +69,9 @@ export class ReviewSynthesisError extends Error {
 }
 
 class FatalPassError extends Error {}
+// The review's ticket can't be used any more (expired, or its passes spent):
+// Resume can't help; what didn't run is refunded automatically.
+export class ReviewEndedError extends Error {}
 const abortError = (signal: AbortSignal) =>
   signal.reason instanceof Error ? signal.reason : new DOMException("Review cancelled", "AbortError");
 // A retry delay that ends immediately on cancel, so a cancelled run settles now, not seconds later.
@@ -175,7 +178,8 @@ function assemble(state: ReviewState, run: Chunk[], skipped: Chunk[], synth: Syn
   };
 }
 
-type Attempt = { ok: true; data: unknown } | { ok: false; reason: string; retryable: boolean };
+// `exhausted`: the server has no more tries for this section (409); don't retry it.
+type Attempt = { ok: true; data: unknown } | { ok: false; reason: string; retryable: boolean; exhausted?: boolean };
 
 // One POST. Throws for outcomes that end the whole review (caller abort,
 // 429 capacity, a 4xx contract error every pass would hit); returns a
@@ -191,16 +195,20 @@ async function attempt(endpoint: string, body: Req, ticket: string, timeoutMs: n
     // Parsed here so a malformed 200 is a retryable failure for this pass, not a crash of the whole run.
     if (res.ok) return { ok: true, data: await res.json() };
     const detail = await res.text().catch(() => "");
-    if (res.status === 429) throw new ReviewCapacityError("Reviews are fully booked for today. Try again tomorrow.");
+    if (res.status === 429) {
+      throw new ReviewCapacityError("Reviews are fully booked for today. Resume within two hours of starting, or the parts that didn't run are refunded automatically.");
+    }
     if (res.status === 401) throw new SignInRequiredError();
     // 403: the ticket is expired or used up; the server says which.
-    if (res.status === 403) throw new FatalPassError(detail || "This review can't continue. Start a new one.");
-    if (res.status === 400 || res.status === 404 || res.status === 413) throw new FatalPassError(`Review request rejected (${res.status}): ${detail}`);
+    if (res.status === 403) throw new ReviewEndedError(detail || "This review can't continue. Start a new one; what it didn't finish is refunded automatically.");
+    if (res.status === 409) return { ok: false, reason: detail || "no tries left for this section; its coins come back", retryable: false, exhausted: true };
+    if (res.status === 400 || res.status === 404 || res.status === 413) throw new FatalPassError(`The review couldn't be sent${detail ? `: ${detail}` : "."}`);
     // 422 = the model's output was truncated; not worth a same-size retry.
-    return { ok: false, reason: `server error ${res.status}${detail ? `: ${detail}` : ""}`, retryable: res.status !== 422 };
+    if (res.status === 422) return { ok: false, reason: "the answer came back cut short", retryable: false };
+    return { ok: false, reason: "Claude didn't answer (busy or unavailable)", retryable: true };
   } catch (err) {
     if (outer.aborted) throw abortError(outer);
-    if (err instanceof ReviewCapacityError || err instanceof FatalPassError || err instanceof SignInRequiredError) throw err;
+    if (err instanceof ReviewCapacityError || err instanceof FatalPassError || err instanceof ReviewEndedError || err instanceof SignInRequiredError) throw err;
     if (err instanceof Error && err.name === "TimeoutError") return { ok: false, reason: "timed out", retryable: true };
     return { ok: false, reason: err instanceof Error ? err.message : String(err), retryable: true };
   }
@@ -223,7 +231,8 @@ async function startReview(endpoint: string, opts: RunReviewOptions, run: Chunk[
     throw new NotEnoughCoinsError(coins, balance);
   }
   if (res.status === 429) throw new ReviewCapacityError("Reviews are fully booked for today. Try again tomorrow; nothing was charged.");
-  throw new Error(`The review couldn't start (${res.status}): ${await res.text().catch(() => "")}`);
+  const detail = res.status < 500 ? await res.text().catch(() => "") : "";
+  throw new Error(`The review couldn't start${detail ? `: ${detail}` : ". Try again in a moment; nothing was charged."}`);
 }
 
 // Runs a review, or — given `resume` (from a previous run's state or a
@@ -275,6 +284,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
         return;
       }
       reason = a.reason;
+      if (a.exhausted) break;
       if (!a.retryable) {
         // Truncated output: one retry asking for half as many claims, then give up.
         if (cap === fullCap) {

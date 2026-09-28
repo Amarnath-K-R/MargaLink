@@ -24,9 +24,12 @@ export async function debit(db: D1Database, userId: string, coins: number, kind:
   return (await debitStatement(db, userId, coins, kind, ref, now).run()).meta.changes === 1;
 }
 
-/** Adds coins once per (kind, ref); false if that ref was credited already. */
+/** Adds coins once per (kind, ref); false if that ref was credited already, or the account is gone (deleted meanwhile). */
 export async function credit(db: D1Database, userId: string, coins: number, kind: LedgerKind, ref: string, now: number): Promise<boolean> {
-  const r = await db.prepare("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING").bind(userId, coins, kind, ref, now).run();
+  const r = await db
+    .prepare("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1) ON CONFLICT DO NOTHING")
+    .bind(userId, coins, kind, ref, now)
+    .run();
   return r.meta.changes === 1;
 }
 
@@ -47,10 +50,11 @@ export async function grantWelcome(db: D1Database, userId: string, email: string
 }
 
 /**
- * Review runs past their expiry: an unfinished one is refunded for the share
- * it didn't deliver (each paid section is one part, the final cross-check
- * one more; rounded down), once, since the refund's ref is the ticket's.
- * Paying for passes and never finishing isn't free: the parts that came
+ * Review runs past their expiry: each is refunded for the share it didn't
+ * deliver, once (the refund's ref is the ticket's). Sections weigh by their
+ * length and the final cross-check like an average section, so padding a
+ * review with tiny sections buys nothing; the result is rounded up, so any
+ * part that didn't come back returns at least a coin. The parts that came
  * back are kept. Every expired ticket is deleted (its deliveries with it).
  * Anyone's request can run it; it touches only expired rows.
  */
@@ -60,10 +64,14 @@ export async function sweepTickets(db: D1Database, now: number) {
       .prepare(
         `INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at)
          SELECT user_id, refund, 'review_refund', id_hash, ?1 FROM (
-           SELECT user_id, id_hash, coins * (parts - delivered - synthesized) / parts AS refund FROM (
+           SELECT user_id, id_hash,
+                  CASE WHEN total = 0 THEN coins * (1 - synthesized)
+                       ELSE (coins * ((total - delivered) * n + (1 - synthesized) * total) + total * (n + 1) - 1) / (total * (n + 1)) END AS refund
+           FROM (
              SELECT t.user_id, t.id_hash, t.coins, t.synthesized,
-                    (SELECT COUNT(*) FROM json_each(t.chunks)) + 1 AS parts,
-                    (SELECT COUNT(*) FROM review_deliveries d WHERE d.ticket = t.id_hash) AS delivered
+                    (SELECT COUNT(*) FROM json_each(t.chunks)) AS n,
+                    (SELECT COALESCE(SUM(value), 0) FROM json_each(t.chunks)) AS total,
+                    (SELECT COALESCE(SUM(json_extract(t.chunks, '$."' || d.chunk_id || '"')), 0) FROM review_deliveries d WHERE d.ticket = t.id_hash) AS delivered
              FROM review_tickets t WHERE t.expires_at <= ?1
            )
          ) WHERE refund > 0
@@ -73,6 +81,8 @@ export async function sweepTickets(db: D1Database, now: number) {
     db.prepare("DELETE FROM review_tickets WHERE expires_at <= ?").bind(now),
   ]);
 }
+
+const PAYMENT_EVENT_DAYS = 90;
 
 /**
  * Clears what has expired: review tickets (refunding what they didn't
@@ -86,12 +96,19 @@ export async function housekeeping(db: D1Database, now: number) {
     db.prepare("DELETE FROM magic_links WHERE expires_at <= ?").bind(now),
     db.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(now),
     db.prepare("DELETE FROM rate_limits WHERE expires_at <= ?").bind(now),
+    // Paddle's event ids (no personal data) only need to outlive its retries.
+    db.prepare("DELETE FROM payment_events WHERE received_at <= ?").bind(now - PAYMENT_EVENT_DAYS * 24 * 60 * 60 * 1000),
   ]);
 }
 
 // No pass starts this close to a ticket's end: a synthesis may run for up to
 // 290 s upstream, and must finish while its ticket still exists.
 const CLAIM_MARGIN_MS = 5 * 60 * 1000;
+// Tries per section: a first run's three (one and two retries) and one more
+// from Retry. With "never again once delivered", a ticket can make Claude
+// read each paid section at most this many times.
+export const TRIES_PER_SECTION = 4;
+export type PassRefusal = { status: 403 | 409; message: string };
 
 /** A paid section that came back with a result. Recorded once, however often it's retried. */
 export async function markDelivered(db: D1Database, ticket: string, chunkId: string) {
@@ -103,11 +120,12 @@ export async function markDelivered(db: D1Database, ticket: string, chunkId: str
 }
 
 /**
- * Spends one pass of a paid review, or says why not: the ticket must be
- * this account's and unexpired, the tier the one paid for, an extract pass
- * a section that was paid for and no longer than paid, and the ticket's
- * budget for that kind of pass not yet used up. Called before the upstream
- * request, so a refused pass never reaches Claude.
+ * Spends one pass of a paid review, or says why not: 403 when the ticket
+ * can't be used (not this account's, expired or about to, another tier, a
+ * section not paid for or longer than paid), 409 when this section or the
+ * cross-check is done with (already delivered, or out of tries). Called
+ * before the upstream request, so a refused pass never reaches Claude. The
+ * tries are counted in the same statement that checks them.
  */
 export async function claimReviewPass(
   db: D1Database,
@@ -115,19 +133,33 @@ export async function claimReviewPass(
   userId: string,
   want: { pass: "extract" | "synthesize"; tier: string; chunkId?: string; chars?: number },
   now: number,
-): Promise<string | null> {
-  if (!ticket || ticket.length > 100) return "This review has no ticket. Start it again from the review page.";
+): Promise<PassRefusal | null> {
+  const refuse = (status: 403 | 409, message: string) => ({ status, message });
+  if (!ticket || ticket.length > 100) return refuse(403, "This review has no ticket. Start it again from the review page.");
   const idHash = await sha256Hex(ticket);
-  const t = await db.prepare("SELECT tier, chunks FROM review_tickets WHERE id_hash = ? AND user_id = ? AND expires_at > ?").bind(idHash, userId, now + CLAIM_MARGIN_MS).first<{ tier: string; chunks: string }>();
-  if (!t) return "This review's ticket has expired. Start a new review; what the old one didn't finish is refunded automatically.";
-  if (t.tier !== want.tier) return "This pass doesn't match the review that was paid for.";
-  if (want.pass === "extract") {
-    const paid = (JSON.parse(t.chunks) as Record<string, number>)[want.chunkId ?? ""];
-    if (!paid || (want.chars ?? Infinity) > paid) return "This section wasn't part of the review that was paid for.";
+  const t = await db
+    .prepare("SELECT tier, chunks, synthesized FROM review_tickets WHERE id_hash = ? AND user_id = ? AND expires_at > ?")
+    .bind(idHash, userId, now + CLAIM_MARGIN_MS)
+    .first<{ tier: string; chunks: string; synthesized: number }>();
+  if (!t) return refuse(403, "This review's ticket has expired. Start a new review; what the old one didn't finish is refunded automatically.");
+  if (t.tier !== want.tier) return refuse(403, "This pass doesn't match the review that was paid for.");
+  if (want.pass === "synthesize") {
+    if (t.synthesized) return refuse(409, "This review was already cross-checked.");
+    const r = await db.prepare("UPDATE review_tickets SET synth_left = synth_left - 1 WHERE id_hash = ? AND synth_left > 0 AND synthesized = 0 AND expires_at > ?").bind(idHash, now + CLAIM_MARGIN_MS).run();
+    return r.meta.changes === 1 ? null : refuse(409, "The cross-check has no tries left; its share of the coins comes back automatically.");
   }
-  const col = want.pass === "extract" ? "extract_left" : "synth_left";
-  const r = await db.prepare(`UPDATE review_tickets SET ${col} = ${col} - 1 WHERE id_hash = ? AND ${col} > 0 AND expires_at > ?`).bind(idHash, now + CLAIM_MARGIN_MS).run();
-  return r.meta.changes === 1 ? null : "This review has used all its passes. Start a new one.";
+  const id = want.chunkId ?? "";
+  const paid = (JSON.parse(t.chunks) as Record<string, number>)[id];
+  if (!paid || (want.chars ?? Infinity) > paid) return refuse(403, "This section wasn't part of the review that was paid for.");
+  if (await db.prepare("SELECT 1 AS y FROM review_deliveries WHERE ticket = ? AND chunk_id = ?").bind(idHash, id).first()) return refuse(409, "This section was already reviewed.");
+  const r = await db
+    .prepare(
+      `UPDATE review_tickets SET extract_left = extract_left - 1, passes = json_set(passes, ?2, COALESCE(json_extract(passes, ?2), 0) + 1)
+       WHERE id_hash = ?1 AND extract_left > 0 AND expires_at > ?3 AND COALESCE(json_extract(passes, ?2), 0) < ?4`,
+    )
+    .bind(idHash, `$."${id}"`, now + CLAIM_MARGIN_MS, TRIES_PER_SECTION) // id matched CHUNK_ID (s3, s3-p2) upstream
+    .run();
+  return r.meta.changes === 1 ? null : refuse(409, "This section has no tries left; its share of the coins comes back automatically.");
 }
 
 /** A review whose synthesis came back: it's finished, so its coins are kept. */

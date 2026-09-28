@@ -134,8 +134,8 @@ function parseSynthesize(body: Loose): SynthesizeRequest | string {
 export const DAILY_PASS_CAP = 1500;
 export const MAX_REVIEW_CHUNKS = 250;
 
-/** The passes a paid review may make: every chunk twice over plus two, and four syntheses (retries, a Resume). */
-export const passBudget = (chunks: number) => ({ extract: 2 * chunks + 2, synthesize: 4 });
+/** The passes a paid review may make: each section's tries (TRIES_PER_SECTION in ledger.ts) and four syntheses. */
+export const passBudget = (chunks: number) => ({ extract: 4 * chunks, synthesize: 4 });
 
 export type StartRequest = { tier: ReviewTier; journalId: string; chunks: { id: string; chars: number }[] };
 

@@ -31,14 +31,16 @@ const data = JSON.parse(await dl.text());
 assert.equal(data.account.email, "ann@example.org");
 assert.equal(data.coins.ledger.length, 2);
 assert.equal(data.sessions.length, 1);
-assert.deepEqual([data.purchases, data.subscriptions], [[], []], "payments are part of the export");
+assert.deepEqual([data.purchases, data.subscriptions, data.adjustments, data.reviews], [[], [], [], []], "payments and running reviews are part of the export");
+assert.equal(data.account.id, u.id, "the account's own id");
+assert.deepEqual(data.identities, [{ provider: "google", subject: "g-1" }], "the Google id we keep, not just a yes");
 
 // what's keyed by the address goes with the account: sign-in links and its counters
 const { fingerprint } = await import("./auth.ts");
 const fp = await fingerprint("key", "ann@example.org");
 await env.DB.batch([
   env.DB.prepare("INSERT INTO magic_links (token_hash, email, next, expires_at) VALUES ('m1', 'ann@example.org', '/', ?)").bind(now + 60_000),
-  env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 1, ?), (?, 1, ?), ('mail-new', 3, ?)").bind(`mail15:${fp}`, now + 60_000, `mailday:${fp}`, now + 60_000, now + 60_000),
+  env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 1, ?), (?, 1, ?), (?, 1, ?), ('mail-new', 3, ?)").bind(`mail15:${fp}:net1`, now + 60_000, `mailday:${fp}:net2`, now + 60_000, `mailall:${fp}`, now + 60_000, now + 60_000),
 ]);
 assert.equal((await del({ delete: "someone@else.org" })).status, 400, "the address must match");
 assert.equal((await del({})).status, 400);

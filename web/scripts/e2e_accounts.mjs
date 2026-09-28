@@ -85,7 +85,7 @@ try {
     event_id: "evt_e2e_1",
     event_type: "transaction.completed",
     occurred_at: new Date().toISOString(),
-    data: { id: "txn_e2e_1", status: "completed", customer_id: "ctm_e2e", subscription_id: null, currency_code: "USD", custom_data: { user_id: me.user.id }, items: [{ price: { id: "pri_e2e_s" } }], details: { totals: { total: "600" } } },
+    data: { id: "txn_e2e_1", status: "completed", customer_id: "ctm_e2e", subscription_id: null, currency_code: "USD", custom_data: { user_id: me.user.id, sig: me.paddle.checkout }, items: [{ price: { id: "pri_e2e_s" } }], details: { totals: { total: "600" } } },
   };
   const raw = JSON.stringify(event);
   const ts = Math.floor(Date.now() / 1000);

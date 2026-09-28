@@ -16,7 +16,7 @@ import { onRequestPost as account } from "../../functions/api/account.ts";
 import { onRequestGet as me } from "../../functions/api/me.ts";
 
 const SECRET = "whsec";
-const env = { DB: testD1(), PADDLE_WEBHOOK_SECRET: SECRET, PADDLE_API_KEY: "pdl_key", PADDLE_ENV: "sandbox", PADDLE_PRICE_IDS: JSON.stringify({ S: "pri_s", PRO_MONTH: "pri_pm", PRO_YEAR: "pri_py" }) };
+const env = { DB: testD1(), HASH_SECRET: "k", PADDLE_WEBHOOK_SECRET: SECRET, PADDLE_API_KEY: "pdl_key", PADDLE_ENV: "sandbox", PADDLE_PRICE_IDS: JSON.stringify({ S: "pri_s", PRO_MONTH: "pri_pm", PRO_YEAR: "pri_py" }) };
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
 const DAY = 864e5;
 const t0 = Date.parse("2026-10-01T00:00:00Z");
@@ -33,7 +33,7 @@ const sub = (userId: string, o: { id?: string; status?: string; price?: string; 
   id: o.id ?? "sub_1",
   status: o.status ?? "active",
   customer_id: "ctm_1",
-  custom_data: { user_id: userId },
+  custom_data: { user_id: userId, sig: createHmac("sha256", "k").update(`checkout:${userId}`).digest("hex") },
   items: [{ price: { id: o.price ?? "pri_pm" } }],
   current_billing_period: { starts_at: iso(o.start), ends_at: iso(o.end) },
   scheduled_change: o.cancel ? { action: "cancel", effective_at: iso(o.end) } : null,

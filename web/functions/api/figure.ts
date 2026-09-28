@@ -107,7 +107,7 @@ async function askClaude(body: FigurePayload, problem: string | null, apiKey: st
       { toolName: tool.name, timeoutMs: UPSTREAM_TIMEOUT_MS },
     ));
   } catch (err) {
-    if (err instanceof TruncatedOutputError) return text("The figure description came back cut short — try asking for fewer panels.", 422);
+    if (err instanceof TruncatedOutputError) return text("The figure description came back cut short. Try asking for fewer panels.", 422);
     if (err instanceof Error && err.name === "TimeoutError") return text("Upstream figure request timed out", 504);
     const status = err instanceof UpstreamError ? err.status : 502;
     const message = err instanceof Error ? err.message : String(err);
