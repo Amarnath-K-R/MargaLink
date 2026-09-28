@@ -11,6 +11,7 @@ import { isEmail, normalEmail } from "./coins.ts";
 
 export const SESSION_COOKIE = "__Host-ml_session";
 export const HINT_COOKIE = "ml_in";
+export const OAUTH_COOKIE = "__Host-ml_oauth"; // Google sign-in in flight: state, PKCE verifier, where to return
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
@@ -143,3 +144,33 @@ export async function rateLimit(db: D1Database, key: string, limit: number, wind
 
 /** A per-day hash of the caller's IP, for rate limits: the address itself is never stored. */
 export const ipKey = async (req: Request, now: number) => sha256Hex(`${req.headers.get("cf-connecting-ip") ?? "local"}:${new Date(now).toISOString().slice(0, 10)}`);
+
+export type AccountEnv = {
+  DB: D1Database;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  GOOGLE_REDIRECT_URI?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
+  DEV_EMAIL_LOG?: string; // "1" on localhost only: print sign-in links instead of emailing them
+};
+
+export function withCookies(res: Response, cookies: string[]): Response {
+  for (const c of cookies) res.headers.append("Set-Cookie", c);
+  return res;
+}
+
+/** A same-site redirect that can set cookies (Response.redirect's headers are immutable). */
+export const redirect = (location: string, cookies: string[] = []) => withCookies(new Response(null, { status: 302, headers: { Location: location } }), cookies);
+
+export const text = (body: string, status: number) => new Response(body, { status });
+
+/** A JSON request body, or null. */
+export async function readJson(req: Request): Promise<Record<string, unknown> | null> {
+  try {
+    const v = await req.json();
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
