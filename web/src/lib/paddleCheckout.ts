@@ -43,6 +43,26 @@ function loadPaddle(): Promise<PaddleJs> {
   return loading;
 }
 
+/**
+ * Paddle's customer portal (manage or cancel Pro, receipts) in a new tab.
+ * The tab opens at the click, before the link is fetched, so a popup
+ * blocker doesn't stop it. Returns an error message, or null.
+ */
+export async function openPortal(): Promise<string | null> {
+  const tab = window.open("about:blank", "_blank");
+  const res = await fetch("/api/pay/portal", { method: "POST" });
+  if (!res.ok) {
+    tab?.close();
+    return (await res.text().catch(() => "")) || `Couldn't open the portal (${res.status}).`;
+  }
+  const { url } = (await res.json()) as { url: string };
+  if (tab) {
+    tab.opener = null;
+    tab.location.href = url;
+  } else window.open(url, "_blank", "noopener");
+  return null;
+}
+
 export async function openCheckout(o: { env: string; token: string; priceId: string; email: string; userId: string; onCompleted: () => void }) {
   const paddle = await loadPaddle();
   if (!ready) {

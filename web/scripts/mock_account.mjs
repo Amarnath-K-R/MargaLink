@@ -7,9 +7,9 @@ import { reviewPrice } from "../src/lib/coins.ts";
 
 // `paddle`: what /api/me says Paddle.js needs, or null (payments not set up).
 export async function mockAccount(context, { balance = 100, email = "smoke@example.org", origin = "http://localhost:3000", paddle = null } = {}) {
-  const state = { id: "user-smoke", balance, email, paddle, starts: [] };
+  const state = { id: "user-smoke", balance, email, paddle, pro: null, starts: [] };
   await context.addCookies([{ name: "ml_in", value: "1", url: origin }]);
-  await context.route("**/api/me", (route) => route.fulfill({ json: { user: { id: state.id, email: state.email }, balance: state.balance, paddle: state.paddle } }));
+  await context.route("**/api/me", (route) => route.fulfill({ json: { user: { id: state.id, email: state.email }, balance: state.balance, pro: state.pro, paddle: state.paddle } }));
   await context.route("**/api/review/start", (route) => {
     const body = route.request().postDataJSON();
     state.starts.push(body);

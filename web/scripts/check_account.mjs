@@ -3,8 +3,8 @@
 // visitor makes no account request; the email link (sent, then confirmed on
 // the verify page, then the token gone from the address bar); Google's popup
 // closing itself; the account page's history and a delete that needs the
-// address typed; and buying a pack with Paddle.js stubbed, the balance
-// updating when the webhook's coins arrive.
+// address typed; buying a pack and Pro with Paddle.js stubbed, the balance
+// updating when the webhook's coins arrive; and managing Pro in the portal.
 import { chromium } from "playwright";
 import { mockAccount } from "./mock_account.mjs";
 
@@ -29,7 +29,7 @@ const watch = (page) => {
   page.on("request", (r) => /\/api\/(me|account)/.test(r.url()) && asked.push(r.url()));
   for (const p of ["/", "/home", "/pricing", "/review", "/terms"]) await page.goto(O + p, { waitUntil: "networkidle" });
   check("signed out, no page asks the account API", asked.length === 0);
-  check("the pricing page invites signing in to buy", (await page.goto(O + "/pricing"), await page.getByRole("link", { name: "Sign in to buy" }).count()) === 3);
+  check("the pricing page invites signing in to buy", (await page.goto(O + "/pricing"), await page.getByRole("link", { name: "Sign in to buy" }).count()) === 5);
 
   // the email link
   let requested = null;
@@ -72,7 +72,7 @@ const watch = (page) => {
 // --- the account page, and buying a pack
 {
   const ctx = await browser.newContext();
-  const account = await mockAccount(ctx, { balance: 12, paddle: { env: "sandbox", token: "test_tok", prices: { S: "pri_s", M: "pri_m", L: "pri_l" } } });
+  const account = await mockAccount(ctx, { balance: 12, paddle: { env: "sandbox", token: "test_tok", prices: { S: "pri_s", M: "pri_m", L: "pri_l", PRO_MONTH: "pri_pm", PRO_YEAR: "pri_py" } } });
   await ctx.route("**/api/account", (r) =>
     r.fulfill({ json: { email: account.email, balance: account.balance, google: false, history: [{ kind: "welcome", label: "Welcome bonus", delta: 10, at: Date.now() }, { kind: "figure", label: "Ask Claude (figure)", delta: -1, at: Date.now() }] } }),
   );
@@ -107,6 +107,22 @@ const watch = (page) => {
   account.balance += 50; // the webhook's coins
   await page.waitForSelector('[data-pack="S"] >> text=Added. You now have 62 M coins.', { timeout: 20000 });
   check("the new coins show up after checkout", true);
+
+  // Pro: the same checkout with the monthly price; then the plan and its portal
+  await page.getByRole("button", { name: "Get Pro monthly" }).click();
+  await page.waitForFunction(() => window.__opened?.items[0].priceId === "pri_pm");
+  check("Pro opens the checkout with its price", true);
+  account.balance += 100;
+  account.pro = { interval: "month", status: "active", renews: true, periodEnd: Date.parse("2026-11-28T00:00:00Z") };
+  await page.waitForSelector('[data-testid="pro"] >> text=You have Pro, monthly.', { timeout: 20000 });
+  check("once Pro lands, the pricing page shows the plan instead of the offer", true);
+  await page.goto(O + "/account");
+  await page.waitForSelector("text=You have Pro, monthly.");
+  check("the account page says when Pro renews", await page.locator("text=Renews on").isVisible());
+  await ctx.route("**/api/pay/portal", (r) => r.fulfill({ json: { url: `${O}/terms?portal=1` } }));
+  const [tab] = await Promise.all([ctx.waitForEvent("page"), page.getByRole("button", { name: "Manage subscription" }).click()]);
+  await tab.waitForURL(/portal=1/, { timeout: 10000 });
+  check("Manage subscription opens the portal in a new tab", true);
   await ctx.close();
 }
 

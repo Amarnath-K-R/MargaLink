@@ -9,7 +9,12 @@ import { useSyncExternalStore } from "react";
 // sign-in finished in a popup or another tab reaches this one.
 // `paddle`: what Paddle.js needs to open a checkout, or null until payments are set up.
 export type PaddleConfig = { env: "sandbox" | "production"; token: string; prices: Record<string, string> };
-export type Account = { status: "unknown" } | { status: "out" } | { status: "in"; id: string; email: string; balance: number; paddle: PaddleConfig | null };
+// `pro`: the Pro plan, if there is one (renews: false once cancelled to the period's end).
+export type ProPlan = { interval: "month" | "year"; status: string; renews: boolean; periodEnd: number | null };
+export type Account =
+  | { status: "unknown" }
+  | { status: "out" }
+  | { status: "in"; id: string; email: string; balance: number; pro: ProPlan | null; paddle: PaddleConfig | null };
 
 const SERVER: Account = { status: "unknown" };
 let state: Account = SERVER;
@@ -24,8 +29,8 @@ async function load() {
   try {
     const res = await fetch("/api/me");
     if (!res.ok) throw new Error(String(res.status));
-    const d = (await res.json()) as { user: { id: string; email: string } | null; balance?: number; paddle?: PaddleConfig | null };
-    set(d.user ? { status: "in", id: d.user.id, email: d.user.email, balance: d.balance ?? 0, paddle: d.paddle ?? null } : { status: "out" });
+    const d = (await res.json()) as { user: { id: string; email: string } | null; balance?: number; pro?: ProPlan | null; paddle?: PaddleConfig | null };
+    set(d.user ? { status: "in", id: d.user.id, email: d.user.email, balance: d.balance ?? 0, pro: d.pro ?? null, paddle: d.paddle ?? null } : { status: "out" });
   } catch {
     // Offline or a server hiccup: keep what we knew; if we knew nothing, show signed out.
     if (state.status === "unknown") set({ status: "out" });

@@ -5,7 +5,7 @@ import PageHeader from "@/components/PageHeader";
 import { Coin } from "@/components/AccountButton";
 import { FIGURE_PRICE, WELCOME_COINS, reviewPrice } from "@/lib/coins";
 import { REVIEW_TIERS } from "@/lib/reviewTypes";
-import Packs from "./Packs";
+import { Packs, ProPlans } from "./Packs";
 
 export const metadata: Metadata = {
   title: "Pricing | MargaLink",
@@ -92,6 +92,12 @@ export default function PricingPage() {
         <h2 id="packs" className="font-serif text-2xl font-medium">M coin packs</h2>
         <p className="mt-2 max-w-2xl text-ink-soft">Pack coins never expire. Prices include tax where it applies; checkout shows the final amount in your currency.</p>
         <Packs />
+      </section>
+
+      <section aria-labelledby="pro" className="mt-14">
+        <h2 id="pro" className="font-serif text-2xl font-medium">Pro</h2>
+        <p className="mt-2 max-w-2xl text-ink-soft">For reviewing often: a monthly allowance of M coins, billed monthly or yearly.</p>
+        <ProPlans />
       </section>
 
       <p className="mt-12 text-sm leading-relaxed text-ink-soft">Payments are handled by Paddle, our merchant of record; MargaLink never sees your card.</p>

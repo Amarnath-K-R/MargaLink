@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Download } from "lucide-react";
 import { Coin } from "@/components/AccountButton";
 import SignInPanel from "@/components/SignInPanel";
+import { ProStatus } from "../pricing/Packs";
+import { PRO } from "@/lib/coins";
 import { refreshAccount, signOut, useAccount } from "@/components/useAccount";
 import type { LedgerKind } from "@/lib/coins";
 
@@ -85,6 +87,19 @@ export default function AccountView() {
           </ol>
         )}
       </section>
+
+      <Panel title="Pro">
+        {account.pro ? (
+          <ProStatus pro={account.pro} />
+        ) : (
+          <p>
+            Pro adds {PRO.coinsPerMonth} M coins every month, billed monthly or yearly, and you can cancel any time.{" "}
+            <Link href="/pricing#pro" className="text-accent hover:underline">
+              See Pro
+            </Link>
+          </p>
+        )}
+      </Panel>
 
       <Panel title="Signing in">
         <p>
