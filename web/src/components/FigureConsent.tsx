@@ -13,10 +13,12 @@
 // and read verbatim what a user was told.
 export default function FigureConsent({
   labels,
+  balance,
   onConfirm,
   onCancel,
 }: {
   labels: Record<string, string[]> | null;
+  balance: number;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -47,9 +49,12 @@ export default function FigureConsent({
           {Object.keys(labels).length === 0 && <p className="text-ink-soft">(none of your columns qualify, so no labels will be sent)</p>}
         </div>
       )}
+      <p className="mt-3 text-sm">
+        Each request costs <strong className="font-medium">1 M coin</strong>; you have {balance}. A request that fails is refunded.
+      </p>
       <div className="mt-4 flex flex-wrap gap-3 text-sm">
-        <button type="button" onClick={onConfirm} className="clay-btn clay-primary h-10 px-5 font-medium">
-          Send it and ask Claude
+        <button type="button" onClick={onConfirm} disabled={balance < 1} className="clay-btn clay-primary h-10 px-5 font-medium">
+          Send it and ask Claude (1 M coin)
         </button>
         <button type="button" onClick={onCancel} className="clay-btn h-10 px-5">
           Cancel

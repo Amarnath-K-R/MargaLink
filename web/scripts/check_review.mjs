@@ -2,10 +2,13 @@
 // journal, consent naming the request count, per-pass progress, a forced
 // failure on one section surfacing in coverage, Retry healing it, the
 // prioritized summary and grounded citations, cancel, and the capacity
-// stop. Never a real Anthropic call —
+// stop; paying for it (signed in through mock_account.mjs): the price in the
+// consent, one charge per review, the ticket on every pass, too few coins;
+// and signed out, the sign-in in place of the button. Never a real Anthropic call —
 // that's a manual gate (see docs/ARCHITECTURE.md's review section).
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
+import { mockAccount } from "./mock_account.mjs";
 
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../.smoke/", import.meta.url).pathname;
 mkdirSync(SCRATCH, { recursive: true });
@@ -13,6 +16,8 @@ const FIXTURE = new URL("./fixtures/test-paper.pdf", import.meta.url).pathname;
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
+const account = await mockAccount(page.context(), { balance: 100 });
+const tickets = [];
 const consoleErrors = [];
 page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text());
@@ -35,6 +40,7 @@ let extractCount = 0;
 let synthCount = 0;
 await page.route("**/api/review", async (route) => {
   const req = route.request().postDataJSON();
+  tickets.push(route.request().headers()["x-review-ticket"]);
   if (slow) await new Promise((r) => setTimeout(r, 1500));
   if (req.pass === "extract") {
     extractCount++;
@@ -80,10 +86,13 @@ await fc.setFiles(FIXTURE);
 await page.waitForSelector("text=Loaded test-paper.pdf", { timeout: 15000 });
 await page.getByRole("button", { name: /^JAMA/ }).click();
 
-const getReview = () => page.getByRole("button", { name: /^Get a standard review by Claude$/ });
+const getReview = () => page.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ });
 await getReview().click();
 await page.waitForSelector('[role="alertdialog"]');
 check("consent names the request count", /in \d+ short requests/.test(await page.locator('[role="alertdialog"]').innerText()));
+const priceLine = await page.locator('[data-testid="review-price"]').innerText();
+const price = Number(priceLine.match(/costs (\d+) M coins/)?.[1]);
+check(`consent names the price and the balance (${priceLine})`, price > 0 && /you have 100\b/.test(priceLine));
 await page.click("text=Send it and review");
 
 await page.waitForSelector('[data-testid="review-coverage"]', { timeout: 30000 });
@@ -105,8 +114,10 @@ check("retry re-ran only the failed section + synthesis", extractCount === extra
 const summary = await page.locator('[data-testid="review-summary"]').innerText();
 check("prioritized summary rendered", summary.includes("Reconcile the sample size"));
 check("summary items carry grounded citations", (await page.locator('[data-testid="review-summary"] li li').count()) >= 1);
-const uses = () => page.evaluate(() => localStorage.getItem("margalink-review-uses"));
-check("one device use recorded", (await uses()) === "1");
+check("paid once, and retrying cost nothing more", account.starts.length === 1 && account.balance === 100 - price);
+check("every pass carried the ticket", tickets.length > 0 && tickets.every((t) => t === "ticket-1"));
+check("the start sent section ids and lengths, never text", account.starts[0].chunks.every((c) => Object.keys(c).join() === "id,chars"));
+check("the tray shows the new balance", (await page.locator('a[href="/account"]').first().getAttribute("aria-label")).startsWith(`${100 - price} M coins`));
 
 // Cancel mid-run.
 slow = true;
@@ -114,18 +125,18 @@ await getReview().click();
 await page.click("text=Send it and review");
 await page.getByRole("button", { name: "Cancel" }).click();
 await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
-check("cancel stops the run without counting a use", (await uses()) === "1");
+check("a new run is charged once", account.starts.length === 2);
 check("a cancelled run can be resumed", await page.getByRole("button", { name: "Resume review" }).isVisible());
 slow = false;
 
-// Capacity: a 429 on any pass stops the run and counts nothing.
+// Capacity: a 429 on any pass stops the run (its coins come back when the ticket expires).
 // A route registered later wins; { times: 1 } unregisters it after one use.
 await page.route("**/api/review", (route) => route.fulfill({ status: 429, contentType: "text/plain", body: "Pilot is fully booked for today" }), { times: 1 });
 await getReview().click();
 await page.click("text=Send it and review");
 await page.waitForSelector("text=fully booked", { timeout: 10000 });
 await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
-check("capacity error stops the run without counting a use", (await uses()) === "1");
+check("capacity error stops the run", !(await page.locator('[data-testid="review-progress"]').isVisible()));
 check("a fresh run doesn't leave the previous review's results on screen", (await page.locator('[data-testid="review-summary"]').count()) === 0);
 
 // Outline: visible, a section marked "Don't send" lowers the request count and its text is never sent.
@@ -170,7 +181,35 @@ await page.waitForTimeout(300);
 check("an outline edit mid-run offers no stale resume", !(await page.getByRole("button", { name: /Resume review|Retry failed sections/ }).isVisible().catch(() => false)));
 slow = false;
 
+// Too few coins: the server says 402, the page says how many and won't send.
+account.balance = 0;
+await getReview().click();
+await page.click("text=Send it and review");
+await page.waitForSelector("text=you have 0", { timeout: 10000 });
+await getReview().click();
+check("with too few coins, the consent won't send", await page.getByRole("button", { name: /^Send it and review/ }).isDisabled());
+check("and says how many more are needed", /You need \d+ more M coins? for this review/.test(await page.locator('[role="alertdialog"]').innerText()));
+await page.getByRole("button", { name: "Cancel" }).last().click();
+
 await page.screenshot({ path: `${SCRATCH}/review-final.png`, fullPage: true });
+
+// Signed out: no account request at all, and the button signs you in in place.
+{
+  const ctx = await browser.newContext();
+  const out = await ctx.newPage();
+  const me = [];
+  out.on("request", (r) => r.url().includes("/api/me") && me.push(r.url()));
+  await out.goto("http://localhost:3000/review");
+  const [chooser] = await Promise.all([out.waitForEvent("filechooser"), out.click("text=Drop a PDF or DOCX")]);
+  await chooser.setFiles(FIXTURE);
+  await out.waitForSelector("text=Loaded test-paper.pdf", { timeout: 15000 });
+  await out.getByRole("button", { name: /^JAMA/ }).click();
+  await out.getByRole("button", { name: "Sign in to get a review" }).click();
+  check("signed out, the review button opens sign-in in place", await out.getByRole("button", { name: "Continue with Google" }).isVisible());
+  check("signed out, the paper is still loaded", await out.locator("text=Loaded test-paper.pdf").isVisible());
+  check("signed out, no /api/me request was made", me.length === 0);
+  await ctx.close();
+}
 console.log("console errors:", consoleErrors.length ? consoleErrors.join("\n") : "(none)");
 console.log("PASS");
 await browser.close();

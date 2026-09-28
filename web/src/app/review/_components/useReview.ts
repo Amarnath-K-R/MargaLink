@@ -5,7 +5,9 @@ import { extractFromFile } from "@/lib/extract";
 import { findJournalRules } from "@/lib/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
 import { MAX_REVIEW_CHARS, prepareForReview } from "@/lib/review";
-import { ReviewSynthesisError, planChunks, runReview, type ReviewState } from "@/lib/reviewOrchestrator";
+import { ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "@/lib/reviewOrchestrator";
+import { NotEnoughCoinsError, SignInRequiredError } from "@/lib/coins";
+import { refreshAccount, setBalance } from "@/components/useAccount";
 import { NO_EDITS, buildOutline, chunkSections, type OutlineEdits } from "@/lib/reviewSections";
 import type { HeadingHint, ReviewProgress, ReviewResult, ReviewTier } from "@/lib/reviewTypes";
 import { errorMessage } from "@/lib/errorMessage";
@@ -119,6 +121,8 @@ export function useReview() {
   const plannedRun = useMemo(() => (outline ? planChunks(chunkSections(outline.sections, headings), tier).run : []), [outline, headings, tier]);
   // How many requests the consent notice names: one per planned chunk + the cross-check.
   const passCount = plannedRun.length + 1;
+  // What it costs, priced from exactly what would be sent (the server charges the same).
+  const price = useMemo(() => (reviewText ? quoteReview({ text: reviewText, hints: headings, outline: outline ?? undefined, tier }).coins : 0), [reviewText, headings, outline, tier]);
   const outlineRows = useMemo(() => {
     if (!outline) return [];
     const reviewed = new Set(plannedRun.map((c) => c.sectionId));
@@ -159,6 +163,7 @@ export function useReview() {
             journalId: selectedJournalId,
             tier,
             signal: ac.signal,
+            onCharged: setBalance,
             onState: (st) => (runStateRef.current = st),
             onProgress: (p) => {
               setProgress(p);
@@ -179,6 +184,12 @@ export function useReview() {
         if (err instanceof ReviewSynthesisError) {
           setResumeState(err.state);
           setReviewResult(err.partial);
+        }
+        if (err instanceof NotEnoughCoinsError) setBalance(err.balance);
+        if (err instanceof SignInRequiredError) {
+          void refreshAccount();
+          setReviewError("Sign in to get a review.");
+          return;
         }
         // The Function returns descriptive text on failure — surface it, not a generic message.
         setReviewError(errorMessage(err, "The review failed. Try again in a moment."));
@@ -218,6 +229,7 @@ export function useReview() {
     edits,
     editOutline,
     passCount,
+    price,
     consentOpen,
     setConsentOpen,
     reviewLoading,

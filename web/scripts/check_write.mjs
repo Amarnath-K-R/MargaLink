@@ -9,12 +9,14 @@
 // reuse it. That's why this uses a persistent context.
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
+import { mockAccount } from "./mock_account.mjs";
 
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../.smoke/", import.meta.url).pathname;
 mkdirSync(SCRATCH, { recursive: true });
 
 const context = await chromium.launchPersistentContext(`${SCRATCH}/write-profile`, { viewport: { width: 1400, height: 900 } });
 const page = context.pages()[0] ?? (await context.newPage());
+const account = await mockAccount(context); // the Review window's review is paid for
 const consoleErrors = [];
 page.on("pageerror", (err) => {
   consoleErrors.push(`pageerror: ${err.message}`);
@@ -82,7 +84,6 @@ await page.goto("http://localhost:3000/templates/templates.json");
 await page.evaluate(async () => {
   const root = await navigator.storage.getDirectory();
   await root.removeEntry("margalink-write", { recursive: true }).catch(() => {});
-  localStorage.removeItem("margalink-review-uses"); // the review step below counts one; the profile persists
 });
 await page.goto("http://localhost:3000/write");
 await page.waitForSelector("text=Write your paper.");
@@ -298,7 +299,7 @@ await page.waitForFunction(
 );
 // "(your target journal)" is the on-target line; the picker's explanation says "Your target journal, X, isn't…" without the parentheses
 if (!(await reviewWindow.getByText("(your target journal)").count())) await reviewWindow.getByRole("button", { name: /^JAMA/ }).click();
-await reviewWindow.getByRole("button", { name: /^Get a standard review by Claude$/ }).click();
+await reviewWindow.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
 await reviewWindow.locator('[role="alertdialog"]').waitFor();
 check("the consent notice appears inside the window", /in \d+ short requests/.test(await reviewWindow.locator('[role="alertdialog"]').innerText()));
 await reviewWindow.getByText("Send it and review").click();
@@ -312,8 +313,9 @@ check(
   "Jump to source closes the window and lands in the editor",
   await page.waitForFunction(() => !document.querySelector("dialog[open]") && !!document.activeElement?.closest(".cm-content"), null, { timeout: 5000 }).then(() => true, () => false),
 );
+check("the Review window's review was paid for once", account.starts.length === 1);
 check("the status bar says something was sent", (await page.locator('[data-testid="workspace"]').textContent()).includes("carried text you agreed to send"));
-check(`the review's requests are the only ones with a body (${bodyRequests.length})`, bodyRequests.length > 0 && bodyRequests.every((u) => u.endsWith("/api/review")));
+check(`the review's requests are the only ones with a body (${bodyRequests.length})`, bodyRequests.length > 0 && bodyRequests.every((u) => u.endsWith("/api/review") || u.endsWith("/api/review/start")));
 
 // --- the Figures window: a figure from a spreadsheet, inserted into the paper (the plain article loads graphicx), reopened from its recipe ---
 await page.click("text=← All projects");

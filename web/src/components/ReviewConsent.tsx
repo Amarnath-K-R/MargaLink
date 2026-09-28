@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReviewTier } from "@/lib/reviewTypes";
+import { Coin } from "./AccountButton";
 
 // The one place in the app where a plain-language notice and an explicit
 // confirm action are non-negotiable (CLAUDE.md rule 3: "any feature that
@@ -11,6 +12,8 @@ export default function ReviewConsent({
   tier,
   passCount,
   excludedCount,
+  price,
+  balance,
   onConfirm,
   onCancel,
 }: {
@@ -18,6 +21,8 @@ export default function ReviewConsent({
   tier: ReviewTier;
   passCount: number;
   excludedCount: number;
+  price: number;
+  balance: number;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -40,9 +45,21 @@ export default function ReviewConsent({
         {excludedCount > 0 &&
           ` The ${excludedCount} section${excludedCount === 1 ? "" : "s"} you marked "Don't send" won't be sent at all.`}
       </p>
+      <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed" data-testid="review-price">
+        <Coin className="mt-0.5" />
+        <span>
+          This review costs <strong className="font-medium">{price} M coins</strong>; you have {balance}. If it doesn&apos;t finish, the coins come back
+          automatically within 2 hours, and resuming or retrying it costs nothing more.
+        </span>
+      </p>
+      {balance < price && (
+        <p className="mt-2 text-sm text-away">
+          You need {price - balance} more M coin{price - balance === 1 ? "" : "s"} for this review.
+        </p>
+      )}
       <div className="mt-5 flex flex-wrap gap-3 text-sm">
-        <button type="button" onClick={onConfirm} className="clay-btn clay-primary h-10 px-5 font-medium">
-          Send it and review
+        <button type="button" onClick={onConfirm} disabled={balance < price} className="clay-btn clay-primary h-10 px-5 font-medium">
+          Send it and review ({price} M coins)
         </button>
         <button type="button" onClick={onCancel} className="clay-btn h-10 px-5">
           Cancel

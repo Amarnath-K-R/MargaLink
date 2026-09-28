@@ -3,6 +3,9 @@
 import { useState } from "react";
 import ErrorText from "@/components/ErrorText";
 import FigureConsent from "@/components/FigureConsent";
+import SignInPanel from "@/components/SignInPanel";
+import { refreshAccount, setBalance, useAccount } from "@/components/useAccount";
+import { FIGURE_PRICE, NotEnoughCoinsError, SignInRequiredError, WELCOME_COINS } from "@/lib/coins";
 import { askClaude, figureConsentGiven, recordFigureConsent, type ClaudeResult } from "@/lib/figure";
 import { REQUEST_MAX_CHARS, buildFigurePayload, levelsToSend, type FigureMode } from "@/lib/figureSchema";
 import type { FigureSpec } from "@/lib/figureSpec";
@@ -11,6 +14,7 @@ import type { Dataset } from "@/lib/spreadsheet";
 // "Describe it" → Claude returns a figure description (or a code tweak),
 // drawn locally like everything else. The exact request is shown before
 // sending; nothing is sent without the consent notice (once per session).
+// Each request costs 1 M coin; signed out, the button signs you in here.
 export default function Describe({
   dataset,
   spec,
@@ -26,6 +30,9 @@ export default function Describe({
   const [busy, setBusy] = useState<FigureMode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const account = useAccount();
+  const balance = account.status === "in" ? account.balance : 0;
   const labels = levelsToSend(dataset);
   const payload = buildFigurePayload(dataset, spec, request, { sendLevels, mode: "spec" });
 
@@ -35,9 +42,12 @@ export default function Describe({
     setSummary(null);
     try {
       const r = await askClaude(dataset, spec, request, { sendLevels, mode });
+      if (r.balance !== null) setBalance(r.balance);
       setSummary(r.summary || null);
       onResult(r);
     } catch (err) {
+      if (err instanceof NotEnoughCoinsError) setBalance(err.balance);
+      if (err instanceof SignInRequiredError) void refreshAccount();
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
@@ -75,20 +85,41 @@ export default function Describe({
           </span>
         </span>
       </label>
-      <div className="mt-3 flex flex-wrap gap-3">
-        <button type="button" disabled={!request.trim() || !!busy} onClick={() => ask("spec")} className={button}>
-          {busy === "spec" ? "Asking Claude…" : "Ask Claude for a figure"}
-        </button>
-        <button type="button" disabled={!request.trim() || !spec || !!busy} onClick={() => ask("hook")} className={button}>
-          {busy === "hook" ? "Asking Claude…" : "Ask for a custom tweak (code)"}
-        </button>
-      </div>
+      {account.status === "out" ? (
+        <div className="mt-3">
+          <button type="button" aria-expanded={signingIn} onClick={() => setSigningIn((o) => !o)} className={button}>
+            Sign in to ask Claude
+          </button>
+          {signingIn && (
+            <div className="sheet mt-3 max-w-md p-5">
+              <SignInPanel
+                lead={
+                  <p className="text-sm leading-relaxed text-ink-soft">
+                    Each request costs {FIGURE_PRICE} M coin; new accounts get {WELCOME_COINS}. Your data and figure stay as they are while you sign in.
+                  </p>
+                }
+              />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-3">
+          <button type="button" disabled={!request.trim() || !!busy || account.status !== "in" || balance < FIGURE_PRICE} onClick={() => ask("spec")} className={button}>
+            {busy === "spec" ? "Asking Claude…" : "Ask Claude for a figure"}
+          </button>
+          <button type="button" disabled={!request.trim() || !spec || !!busy || account.status !== "in" || balance < FIGURE_PRICE} onClick={() => ask("hook")} className={button}>
+            {busy === "hook" ? "Asking Claude…" : "Ask for a custom tweak (code)"}
+          </button>
+        </div>
+      )}
       <p className="mt-2 text-xs text-ink-soft">
+        {account.status === "in" && `Each request costs ${FIGURE_PRICE} M coin (you have ${balance}); a request that fails is refunded. `}
         Templates, editing and exports are unlimited and never send anything.
       </p>
       {pending && (
         <FigureConsent
           labels={sendLevels ? labels : null}
+          balance={balance}
           onConfirm={() => {
             recordFigureConsent();
             const mode = pending;

@@ -6,9 +6,10 @@
 //   Part 2 — the editors: a second panel (scatter), a title and unit, Welch
 //   brackets against the first group (loads SciPy once), and a recipe that
 //   round-trips to the identical image; a recipe for other data is refused.
-//   Part 3 — Ask Claude (mocked; a real call is a manual gate): consent, the
-//   exact body (no values, no labels by default; only the listed labels when
-//   opted in, with the notice shown again), the returned spec renders.
+//   Part 3 — Ask Claude (mocked; a real call is a manual gate): consent with
+//   its price and balance, the exact body (no values, no labels by default;
+//   only the listed labels when opted in, with the notice shown again), the
+//   returned spec renders, the coin is charged. Signed in via mock_account.mjs.
 //   Part 4 — custom tweak (mocked): "import os" is refused before anything
 //   runs; a benign customize() runs and shows in the exported SVG.
 //
@@ -17,6 +18,7 @@
 // context instead of chromium.launch()'s throwaway one.
 import { chromium } from "playwright";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mockAccount } from "./mock_account.mjs";
 
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../.smoke/", import.meta.url).pathname;
 mkdirSync(SCRATCH, { recursive: true });
@@ -24,6 +26,7 @@ const MESSY = new URL("./fixtures/messy.csv", import.meta.url).pathname;
 
 const context = await chromium.launchPersistentContext(`${SCRATCH}/figures-profile`, {});
 const page = context.pages()[0] ?? (await context.newPage());
+const account = await mockAccount(context, { balance: 5 });
 
 // One /write project in this browser, for "Add to a paper" (part 1).
 {
@@ -162,7 +165,8 @@ const bodies = [];
 let nextReply = null;
 await page.route("**/api/figure", async (route) => {
   bodies.push(JSON.parse(route.request().postData()));
-  await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(nextReply) });
+  account.balance -= 1; // the real Function charges 1 M coin (and refunds one it rejects)
+  await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...nextReply, balance: account.balance }) });
 });
 const twoPanel = structuredClone(recipe.spec);
 twoPanel.panels[0].layers = [{ kind: "points", ci: false, alpha: 0.5, size: null, jitter: null }];
@@ -175,9 +179,11 @@ check("payload preview: no labels, no values by default", preview1.includes('"le
 await describe.getByRole("button", { name: "Ask Claude for a figure" }).click();
 await page.waitForSelector('[role="alertdialog"]');
 check("consent does not list labels when not opted in", (await page.locator('[data-testid="consent-labels"]').count()) === 0);
+check("consent names the price and the balance", /costs 1 M coin; you have 5\b/.test(await page.locator('[role="alertdialog"]').innerText()));
 await page.getByRole("button", { name: "Send it and ask Claude" }).click();
 await page.waitForSelector('[data-testid="claude-summary"]');
 await settled();
+check("the new balance reaches the page", /you have 4\)/.test(await describe.innerText()));
 const sent1 = JSON.stringify(bodies[0]);
 check("request body: levels null, no cell value or label", bodies[0].levels === null && !/Nordklinik|S01|Placebo|1081/.test(sent1));
 check("request body keeps typed text local (title not sent)", !sent1.includes("Week 1 score by arm"));
