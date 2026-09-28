@@ -1,319 +1,427 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import PageHeader from "@/components/PageHeader";
-import { CONTACT_EMAIL } from "@/lib/site";
+import { Aside, DocBody, OptionTable, type TocItem } from "@/components/docs/Doc";
+import { CONTACT_EMAIL, OPERATOR } from "@/lib/site";
+import { FIGURE_PRICE, WELCOME_COINS } from "@/lib/coins";
 
 export const metadata: Metadata = {
   title: "How privacy works | MargaLink",
-  description: "What leaves your device when you use MargaLink, and what doesn't.",
+  description: "What MargaLink collects, why, where it goes, how long it's kept, and your rights.",
 };
+
+// The privacy notice. Written to cover what UK/EU GDPR (Art. 13) and India's
+// DPDP Rules (Rule 3: an itemised list of personal data with its purpose,
+// in plain language, with how to withdraw consent, use your rights and
+// complain) ask for, from what the code actually does. When the product
+// changes what it collects or sends, change this page in the same commit,
+// and bump the version and date below.
+const VERSION = "Version 1, 28 September 2026";
+
+const TOC: TocItem[] = [
+  { id: "summary", label: "In short" },
+  { id: "who", label: "Who runs MargaLink" },
+  { id: "papers", label: "Your papers stay with you" },
+  { id: "no-account", label: "Without an account" },
+  { id: "ai", label: "The two features that send something", tint: "#f1d2c2" },
+  { id: "accounts", label: "Your account" },
+  { id: "payments", label: "Buying M coins" },
+  { id: "basis", label: "Why we may use it" },
+  { id: "sharing", label: "Who else is involved" },
+  { id: "cookies", label: "Cookies and browser storage" },
+  { id: "keeping", label: "How long, and how safe" },
+  { id: "rights", label: "Your rights" },
+  { id: "children", label: "Children" },
+  { id: "changes", label: "Changes and contact" },
+];
+
+const Contact = () =>
+  CONTACT_EMAIL ? (
+    <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">
+      {CONTACT_EMAIL}
+    </a>
+  ) : (
+    <>the contact address listed here once accounts open</>
+  );
 
 export default function PrivacyPage() {
   return (
-    <main className="mx-auto w-full max-w-2xl px-6 pt-3 pb-20">
-      <PageHeader page="privacy"
-        width="2xl"
+    <main className="mx-auto w-full max-w-6xl px-6 pt-3 pb-24">
+      <PageHeader
+        page="privacy"
+        width="3xl"
         title="How privacy works"
-        subtitle={<p className="mt-3 text-lg text-ink-soft">Three rules, two disclosed exceptions, and one diagram of what actually happens.</p>}
+        subtitle={
+          <p className="mt-3 max-w-2xl text-lg text-ink-soft">
+            What MargaLink collects, why, where it goes, how long it&apos;s kept, and what you can do about it.{" "}
+            <span className="text-base">{VERSION}.</span>
+          </p>
+        }
       />
 
-      <ol className="mt-10 space-y-4">
-        <li className="border-t border-line pt-4">
-          <p className="font-medium">Your paper is never uploaded.</p>
-          <p className="mt-1 text-ink-soft">
-            Not for matching, not for the format check. The file stays on your
-            device the whole time.
-          </p>
-        </li>
-        <li className="border-t border-line pt-4">
-          <p className="font-medium">Nothing from a paper is stored anywhere.</p>
-          <p className="mt-1 text-ink-soft">
-            Not on a server, not in an account. Even if you sign in later,
-            paper content is never part of what&apos;s saved.
-          </p>
-        </li>
-        <li className="border-t border-line pt-4">
-          <p className="font-medium">
-            Anything that would need to leave your device is opt-in.
-          </p>
-          <p className="mt-1 text-ink-soft">
-            Matching, the format check, and the journal rules check never do.
-            Two features are the exceptions:{" "}
-            <Link href="#review-exception" className="text-accent hover:underline">
-              getting a paper reviewed
-            </Link>{" "}
-            and{" "}
-            <Link href="#figures-exception" className="text-accent hover:underline">
-              making figures from a spreadsheet
-            </Link>
-            . Both use a large language model, which can&apos;t run in a
-            browser. Each asks first, in plain language, exactly what
-            it&apos;s about to send, before sending anything.
-          </p>
-        </li>
-      </ol>
+      <DocBody toc={TOC}>
+        <div className="space-y-14">
+          <Section id="summary" title="In short">
+            <ul className="list-disc space-y-2 pl-5">
+              <li>
+                <strong>Your papers never reach our servers.</strong> Matching, the format and journal-rules checks, figures and writing all run in
+                your browser. Nothing from a paper is stored on a server, for anyone, signed in or not.
+              </li>
+              <li>
+                <strong>Two optional features send something to Anthropic&apos;s Claude</strong>, and only after you confirm a notice that says
+                exactly what: the AI review (your paper&apos;s text) and Ask Claude in the figure studio (a description of your data, never its
+                values).
+              </li>
+              <li>
+                <strong>You need an account only for those two.</strong> It holds your email address, your M coin history and your purchases. Not your
+                name, not your papers.
+              </li>
+              <li>
+                <strong>No ads, no analytics, no tracking cookies</strong>, and we never sell or rent anything about you.
+              </li>
+              <li>
+                <strong>You&apos;re in control:</strong> download everything we hold, or delete your account, on your account page, at any time.
+              </li>
+            </ul>
+          </Section>
 
-      <h2 className="mt-12 font-serif text-xl font-medium">What actually happens</h2>
-      <PrivacyDiagram />
-      <p className="mt-4 text-sm text-ink-soft">
-        The embedding model and the journal index are public files, the same
-        ones for everyone, downloaded once and cached by your browser. Your
-        paper never appears in either direction of those downloads. There is
-        no MargaLink server in this loop at all: matching a paper to a
-        journal is a page in your browser talking to files, not to us.
-      </p>
+          <Section id="who" title="Who runs MargaLink">
+            <p>
+              MargaLink is run by {OPERATOR ?? "an individual in India"}, who decides what personal data is collected and why (the
+              &ldquo;controller&rdquo; under GDPR, the &ldquo;Data Fiduciary&rdquo; under India&apos;s Digital Personal Data Protection Act). For any
+              question about your data, a request, or a complaint, write to <Contact />. The same address reaches the person responsible for
+              handling grievances.
+            </p>
+          </Section>
 
-      <h2 className="mt-12 font-serif text-xl font-medium">Why this is checkable, not just claimed</h2>
-      <p className="mt-3 text-ink-soft">
-        Open your browser&apos;s network tab (in its developer tools) and read the requests
-        yourself: every one is a plain <code className="font-mono text-sm">GET</code> for
-        a public file, none carries a request body. The browser-side code
-        that does the extracting, embedding, and ranking is what actually
-        ships to your browser; there&apos;s nothing hidden behind a server
-        to take on faith.
-      </p>
+          <Section id="papers" title="Your papers stay with you">
+            <p>Three rules shape every feature:</p>
+            <ol className="list-decimal space-y-2 pl-5">
+              <li>
+                <strong>Your paper is never uploaded</strong> for matching or the format and journal checks. The file stays on your device.
+              </li>
+              <li>
+                <strong>Nothing from a paper is stored on a server</strong>, not even for signed-in users.
+              </li>
+              <li>
+                <strong>Anything that sends text off your device is opt-in</strong>, behind a plain-language notice. Only the two features below do.
+              </li>
+            </ol>
+            <PrivacyDiagram />
+            <p>
+              <strong>Checkable, not just claimed.</strong> Open your browser&apos;s developer tools and watch the network tab while you match a paper:
+              every request is a plain download of a public file, and none carries a body. The code that reads, embeds and ranks your paper is the
+              code your browser runs.
+            </p>
+            <p>
+              <strong>What an embedding is.</strong> Matching turns your title and abstract into a list of a few hundred numbers that capture the
+              topic, not the words, and compares it with the same kind of list for each journal. It can&apos;t practically be turned back into your
+              text, but it comes from your paper, so it never leaves the tab either; nor do the research topics and cited journals worked out from
+              the same text.
+            </p>
+          </Section>
 
-      <h2 className="mt-12 font-serif text-xl font-medium">What an embedding reveals</h2>
-      <p className="mt-3 text-ink-soft">
-        Matching works by turning your paper&apos;s title and abstract into a
-        list of a few hundred numbers (an embedding) and comparing it against
-        the same kind of list for each journal. Be clear about what that
-        number list is: it carries the general topic of your paper, not the
-        words. It can&apos;t be turned back into your original text in any
-        practical way, but it&apos;s still derived from your paper, so we
-        don&apos;t send it anywhere either. The whole comparison happens
-        locally, against the journal index already in your browser.
-      </p>
-      <p className="mt-3 text-ink-soft">
-        Two more things are worked out on your device, from the same text: which research
-        topics your paper reads as (compared against a public list of about 4,500 topics),
-        and which journals your own reference list cites. Neither leaves the tab. If you
-        paste a title and abstract instead of uploading a file, that text stays in the tab
-        too.
-      </p>
-      <p className="mt-3 text-ink-soft">
-        How good is the matching? Every index build holds back each journal&apos;s most recent
-        papers (they are never part of the index) and checks how often each one&apos;s real
-        journal comes back in the top ten. That figure is shown at the bottom of the matching
-        page for the build you are using. It measures papers that were published, so treat it
-        as a guide, not a promise for yours.
-      </p>
+          <Section id="no-account" title="Using MargaLink without an account">
+            <p>
+              Browsing journals, matching, the checks, the figure studio (drawing, statistics, exports) and the writing workspace need no account and
+              send nothing about you or your work. To run in your browser, the page downloads public files, the same for everyone:
+            </p>
+            <OptionTable
+              title="What your browser downloads, and from where"
+              rows={[
+                { name: "The site and the journal index", what: "Pages, the journal index, templates and fonts, from our site (hosted by Cloudflare)." },
+                { name: "The matching model", what: "The embedding model's weights, from Hugging Face." },
+                { name: "Runtimes", what: "The ONNX runtime (for the model) and Pyodide with its Python packages (for figures), from the jsDelivr CDN." },
+                { name: "The TeX engine", what: "TeX Live and its packages for the writing workspace, from our file storage (Cloudflare R2)." },
+              ]}
+            />
+            <p>
+              Like any request on the web, each of these reaches its host with your IP address and ordinary browser details (such as its version),
+              which the host uses to deliver the file and protect its service under its own privacy policy. None of them carries anything from your
+              papers, spreadsheets or drafts. We run no analytics and keep no access logs of our own; Cloudflare processes request data to serve and
+              protect the site.
+            </p>
+            <p>
+              <strong>Your drafts live in your browser.</strong> Writing projects are kept in your browser&apos;s own storage on your device, never on
+              a server. Clearing this site&apos;s data in your browser deletes them, so use &ldquo;Download backup&rdquo; to keep a copy or move to
+              another computer.
+            </p>
+          </Section>
 
-      <h2 id="review-exception" className="mt-12 font-serif text-xl font-medium">
-        The first exception: getting a paper reviewed
-      </h2>
-      <p className="mt-3 text-ink-soft">
-        Everything above (matching, the format check, the journal rules check) runs
-        entirely on your device. Getting a paper reviewed is different: it sends your
-        paper&apos;s text to Anthropic&apos;s Claude API, because that kind of review needs a
-        large language model, and no model capable of it runs in a browser today. It only
-        runs if you explicitly ask for it:
-      </p>
-      <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
-        <li>
-          Nothing is sent until you confirm a plain-language notice naming exactly what&apos;s
-          about to happen, including how many requests it takes: one per section of your
-          paper, then one over the numbers found. There is no default-on path.
-        </li>
-        <li>
-          Author names and email addresses are stripped from the text first, on a
-          best-effort basis, before anything leaves your device.
-        </li>
-        <li>
-          Anthropic&apos;s API terms don&apos;t use this data to train models. MargaLink
-          doesn&apos;t store what you send, before or after the review.
-        </li>
-        <li>
-          Before sending, you can see how your paper was split into sections and mark any
-          section &ldquo;Don&apos;t send&rdquo;; it never leaves your device.
-        </li>
-        <li>
-          Each request carries one section; the server reviews it and forgets it; MargaLink
-          keeps nothing between requests. Anthropic retains API data only under its own API
-          data policy.
-        </li>
-        <li>
-          None of it is hidden: the notice says how many requests a review takes before you
-          send it, and in the writing workspace the status line counts every request that
-          carried text you agreed to send.
-        </li>
-        <li>
-          A review is paid in M coins, charged when you confirm. So that each request can be
-          checked against what was paid for, the server keeps which sections the review covers
-          and their lengths (never their text) for about two hours.
-        </li>
-      </ul>
+          <Section id="ai" title="The two features that send something">
+            <p>
+              Each needs a large language model that can&apos;t run in a browser, so each sends something to Anthropic&apos;s Claude API (in the United
+              States) through our server, which holds the API key and keeps nothing it passes on. Neither starts until you confirm its notice.
+            </p>
+            <OptionTable
+              title="What each one sends"
+              rows={[
+                {
+                  name: "AI pre-submission review",
+                  what: (
+                    <>
+                      Your paper&apos;s text, a section at a time, then one cross-check over the numbers found, with the chosen journal&apos;s guidelines.
+                      Author names and email addresses are stripped first (best effort). Sections you mark &ldquo;Don&apos;t send&rdquo; are never
+                      sent.
+                    </>
+                  ),
+                  away: true,
+                },
+                {
+                  name: "Ask Claude (figures)",
+                  what: (
+                    <>
+                      Column names and their types, the row count, your request, and the current figure&apos;s settings with any text you typed blanked.
+                      Never a cell value. Group labels (like &ldquo;Placebo&rdquo;) only if you tick a separate box, and the notice lists them each
+                      time.
+                    </>
+                  ),
+                  away: true,
+                },
+              ]}
+            />
+            <p>
+              <strong>What Anthropic does with it.</strong> Under its commercial terms, Anthropic doesn&apos;t use API data to train its models and
+              deletes inputs and outputs within 30 days, except that content flagged for breaking its usage policy may be kept for up to 2 years
+              (and as the law requires).{" "}
+              <a href="https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data" className="text-accent hover:underline">
+                Anthropic&apos;s retention policy
+              </a>
+            </p>
+            <p>
+              <strong>What we keep.</strong> Nothing of what&apos;s sent, before or after. To charge a review once and refund what didn&apos;t run, we
+              keep which sections it covers, their lengths and which came back (never their text), for about two hours. Ask Claude costs{" "}
+              {FIGURE_PRICE} M coin a request; we keep only that coin&apos;s charge or refund.
+            </p>
+          </Section>
 
-      <h2 id="figures-exception" className="mt-12 font-serif text-xl font-medium">
-        The second exception: making figures from a spreadsheet
-      </h2>
-      <p className="mt-3 text-ink-soft">
-        The figure studio turns a CSV or Excel file into a publication-ready figure. Reading your
-        file, drawing the figure, the statistics and every export happen in your browser; your
-        spreadsheet never leaves your device. Only one optional step sends anything: asking Claude
-        to set up a figure from a description you type. What goes then is a description: your
-        column names, their inferred types, how many rows you have, your request, and the current
-        figure settings (chart types, which columns go where, axis settings), never a cell value,
-        and never titles or notes you typed.
-      </p>
-      <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
-        <li>
-          Nothing is sent until you confirm a plain-language notice, once per browser session. The
-          exact request is shown on the page before every call.
-        </li>
-        <li>
-          Group labels (like &quot;Placebo&quot; or a site name) are values too, so they&apos;re only
-          sent if you tick a separate box, and then the notice appears every time and lists the
-          exact labels. Only columns with at most 30 distinct values qualify, so ID-like columns
-          never do.
-        </li>
-        <li>
-          Error details from drawing a figure can quote your data, so they&apos;re shown only to you
-          and never sent anywhere.
-        </li>
-        <li>
-          A custom tweak (written by Claude, or inside a recipe someone shares) is shown to you and
-          never runs until you click Run. It&apos;s checked first, and it runs only in your browser,
-          in a worker whose network access is switched off before any tweak can run.
-        </li>
-        <li>
-          Drawing happens in a Web Worker that downloads its Python runtime, the figure engine and
-          fonts: public files, never anything from your data. They appear in your browser&apos;s
-          network tab like any other request.
-        </li>
-      </ul>
+          <Section id="accounts" title="Your account">
+            <p>
+              You need an account only for the two features above. Sign in with Google (which tells us your verified email address and its id for
+              your account, nothing else) or with a one-time link sent to your email. Here is everything an account involves:
+            </p>
+            <OptionTable
+              title="What we keep, why, and for how long"
+              rows={[
+                { name: "Email address", what: "To sign you in, send your sign-in links, and reach you about your account.", def: "Until you delete your account" },
+                { name: "Google's id for you", what: "Only if you use Google: to recognise your Google sign-in.", def: "Until you delete your account" },
+                { name: "Sign-ins", what: "For each browser you're signed in on, a one-way fingerprint of its sign-in token and when it expires.", def: "30 days after you last use it" },
+                { name: "Emailed sign-in links", what: "The address it went to, the page to return to, and a fingerprint of the link.", def: "Until used, or 15 minutes" },
+                { name: "M coin history", what: "Each welcome bonus, charge, refund and purchase, with its date, so your balance is right.", def: "Until you delete your account" },
+                { name: "Purchases and Pro", what: "See Buying M coins below.", def: "Until you delete your account" },
+                { name: "A running review", what: "Which sections it covers, their lengths, its tries and which came back. Never text.", def: "About 2 hours" },
+                {
+                  name: "Abuse limits",
+                  what: "Counters of how many sign-in emails an address or a network asked for, keyed by fingerprints made with a secret key (a network's changes daily). Never the address or IP itself.",
+                  def: "Within a day",
+                },
+                {
+                  name: "Welcome-bonus fingerprint",
+                  what: `A fingerprint of your email address made with a secret key, so the ${WELCOME_COINS}-coin welcome bonus is given once per address. It holds no address and can't be matched to one without that key.`,
+                  def: "Kept after you delete your account",
+                },
+                { name: "Notice version", what: "Which version of this notice you signed up under.", def: "Until you delete your account" },
+              ]}
+            />
+            <p>
+              We don&apos;t collect your name, photo, affiliation, phone number or location, and we don&apos;t build a profile of you. Your papers,
+              spreadsheets and figures are never part of an account.
+            </p>
+          </Section>
 
-      <h2 id="writing" className="mt-12 font-serif text-xl font-medium">
-        Writing your paper
-      </h2>
-      <p className="mt-3 text-ink-soft">
-        The writing workspace compiles your LaTeX in your browser, with TeX Live running on your
-        device. Your manuscript, figures and bibliography are kept in this browser&apos;s own storage
-        on this device, never on a server. The workspace has no AI writing help: nothing rewrites
-        your text. The other tools open inside it as windows: matching and the format and
-        journal-rules checks read the PDF you compiled, on your device; the AI review and the figure
-        window&apos;s Ask Claude are the same two opt-in exceptions described above, behind the same
-        notices, and nothing is sent until you confirm one of them. The workspace&apos;s status line
-        says when a request carried something you agreed to send.
-      </p>
-      <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
-        <li>
-          The first compile downloads the TeX engine and its packages (about 140 MB, more for some
-          templates) from our public file host. Those downloads carry nothing from your paper, and
-          your browser keeps them for later compiles.
-        </li>
-        <li>
-          Because your drafts live only in this browser, clearing its site data deletes them. Use
-          &quot;Download backup&quot; to keep a copy or to move to another computer, and import the
-          zip to continue.
-        </li>
-        <li>
-          Figures made in the workspace&apos;s figure window, or added from the figure studio, are
-          written straight into the project&apos;s figures folder in your browser; nothing is uploaded.
-        </li>
-      </ul>
+          <Section id="payments" title="Buying M coins">
+            <p>
+              Coin packs and Pro are sold by Paddle, which acts as the merchant of record: it takes the payment, charges any sales tax, sends the
+              receipt and handles refund requests, as the controller of that payment data under{" "}
+              <a href="https://www.paddle.com/legal/privacy" className="text-accent hover:underline">
+                its own privacy notice
+              </a>
+              . Your card or bank details go to Paddle only; MargaLink never sees or stores them. Paddle&apos;s checkout script loads only when you
+              choose to buy.
+            </p>
+            <p>
+              From Paddle we keep, for each purchase: what it bought, the amount and currency, and Paddle&apos;s references for the payment and for you
+              as its customer; for Pro, the plan, its status and billing periods; and any refund or chargeback. We also keep Paddle&apos;s ids for the
+              payment events it sends us (nothing personal in them) for 90 days, to recognise a repeat. Paddle keeps its own records as the law
+              requires of a seller.
+            </p>
+          </Section>
 
-      <h2 id="accounts" className="mt-12 scroll-mt-24 font-serif text-xl font-medium">
-        Accounts, M coins and payment
-      </h2>
-      <p className="mt-3 text-ink-soft">
-        Only the two features above that cost money each time they run, the AI review and Ask
-        Claude, need an account. Everything else works without one, and a visitor who isn&apos;t
-        signed in makes no account requests at all. The three rules at the top of this page apply
-        to accounts too: nothing from a paper is ever part of one.
-      </p>
-      <h3 className="mt-6 font-medium">What an account keeps</h3>
-      <ul className="mt-2 list-disc space-y-2 pl-5 text-ink-soft">
-        <li>Your email address. If you use &ldquo;Continue with Google&rdquo;, also Google&apos;s id for your account, so we recognise it. Not your name, not your photo.</li>
-        <li>Your M coin history: each welcome bonus, purchase, charge and refund, with its date.</li>
-        <li>
-          Your purchases: for each pack or Pro payment, what it bought, the amount and currency, and Paddle&apos;s references for the payment and for
-          you as its customer; for Pro, the plan and its billing periods; and any refund or chargeback of them.
-        </li>
-        <li>Your sign-ins: for each browser you&apos;re signed in on, a one-way fingerprint of its sign-in token and when it expires (30 days, extended while you use it).</li>
-        <li>Which version of this notice you signed up under.</li>
-      </ul>
-      <h3 className="mt-6 font-medium">Kept briefly</h3>
-      <ul className="mt-2 list-disc space-y-2 pl-5 text-ink-soft">
-        <li>While a paid review runs: which sections it covers, their lengths and which came back (never their text), deleted shortly after its two hours end.</li>
-        <li>An emailed sign-in link: the address it was sent to and the page to return to, with a one-way fingerprint of the link, deleted when it&apos;s used or shortly after its 15 minutes.</li>
-        <li>
-          Counters that limit how many sign-in emails an address or a network can ask for. They&apos;re keyed by fingerprints made with a secret key
-          only our server holds (a network&apos;s also changes daily), never the address itself, and they expire within a day.
-        </li>
-        <li>Paddle&apos;s ids for the payment events it tells us about (nothing personal in them), for 90 days, so a repeated one is recognised.</li>
-      </ul>
-      <h3 className="mt-6 font-medium">Kept after you delete your account</h3>
-      <p className="mt-2 text-ink-soft">
-        A fingerprint of your email address, made with a secret key only our server holds, so the
-        welcome bonus is given once per address. It holds no address, and without that key it
-        can&apos;t be matched to one.
-      </p>
-      <h3 className="mt-6 font-medium">Never kept</h3>
-      <p className="mt-2 text-ink-soft">
-        Anything from your papers, spreadsheets or figures. Card or bank details: buying M coins
-        goes through Paddle, which sells them to you as the merchant of record, takes the payment,
-        handles the tax and sends the receipt. MargaLink never sees or stores card numbers.
-      </p>
-      <h3 className="mt-6 font-medium">Cookies</h3>
-      <p className="mt-2 text-ink-soft">
-        Signed in, your browser holds two: one carries your sign-in and can&apos;t be read by
-        pages, the other only says that you&apos;re signed in, so signed-out pages ask nothing. A
-        third, short-lived one exists only during a Google sign-in. MargaLink sets no tracking or
-        advertising cookies. When you buy coins, Paddle&apos;s checkout runs its own script, and where
-        it&apos;s switched on so does Cloudflare&apos;s Turnstile check; each follows its own privacy terms.
-      </p>
-      <h3 className="mt-6 font-medium">Who else is involved</h3>
-      <ul className="mt-2 list-disc space-y-2 pl-5 text-ink-soft">
-        <li>Cloudflare hosts the site and the account database and, where it&apos;s switched on, checks that an email sign-in request comes from a person (Turnstile).</li>
-        <li>Google, only if you choose it, tells us your verified email address and its id for your account.</li>
-        <li>Resend sends sign-in emails: your address and the link.</li>
-        <li>Paddle takes payments, as the merchant of record.</li>
-        <li>Anthropic runs the AI review and Ask Claude, as described above.</li>
-      </ul>
-      <h3 className="mt-6 font-medium">What we use it for, and your choices</h3>
-      <p className="mt-2 text-ink-soft">
-        Your address signs you in and receives sign-in links; we don&apos;t send marketing email.
-        Your coin history runs the service and our accounts. On{" "}
-        <Link href="/account" className="text-accent hover:underline">
-          your account page
-        </Link>{" "}
-        you can see that history, download everything we hold as a file, sign out on every
-        browser, and delete your account, which is immediate. For anything else about your data,
-        or a complaint,{" "}
-        {CONTACT_EMAIL ? (
-          <>
-            write to{" "}
-            <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">
-              {CONTACT_EMAIL}
-            </a>
-            .
-          </>
-        ) : (
-          "write to the contact address listed here once accounts open."
-        )}{" "}
-        The{" "}
-        <Link href="/terms" className="text-accent hover:underline">
-          terms
-        </Link>{" "}
-        cover how M coins work.
-      </p>
+          <Section id="basis" title="Why we may use it">
+            <OptionTable
+              rows={[
+                {
+                  name: "Your account, coins, purchases",
+                  what: "To provide the service you signed up for: our contract with you (GDPR Art. 6(1)(b)); under India's law, your consent when you sign up.",
+                },
+                {
+                  name: "The AI review and Ask Claude",
+                  what: "Your consent, given each time you confirm the notice (GDPR Art. 6(1)(a)). Not confirming, or simply not using them, is how you withhold it.",
+                  away: true,
+                },
+                {
+                  name: "Abuse limits, the welcome fingerprint, payment event ids",
+                  what: "Our legitimate interest in keeping the service secure and fair, weighed against yours: they hold no address, name or IP (GDPR Art. 6(1)(f)).",
+                },
+                { name: "Purchase records", what: "Also to meet accounting and tax duties (GDPR Art. 6(1)(c)).", def: "" },
+              ]}
+            />
+            <p>
+              Giving your email address is needed to have an account; without one you can still use every tool except the two AI features. We make
+              no decisions about you by automated means that have legal or similar effects: match suggestions and the AI review are aids you read
+              and judge yourself.
+            </p>
+          </Section>
+
+          <Section id="sharing" title="Who else is involved">
+            <p>We never sell, rent or trade personal data, and we share it only with the services that run MargaLink:</p>
+            <OptionTable
+              title="Who processes what"
+              rows={[
+                {
+                  name: "Cloudflare",
+                  what: "Hosts the site, the account database (primarily in the Asia-Pacific region) and our file storage; protects them from attacks; runs the optional Turnstile check on the email sign-in form.",
+                  def: "Global network",
+                },
+                { name: "Anthropic", what: "Runs the AI review and Ask Claude, as described above.", def: "United States", away: true },
+                { name: "Google", what: "Only if you choose Continue with Google: confirms your email address and its id for your account.", def: "United States" },
+                { name: "Resend", what: "Sends your sign-in emails: your address and the link.", def: "United States" },
+                { name: "Paddle", what: "Sells coin packs and Pro as merchant of record.", def: "UK / United States" },
+              ]}
+            />
+            <p>
+              Some of them are outside your country, so your data may be processed in the United States and elsewhere. We rely on each
+              provider&apos;s data-protection terms (including the standard contractual clauses the EU and UK recognise) for those transfers. We may
+              also disclose data if the law requires it, for example to answer a valid court order.
+            </p>
+          </Section>
+
+          <Section id="cookies" title="Cookies and browser storage">
+            <p>
+              MargaLink sets no advertising, analytics or tracking cookies, so it shows no cookie banner. Only these, all strictly necessary, and only
+              when you&apos;re signed in or signing in:
+            </p>
+            <OptionTable
+              title="Cookies"
+              rows={[
+                { name: "__Host-ml_session", what: "Keeps you signed in. Can't be read by pages; holds a random token, never your details.", def: "30 days, renewed as you use it" },
+                { name: "ml_in", what: "Only says that you're signed in, so pages of a signed-out visitor never ask for account details.", def: "30 days, renewed as you use it" },
+                { name: "__Host-ml_oauth", what: "Exists only during a Google sign-in, to complete it safely.", def: "10 minutes" },
+              ]}
+            />
+            <p>
+              The site also keeps a few things in your browser&apos;s own storage, on your device, which it never sends anywhere: your writing projects
+              and their settings (layout, open files, whether to compile automatically), cached copies of the downloads listed above so they
+              aren&apos;t fetched again, whether you&apos;ve seen the introduction, and, for this browser session, that you&apos;ve read the Ask Claude
+              notice. When you buy coins, Paddle&apos;s checkout runs its own script, and where it&apos;s switched on so does Cloudflare&apos;s
+              Turnstile check; each follows its own cookie and privacy terms.
+            </p>
+          </Section>
+
+          <Section id="keeping" title="How long, and how safe">
+            <p>
+              Each item above shows how long it&apos;s kept. When something expires, or you delete your account, it&apos;s deleted from the live
+              database straight away or within minutes. Our database provider keeps a point-in-time recovery copy for up to 30 days, so a deleted
+              record can linger there for that long before it&apos;s gone for good; it&apos;s used only to recover from a failure.
+            </p>
+            <p>
+              <strong>Safeguards.</strong> Everything travels over HTTPS. Sign-in tokens and links are stored only as one-way fingerprints, and the
+              session cookie can&apos;t be read by scripts. Abuse counters and the welcome fingerprint are keyed with a secret, so they can&apos;t be
+              matched to an address or IP by anyone without it. The API keys stay on the server. Only the person who runs MargaLink can reach the
+              database. If a breach ever affected your data, we&apos;d tell you and the authorities as the law requires.
+            </p>
+          </Section>
+
+          <Section id="rights" title="Your rights">
+            <p>Depending on where you live, and in any case as our practice, you can:</p>
+            <ul className="list-disc space-y-2 pl-5">
+              <li>
+                <strong>See and take everything we hold</strong>: your{" "}
+                <Link href="/account" className="text-accent hover:underline">
+                  account page
+                </Link>{" "}
+                shows your coin history and has &ldquo;Download my data&rdquo;, a complete copy in a machine-readable file.
+              </li>
+              <li>
+                <strong>Delete it</strong>: &ldquo;Delete my account&rdquo; on the same page removes it at once (it also cancels Pro).
+              </li>
+              <li>
+                <strong>Correct it</strong>: write to <Contact /> to change your email address or fix anything else.
+              </li>
+              <li>
+                <strong>Withdraw consent</strong>: stop using the AI features at any time; each needs your confirmation every time. Deleting your
+                account withdraws consent to everything else, as easily as you gave it.
+              </li>
+              <li>
+                <strong>Object, or ask us to restrict</strong> what we do with your data, including anything we do on the basis of legitimate interest.
+              </li>
+              <li>
+                <strong>Nominate someone</strong> to exercise these rights for you if you die or can&apos;t (India&apos;s law provides for this):
+                write to us.
+              </li>
+            </ul>
+            <p>
+              For anything the account page doesn&apos;t do, write to <Contact />. We&apos;ll answer within 30 days. If you&apos;re not satisfied,
+              you can complain to your data-protection authority: in India, the Data Protection Board of India; in the EU, the authority where you
+              live; in the UK, the Information Commissioner&apos;s Office.
+            </p>
+          </Section>
+
+          <Section id="children" title="Children">
+            <p>
+              Accounts are for people 18 or older. The tools that need no account collect no personal data from anyone. If you believe someone under
+              18 has created an account, write to us and we&apos;ll delete it.
+            </p>
+          </Section>
+
+          <Section id="changes" title="Changes and contact">
+            <p>
+              When what MargaLink collects or sends changes, this notice changes first, with a new version and date at the top, and we&apos;ll tell
+              account holders by email before a change that matters takes effect. New uses of your data would need your consent first where the law
+              requires it.
+            </p>
+            <Aside title="Questions, requests and complaints">
+              <p>
+                Write to <Contact />. The{" "}
+                <Link href="/terms" className="text-accent hover:underline">
+                  terms
+                </Link>{" "}
+                cover how M coins work, and the{" "}
+                <Link href="/refunds" className="text-accent hover:underline">
+                  refund policy
+                </Link>{" "}
+                what comes back and when.
+              </p>
+            </Aside>
+          </Section>
+        </div>
+      </DocBody>
     </main>
+  );
+}
+
+function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  return (
+    <section id={id} className="max-w-3xl scroll-mt-28">
+      <h2 className="font-serif text-2xl font-medium tracking-[-0.01em]">{title}</h2>
+      <div className="mt-4 space-y-4 leading-relaxed text-ink-soft [&_strong]:font-medium [&_strong]:text-ink">{children}</div>
+    </section>
   );
 }
 
 function PrivacyDiagram() {
   return (
-    <figure className="mt-6">
+    <figure className="sheet mx-auto max-w-md p-5">
       <svg
         viewBox="0 0 420 598"
         role="img"
         aria-label="Diagram: inside your browser, a paper is extracted to text, embedded into a vector, then ranked against a journal index, all locally. Two public files (the embedding model and the journal index) download once into the browser. No MargaLink server is part of this flow."
-        className="w-full h-auto"
+        className="h-auto w-full"
         style={{ color: "var(--ink)" }}
       >
         {/* Vertical stack (not a wide horizontal flow) so it stays legible at
-            phone width — the diagram scales by width, and a narrow viewBox
+            phone width: the diagram scales by width, and a narrow viewBox
             shrinks far less on a 375px screen than a wide one would. */}
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -322,56 +430,47 @@ function PrivacyDiagram() {
         </defs>
 
         <g fontFamily="var(--font-sans)">
-          {/* top public file box */}
           <rect x="70" y="14" width="280" height="52" rx="2" fill="none" stroke="currentColor" strokeWidth="1" />
           <text x="210" y="37" textAnchor="middle" fontSize="15">Embedding model (~30MB)</text>
           <text x="210" y="54" textAnchor="middle" fontSize="13" fill="var(--ink-soft)">public file, no personal data</text>
           <line x1="210" y1="66" x2="210" y2="104" stroke="currentColor" markerEnd="url(#arrow)" />
           <text x="222" y="89" fontSize="13" fill="var(--ink-soft)">downloads once, cached</text>
 
-          {/* browser boundary */}
           <rect x="20" y="104" width="380" height="310" rx="3" fill="none" stroke="var(--accent)" strokeWidth="1.5" />
           <text x="36" y="126" fontSize="15" fill="var(--accent)">Your browser</text>
 
-          {/* pipeline steps, stacked */}
           <rect x="60" y="140" width="300" height="42" rx="2" fill="none" stroke="currentColor" />
           <text x="210" y="166" textAnchor="middle" fontSize="15">Paper</text>
-
           <line x1="210" y1="182" x2="210" y2="208" stroke="currentColor" markerEnd="url(#arrow)" />
           <text x="222" y="199" fontSize="13" fill="var(--ink-soft)">extract</text>
 
           <rect x="60" y="208" width="300" height="42" rx="2" fill="none" stroke="currentColor" />
           <text x="210" y="234" textAnchor="middle" fontSize="15">Text</text>
-
           <line x1="210" y1="250" x2="210" y2="276" stroke="currentColor" markerEnd="url(#arrow)" />
           <text x="222" y="267" fontSize="13" fill="var(--ink-soft)">embed</text>
 
           <rect x="60" y="276" width="300" height="42" rx="2" fill="none" stroke="currentColor" />
           <text x="210" y="302" textAnchor="middle" fontSize="15">Vector</text>
-
           <line x1="210" y1="318" x2="210" y2="344" stroke="currentColor" markerEnd="url(#arrow)" />
           <text x="222" y="335" fontSize="13" fill="var(--ink-soft)">rank</text>
 
           <rect x="60" y="344" width="300" height="50" rx="2" fill="none" stroke="currentColor" />
           <text x="210" y="374" textAnchor="middle" fontSize="15">Ranked journals</text>
 
-          {/* bottom public file box */}
           <line x1="210" y1="414" x2="210" y2="452" stroke="currentColor" markerEnd="url(#arrow)" />
           <text x="222" y="437" fontSize="13" fill="var(--ink-soft)">downloads once, cached</text>
           <rect x="70" y="452" width="280" height="52" rx="2" fill="none" stroke="currentColor" strokeWidth="1" />
           <text x="210" y="475" textAnchor="middle" fontSize="15">Journal index (~8MB)</text>
           <text x="210" y="492" textAnchor="middle" fontSize="13" fill="var(--ink-soft)">public file, no personal data</text>
 
-          {/* absent server, explicitly drawn */}
           <rect x="70" y="524" width="280" height="54" rx="2" fill="none" stroke="var(--away)" strokeWidth="1" strokeDasharray="4 3" />
           <text x="210" y="547" textAnchor="middle" fontSize="15" fill="var(--away)">MargaLink server</text>
           <text x="210" y="564" textAnchor="middle" fontSize="13" fill="var(--away)">no such request exists</text>
         </g>
       </svg>
       <figcaption className="mt-3 text-sm text-ink-soft">
-        Everything that touches your paper happens inside the browser
-        boundary. The only network traffic is two public, non-personal
-        downloads; there is no server in this loop to send your paper to.
+        Matching a paper: everything that touches it happens inside the browser. The only traffic is two public downloads; there&apos;s no server
+        in this loop to send your paper to.
       </figcaption>
     </figure>
   );

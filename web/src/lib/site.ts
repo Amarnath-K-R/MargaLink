@@ -9,6 +9,10 @@ export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://example-pla
 // accounts shouldn't open without it.
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || null;
 
+// Who runs MargaLink, as the privacy notice and the terms name them (for
+// example "Jane Doe, Kochi, India"). Unset: "an individual in India".
+export const OPERATOR = process.env.NEXT_PUBLIC_OPERATOR || null;
+
 export const SITE_NAME = "MargaLink";
 export const SITE_TITLE = "MargaLink: match, check, and review your paper without it leaving your device";
 export const SITE_DESCRIPTION =

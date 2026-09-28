@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
 import { PRO, WELCOME_COINS } from "@/lib/coins";
-import { CONTACT_EMAIL } from "@/lib/site";
+import { CONTACT_EMAIL, OPERATOR } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Terms | MargaLink",
@@ -20,7 +20,7 @@ export default function TermsPage() {
       <div className="mt-10 space-y-8 text-ink-soft [&_strong]:font-medium [&_strong]:text-ink">
         <Part title="The service">
           <p>
-            MargaLink helps you find a journal for a paper, check it against a journal&apos;s rules, make figures and write it. Most of it runs in your
+            MargaLink is run by {OPERATOR ?? "an individual in India"}. It helps you find a journal for a paper, check it against a journal&apos;s rules, make figures and write it. Most of it runs in your
             browser and is free, with no account. Two features send something to Anthropic&apos;s Claude and cost M coins: the AI pre-submission
             review and Ask Claude in the figure studio. The{" "}
             <Link href="/privacy" className="text-accent hover:underline">
@@ -32,7 +32,8 @@ export default function TermsPage() {
 
         <Part title="Your account">
           <p>
-            One account per person, signed in with Google or an emailed link. Keep access to that email address: it&apos;s how you sign in. We may
+            Accounts are for people 18 or older. One account per person, signed in with Google or an emailed link. Keep access to that email
+            address: it&apos;s how you sign in. We may
             suspend an account used to abuse the service, for example to farm welcome bonuses or get around charges.
           </p>
         </Part>
