@@ -97,4 +97,28 @@ assert.equal((await deliver(txn("txn_6", "evt_k", "pri_s", "600", null))).status
 assert.equal((await deliver({ event_id: "evt_l", event_type: "customer.updated", occurred_at: "", data: {} })).status, 200);
 assert.equal(await balance(env.DB, u.id), before);
 assert.equal((await deliver({ nope: 1 })).status, 400);
+
+// a pack bought three at a time is three packs
+const q = await signInUser(env.DB, { email: "quinn@x.org" }, now);
+const triple = txn("txn_q", "evt_q", "pri_s", "1800", q.id);
+(triple.data.items[0] as { quantity?: number }).quantity = 3;
+await deliver(triple);
+assert.equal(await balance(env.DB, q.id), 150);
+
+// two partial refunds landing at once can't take back more than was bought
+await deliver(txn("txn_q2", "evt_q2", "pri_m", "1500", q.id));
+assert.equal(await balance(env.DB, q.id), 300);
+await Promise.all([
+  deliver(adj("adj_q1", "evt_q3", "txn_q2", "refund", "approved", "partial", "1000")),
+  deliver(adj("adj_q2", "evt_q4", "txn_q2", "refund", "approved", "partial", "1000")),
+]);
+assert.equal(await balance(env.DB, q.id), 150, "150 at most, however they interleave");
+
+// a chargeback, then the dispute won: the coins come back
+await deliver(txn("txn_q3", "evt_q5", "pri_s", "600", q.id));
+await deliver(adj("adj_q3", "evt_q6", "txn_q3", "chargeback", "approved", "full", "600"));
+assert.equal(await balance(env.DB, q.id), 150);
+await deliver(adj("adj_q4", "evt_q7", "txn_q3", "chargeback_reverse", "approved", "full", "600"));
+await deliver(adj("adj_q4", "evt_q8", "txn_q3", "chargeback_reverse", "approved", "full", "600", "adjustment.updated"));
+assert.equal(await balance(env.DB, q.id), 200, "restored once");
 console.log("paddle.selfcheck: OK");

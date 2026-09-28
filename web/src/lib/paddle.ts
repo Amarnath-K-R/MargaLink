@@ -3,7 +3,7 @@
 // which of our products a Paddle price is, and turning a webhook event
 // into ledger changes. Paddle is the merchant of record: it takes the
 // payment and the tax; we only ever see references and amounts.
-import { PACKS, type PackId } from "./coins.ts";
+import { PACKS, PRO, type PackId } from "./coins.ts";
 
 const MAX_SKEW_S = 300;
 
@@ -117,58 +117,113 @@ export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: R
     };
   }
   if (e.event_type === "transaction.completed") {
+    // A pack purchase; a quantity above one is that many packs.
     const txn = str(d.id);
     const userId = str(obj(d.custom_data).user_id);
-    const priceId = str(obj(obj((d.items as unknown[] | undefined)?.[0]).price).id);
-    const product = priceId ? prices[priceId] : undefined;
-    if (!txn || !userId || !product || !("pack" in product)) {
+    let coins = 0;
+    let priceId: string | null = null;
+    for (const item of (d.items as unknown[] | undefined) ?? []) {
+      const id = str(obj(obj(item).price).id);
+      const product = id ? prices[id] : undefined;
+      if (!product || !("pack" in product)) continue;
+      const quantity = Number(obj(item).quantity ?? 1);
+      coins += PACKS.find((p) => p.id === product.pack)!.coins * (Number.isInteger(quantity) && quantity > 0 ? quantity : 1);
+      priceId ??= id;
+    }
+    if (!txn || !userId || coins === 0) {
       console.warn(`paddle: ${txn ?? "a transaction"} isn't a pack we can credit`);
       return none;
     }
-    const coins = PACKS.find((p) => p.id === product.pack)!.coins;
     const total = Number(str(obj(obj(d.details).totals).total) ?? "0");
     return {
       grantFor: null,
       statements: [
-      db
-        .prepare(
-          `INSERT INTO purchases (txn_id, user_id, customer_id, price_id, coins, total, currency, created_at)
-           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?2) ON CONFLICT DO NOTHING`,
-        )
-        .bind(txn, userId, str(d.customer_id), priceId, coins, total, str(d.currency_code) ?? "", now),
-      db
-        .prepare(
-          `INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at)
-           SELECT ?1, ?2, 'pack', ?3, ?4 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1) ON CONFLICT DO NOTHING`,
-        )
-        .bind(userId, coins, txn, now),
+        db
+          .prepare(
+            `INSERT INTO purchases (txn_id, user_id, customer_id, price_id, coins, total, currency, created_at)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?2) ON CONFLICT DO NOTHING`,
+          )
+          .bind(txn, userId, str(d.customer_id), priceId, coins, total, str(d.currency_code) ?? "", now),
+        db
+          .prepare(
+            `INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at)
+             SELECT ?1, ?2, 'pack', ?3, ?4 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1) ON CONFLICT DO NOTHING`,
+          )
+          .bind(userId, coins, txn, now),
       ],
     };
   }
   if (e.event_type === "adjustment.created" || e.event_type === "adjustment.updated") {
-    // A refund once approved, or a chargeback: take back that share of what
-    // it bought (a pack's coins, or the Pro month's grants).
-    if (!["refund", "chargeback"].includes(str(d.action) ?? "") || str(d.status) !== "approved") return none;
+    const action = str(d.action) ?? "";
     const txn = str(d.transaction_id);
     const adj = str(d.id);
-    if (!txn || !adj) return none;
+    if (!["refund", "chargeback", "chargeback_reverse"].includes(action) || str(d.status) !== "approved" || !txn || !adj) return none;
     const p = await db
-      .prepare("SELECT user_id AS userId, coins, total, subscription_id AS sub, period_start AS start FROM purchases WHERE txn_id = ?")
+      .prepare(
+        `SELECT p.user_id AS userId, p.coins, p.total, p.subscription_id AS sub, p.period_start AS start, s.interval
+         FROM purchases p LEFT JOIN subscriptions s ON s.id = p.subscription_id WHERE p.txn_id = ?`,
+      )
       .bind(txn)
-      .first<{ userId: string; coins: number; total: number; sub: string | null; start: number | null }>();
+      .first<{ userId: string; coins: number; total: number; sub: string | null; start: number | null; interval: "month" | "year" | null }>();
     if (!p) return none; // not ours, or the account is gone
-    const bought = p.sub
-      ? ((await db.prepare("SELECT COALESCE(SUM(delta), 0) AS s FROM coin_ledger WHERE kind = 'pro_grant' AND substr(ref, 1, length(?1)) = ?1").bind(`${p.sub}:${p.start}:`).first<number>("s")) ?? 0)
-      : p.coins;
-    const taken = -((await db.prepare("SELECT COALESCE(SUM(delta), 0) AS s FROM coin_ledger WHERE kind = 'reversal' AND substr(ref, 1, length(?1)) = ?1").bind(`${txn}:`).first<number>("s")) ?? 0);
-    const left = bought - taken;
-    const share = str(d.type) === "partial" && p.total > 0 ? Math.round((bought * Number(str(obj(d.totals).total) ?? "0")) / p.total) : left;
-    const coins = Math.min(left, share);
-    if (coins <= 0) return none;
-    return {
-      statements: [db.prepare("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) VALUES (?, ?, 'reversal', ?, ?) ON CONFLICT DO NOTHING").bind(p.userId, -coins, `${txn}:${adj}`, now)],
-      grantFor: null,
-    };
+    // Everything this purchase put in or took out of the ledger shares a ref prefix:
+    // a pack's is its transaction; a Pro payment's, the billing period it paid for.
+    const prefix = p.sub ? `${p.sub}:${p.start}:` : `${txn}:`;
+    const ref = p.sub ? `${prefix}r:${adj}` : `${prefix}${adj}`;
+    const sum = (kinds: string) => `(SELECT COALESCE(SUM(delta), 0) FROM coin_ledger WHERE kind IN (${kinds}) AND substr(ref, 1, length(?5)) = ?5)`;
+
+    if (action === "chargeback_reverse") {
+      // A dispute won: give back what this purchase's chargebacks took, once,
+      // and let a Pro period count as paid again.
+      return {
+        grantFor: null,
+        statements: [
+          db
+            .prepare(
+              `INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at)
+               SELECT ?1, x, 'reinstated', ?2, ?3 FROM (
+                 SELECT COALESCE((SELECT SUM(coins) FROM adjustments WHERE txn_id = ?4 AND action = 'chargeback'), 0) - ${sum("'reinstated'")} AS x
+               ) WHERE x > 0 ON CONFLICT DO NOTHING`,
+            )
+            .bind(p.userId, `${prefix}x:${adj}`, now, txn, prefix),
+          db
+            .prepare(
+              `INSERT INTO adjustments (id, txn_id, action, share, created_at)
+               SELECT ?1, ?2, 'chargeback_reverse', -COALESCE((SELECT SUM(share) FROM adjustments WHERE txn_id = ?2 AND action IN ('chargeback', 'chargeback_reverse')), 0), ?3
+               ON CONFLICT DO NOTHING`,
+            )
+            .bind(adj, txn, now),
+        ],
+      };
+    }
+
+    // A refund once approved, or a chargeback. The amount is worked out inside
+    // the statement, from the ledger as it is then, so two landing at once
+    // can't both take the same coins.
+    const share = str(d.type) === "partial" && p.total > 0 ? Math.min(1, Number(str(obj(d.totals).total) ?? "0") / p.total) : 1;
+    const record = db.prepare("INSERT INTO adjustments (id, txn_id, action, share, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING").bind(adj, txn, action, share, now);
+    const take = p.sub
+      ? // Pro: the period is now worth its entitlement times what's left unrefunded; take back what was granted beyond that.
+        db
+          .prepare(
+            `INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at)
+             SELECT ?1, -(net - allowed), 'pro_reversal', ?2, ?3 FROM (
+               SELECT ${sum("'pro_grant', 'pro_reversal', 'reinstated'")} AS net,
+                      CAST(?6 * (1 - MIN(1.0, (SELECT COALESCE(SUM(share), 0) FROM adjustments WHERE txn_id = ?4))) AS INTEGER) AS allowed
+             ) WHERE net > allowed ON CONFLICT DO NOTHING`,
+          )
+          .bind(p.userId, ref, now, txn, prefix, PRO.coinsPerMonth * (p.interval === "year" ? 12 : 1))
+      : // A pack: its share of the coins, never more than it has left.
+        db
+          .prepare(
+            `INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at)
+             SELECT ?1, -x, 'reversal', ?2, ?3 FROM (
+               SELECT MIN(?6, ?7 + ${sum("'reversal', 'reinstated'")}) AS x
+             ) WHERE x > 0 ON CONFLICT DO NOTHING`,
+          )
+          .bind(p.userId, ref, now, txn, prefix, Math.round(p.coins * share), p.coins);
+    const note = db.prepare("UPDATE adjustments SET coins = COALESCE((SELECT -delta FROM coin_ledger WHERE ref = ?1 AND kind IN ('reversal', 'pro_reversal')), 0) WHERE id = ?2").bind(ref, adj);
+    return { statements: [record, take, note], grantFor: null };
   }
   return none;
 }

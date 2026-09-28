@@ -34,28 +34,48 @@ export const PRO = {
   year: { usd: 90, inr: 7499 },
 } as const;
 
-export type LedgerKind = "welcome" | "pack" | "pro_grant" | "pro_expire" | "review" | "review_refund" | "figure" | "figure_refund" | "reversal" | "admin";
+export type LedgerKind =
+  | "welcome"
+  | "pack"
+  | "pro_grant"
+  | "pro_expire"
+  | "pro_reversal"
+  | "review"
+  | "review_refund"
+  | "figure"
+  | "figure_refund"
+  | "reversal"
+  | "reinstated"
+  | "admin";
 
 /**
  * Unspent Pro coins, walking the ledger oldest first. Pro coins are spent
- * before any others (they're the ones that can lapse); a reversed payment
- * takes back non-Pro coins first. Refunds count as non-Pro: they never lapse.
+ * before any others (they're the ones that can lapse). A refund goes back to
+ * the coins it was paid with (matched by its ref), so abandoning a review
+ * can't turn lapsing Pro coins into lasting ones. A reversed pack takes pack
+ * coins first; a reversed Pro payment, Pro coins first.
  */
-export function proCoinsLeft(entries: { kind: LedgerKind; delta: number }[]): number {
+export function proCoinsLeft(entries: { kind: LedgerKind; delta: number; ref: string }[]): number {
   let pro = 0;
   let other = 0;
-  for (const { kind, delta } of entries) {
+  const paidWithPro = new Map<string, number>(); // a charge's ref -> how much of it was Pro coins
+  const take = (amount: number, proFirst: boolean) => {
+    const fromPro = proFirst ? Math.max(0, Math.min(pro, amount)) : Math.max(0, amount - Math.max(0, Math.min(other, amount)));
+    pro -= fromPro;
+    other -= amount - fromPro;
+    return fromPro;
+  };
+  for (const { kind, delta, ref } of entries) {
     if (kind === "pro_grant" || kind === "pro_expire") pro += delta;
-    else if (delta > 0) other += delta;
-    else if (kind === "reversal") {
-      const fromOther = Math.max(0, Math.min(other, -delta));
-      other -= fromOther;
-      pro -= -delta - fromOther;
-    } else {
-      const fromPro = Math.max(0, Math.min(pro, -delta));
-      pro -= fromPro;
-      other -= -delta - fromPro;
-    }
+    else if (kind === "review_refund" || kind === "figure_refund") {
+      const back = Math.min(delta, paidWithPro.get(ref) ?? 0);
+      pro += back;
+      other += delta - back;
+      paidWithPro.set(ref, (paidWithPro.get(ref) ?? 0) - back);
+    } else if (delta > 0) other += delta;
+    else if (kind === "reversal") take(-delta, false);
+    else if (kind === "pro_reversal") take(-delta, true);
+    else paidWithPro.set(ref, (paidWithPro.get(ref) ?? 0) + take(-delta, true));
   }
   return Math.max(0, pro);
 }
@@ -111,6 +131,8 @@ const LABELS: Record<LedgerKind, string> = {
   figure: "Ask Claude (figure)",
   figure_refund: "Refund: figure request failed",
   reversal: "Payment refunded or reversed",
+  pro_reversal: "Pro payment refunded or reversed",
+  reinstated: "Disputed payment settled: coins restored",
   admin: "Adjustment",
 };
 export const ledgerLabel = (kind: LedgerKind) => LABELS[kind];

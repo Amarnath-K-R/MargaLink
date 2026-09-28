@@ -135,12 +135,26 @@ export async function markSynthesized(db: D1Database, ticket: string) {
   await db.prepare("UPDATE review_tickets SET synthesized = 1 WHERE id_hash = ?").bind(await sha256Hex(ticket)).run();
 }
 
+/** What a Pro billing period is worth: a month's or a year's coins, times the share of its payment not refunded. */
+const periodAllowance = (db: D1Database, subId: string, periodStart: number, interval: "month" | "year") =>
+  db
+    .prepare(
+      `SELECT CAST(?1 * (1 - MIN(1.0, COALESCE((SELECT SUM(a.share) FROM adjustments a JOIN purchases p ON p.txn_id = a.txn_id
+         WHERE p.subscription_id = ?2 AND p.period_start = ?3), 0))) AS INTEGER) AS allowed`,
+    )
+    .bind(PRO.coinsPerMonth * (interval === "year" ? 12 : 1), subId, periodStart)
+    .first<number>("allowed");
+
 /**
  * Pro's monthly coins, granted when first due (from /api/me and the
  * webhook; there's no scheduler). Before each month's coins arrive, unspent
- * Pro coins above the carry-over cap lapse. Only while the plan is active:
- * not overdue, paused or cancelled. Each grant is a plain INSERT on a unique
- * ref, so a call racing this one makes it stop, never grant twice.
+ * Pro coins above the carry-over cap lapse. Only while the plan is active
+ * (not overdue, paused or cancelled), and never beyond what the period's
+ * payment, less any refund of it, is worth. The lapse is worked out from the
+ * ledger as read; the write only happens if nothing else touched this
+ * account's ledger since (otherwise it's worked out again), and each grant
+ * is a plain INSERT on a unique ref, so a racing call makes this one stop,
+ * never grant twice.
  */
 export async function grantDuePro(db: D1Database, userId: string, now: number) {
   const subs = (
@@ -149,23 +163,38 @@ export async function grantDuePro(db: D1Database, userId: string, now: number) {
       .bind(userId)
       .all<{ id: string; interval: "month" | "year"; periodStart: number; periodEnd: number }>()
   ).results;
-  const due = subs.flatMap((s) => dueProGrants({ ...s, active: true }, now));
-  if (due.length === 0) return;
-  const have = new Set((await db.prepare("SELECT ref FROM coin_ledger WHERE user_id = ? AND kind = 'pro_grant'").bind(userId).all<{ ref: string }>()).results.map((r) => r.ref));
-  const todo = due.filter((ref) => !have.has(ref));
-  if (todo.length === 0) return;
-  const entries = (await db.prepare("SELECT kind, delta FROM coin_ledger WHERE user_id = ? ORDER BY id").bind(userId).all<{ kind: LedgerKind; delta: number }>()).results;
-  const insert = (delta: number, kind: LedgerKind, ref: string) =>
-    db.prepare("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) VALUES (?, ?, ?, ?, ?)").bind(userId, delta, kind, ref, now);
-  for (const ref of todo) {
-    const lapse = Math.max(0, proCoinsLeft(entries) - PRO.carryCap);
-    try {
-      await db.batch([...(lapse > 0 ? [insert(-lapse, "pro_expire", ref)] : []), insert(PRO.coinsPerMonth, "pro_grant", ref)]);
-    } catch {
-      return; // granted by a concurrent call; it carries on from here
+  for (const s of subs) {
+    const have = new Set((await db.prepare("SELECT ref FROM coin_ledger WHERE user_id = ? AND kind = 'pro_grant'").bind(userId).all<{ ref: string }>()).results.map((r) => r.ref));
+    const todo = dueProGrants({ ...s, active: true }, now).filter((ref) => !have.has(ref));
+    if (todo.length === 0) continue;
+    const allowed = (await periodAllowance(db, s.id, s.periodStart, s.interval)) ?? 0;
+    const prefix = `${s.id}:${s.periodStart}:`;
+    refs: for (const ref of todo) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const entries = (await db.prepare("SELECT id, kind, delta, ref FROM coin_ledger WHERE user_id = ? ORDER BY id").bind(userId).all<{ id: number; kind: LedgerKind; delta: number; ref: string }>()).results;
+        const granted = entries.filter((e) => e.kind === "pro_grant" && e.ref.startsWith(prefix)).reduce((n, e) => n + e.delta, 0);
+        const amount = Math.min(PRO.coinsPerMonth, allowed - granted);
+        if (amount <= 0) break refs; // this period's worth is all granted (or refunded)
+        const lapse = Math.max(0, proCoinsLeft(entries) - PRO.carryCap);
+        const seen = entries.length ? entries[entries.length - 1].id : 0;
+        // Only if the ledger is as read: no row newer than `seen` except this grant's own.
+        const insert = (delta: number, kind: LedgerKind) =>
+          db
+            .prepare(
+              `INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at)
+               SELECT ?1, ?2, ?3, ?4, ?5 WHERE NOT EXISTS (SELECT 1 FROM coin_ledger WHERE user_id = ?1 AND id > ?6 AND ref != ?4)`,
+            )
+            .bind(userId, delta, kind, ref, now, seen);
+        let results: D1Result[];
+        try {
+          results = await db.batch([...(lapse > 0 ? [insert(-lapse, "pro_expire")] : []), insert(amount, "pro_grant")]);
+        } catch {
+          break refs; // granted by a concurrent call; it carries on from here
+        }
+        if (results[results.length - 1].meta.changes === 1) break;
+        // the ledger moved under us: read it again
+      }
     }
-    if (lapse > 0) entries.push({ kind: "pro_expire", delta: -lapse });
-    entries.push({ kind: "pro_grant", delta: PRO.coinsPerMonth });
   }
 }
 

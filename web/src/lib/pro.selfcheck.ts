@@ -90,6 +90,54 @@ assert.equal(await balance(env.DB, y.id), 200, "then the cap: 100 carried + 100,
 const grants = await env.DB.prepare("SELECT COUNT(*) AS n FROM coin_ledger WHERE user_id = ? AND kind = 'pro_grant'").bind(y.id).first<{ n: number }>();
 assert.equal(grants?.n, 12, "twelve grants in a year, no more");
 
+// a charge landing between the grant's read of the ledger and its write doesn't make too much lapse
+const w = await signInUser(env.DB, { email: "wes@x.org" }, t0);
+await deliver("subscription.created", sub(w.id, { id: "sub_w", start: t0, end: t0 + 31 * DAY }), t0);
+await grantDuePro(env.DB, w.id, t0 + DAY);
+await deliver("subscription.updated", sub(w.id, { id: "sub_w", start: t0 + 31 * DAY, end: t0 + 61 * DAY }), t0 + 31 * DAY);
+await grantDuePro(env.DB, w.id, t0 + 32 * DAY);
+assert.equal(await balance(env.DB, w.id), 200);
+await deliver("subscription.updated", sub(w.id, { id: "sub_w", start: t0 + 61 * DAY, end: t0 + 92 * DAY }), t0 + 61 * DAY);
+let raced = false;
+const racy = new Proxy(env.DB, {
+  get(target, prop) {
+    if (prop === "batch" && !raced) {
+      return async (stmts: D1PreparedStatement[]) => {
+        raced = true;
+        await debit(env.DB, w.id, 150, "review", "raced", t0 + 62 * DAY);
+        return target.batch(stmts);
+      };
+    }
+    const v = Reflect.get(target, prop);
+    return typeof v === "function" ? v.bind(target) : v;
+  },
+}) as D1Database;
+await grantDuePro(racy, w.id, t0 + 62 * DAY);
+assert.equal(await balance(env.DB, w.id), 150, "200 - 150 spent = 50 Pro left, nothing to lapse, + 100");
+
+// a yearly plan refunded by half: the year's allowance halves, and the drips stop there
+const h = await signInUser(env.DB, { email: "hal@x.org" }, t0);
+await deliver("subscription.created", sub(h.id, { id: "sub_h", price: "pri_py", start: t0, end: t0 + 365 * DAY }), t0);
+const yearTxn = (id: string, userId: string, subId: string) => ({ id, subscription_id: subId, customer_id: "ctm_1", currency_code: "USD", custom_data: { user_id: userId }, items: [{ price: { id: "pri_py" } }], details: { totals: { total: "9000" } }, billing_period: { starts_at: iso(t0), ends_at: iso(t0 + 365 * DAY) } });
+await deliver("transaction.completed", yearTxn("txn_h", h.id, "sub_h"));
+await grantDuePro(env.DB, h.id, t0 + DAY);
+await deliver("adjustment.created", { id: "adj_h", action: "refund", status: "approved", type: "partial", transaction_id: "txn_h", subscription_id: "sub_h", totals: { total: "4500" } });
+assert.equal(await balance(env.DB, h.id), 100, "one month in, well within half a year's coins: nothing taken back");
+await grantDuePro(env.DB, h.id, t0 + 400 * DAY);
+const hGrants = await env.DB.prepare("SELECT COUNT(*) AS n, SUM(delta) AS s FROM coin_ledger WHERE user_id = ? AND kind = 'pro_grant'").bind(h.id).first<{ n: number; s: number }>();
+assert.deepEqual([hGrants?.n, hGrants?.s], [6, 600], "six months of a half-refunded year");
+
+// refunded in full in its first month: that month taken back, no more months
+const f = await signInUser(env.DB, { email: "fay@x.org" }, t0);
+await deliver("subscription.created", sub(f.id, { id: "sub_f", price: "pri_py", start: t0, end: t0 + 365 * DAY }), t0);
+await deliver("transaction.completed", yearTxn("txn_f", f.id, "sub_f"));
+await grantDuePro(env.DB, f.id, t0 + DAY);
+await deliver("adjustment.created", { id: "adj_f", action: "refund", status: "approved", type: "full", transaction_id: "txn_f", subscription_id: "sub_f", totals: { total: "9000" } });
+assert.equal(await balance(env.DB, f.id), 0);
+await grantDuePro(env.DB, f.id, t0 + 400 * DAY);
+assert.equal(await balance(env.DB, f.id), 0, "no months after a full refund");
+assert.equal((await env.DB.prepare("SELECT kind FROM coin_ledger WHERE user_id = ? AND delta < 0").bind(f.id).first<{ kind: string }>())?.kind, "pro_reversal");
+
 // /api/me says what the plan is
 const yCookie = `__Host-ml_session=${await createSession(env.DB, y.id, Date.now())}`;
 const mine = (await (await (me as unknown as Handler)({ request: new Request("https://m.test/api/me", { headers: { cookie: yCookie } }), env })).json()) as { pro: unknown };
