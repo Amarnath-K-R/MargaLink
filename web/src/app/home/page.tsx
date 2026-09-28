@@ -5,6 +5,7 @@ import { ArrowDown, ArrowRight, House } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { GuideArt, WriteArt } from "@/components/docs/Art";
 import NewsRail from "./NewsRail.tsx";
+import AccountStrip from "./AccountStrip.tsx";
 import { UPDATES } from "./updates.ts";
 
 export const metadata: Metadata = {
@@ -23,7 +24,7 @@ export default function HomeDashboard() {
 
       {/* The window minus the tray above it (its top offset, height and margin: 5.75rem). */}
       <section className="flex flex-col pb-6 md:h-[calc(100dvh-5.75rem)] md:min-h-[32rem]">
-        <header id="content" className="flex scroll-mt-24 items-center gap-5">
+        <header id="content" className="flex scroll-mt-24 flex-wrap items-center gap-5">
           <span aria-hidden className="bead hidden h-12 w-12 shrink-0 sm:grid" style={{ background: "#fbfaf6" }}>
             <House size={22} strokeWidth={1.8} />
           </span>
@@ -31,6 +32,7 @@ export default function HomeDashboard() {
             <h1 className="font-serif text-4xl font-medium leading-tight tracking-[-0.02em] sm:text-5xl">Home</h1>
             <p className="mt-1 text-lg text-ink-soft">Pick up your paper, or learn your way around. Everything here runs in your browser.</p>
           </div>
+          <AccountStrip />
         </header>
 
         <div className="mt-7 grid min-h-0 flex-1 gap-6 md:grid-cols-2 md:grid-rows-[minmax(0,1fr)]">

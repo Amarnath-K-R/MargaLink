@@ -33,6 +33,9 @@ body.intro-bridge-fading .site-header { opacity: 1; filter: blur(0); }
 .header-note { color: var(--ink-soft); }
 .header-cta { display: inline-flex; gap: 8px; align-items: center; background: transparent; color: var(--ink); border-bottom: 1px solid var(--ink); padding: 6px 0; font-size: 12px; cursor: pointer; transition: color .18s ease, border-color .18s ease; }
 .header-cta:hover { color: var(--accent); border-color: var(--accent); }
+.header-signin { color: var(--ink-soft); padding: 6px 0; font-size: 12px; transition: color .18s ease; }
+.header-signin:hover { color: var(--ink); }
+.header-coins { display: inline-flex; gap: 7px; align-items: center; color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; }
 
 /* The tools picker is the one deliberately curved shape in an otherwise
    flat, hairline-bordered design language — reserved for this single
@@ -303,7 +306,7 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
   .intro-question strong { font-size: 48px; }
   .intro-status { left: 18px; bottom: 22px; font-size: 8px; }
   .intro-progress-track { right: 18px; bottom: 26px; width: 86px; }
-  .header-cta { font-size: 10px; }
+  .header-cta, .header-signin, .header-coins { font-size: 10px; }
   .section-shell { width: calc(100% - 36px); }
   .hero { padding: 0; }
   .hero-stage { align-items: flex-start; padding-top: 145px; }

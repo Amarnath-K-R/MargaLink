@@ -102,7 +102,9 @@ const WINDOWS: { tool: Exclude<Tool, "palette" | "shortcuts">; title: string; si
 // One open project: the toolbar, files on the left, the source editor and
 // the PDF side by side (the split drags), the compiler's diagnostics under
 // the editor, a status line, and the other tools as windows over it all.
-// `calls` is the page's network trace, for the status line's "sent" count;
+// `calls` is the page's network trace, for the status line's "sent" count
+// (only the review and Ask Claude requests carry text you agreed to send:
+// starting a paid review or signing out doesn't);
 // `onCreateFromTemplate` starts a new project (the Journal window offers
 // the target's template that way — this project is never rewritten).
 export default function Workspace({
@@ -758,7 +760,7 @@ export default function Workspace({
         onShortcuts={() => setTool("shortcuts")}
         dirty={dirty}
         running={running}
-        sent={calls.filter((c) => c.hadBody).length}
+        sent={calls.filter((c) => c.hadBody && /\/api\/(review|figure)(\?|$)/.test(c.url)).length}
         busy={busy}
       />
 

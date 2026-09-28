@@ -1,10 +1,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BarChart3, BookOpen, CircleHelp, FileCheck2, House, PenLine, ScanSearch, ShieldCheck } from "lucide-react";
+import AccountButton from "./AccountButton";
 
 // The shared header for every non-homepage route: a sticky clay tray (the
 // landing, Home — the dashboard — the five tools with the current one
-// pressed in, the guide, privacy) that is the same
+// pressed in, the guide, privacy, and the account: Sign in, or the M coin
+// balance) that is the same
 // width on every page, so moving between tools feels like one app; then the
 // page's h1 with its tool's bead, and an optional subtitle. The h1 keeps
 // three content-width tiers, matched to what each route renders; each page
@@ -59,8 +61,8 @@ export default function PageHeader({
       {/* Wider than the page's column: the tray is the same size on every route.
           A sibling of the <header>, not inside it, so it sticks for the whole page. */}
       <div className={`sticky top-3 z-30 mx-[calc((100%_-_min(100vw_-_1.5rem,76rem))/2)] ${title === undefined ? "mb-6" : "mb-12 sm:mb-14"}`}>
-        <nav aria-label="MargaLink" className="clay flex items-center gap-1.5 px-2.5 py-2">
-          <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-xl pr-2">
+        <nav aria-label="MargaLink" className="clay flex items-center gap-1 px-2 py-2 sm:gap-1.5 sm:px-2.5">
+          <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-xl sm:pr-2">
             <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-accent font-serif text-base font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,.3),inset_0_-2px_4px_rgba(0,0,0,.2),0_3px_8px_-2px_rgba(44,95,111,.45)]">
               M
             </span>
@@ -92,6 +94,7 @@ export default function PageHeader({
             <ShieldCheck size={15} strokeWidth={1.9} className="sm:hidden" />
             <span className="sr-only sm:not-sr-only">Privacy</span>
           </Link>
+          <AccountButton />
         </nav>
       </div>
       {title !== undefined && (
