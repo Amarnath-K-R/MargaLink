@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // The figurelib test project's Python virtualenv (vendored JS inside matplotlib).
     "figurelib/.venv/**",
+    // wrangler's local build output (wrangler pages dev, npm run dev:full).
+    ".wrangler/**",
   ]),
 ]);
 

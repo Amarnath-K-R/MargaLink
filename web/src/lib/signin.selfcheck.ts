@@ -106,7 +106,7 @@ assert.ok(tokenForm!.get("code_verifier")!.length >= 43, "PKCE verifier sent");
 const googleCookie = cookieHeader(r);
 assert.match(googleCookie, /__Host-ml_oauth=; __Host-ml_session=/, "the oauth cookie is cleared");
 r = await run(me, get("/api/me", googleCookie));
-assert.deepEqual(await r.json(), { user: { id: annMe.user.id, email: "ann@example.org" }, balance: 10, paddle: null }, "same account, no second welcome");
+assert.deepEqual(await r.json(), { user: { id: annMe.user.id, email: "ann@example.org" }, balance: 10, pro: null, paddle: null }, "same account, no second welcome");
 
 // --- sign out, and a stale hint is cleared
 r = await run(logout, post("/api/auth/logout", {}, googleCookie));

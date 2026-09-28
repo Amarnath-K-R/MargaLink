@@ -57,26 +57,79 @@ type Rec = Record<string, unknown>;
 const obj = (v: unknown): Rec => (v && typeof v === "object" ? (v as Rec) : {});
 const str = (v: unknown) => (typeof v === "string" ? v : null);
 
+const when = (v: unknown) => {
+  const t = Date.parse(str(v) ?? "");
+  return Number.isFinite(t) ? t : null;
+};
+
 /**
  * The ledger statements an event calls for (none for events we don't act
- * on). Coins go to the user id our checkout put in custom_data; a pack's
- * ledger ref is its transaction, a reversal's "<transaction>:<adjustment>",
- * so a retried or re-sent event never counts twice.
+ * on), and whose Pro coins may now be due. Coins go to the user id our
+ * checkout put in custom_data (Paddle copies it onto the subscription); a
+ * pack's ledger ref is its transaction, a reversal's
+ * "<transaction>:<adjustment>", so a retried or re-sent event never counts
+ * twice.
  */
-export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: Record<string, Product>, now: number): Promise<D1PreparedStatement[]> {
+export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: Record<string, Product>, now: number): Promise<{ statements: D1PreparedStatement[]; grantFor: string | null }> {
+  const none = { statements: [], grantFor: null };
   const d = e.data;
-  if (e.event_type === "transaction.completed" && !d.subscription_id) {
+  if (e.event_type.startsWith("subscription.")) {
+    const id = str(d.id);
+    const userId = str(obj(d.custom_data).user_id);
+    const priceId = str(obj(obj((d.items as unknown[] | undefined)?.[0]).price).id);
+    const product = priceId ? prices[priceId] : undefined;
+    if (!id || !userId || !product || !("pro" in product)) {
+      console.warn(`paddle: ${id ?? "a subscription"} isn't a Pro plan we can match to an account`);
+      return none;
+    }
+    const period = obj(d.current_billing_period);
+    return {
+      statements: [
+        db
+          .prepare(
+            `INSERT INTO subscriptions (id, user_id, customer_id, price_id, interval, status, period_start, period_end, cancel_at_end, event_at)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?2)
+             ON CONFLICT(id) DO UPDATE SET customer_id = excluded.customer_id, price_id = excluded.price_id, interval = excluded.interval,
+               status = excluded.status, period_start = excluded.period_start, period_end = excluded.period_end,
+               cancel_at_end = excluded.cancel_at_end, event_at = excluded.event_at
+             WHERE excluded.event_at >= subscriptions.event_at`,
+          )
+          .bind(id, userId, str(d.customer_id) ?? "", priceId, product.pro, str(d.status) ?? "", when(period.starts_at), when(period.ends_at), str(obj(d.scheduled_change).action) === "cancel" ? 1 : 0, when(e.occurred_at) ?? now),
+      ],
+      grantFor: userId,
+    };
+  }
+  if (e.event_type === "transaction.completed" && d.subscription_id) {
+    // A Pro payment adds nothing itself (the month's grant does); it's kept so a refund can find its month.
+    const txn = str(d.id);
+    const userId = str(obj(d.custom_data).user_id);
+    if (!txn || !userId) return none;
+    return {
+      statements: [
+        db
+          .prepare(
+            `INSERT INTO purchases (txn_id, user_id, customer_id, price_id, coins, total, currency, subscription_id, period_start, created_at)
+             SELECT ?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?8, ?9 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?2) ON CONFLICT DO NOTHING`,
+          )
+          .bind(txn, userId, str(d.customer_id), str(obj(obj((d.items as unknown[] | undefined)?.[0]).price).id) ?? "", Number(str(obj(obj(d.details).totals).total) ?? "0"), str(d.currency_code) ?? "", str(d.subscription_id), when(obj(d.billing_period).starts_at), now),
+      ],
+      grantFor: userId,
+    };
+  }
+  if (e.event_type === "transaction.completed") {
     const txn = str(d.id);
     const userId = str(obj(d.custom_data).user_id);
     const priceId = str(obj(obj((d.items as unknown[] | undefined)?.[0]).price).id);
     const product = priceId ? prices[priceId] : undefined;
     if (!txn || !userId || !product || !("pack" in product)) {
       console.warn(`paddle: ${txn ?? "a transaction"} isn't a pack we can credit`);
-      return [];
+      return none;
     }
     const coins = PACKS.find((p) => p.id === product.pack)!.coins;
     const total = Number(str(obj(obj(d.details).totals).total) ?? "0");
-    return [
+    return {
+      grantFor: null,
+      statements: [
       db
         .prepare(
           `INSERT INTO purchases (txn_id, user_id, customer_id, price_id, coins, total, currency, created_at)
@@ -89,22 +142,54 @@ export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: R
            SELECT ?1, ?2, 'pack', ?3, ?4 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1) ON CONFLICT DO NOTHING`,
         )
         .bind(userId, coins, txn, now),
-    ];
+      ],
+    };
   }
   if (e.event_type === "adjustment.created" || e.event_type === "adjustment.updated") {
-    // A refund once approved, or a chargeback: take back that share of the pack.
-    if (!["refund", "chargeback"].includes(str(d.action) ?? "") || str(d.status) !== "approved") return [];
+    // A refund once approved, or a chargeback: take back that share of what
+    // it bought (a pack's coins, or the Pro month's grants).
+    if (!["refund", "chargeback"].includes(str(d.action) ?? "") || str(d.status) !== "approved") return none;
     const txn = str(d.transaction_id);
     const adj = str(d.id);
-    if (!txn || !adj) return [];
-    const p = await db.prepare("SELECT user_id AS userId, coins, total FROM purchases WHERE txn_id = ?").bind(txn).first<{ userId: string; coins: number; total: number }>();
-    if (!p) return []; // not a pack (a Pro renewal), or the account is gone
+    if (!txn || !adj) return none;
+    const p = await db
+      .prepare("SELECT user_id AS userId, coins, total, subscription_id AS sub, period_start AS start FROM purchases WHERE txn_id = ?")
+      .bind(txn)
+      .first<{ userId: string; coins: number; total: number; sub: string | null; start: number | null }>();
+    if (!p) return none; // not ours, or the account is gone
+    const bought = p.sub
+      ? ((await db.prepare("SELECT COALESCE(SUM(delta), 0) AS s FROM coin_ledger WHERE kind = 'pro_grant' AND substr(ref, 1, length(?1)) = ?1").bind(`${p.sub}:${p.start}:`).first<number>("s")) ?? 0)
+      : p.coins;
     const taken = -((await db.prepare("SELECT COALESCE(SUM(delta), 0) AS s FROM coin_ledger WHERE kind = 'reversal' AND substr(ref, 1, length(?1)) = ?1").bind(`${txn}:`).first<number>("s")) ?? 0);
-    const left = p.coins - taken;
-    const share = str(d.type) === "partial" && p.total > 0 ? Math.round((p.coins * Number(str(obj(d.totals).total) ?? "0")) / p.total) : left;
+    const left = bought - taken;
+    const share = str(d.type) === "partial" && p.total > 0 ? Math.round((bought * Number(str(obj(d.totals).total) ?? "0")) / p.total) : left;
     const coins = Math.min(left, share);
-    if (coins <= 0) return [];
-    return [db.prepare("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) VALUES (?, ?, 'reversal', ?, ?) ON CONFLICT DO NOTHING").bind(p.userId, -coins, `${txn}:${adj}`, now)];
+    if (coins <= 0) return none;
+    return {
+      statements: [db.prepare("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) VALUES (?, ?, 'reversal', ?, ?) ON CONFLICT DO NOTHING").bind(p.userId, -coins, `${txn}:${adj}`, now)],
+      grantFor: null,
+    };
   }
-  return [];
+  return none;
+}
+
+// Paddle's API, for the customer portal and cancelling Pro before an account is deleted.
+export type PaddleApiEnv = { PADDLE_API_KEY?: string; PADDLE_ENV?: string };
+const api = (env: PaddleApiEnv, path: string, body: unknown) =>
+  fetch(`${env.PADDLE_ENV === "production" ? "https://api.paddle.com" : "https://sandbox-api.paddle.com"}${path}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.PADDLE_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+/** A signed link to Paddle's customer portal (manage or cancel Pro, receipts), or null. */
+export async function portalUrl(env: PaddleApiEnv, customerId: string, subscriptionId: string | null): Promise<string | null> {
+  const res = await api(env, `/customers/${encodeURIComponent(customerId)}/portal-sessions`, subscriptionId ? { subscription_ids: [subscriptionId] } : {});
+  if (!res.ok) return null;
+  const data = obj(obj((await res.json()) as unknown).data);
+  return str(obj(obj(data.urls).general).overview);
+}
+
+export async function cancelSubscription(env: PaddleApiEnv, subscriptionId: string): Promise<boolean> {
+  return (await api(env, `/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, { effective_from: "immediately" })).ok;
 }

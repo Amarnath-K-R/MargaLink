@@ -7,6 +7,7 @@
 // would keep retrying it. Never logs a body.
 import { isPaddleEvent, paddleStatements, parsePriceIds, verifyPaddleSignature } from "../../../src/lib/paddle.ts";
 import { text, type AccountEnv } from "../../../src/lib/auth.ts";
+import { grantDuePro } from "../../../src/lib/ledger.ts";
 
 type Env = AccountEnv & { PADDLE_WEBHOOK_SECRET?: string; PADDLE_PRICE_IDS?: string };
 
@@ -24,9 +25,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!isPaddleEvent(event)) return text("Not a Paddle event", 400);
 
   if (await env.DB.prepare("SELECT 1 AS y FROM payment_events WHERE id = ?").bind(event.event_id).first()) return text("Already handled", 200);
-  const effects = await paddleStatements(env.DB, event, parsePriceIds(env.PADDLE_PRICE_IDS), now);
+  const { statements, grantFor } = await paddleStatements(env.DB, event, parsePriceIds(env.PADDLE_PRICE_IDS), now);
   // A plain INSERT: if another delivery of this event won the race, the
   // whole batch rolls back and the retry finds it handled.
-  await env.DB.batch([env.DB.prepare("INSERT INTO payment_events (id, type, received_at) VALUES (?, ?, ?)").bind(event.event_id, event.event_type, now), ...effects]);
+  await env.DB.batch([env.DB.prepare("INSERT INTO payment_events (id, type, received_at) VALUES (?, ?, ?)").bind(event.event_id, event.event_type, now), ...statements]);
+  // A Pro plan that started or renewed: its month's coins now, not at the next visit.
+  if (grantFor) await grantDuePro(env.DB, grantFor, now);
   return text("OK", 200);
 };

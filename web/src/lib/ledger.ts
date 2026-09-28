@@ -2,7 +2,7 @@
 // The M coin ledger's SQL (server-side only). Append-only: the balance is
 // SUM(delta), a debit is one conditional INSERT (so two at once can't both
 // spend the last coins), and UNIQUE(kind, ref) makes every row idempotent.
-import { canonicalEmail, ledgerLabel, WELCOME_COINS, type LedgerKind } from "./coins.ts";
+import { canonicalEmail, dueProGrants, ledgerLabel, proCoinsLeft, PRO, WELCOME_COINS, type LedgerKind } from "./coins.ts";
 import { sha256Hex } from "./auth.ts";
 
 export async function balance(db: D1Database, userId: string): Promise<number> {
@@ -96,6 +96,40 @@ export async function claimReviewPass(
 /** A review whose synthesis came back: it's finished, so its coins are kept. */
 export async function markSynthesized(db: D1Database, ticket: string) {
   await db.prepare("UPDATE review_tickets SET synthesized = 1 WHERE id_hash = ?").bind(await sha256Hex(ticket)).run();
+}
+
+/**
+ * Pro's monthly coins, granted when first due (from /api/me and the
+ * webhook; there's no scheduler). Before each month's coins arrive, unspent
+ * Pro coins above the carry-over cap lapse. Only while the plan is active:
+ * not overdue, paused or cancelled. Each grant is a plain INSERT on a unique
+ * ref, so a call racing this one makes it stop, never grant twice.
+ */
+export async function grantDuePro(db: D1Database, userId: string, now: number) {
+  const subs = (
+    await db
+      .prepare("SELECT id, interval, period_start AS periodStart, period_end AS periodEnd FROM subscriptions WHERE user_id = ? AND status = 'active' AND period_start IS NOT NULL")
+      .bind(userId)
+      .all<{ id: string; interval: "month" | "year"; periodStart: number; periodEnd: number }>()
+  ).results;
+  const due = subs.flatMap((s) => dueProGrants({ ...s, active: true }, now));
+  if (due.length === 0) return;
+  const have = new Set((await db.prepare("SELECT ref FROM coin_ledger WHERE user_id = ? AND kind = 'pro_grant'").bind(userId).all<{ ref: string }>()).results.map((r) => r.ref));
+  const todo = due.filter((ref) => !have.has(ref));
+  if (todo.length === 0) return;
+  const entries = (await db.prepare("SELECT kind, delta FROM coin_ledger WHERE user_id = ? ORDER BY id").bind(userId).all<{ kind: LedgerKind; delta: number }>()).results;
+  const insert = (delta: number, kind: LedgerKind, ref: string) =>
+    db.prepare("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) VALUES (?, ?, ?, ?, ?)").bind(userId, delta, kind, ref, now);
+  for (const ref of todo) {
+    const lapse = Math.max(0, proCoinsLeft(entries) - PRO.carryCap);
+    try {
+      await db.batch([...(lapse > 0 ? [insert(-lapse, "pro_expire", ref)] : []), insert(PRO.coinsPerMonth, "pro_grant", ref)]);
+    } catch {
+      return; // granted by a concurrent call; it carries on from here
+    }
+    if (lapse > 0) entries.push({ kind: "pro_expire", delta: -lapse });
+    entries.push({ kind: "pro_grant", delta: PRO.coinsPerMonth });
+  }
 }
 
 export type LedgerEntry = { kind: LedgerKind; label: string; delta: number; at: number };

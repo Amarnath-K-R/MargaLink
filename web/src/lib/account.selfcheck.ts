@@ -31,6 +31,7 @@ const data = JSON.parse(await dl.text());
 assert.equal(data.account.email, "ann@example.org");
 assert.equal(data.coins.ledger.length, 2);
 assert.equal(data.sessions.length, 1);
+assert.deepEqual([data.purchases, data.subscriptions], [[], []], "payments are part of the export");
 
 assert.equal((await del({ delete: "someone@else.org" })).status, 400, "the address must match");
 assert.equal((await del({})).status, 400);
