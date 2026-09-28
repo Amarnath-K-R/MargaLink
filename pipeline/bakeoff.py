@@ -16,7 +16,8 @@ from pathlib import Path
 import numpy as np
 
 import embedding
-from build_index import load_works, paper_text, split_papers, works_path
+from build_index import paper_text, split_papers, works_path
+from openalex import safe_iter_jsonl
 
 DATA = Path(__file__).parent / "data"
 INDEX_PER_JOURNAL = 60  # enough for a mean vector; keeps each model to ~30 min
@@ -28,6 +29,12 @@ def top_k_hits(centroids: np.ndarray, queries: np.ndarray, truth: np.ndarray, ks
     order = np.argsort(-sims, axis=1)
     rank = np.argmax(order == truth[:, None], axis=1)
     return {k: float(np.mean(rank < k)) for k in ks}
+
+
+def load_works(path) -> dict[str, list[dict]]:
+    # ponytail: holds the whole works file in memory, fine for the v1 file the
+    # bake-off ran on; the full v2 file needs build_index's streaming instead.
+    return {j["id"]: j["papers"] for j in safe_iter_jsonl(path)}
 
 
 def main() -> None:

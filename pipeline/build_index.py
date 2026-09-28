@@ -18,9 +18,12 @@ so a rebuild can never publish stale accuracy.
 """
 
 import hashlib
+import itertools
 import json
 import random
 import sys
+import tempfile
+import time
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -68,8 +71,29 @@ def works_path() -> Path:
     return v2 if v2.exists() and v2.stat().st_size > 0 and "--v1" not in sys.argv else DATA_DIR / "works.jsonl"
 
 
-def load_works(path: Path) -> dict[str, list[dict]]:
-    return {j["id"]: j["papers"] for j in safe_iter_jsonl(path)}
+def slim(p: dict) -> dict:
+    """What the build keeps of a paper in memory: never its text. The full works
+    file (4.6 GB, 2.8M abstracts) doesn't fit in RAM beside everything else; texts
+    are streamed from the file when they're embedded (iter_texts)."""
+    return {"id": p.get("id"), "topics": [sys.intern(t) for t in p.get("topics") or []], "year": p.get("year")}
+
+
+def load_splits(path: Path) -> dict[str, tuple[list[dict], list[dict]]]:
+    """Journal id -> (index, held-out) papers, slimmed, in file order."""
+    out = {}
+    for j in safe_iter_jsonl(path):
+        idx, held = split_papers(j["papers"])
+        out[j["id"]] = ([slim(p) for p in idx], [slim(p) for p in held])
+    return out
+
+
+def iter_texts(path: Path, ids: list[str], which: int):
+    """The papers' texts streamed from the works file, journal by journal in `ids`
+    order, which must be file order: which=0 the index papers, 1 the held-out."""
+    want = set(ids)
+    for j in safe_iter_jsonl(path):
+        if j["id"] in want:
+            yield from (paper_text(p) for p in split_papers(j["papers"])[which])
 
 
 def split_papers(papers: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -111,52 +135,75 @@ def int8_top10(query: np.ndarray, centres: np.ndarray, spans: list[tuple[int, in
     return sorted(range(len(best)), key=lambda j: (-best[j], j))[:10]
 
 
-def embed_cached(model, texts: list[str], kind: str, key: str) -> np.ndarray:
-    """Paper vectors cached on disk (float16) by model + kind + content hash, so
-    re-running the build to tune the quality pass doesn't re-embed millions."""
-    digest = hashlib.sha1(("\x00".join(texts)).encode()).hexdigest()[:16]
-    path = DATA_DIR / f"embcache_{embedding.MODEL_NAME.replace('/', '_')}_{kind}_{key}_{digest}.npy"
+EMBED_CHUNK = 20_000
+
+
+def embed_cached(model, texts, count: int, dim: int, kind: str, key: str, cache_dir: Path = DATA_DIR) -> np.ndarray:
+    """Paper vectors, embedded chunk by chunk straight into a float16 file on disk
+    and returned memory-mapped, so millions never sit in memory at once. Cached
+    by model + kind + key, so re-running the build to tune the quality pass
+    doesn't re-embed; an interrupted run (OOM, sleep, SIGKILL) resumes where the
+    last finished chunk left off."""
+    path = cache_dir / f"embcache_{embedding.MODEL_NAME.replace('/', '_')}_{kind}_{key}.npy"
     if path.exists():
         print(f"using cached vectors {path.name}", flush=True)
-        return np.load(path).astype(np.float32)
-    vecs = embedding.embed_texts(model, texts, kind)
-    np.save(path, vecs.astype(np.float16))
-    return vecs
+        return np.load(path, mmap_mode="r")
+    part, done_file = path.with_suffix(".partial.npy"), path.with_suffix(".done")
+    resume = part.exists() and done_file.exists()
+    out = np.lib.format.open_memmap(part, mode="r+" if resume else "w+", dtype=np.float16, shape=(count, dim))
+    done = int(done_file.read_text()) if resume else 0
+    if done:
+        print(f"{kind}: resuming at {done}/{count}", flush=True)
+    rest, start, first = itertools.islice(texts, done, None), time.time(), done
+    while chunk := list(itertools.islice(rest, EMBED_CHUNK)):
+        out[done : done + len(chunk)] = embedding.embed_texts(model, chunk, kind, progress=False)
+        out.flush()
+        done += len(chunk)
+        done_file.write_text(str(done))
+        rate = (done - first) / max(time.time() - start, 1e-9)
+        print(f"{kind}: {done}/{count} ({rate:.0f}/s, ~{(count - done) / rate / 3600:.1f} h left)", flush=True)
+    if done != count:
+        raise RuntimeError(f"{kind}: expected {count} texts, the works file gave {done}")
+    del out
+    part.rename(path)
+    done_file.unlink()
+    return np.load(path, mmap_mode="r")
 
 
 def main() -> None:
     sources = load_sources()
     wpath = works_path()
-    works = load_works(wpath)
+    splits = load_splits(wpath)
     doaj, nlm = load_doaj(), load_nlm()
     topics = list(safe_iter_jsonl(DATA_DIR / "topics.jsonl"))
     topic_name = {t["id"]: t["name"] for t in topics}
     topic_field = {t["id"]: t["field"] for t in topics}
-    ids = [sid for sid in sources if sid in works and not is_conference_proceedings_name(sources[sid]["display_name"])]
+    ids = [sid for sid in sources if sid in splits and not is_conference_proceedings_name(sources[sid]["display_name"])]
     if "--journals" in sys.argv:
         n = int(sys.argv[sys.argv.index("--journals") + 1])
         ids = sorted(random.Random(1).sample(ids, min(n, len(ids))))
-    print(f"{len(sources)} sources, {len(works)} with papers ({wpath.name}), {len(ids)} to build", flush=True)
+    print(f"{len(sources)} sources, {len(splits)} with papers ({wpath.name}), {len(ids)} to build", flush=True)
     if len(ids) < 10:
         print("too few journals joined yet — let fetch_works.py run longer")
         return
 
-    splits = {sid: split_papers(works[sid]) for sid in ids}
-    ids = [sid for sid in ids if len(splits[sid][0]) >= MIN_INDEX_PAPERS]
+    chosen = {sid for sid in ids if len(splits[sid][0]) >= MIN_INDEX_PAPERS}
+    ids = [sid for sid in splits if sid in chosen]  # file order, so texts can be streamed in step
     model = embedding.load_model()
     dim = model.get_embedding_dimension()
-    key = f"{wpath.stem}_{len(ids)}"
-    index_texts = [paper_text(p) for sid in ids for p in splits[sid][0]]
-    heldout_texts = [paper_text(p) for sid in ids for p in splits[sid][1]]
-    print(f"embedding {len(index_texts)} index papers + {len(heldout_texts)} held-out", flush=True)
-    index_vecs = embed_cached(model, index_texts, "passage", key)
-    heldout_vecs = embed_cached(model, heldout_texts, "query", key) if heldout_texts else np.zeros((0, dim), np.float32)
+    stat = wpath.stat()
+    digest = hashlib.sha1(f"{stat.st_size}:{stat.st_mtime_ns}:{','.join(ids)}".encode()).hexdigest()[:16]
+    key = f"{wpath.stem}_{len(ids)}_{digest}"
+    n_index, n_held = (sum(len(splits[sid][w]) for sid in ids) for w in (0, 1))
+    print(f"embedding {n_index} index papers + {n_held} held-out", flush=True)
+    index_vecs = embed_cached(model, iter_texts(wpath, ids, 0), n_index, dim, "passage", key)
+    heldout_vecs = embed_cached(model, iter_texts(wpath, ids, 1), n_held, dim, "query", key) if n_held else np.zeros((0, dim), np.float16)
 
     centres_all, meta, spans, kept, dropped, cohs, means = [], [], [], [], [], [], []
     i = 0
     for sid in ids:
         papers = splits[sid][0]
-        vecs = index_vecs[i : i + len(papers)]
+        vecs = np.asarray(index_vecs[i : i + len(papers)], dtype=np.float32)
         i += len(papers)
         centres, labels = cluster_journal(vecs)
         paper_topics = [p.get("topics") or [] for p in papers]
@@ -204,7 +251,7 @@ def main() -> None:
                 h_papers.append({"work": p.get("id"), "j": row_of[sid], "topics": p.get("topics") or [], "year": p.get("year")})
                 h_rows.append(h)
             h += 1
-    heldout_int8 = embedding.quantize_int8(heldout_vecs[h_rows]) if h_rows else np.zeros((0, dim), np.int8)
+    heldout_int8 = embedding.quantize_int8(np.asarray(heldout_vecs[h_rows], dtype=np.float32)) if h_rows else np.zeros((0, dim), np.int8)
     heldout_int8.tofile(DATA_DIR / "heldout.bin")
     (DATA_DIR / "heldout.json").write_text(json.dumps({"model_id": embedding.BROWSER_MODEL_ID, "dim": dim, "papers": h_papers}))
     rng = random.Random(1)
@@ -260,6 +307,43 @@ def _self_check() -> None:
     assert top == [0, 2, 1], top  # j0: 100, j1: max(0, 50) = 50, j2: 90
     tie = int8_top10(np.array([1, 1], dtype=np.int8), np.array([[1, 1], [1, 1]], dtype=np.int8), [(0, 1), (1, 1)])
     assert tie == [0, 1], "ties break by journal index"
+
+    # Streaming: texts come back in file order, per split, and match what's kept.
+    with tempfile.TemporaryDirectory() as tmp:
+        works = Path(tmp) / "w.jsonl"
+        journal = lambda jid, n: {"id": jid, "papers": [{"id": f"{jid}{i}", "title": f"{jid}{i}", "abstract": "a", "topics": ["T1"], "year": 2026} for i in range(n)]}
+        works.write_text("\n".join(json.dumps(journal(j, n)) for j, n in [("A", 20), ("B", 12), ("C", 20)]) + "\n")
+        sp = load_splits(works)
+        assert list(sp) == ["A", "B", "C"] and set(sp["A"][0][0]) == {"id", "topics", "year"}, "slim, file order"
+        texts = list(iter_texts(works, ["A", "C"], 0))
+        assert len(texts) == 30 and texts[0].startswith("A5") and texts[15].startswith("C5")
+        assert [t.split()[0] for t in iter_texts(works, ["A", "C"], 1)] == [f"A{i}" for i in range(5)] + [f"C{i}" for i in range(5)]
+
+        # Resumable embedding: a run killed mid-way picks up at the last chunk.
+        class Model:
+            def __init__(self, fail_after=None):
+                self.seen, self.fail_after = [], fail_after
+
+            def encode(self, texts, **_):
+                if self.fail_after is not None and len(self.seen) >= self.fail_after:
+                    raise KeyboardInterrupt
+                self.seen += texts
+                return np.array([[len(t), 1.0] for t in texts], dtype=np.float32)
+
+        global EMBED_CHUNK
+        chunk, EMBED_CHUNK = EMBED_CHUNK, 2
+        items = [f"t{'x' * i}" for i in range(5)]
+        try:
+            embed_cached(Model(fail_after=2), iter(items), 5, 2, "passage", "k", Path(tmp))
+            raise AssertionError("should have been interrupted")
+        except KeyboardInterrupt:
+            pass
+        m = Model()
+        vecs = embed_cached(m, iter(items), 5, 2, "passage", "k", Path(tmp))
+        assert m.seen == items[2:], "only the unfinished chunks are re-embedded"
+        assert np.allclose(vecs, embedding.normalize(np.array([[len(t), 1.0] for t in items], dtype=np.float32)), atol=1e-3)
+        assert embed_cached(Model(fail_after=0), iter(items), 5, 2, "passage", "k", Path(tmp)).shape == (5, 2), "cached: nothing re-embedded"
+        EMBED_CHUNK = chunk
 
     print("build_index self-check: OK")
 
