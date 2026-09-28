@@ -87,7 +87,8 @@ export default function TermsPage() {
         <Part title="Fair use">
           <p>
             Don&apos;t try to get around charges or limits, overload the service, call its API from anything but its own pages, or send material you
-            have no right to share. Daily capacity is limited; when it&apos;s reached, nothing is charged.
+            have no right to share. Daily capacity is limited: if it&apos;s reached before a review or a request starts, nothing is charged; a review stopped
+            midway by it is refunded for what didn&apos;t run.
           </p>
         </Part>
 

@@ -8,7 +8,8 @@ import { useSyncExternalStore } from "react";
 // signed in. It's asked again when the tab regains focus, which is how a
 // sign-in finished in a popup or another tab reaches this one.
 // `paddle`: what Paddle.js needs to open a checkout, or null until payments are set up.
-export type PaddleConfig = { env: "sandbox" | "production"; token: string; prices: Record<string, string> };
+// `checkout`: the account's signature for custom_data, so the webhook credits only the buyer.
+export type PaddleConfig = { env: "sandbox" | "production"; token: string; prices: Record<string, string>; checkout: string };
 // `pro`: the Pro plan, if there is one (renews: false once cancelled to the period's end).
 export type ProPlan = { interval: "month" | "year"; status: string; renews: boolean; periodEnd: number | null };
 export type Account =

@@ -41,6 +41,7 @@ function useCheckout() {
         priceId: account.paddle.prices[key],
         email: account.email,
         userId: account.id,
+        sig: account.paddle.checkout,
         onCompleted: () => void waitForCoins(key, before),
       });
       setStatus((s) => (s?.phase === "opening" ? null : s));

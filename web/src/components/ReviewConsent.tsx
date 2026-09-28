@@ -50,7 +50,7 @@ export default function ReviewConsent({
         <span>
           This review costs <strong className="font-medium">{price} M coins</strong>; you have {balance}. If part of it doesn&apos;t come back (a
           section, or the final cross-check), you get that part&apos;s coins back automatically, about two hours after it starts. Resuming or retrying
-          costs nothing more.
+          within those two hours costs nothing more.
         </span>
       </p>
       {balance < price && (

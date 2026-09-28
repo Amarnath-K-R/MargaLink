@@ -28,7 +28,7 @@ export default function AccountView() {
     if (!signedIn) return;
     let live = true;
     fetch("/api/account")
-      .then((r) => (r.ok ? (r.json() as Promise<Details>) : Promise.reject(new Error(`Couldn't load your account (${r.status}).`))))
+      .then((r) => (r.ok ? (r.json() as Promise<Details>) : Promise.reject(new Error("Couldn't load your account. Reload the page to try again."))))
       .then((d) => live && setDetails(d))
       .catch((e: Error) => live && setError(e.message));
     return () => {
@@ -129,7 +129,7 @@ export default function AccountView() {
         </a>
       </Panel>
 
-      <DeletePanel email={account.email} onDeleted={() => setDeleted(true)} />
+      <DeletePanel email={account.email} pro={!!account.pro && account.pro.status !== "canceled"} onDeleted={() => setDeleted(true)} />
     </div>
   );
 }
@@ -143,7 +143,7 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function DeletePanel({ email, onDeleted }: { email: string; onDeleted: () => void }) {
+function DeletePanel({ email, pro, onDeleted }: { email: string; pro: boolean; onDeleted: () => void }) {
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,6 +165,12 @@ function DeletePanel({ email, onDeleted }: { email: string; onDeleted: () => voi
     <section className="sheet border-l-4 border-away p-6 text-sm leading-relaxed text-ink-soft sm:p-8">
       <h2 className="mb-2 font-serif text-lg font-medium text-ink">Delete your account</h2>
       <p>This deletes your email address, sign-ins and coin history straight away. Any M coins left are lost, and it can&apos;t be undone.</p>
+      {pro && (
+        <p className="mt-2 text-away">
+          It also ends Pro at once: the rest of the period you&apos;ve paid for is lost. To keep it until then, cancel in Manage subscription instead and
+          delete your account after it ends.
+        </p>
+      )}
       <label htmlFor="delete-confirm" className="mt-4 block text-xs font-medium">
         Type {email} to confirm
       </label>

@@ -5,7 +5,7 @@ import { extractFromFile } from "@/lib/extract";
 import { findJournalRules } from "@/lib/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
 import { MAX_REVIEW_CHARS, prepareForReview } from "@/lib/review";
-import { ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "@/lib/reviewOrchestrator";
+import { ReviewEndedError, ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "@/lib/reviewOrchestrator";
 import { NotEnoughCoinsError, SignInRequiredError } from "@/lib/coins";
 import { refreshAccount, setBalance } from "@/components/useAccount";
 import { NO_EDITS, buildOutline, chunkSections, type OutlineEdits } from "@/lib/reviewSections";
@@ -35,6 +35,7 @@ export function useReview() {
   const [progress, setProgress] = useState<ReviewProgress | null>(null);
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [shortOfCoins, setShortOfCoins] = useState(false); // the last start was refused for too few coins
   const [tier, setTier] = useState<ReviewTier>("standard");
   const [resumeState, setResumeState] = useState<ReviewState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -50,6 +51,7 @@ export function useReview() {
     setConsentOpen(false);
     setReviewResult(null);
     setReviewError(null);
+    setShortOfCoins(false);
     setProgress(null);
     setResumeState(null);
   }, []);
@@ -149,6 +151,7 @@ export function useReview() {
       abortRef.current = ac;
       setReviewLoading(true);
       setReviewError(null);
+      setShortOfCoins(false);
       // A fresh run replaces the last result; a resume builds on it.
       if (!resume) {
         setReviewResult(null);
@@ -184,12 +187,17 @@ export function useReview() {
         if (err instanceof ReviewSynthesisError) {
           setResumeState(err.state);
           setReviewResult(err.partial);
+        } else if (err instanceof ReviewEndedError) {
+          setResumeState(null); // its ticket is spent or expired: a Resume would only fail
         } else if (runStateRef.current?.ticket) {
           // Whatever stopped a paid run (a sign-in that expired, today's
           // capacity), it can be picked up again on the same ticket, free.
           setResumeState(runStateRef.current);
         }
-        if (err instanceof NotEnoughCoinsError) setBalance(err.balance);
+        if (err instanceof NotEnoughCoinsError) {
+          setBalance(err.balance);
+          setShortOfCoins(true);
+        }
         if (err instanceof SignInRequiredError) {
           void refreshAccount();
           setReviewError("Sign in to get a review.");
@@ -240,6 +248,7 @@ export function useReview() {
     progress,
     reviewResult,
     reviewError,
+    shortOfCoins,
     resumeState,
     canRetry,
     unfinished,

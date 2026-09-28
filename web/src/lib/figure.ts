@@ -64,7 +64,7 @@ export async function askClaude(
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(detail && res.status < 500 ? detail : `Claude request failed (${res.status})${detail ? `: ${detail}` : ""}`);
+    throw new Error(detail && res.status < 500 ? detail : "Claude didn't answer. Try again in a moment; a request that fails is refunded.");
   }
   const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
   const summary = typeof data?.summary === "string" ? data.summary : "";

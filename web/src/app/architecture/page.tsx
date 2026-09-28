@@ -53,14 +53,15 @@ export default function ArchitecturePage() {
           <SystemDiagram />
           <DocPart title="No server for the work">
             <p>
-              The web app is a Next.js <strong>static export</strong> on Cloudflare Pages. There is no application server and no database. The journal
+              The web app is a Next.js <strong>static export</strong> on Cloudflare Pages. No server does the work on a paper. The journal
               index is built offline by the Python pipeline ({code("pipeline/")}) and shipped as static files ({code("web/public/index/")}); the browser
               downloads it once and does every match itself. That isn&apos;t an optimisation on top of a server design: a server that ranks journals
               necessarily sees the paper, so keeping &ldquo;the paper never leaves the device&rdquo; absolute meant taking the server out of the path.
             </p>
             <p>
-              The two exceptions are Cloudflare Pages Functions, {code("functions/api/review.ts")} and {code("functions/api/figure.ts")}, for the two
-              features that need a language model. They exist because the browser must never hold the Anthropic API key. Both are stateless.
+              The exceptions are Cloudflare Pages Functions: {code("functions/api/review.ts")} and {code("functions/api/figure.ts")}, for the two
+              features that need a language model (the browser must never hold the Anthropic API key), and the account and payment Functions beside
+              them, on a D1 database that holds accounts and M coins, never anything from a paper.
             </p>
           </DocPart>
           <DocPart title="Heavy things run in workers">
@@ -91,9 +92,10 @@ export default function ArchitecturePage() {
                 name: "2 · Nothing from a paper is stored on a server",
                 what: (
                   <>
-                    Both Functions are stateless: they validate, call Claude, gate the answer and return it. The only server state is a daily counter per
-                    feature in KV ({code("review-pass-count:<date>")}, {code("figure-count:<date>")}). Writing projects live in the browser&apos;s Origin
-                    Private File System ({code("projectStore.ts")}).
+                    Both AI Functions keep nothing from a request: they validate, charge, call Claude, gate the answer and return it. Server state is a
+                    daily counter per feature in KV ({code("review-pass-count:<date>")}, {code("figure-count:<date>")}) and, in D1, accounts, the coin
+                    ledger and a running review&apos;s ticket (section ids and lengths). Writing projects live in the browser&apos;s Origin Private File
+                    System ({code("projectStore.ts")}).
                   </>
                 ),
               },
@@ -258,8 +260,9 @@ export default function ArchitecturePage() {
                 name: "Paying for a review",
                 what: (
                   <>
-                    {code("review/start")} gets section ids and lengths (never text), charges {code("reviewPrice")} and issues a ticket bound to them, with a pass
-                    budget, for two hours. Every pass spends one before Claude is called; when the ticket expires, the parts it didn&apos;t deliver (sections, the cross-check) are refunded.
+                    {code("review/start")} gets section ids and lengths (never text), charges {code("reviewPrice")} and issues a ticket bound to them for two
+                    hours. Every pass is claimed before Claude is called: a section that came back isn&apos;t sent again, and each gets at most four tries. When
+                    the ticket expires, what it didn&apos;t deliver is refunded, sections weighed by length.
                   </>
                 ),
                 away: true,

@@ -50,10 +50,10 @@ function loadPaddle(): Promise<PaddleJs> {
  */
 export async function openPortal(): Promise<string | null> {
   const tab = window.open("about:blank", "_blank");
-  const res = await fetch("/api/pay/portal", { method: "POST" });
-  if (!res.ok) {
+  const res = await fetch("/api/pay/portal", { method: "POST" }).catch(() => null);
+  if (!res?.ok) {
     tab?.close();
-    return (await res.text().catch(() => "")) || `Couldn't open the portal (${res.status}).`;
+    return (res && (await res.text().catch(() => ""))) || "Couldn't open the subscription page. Check your connection and try again.";
   }
   const { url } = (await res.json()) as { url: string };
   if (tab) {
@@ -63,7 +63,7 @@ export async function openPortal(): Promise<string | null> {
   return null;
 }
 
-export async function openCheckout(o: { env: string; token: string; priceId: string; email: string; userId: string; onCompleted: () => void }) {
+export async function openCheckout(o: { env: string; token: string; priceId: string; email: string; userId: string; sig: string; onCompleted: () => void }) {
   const paddle = await loadPaddle();
   if (!ready) {
     if (o.env === "sandbox") paddle.Environment.set("sandbox");
@@ -74,7 +74,7 @@ export async function openCheckout(o: { env: string; token: string; priceId: str
   paddle.Checkout.open({
     items: [{ priceId: o.priceId, quantity: 1 }],
     customer: { email: o.email },
-    customData: { user_id: o.userId },
+    customData: { user_id: o.userId, sig: o.sig },
     settings: { displayMode: "overlay", theme: "light", allowLogout: false },
   });
 }

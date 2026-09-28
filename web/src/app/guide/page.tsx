@@ -822,7 +822,7 @@ export default function GuidePage() {
             alt="Signing in: Continue with Google, or an emailed link"
             notes={[
               <>
-                <strong>Continue with Google</strong>: shares only your verified email address with us.
+                <strong>Continue with Google</strong>: shares your verified email address and Google&apos;s id for your account, nothing else.
               </>,
               <>
                 <strong>Your email address</strong>, for a one-time link instead. It works once, within 15 minutes.
@@ -859,7 +859,7 @@ export default function GuidePage() {
           />
           <Aside title="Coins come back on their own">
             <p>
-              A review is priced in parts, one per section it sends and one for the final cross-check; any part that doesn&apos;t come back is
+              A review&apos;s price is shared among its sections, by length, and the final cross-check; any part that doesn&apos;t come back is
               refunded about two hours after the review started. An Ask Claude request that fails is refunded at once. Your history on the account
               page shows each refund.
             </p>

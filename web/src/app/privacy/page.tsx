@@ -225,7 +225,11 @@ export default function PrivacyPage() {
       <h3 className="mt-6 font-medium">What an account keeps</h3>
       <ul className="mt-2 list-disc space-y-2 pl-5 text-ink-soft">
         <li>Your email address. If you use &ldquo;Continue with Google&rdquo;, also Google&apos;s id for your account, so we recognise it. Not your name, not your photo.</li>
-        <li>Your M coin history: each welcome bonus, purchase, charge and refund, with its date and the payment provider&apos;s reference for purchases.</li>
+        <li>Your M coin history: each welcome bonus, purchase, charge and refund, with its date.</li>
+        <li>
+          Your purchases: for each pack or Pro payment, what it bought, the amount and currency, and Paddle&apos;s references for the payment and for
+          you as its customer; for Pro, the plan and its billing periods; and any refund or chargeback of them.
+        </li>
         <li>Your sign-ins: for each browser you&apos;re signed in on, a one-way fingerprint of its sign-in token and when it expires (30 days, extended while you use it).</li>
         <li>Which version of this notice you signed up under.</li>
       </ul>
@@ -237,6 +241,7 @@ export default function PrivacyPage() {
           Counters that limit how many sign-in emails an address or a network can ask for. They&apos;re keyed by fingerprints made with a secret key
           only our server holds (a network&apos;s also changes daily), never the address itself, and they expire within a day.
         </li>
+        <li>Paddle&apos;s ids for the payment events it tells us about (nothing personal in them), for 90 days, so a repeated one is recognised.</li>
       </ul>
       <h3 className="mt-6 font-medium">Kept after you delete your account</h3>
       <p className="mt-2 text-ink-soft">
@@ -254,8 +259,9 @@ export default function PrivacyPage() {
       <p className="mt-2 text-ink-soft">
         Signed in, your browser holds two: one carries your sign-in and can&apos;t be read by
         pages, the other only says that you&apos;re signed in, so signed-out pages ask nothing. A
-        third, short-lived one exists only during a Google sign-in. No tracking or advertising
-        cookies, ever.
+        third, short-lived one exists only during a Google sign-in. MargaLink sets no tracking or
+        advertising cookies. When you buy coins, Paddle&apos;s checkout runs its own script, and where
+        it&apos;s switched on so does Cloudflare&apos;s Turnstile check; each follows its own privacy terms.
       </p>
       <h3 className="mt-6 font-medium">Who else is involved</h3>
       <ul className="mt-2 list-disc space-y-2 pl-5 text-ink-soft">

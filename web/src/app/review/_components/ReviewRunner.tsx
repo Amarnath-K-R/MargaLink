@@ -115,7 +115,20 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
           onCancel={() => r.setConsentOpen(false)}
         />
       )}
-      {r.reviewError && <ErrorText>{r.reviewError}</ErrorText>}
+      {r.reviewError && (
+        <ErrorText>
+          {r.reviewError}
+          {r.shortOfCoins && (
+            <>
+              {" "}
+              <a href="/pricing#packs" target="_blank" rel="noopener" className="text-accent underline-offset-2 hover:underline">
+                Buy coins
+              </a>{" "}
+              <span className="text-ink-soft">(a new tab; your paper stays here)</span>
+            </>
+          )}
+        </ErrorText>
+      )}
       {r.reviewResult && <ReviewResultPanel result={r.reviewResult} partial={r.reviewResult.journalFit === null} onCitation={onCitation} />}
     </>
   );

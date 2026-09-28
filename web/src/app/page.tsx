@@ -166,7 +166,7 @@ function Home() {
                 </div>
                 <div>
                   <dt>Free</dt>
-                  <dd>to use, no sign-up</dd>
+                  <dd>to match, check and write</dd>
                 </div>
               </dl>
             </div>

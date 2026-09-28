@@ -17,8 +17,9 @@ export default function RefundsPage() {
       <div className="mt-10 space-y-8 text-ink-soft [&_strong]:font-medium [&_strong]:text-ink">
         <Part title="Coins back, automatically">
           <p>
-            A review is priced in parts: one for each section it sends, and one for the final cross-check. Any part that doesn&apos;t come back is
-            refunded, whether or not the rest of the review finished, about two hours after the review started. An Ask Claude request that fails, or
+            A review&apos;s price is shared among its parts: each section it sends, weighed by its length, and the final cross-check, counted like an
+            average section. Any part that doesn&apos;t come back is refunded (rounded up to whole coins), whether or not the rest of the review
+            finished, about two hours after the review started. An Ask Claude request that fails, or
             whose answer can&apos;t be used, is refunded at once. You don&apos;t need to ask; your coin history on{" "}
             <Link href="/account" className="text-accent hover:underline">
               your account page

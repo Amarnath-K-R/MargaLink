@@ -47,7 +47,7 @@ export function SystemDiagram() {
   const outside: Box[] = [
     { x: 566, y: 30, w: 240, h: 76, title: "Cloudflare Pages", lines: ["the static site, /index, /templates,", "the figure gallery"] },
     { x: 566, y: 124, w: 240, h: 94, title: "Public assets", lines: ["R2: TeX engine and packs", "jsDelivr: Pyodide, ONNX runtime", "Hugging Face: the embedding model"] },
-    { x: 566, y: 250, w: 240, h: 76, title: "Pages Functions", lines: ["/api/review · /api/figure", "hold the API key; store nothing"] },
+    { x: 566, y: 250, w: 240, h: 76, title: "Pages Functions", lines: ["/api/review · /api/figure", "hold the key; keep no paper"] },
     { x: 566, y: 352, w: 240, h: 54, title: "Anthropic API", lines: ["Claude"] },
   ];
   return (

@@ -115,7 +115,7 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
         </p>
       )}
       <p className="mt-4 text-xs leading-relaxed text-ink-soft">
-        We keep only your email address, never anything from your papers.{" "}
+        We keep your email address and your M coin history, never anything from your papers.{" "}
         <Link href="/privacy#accounts" className="text-accent hover:underline">
           What an account stores
         </Link>
