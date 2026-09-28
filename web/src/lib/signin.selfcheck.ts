@@ -41,15 +41,19 @@ let r = await run(emailRequest, post("/api/auth/email/request", { email: " Ann@E
 assert.equal(r.status, 200);
 assert.deepEqual(sent[0].to, ["ann@example.org"]);
 assert.ok(!sent[0].text.includes("—"), "no em dashes in the email");
-const link = sent[0].text.match(/https:\/\/m\.test\/signin\/verify#t=([\w-]+)&e=([^\s]+)/);
+const link = sent[0].text.match(/https:\/\/m\.test\/signin\/verify#t=([\w-]+)\s/);
 assert.ok(link, sent[0].text);
-assert.equal(decodeURIComponent(link[2]), "ann@example.org");
+assert.ok(!sent[0].text.includes("verify#t=" + link[1] + "&"), "the link carries no address to show");
 assert.equal((await env.DB.prepare("SELECT next FROM magic_links").first<{ next: string }>())?.next, "/home", "an unsafe next is dropped");
 assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM magic_links WHERE token_hash = ?").bind(link[1]).first<{ n: number }>())?.n, 0, "only the hash is stored");
 
+// the page asks which account the link is for, without spending it
+r = await run(emailVerify, post("/api/auth/email/verify", { token: link[1], peek: true }));
+assert.deepEqual(await r.json(), { email: "ann@example.org" });
+assert.equal((await run(emailVerify, post("/api/auth/email/verify", { token: "nope", peek: true }))).status, 400);
 r = await run(emailVerify, post("/api/auth/email/verify", { token: link[1] }));
 assert.equal(r.status, 200);
-assert.deepEqual(await r.json(), { next: "/home" });
+assert.deepEqual(await r.json(), { next: "/home", email: "ann@example.org" });
 const annCookie = cookieHeader(r);
 assert.match(annCookie, /__Host-ml_session=[\w-]{40,}; ml_in=1/);
 assert.equal((await run(emailVerify, post("/api/auth/email/verify", { token: link[1] }))).status, 400, "single use");
@@ -60,6 +64,12 @@ const annMe = (await r.json()) as { user: { id: string; email: string }; balance
 assert.deepEqual([annMe.user.email, annMe.balance, annMe.paddle], ["ann@example.org", 10, null], "no Paddle config, no checkout");
 assert.match(annMe.user.id, /^[0-9a-f]{32}$/, "the id checkout names in custom_data");
 assert.equal(r.headers.getSetCookie().length, 0, "a fresh session isn't re-sent");
+
+// a stored destination is checked again on the way out
+const { sha256Hex } = await import("./auth.ts");
+await env.DB.prepare("INSERT INTO magic_links (token_hash, email, next, expires_at) VALUES (?, 'ann@example.org', '/..//evil.com', ?)").bind(await sha256Hex("planted-token-planted-token-planted-token"), Date.now() + 60_000).run();
+r = await run(emailVerify, post("/api/auth/email/verify", { token: "planted-token-planted-token-planted-token" }));
+assert.equal(((await r.json()) as { next: string }).next, "/home");
 
 // rate limits: three per address per 15 minutes
 for (let i = 0; i < 2; i++) assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "ann@example.org" }))).status, 200);
@@ -72,7 +82,7 @@ console.log = (s: string) => void logged.push(s);
 r = await run(emailRequest, new Request("http://localhost:8788/api/auth/email/request", { method: "POST", body: JSON.stringify({ email: "dev@x.org" }) }), { ...env, RESEND_API_KEY: undefined, DEV_EMAIL_LOG: "1" });
 console.log = log;
 assert.equal(r.status, 200);
-assert.match(logged.join(""), /http:\/\/localhost:8788\/signin\/verify#t=/);
+assert.match(logged.join(""), /http:\/\/localhost:8788\/signin\/verify#t=[\w-]+$/);
 
 // --- Google
 r = await run(googleStart, get("/api/auth/google/start?next=/review&popup=1"));

@@ -4,7 +4,9 @@
 // account. Limits: 3 per address per 15 minutes and 10 a day, 10 an hour
 // per network, 90 a day in all (Resend's free tier). The link carries the
 // token in its #fragment, which never reaches a server, and the page asks
-// before using it, so a mail scanner opening the link can't spend it.
+// before using it, so a mail scanner opening the link can't spend it. The
+// page asks the server which address the link is for; the link itself names
+// none, so it can't be dressed up as someone else's.
 import { ipKey, randomToken, rateLimit, readJson, safeNext, sha256Hex, text, type AccountEnv } from "../../../../src/lib/auth.ts";
 import { isEmail, normalEmail } from "../../../../src/lib/coins.ts";
 
@@ -33,7 +35,7 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
   const token = randomToken();
   const hash = await sha256Hex(token);
   await db.prepare("INSERT INTO magic_links (token_hash, email, next, expires_at) VALUES (?, ?, ?, ?)").bind(hash, email, next, now + LINK_TTL_MS).run();
-  const link = `${url.origin}/signin/verify#t=${token}&e=${encodeURIComponent(email)}`;
+  const link = `${url.origin}/signin/verify#t=${token}`;
   if (dev) {
     console.log(`[dev] sign-in link: ${link}`);
     return Response.json({ ok: true });

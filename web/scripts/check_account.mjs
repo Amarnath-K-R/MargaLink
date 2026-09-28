@@ -43,13 +43,15 @@ const watch = (page) => {
   // the verify page asks first, then signs in and clears the token
   let spent = 0;
   await ctx.route("**/api/auth/email/verify", async (r) => {
+    if (r.request().postDataJSON().peek) return r.fulfill({ json: { email: "ann@example.org" } });
     spent++;
     await ctx.addCookies([{ name: "ml_in", value: "1", url: O }]);
-    return r.fulfill({ json: { next: "/review" } });
+    return r.fulfill({ json: { next: "/review", email: "ann@example.org" } });
   });
   await ctx.route("**/api/me", (r) => r.fulfill({ json: spent ? { user: { id: "u1", email: "ann@example.org" }, balance: 10, paddle: null } : { user: null } }));
-  await page.goto(O + "/signin/verify#t=tok123&e=ann%40example.org");
+  await page.goto(O + "/signin/verify#t=tok123&e=someone-else%40example.org");
   await page.waitForSelector("text=Sign in as ann@example.org?");
+  check("the page names the account the server has for the link, not what the link says", !(await page.locator("text=someone-else").count()));
   check("opening the link spends nothing", spent === 0);
   await page.locator(".sheet button", { hasText: "Sign in" }).click();
   await page.waitForSelector("text=You're signed in as ann@example.org");

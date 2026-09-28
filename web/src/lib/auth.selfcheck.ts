@@ -8,7 +8,7 @@ import { onRequest } from "../../functions/api/_middleware.ts";
 import { testD1 } from "./testD1.ts";
 
 // safeNext: only same-site paths survive
-for (const bad of ["//evil.com", "/\\evil.com", "https://evil.com", "javascript:alert(1)", "/\t/evil.com", "evil.com", "", null, 42, `/${"a".repeat(600)}`]) {
+for (const bad of ["//evil.com", "/\\evil.com", "https://evil.com", "javascript:alert(1)", "/\t/evil.com", "evil.com", "", null, 42, `/${"a".repeat(600)}`, "/..//evil.com", "/.//evil.com", "/%2e%2e//evil.com", "/a/../..//evil.com"]) {
   assert.equal(safeNext(bad), "/home", String(bad));
 }
 assert.equal(safeNext("/review?x=1#y"), "/review?x=1#y");

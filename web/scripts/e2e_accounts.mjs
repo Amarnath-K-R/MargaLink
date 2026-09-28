@@ -69,7 +69,7 @@ try {
   await page.waitForSelector("text=Check your email");
   let link = null;
   for (let i = 0; i < 20 && !link; i++) {
-    link = log.match(/sign-in link: (http:\/\/localhost:\d+\/signin\/verify#t=[\w-]+&e=[^\s]+)/)?.[1] ?? null;
+    link = log.match(/sign-in link: (http:\/\/localhost:\d+\/signin\/verify#t=[\w-]+)/)?.[1] ?? null;
     if (!link) await new Promise((r) => setTimeout(r, 250));
   }
   check("the sign-in link was written to the dev log", !!link);
