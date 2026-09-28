@@ -8,6 +8,7 @@
 // page that someone is signed in, so signed-out visitors never call /api/me.
 // Nothing here logs an email, a token or a request body.
 import { isEmail, normalEmail } from "./coins.ts";
+export { safeNext } from "./safeNext.ts";
 
 export const SESSION_COOKIE = "__Host-ml_session";
 export const HINT_COOKIE = "ml_in";
@@ -20,13 +21,6 @@ const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString
 export const sha256Hex = async (s: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
 export const newId = () => hex(crypto.getRandomValues(new Uint8Array(16)).buffer);
 
-/** Where to go after signing in: a path on this site, or `fallback`. Never another origin. */
-export function safeNext(next: unknown, fallback = "/home"): string {
-  if (typeof next !== "string" || next.length > 512 || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return fallback;
-  if (/[\u0000-\u001f\u007f]/.test(next)) return fallback;
-  const u = new URL(next, "https://margalink.invalid");
-  return u.origin === "https://margalink.invalid" ? u.pathname + u.search + u.hash : fallback;
-}
 
 export function readCookie(req: Request, name: string): string | null {
   for (const part of (req.headers.get("cookie") ?? "").split(";")) {

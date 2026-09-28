@@ -10,14 +10,17 @@ import { signInWithGoogle } from "./useAccount";
 // by email (it opens in a new tab). Either way this tab notices on focus, so
 // a loaded paper, dataset or figure is never lost. Used by /signin, the
 // tray's Sign in button, and the review and figure consents.
-export default function SignInPanel({ next, lead }: { next?: string; lead?: ReactNode }) {
+// `notice`: a problem from an earlier attempt, shown until the next one.
+export default function SignInPanel({ next, lead, notice }: { next?: string; lead?: ReactNode; notice?: string }) {
   const [email, setEmail] = useState("");
   const [phase, setPhase] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [tried, setTried] = useState(false);
   const target = () => next ?? `${location.pathname}${location.search}`;
 
   async function sendLink(e: React.FormEvent) {
     e.preventDefault();
+    setTried(true);
     setPhase("sending");
     setError(null);
     try {
@@ -56,8 +59,16 @@ export default function SignInPanel({ next, lead }: { next?: string; lead?: Reac
 
   return (
     <div>
+      {notice && !tried && (
+        <p role="alert" className="mb-4 rounded-xl bg-[#f6e7df] px-3 py-2 text-sm text-away">
+          {notice}
+        </p>
+      )}
       {lead ?? <p className="text-sm leading-relaxed text-ink-soft">AI reviews and Ask Claude need an account. New accounts get {WELCOME_COINS} M coins.</p>}
-      <button type="button" onClick={() => signInWithGoogle(target())} className="clay-btn mt-4 h-11 w-full justify-center gap-2.5 text-sm font-medium">
+      <button type="button" onClick={() => {
+          setTried(true);
+          signInWithGoogle(target());
+        }} className="clay-btn mt-4 h-11 w-full justify-center gap-2.5 text-sm font-medium">
         <GoogleMark /> Continue with Google
       </button>
       <div className="my-4 flex items-center gap-3 text-xs text-ink-soft">
