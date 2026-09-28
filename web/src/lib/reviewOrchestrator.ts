@@ -1,12 +1,15 @@
 // Client-side orchestration of a review: plan chunks from the prepared text,
-// run one bounded extract pass per chunk (a small worker pool), build the
-// claims ledger, run one synthesize pass, assemble the ReviewResult. Every
+// pay for the review (POST /api/review/start: section ids and lengths only,
+// answered with a ticket), run one bounded extract pass per chunk (a small
+// worker pool), build the claims ledger, run one synthesize pass, assemble
+// the ReviewResult. Every pass carries the ticket; a resume reuses it. Every
 // pass is an independent request to the stateless Function, so any pass can
 // fail, be retried, or be resumed alone, and partial results render on the way.
 // Callers MUST have consent before calling runReview() (ReviewConsent.tsx).
 // `fetch` is resolved at call time, never captured at import — NetworkTrace's
 // window.fetch patch must see every request.
-import { FREE_REVIEWS_PER_DEVICE, ReviewCapacityError, ReviewLimitError, recordReviewUsed, reviewsRemaining } from "./review.ts";
+import { ReviewCapacityError } from "./review.ts";
+import { NotEnoughCoinsError, SignInRequiredError, reviewPrice } from "./coins.ts";
 import { TIER_PLAN } from "./reviewPrompt.ts";
 import { MAX_ABSTRACT_CHARS, MAX_LEDGER, MAX_NOTES, MAX_PAPER_SECTIONS, MAX_STATS_FINDINGS } from "./reviewPasses.ts";
 import { buildPaperMap, chunkSections, splitIntoSections } from "./reviewSections.ts";
@@ -39,6 +42,8 @@ export type RunReviewOptions = {
   // cancels mid-run resume later without re-sending finished sections.
   onState?: (state: ReviewState) => void;
   signal?: AbortSignal;
+  // The account's balance after the review was paid for.
+  onCharged?: (balance: number) => void;
   concurrency?: number;
   timeoutMs?: { extract: number; synthesize: number };
   retryDelaysMs?: number[];
@@ -50,7 +55,7 @@ export type ReviewState = {
   extracted: Record<string, ExtractResponse>;
   failed: Record<string, string>;
   excluded: { id: string; title: string }[];
-  counted: boolean; // set the first time synthesis succeeds — a device use is recorded exactly once per review
+  ticket: string | null; // from /api/review/start; a resume reuses it, so a review is paid for once
 };
 export type ReviewRun = { result: ReviewResult; state: ReviewState };
 export class ReviewSynthesisError extends Error {
@@ -100,8 +105,15 @@ function planState(text: string, hints: HeadingHint[], outline?: RunReviewOption
     extracted: {},
     failed: {},
     excluded: (outline?.excluded ?? []).map((s) => ({ id: s.id, title: s.title })),
-    counted: false,
+    ticket: null,
   };
+}
+
+/** What a review would cost, from exactly what it would send: shown in the consent before anything is. */
+export function quoteReview(opts: Pick<RunReviewOptions, "text" | "hints" | "outline" | "tier">): { coins: number; chars: number; sections: number } {
+  const { run } = planChunks(planState(opts.text, opts.hints ?? [], opts.outline).chunks, opts.tier);
+  const chars = run.reduce((n, c) => n + c.text.length, 0);
+  return { coins: reviewPrice(opts.tier, chars), chars, sections: run.length };
 }
 
 // Builds the wire ledger and an id → citation map in document order. Ids are
@@ -168,45 +180,69 @@ type Attempt = { ok: true; data: unknown } | { ok: false; reason: string; retrya
 // One POST. Throws for outcomes that end the whole review (caller abort,
 // 429 capacity, a 4xx contract error every pass would hit); returns a
 // failure for outcomes worth retrying or recording against one chunk.
-async function attempt(endpoint: string, body: Req, timeoutMs: number, outer: AbortSignal): Promise<Attempt> {
+async function attempt(endpoint: string, body: Req, ticket: string, timeoutMs: number, outer: AbortSignal): Promise<Attempt> {
   try {
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Review-Ticket": ticket },
       body: JSON.stringify(body),
       signal: AbortSignal.any([outer, AbortSignal.timeout(timeoutMs)]),
     });
     // Parsed here so a malformed 200 is a retryable failure for this pass, not a crash of the whole run.
     if (res.ok) return { ok: true, data: await res.json() };
     const detail = await res.text().catch(() => "");
-    if (res.status === 429) throw new ReviewCapacityError("This pilot is fully booked for today. Try again tomorrow.");
+    if (res.status === 429) throw new ReviewCapacityError("Reviews are fully booked for today. Try again tomorrow.");
+    if (res.status === 401) throw new SignInRequiredError();
+    // 403: the ticket is expired or used up; the server says which.
+    if (res.status === 403) throw new FatalPassError(detail || "This review can't continue. Start a new one.");
     if (res.status === 400 || res.status === 404 || res.status === 413) throw new FatalPassError(`Review request rejected (${res.status}): ${detail}`);
     // 422 = the model's output was truncated; not worth a same-size retry.
     return { ok: false, reason: `server error ${res.status}${detail ? `: ${detail}` : ""}`, retryable: res.status !== 422 };
   } catch (err) {
     if (outer.aborted) throw abortError(outer);
-    if (err instanceof ReviewCapacityError || err instanceof FatalPassError) throw err;
+    if (err instanceof ReviewCapacityError || err instanceof FatalPassError || err instanceof SignInRequiredError) throw err;
     if (err instanceof Error && err.name === "TimeoutError") return { ok: false, reason: "timed out", retryable: true };
     return { ok: false, reason: err instanceof Error ? err.message : String(err), retryable: true };
   }
 }
 type Req = ExtractRequest | SynthesizeRequest;
 
+// Pays for the review: section ids and lengths go up, a ticket comes back.
+async function startReview(endpoint: string, opts: RunReviewOptions, run: Chunk[]): Promise<{ ticket: string; balance: number }> {
+  const res = await fetch(`${endpoint}/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tier: opts.tier, journalId: opts.journalId, chunks: run.map((c) => ({ id: c.id, chars: c.text.length })) }),
+    signal: opts.signal,
+  });
+  if (res.ok) return (await res.json()) as { ticket: string; balance: number };
+  if (res.status === 401) throw new SignInRequiredError();
+  if (res.status === 402) {
+    const { coins, balance } = (await res.json()) as { coins: number; balance: number };
+    throw new NotEnoughCoinsError(coins, balance);
+  }
+  if (res.status === 429) throw new ReviewCapacityError("Reviews are fully booked for today. Try again tomorrow; nothing was charged.");
+  throw new Error(`The review couldn't start (${res.status}): ${await res.text().catch(() => "")}`);
+}
+
 // Runs a review, or — given `resume` (from a previous run's state or a
 // ReviewSynthesisError, or onState after a cancel) — re-runs only the chunks
-// not yet extracted plus synthesis. A review counts one device use, once.
+// not yet extracted plus synthesis, on the same ticket: paid for once.
 export async function runReview(opts: RunReviewOptions, resume?: ReviewState): Promise<ReviewRun> {
   const endpoint = opts.endpoint ?? "/api/review";
   const concurrency = opts.concurrency ?? 3;
   const timeoutMs = opts.timeoutMs ?? { extract: 120_000, synthesize: 300_000 };
   const delays = opts.retryDelaysMs ?? [1000, 3000];
-  if (!resume && reviewsRemaining() <= 0) {
-    throw new ReviewLimitError(`You've used all ${FREE_REVIEWS_PER_DEVICE} free pilot reviews on this device.`);
-  }
 
   const state = resume ?? planState(opts.text, opts.hints ?? [], opts.outline);
   opts.onState?.(state);
   const { run, skipped } = planChunks(state.chunks, opts.tier);
+  if (!state.ticket) {
+    const paid = await startReview(endpoint, opts, run);
+    state.ticket = paid.ticket;
+    opts.onCharged?.(paid.balance);
+  }
+  const ticket = state.ticket;
   const queue = run.filter((c) => !(c.id in state.extracted));
   for (const c of queue) delete state.failed[c.id];
   let done = run.length - queue.length;
@@ -231,7 +267,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
         claimsCap: cap,
         chunk: { id: chunk.id, title: chunk.title, kind: chunk.kind, part: chunk.part, parts: chunk.parts, text: chunk.text },
       };
-      const a = await attempt(endpoint, body, timeoutMs.extract, controller.signal);
+      const a = await attempt(endpoint, body, ticket, timeoutMs.extract, controller.signal);
       if (a.ok) {
         state.extracted[chunk.id] = a.data as ExtractResponse;
         return;
@@ -291,7 +327,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
     let reason = "";
     try {
       for (let i = 0; i < 2 && !synth; i++) {
-        const a = await attempt(endpoint, synthBody, timeoutMs.synthesize, controller.signal);
+        const a = await attempt(endpoint, synthBody, ticket, timeoutMs.synthesize, controller.signal);
         if (a.ok) {
           synth = a.data as SynthesizeResponse;
           break;
@@ -307,10 +343,6 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
       reason = err instanceof Error ? err.message : String(err);
     }
     if (!synth) throw new ReviewSynthesisError(`The cross-check didn't finish (${reason}).`, assemble(state, run, skipped, null), state);
-    if (!state.counted) {
-      recordReviewUsed();
-      state.counted = true;
-    }
     return { result: assemble(state, run, skipped, synth), state };
   } finally {
     opts.signal?.removeEventListener("abort", onOuterAbort);

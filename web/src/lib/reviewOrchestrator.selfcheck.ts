@@ -1,27 +1,14 @@
 // Runnable check for reviewOrchestrator.ts — planning, concurrency, retry
-// policy, failure isolation, resume and usage counting, against a stubbed
+// policy, failure isolation, resume and the paid ticket (one start per
+// review, sent with every pass, reused by a resume), against a stubbed
 // fetch. Run directly:  node src/lib/reviewOrchestrator.selfcheck.ts
 import assert from "node:assert/strict";
-import { ReviewSynthesisError, planChunks, runReview, type ReviewState } from "./reviewOrchestrator.ts";
+import { ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "./reviewOrchestrator.ts";
 import { NO_EDITS, buildOutline, chunkSections, splitIntoSections } from "./reviewSections.ts";
-import { FREE_REVIEWS_PER_DEVICE, ReviewCapacityError, reviewsRemaining } from "./review.ts";
+import { ReviewCapacityError } from "./review.ts";
+import { NotEnoughCoinsError, SignInRequiredError, reviewPrice } from "./coins.ts";
 import { parsePassRequest } from "./reviewPasses.ts";
 import type { ExtractRequest, ReviewProgress, SynthesizeRequest, SynthesizeResponse } from "./reviewTypes.ts";
-
-class MemoryStorage {
-  private store = new Map<string, string>();
-  getItem(k: string) {
-    return this.store.has(k) ? this.store.get(k)! : null;
-  }
-  setItem(k: string, v: string) {
-    this.store.set(k, v);
-  }
-  clear() {
-    this.store.clear();
-  }
-}
-const storage = new MemoryStorage();
-(globalThis as unknown as { localStorage: MemoryStorage }).localStorage = storage;
 
 const para = (n: number, seed: string) => Array.from({ length: n }, (_, i) => `${seed} sentence ${i} reports ${10 + i} patients.`).join(" ");
 const REFS = Array.from({ length: 12 }, (_, i) => `[${i + 1}] Author ${i}. Title ${i}. Journal, 20${10 + i}.`).join("\n");
@@ -31,15 +18,28 @@ const PAPER = `Title\n\nAbstract\n\n${para(12, "A")}\n\n1. Introduction\n\n${par
 type Req = ExtractRequest | SynthesizeRequest;
 type Handler = (req: Req, attempt: number, signal: AbortSignal | null | undefined) => Response | Promise<Response>;
 const calls: Req[] = [];
+// POST /start: what was asked for, and what it answers (a fresh ticket by default)
+type Start = { tier: string; journalId: string; chunks: { id: string; chars: number }[] };
+const starts: Start[] = [];
+let startReply: () => Response = () => json({ ticket: `t${starts.length}`, coins: 9, balance: 33 });
+const tickets: (string | null)[] = [];
 let inFlight = 0;
 let maxInFlight = 0;
 const attempts = new Map<string, number>();
-function stub(handler: Handler) {
+function stub(handler: Handler, onStart?: () => Response) {
   calls.length = 0;
+  starts.length = 0;
+  tickets.length = 0;
+  startReply = onStart ?? (() => json({ ticket: `t${starts.length}`, coins: 9, balance: 33 }));
   inFlight = 0;
   maxInFlight = 0;
   attempts.clear();
-  (globalThis as unknown as { fetch: typeof fetch }).fetch = (async (_url: string, init?: RequestInit) => {
+  (globalThis as unknown as { fetch: typeof fetch }).fetch = (async (url: string, init?: RequestInit) => {
+    if (url.endsWith("/start")) {
+      starts.push(JSON.parse(init!.body as string));
+      return startReply();
+    }
+    tickets.push(new Headers(init!.headers).get("x-review-ticket"));
     const req = JSON.parse(init!.body as string) as Req;
     const key = req.pass === "extract" ? req.chunk.id : "synth";
     const attempt = (attempts.get(key) ?? 0) + 1;
@@ -55,7 +55,9 @@ function stub(handler: Handler) {
     }
   }) as typeof fetch;
 }
-const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { "Content-Type": "application/json" } });
+function json(v: unknown, status = 200) {
+  return new Response(JSON.stringify(v), { status, headers: { "Content-Type": "application/json" } });
+}
 const text = (s: string, status: number) => new Response(s, { status });
 const firstSentence = (t: string) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12) ?? t.trim()).split(". ")[0];
 const okExtract = (req: ExtractRequest) =>
@@ -75,12 +77,12 @@ const extracts = () => calls.filter((c): c is ExtractRequest => c.pass === "extr
 const synthCall = () => calls.find((c): c is SynthesizeRequest => c.pass === "synthesize")!;
 const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint: "/mock", retryDelaysMs: [1, 2] };
 
-// 1. happy path: bodies, ids, citations, usage, progress
+// 1. happy path: bodies, ids, citations, the ticket, progress
 {
-  storage.clear();
   stub(happy);
   const progress: ReviewProgress[] = [];
-  const { result, state } = await runReview({ ...base, onProgress: (p) => progress.push(p) });
+  const charged: number[] = [];
+  const { result, state } = await runReview({ ...base, onProgress: (p) => progress.push(p), onCharged: (b) => charged.push(b) });
   const synth = synthCall();
   assert.equal(extracts().length, 6, "front matter, abstract, intro, methods, results, discussion — never references");
   assert.ok(extracts().every((e) => Object.keys(e).sort().join() === "chunk,claimsCap,pass,tier" && PAPER.includes(e.chunk.text)), "extract bodies carry exactly pass/tier/claimsCap/chunk");
@@ -95,7 +97,14 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   assert.equal(result.coverage.reviewed.length, 6);
   assert.equal(result.coverage.failed.length, 0);
   assert.deepEqual(result.coverage.skipped.map((s) => s.title), ["5. References"]);
-  assert.equal(reviewsRemaining(), FREE_REVIEWS_PER_DEVICE - 1, "one device use per review");
+  assert.equal(starts.length, 1, "one charge per review");
+  const run = planChunks(state.chunks, "standard").run;
+  assert.deepEqual(starts[0], { tier: "standard", journalId: "j", chunks: run.map((c) => ({ id: c.id, chars: c.text.length })) }, "start sends ids and lengths, never text");
+  assert.ok(tickets.length === 7 && tickets.every((t) => t === "t1"), "every pass carries the ticket");
+  assert.deepEqual(charged, [33], "the new balance is passed on");
+  assert.equal(state.ticket, "t1");
+  const quote = quoteReview({ text: PAPER, tier: "standard" });
+  assert.deepEqual(quote, { coins: reviewPrice("standard", starts[0].chunks.reduce((n, c) => n + c.chars, 0)), chars: starts[0].chunks.reduce((n, c) => n + c.chars, 0), sections: 6 }, "the quote is what start is charged for");
   assert.equal(progress.length, 7, "one event per extract pass + one for synthesis");
   assert.ok(progress.every((p, i) => i === 0 || p.done >= progress[i - 1].done), "progress is monotonic");
   assert.equal(progress[6].phase, "synthesize");
@@ -103,33 +112,27 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 }
 // 2. concurrency never exceeds 3
 {
-  storage.clear();
   stub(happy);
   await runReview({ ...base, text: `${PAPER}\n\nAppendix\n\n${para(12, "X")}\n\nSupplementary Material\n\n${para(12, "Y")}`, tier: "thorough" });
   assert.ok(maxInFlight <= 3 && calls.length >= 8, `max in flight ${maxInFlight}, calls ${calls.length}`);
 }
 // 3. one chunk fails after retries → coverage.failed, synthesis still runs, usage counted
 {
-  storage.clear();
   stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s2" ? text("boom", 502) : happy(req, attempt, null)));
   const { result } = await runReview(base);
   assert.equal(attempts.get("s2"), 3, "1 try + 2 retries");
   assert.deepEqual(result.coverage.failed.map((f) => f.id), ["s2"]);
   assert.match(result.coverage.failed[0].reason, /502/);
   assert.ok(!synthCall().ledger.some((e) => e.id.startsWith("s2-")), "a failed chunk contributes nothing to the ledger");
-  assert.equal(reviewsRemaining(), FREE_REVIEWS_PER_DEVICE - 1);
 }
-// 4. 429 aborts everything, nothing counted
+// 4. 429 aborts everything
 {
-  storage.clear();
   stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s2" ? text("Pilot is fully booked for today", 429) : happy(req, attempt, null)));
   await assert.rejects(runReview(base), ReviewCapacityError);
   assert.ok(calls.length <= 4, `abort stopped the queue (${calls.length} calls)`);
-  assert.equal(reviewsRemaining(), FREE_REVIEWS_PER_DEVICE);
 }
 // 5. timeouts retry, then fail with a reason
 {
-  storage.clear();
   stub((req, attempt, signal) =>
     req.pass === "extract" && req.chunk.id === "s3"
       ? new Promise<Response>((_, rej) => signal?.addEventListener("abort", () => rej(signal.reason)))
@@ -145,41 +148,37 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 }
 // 6. resume re-runs only failed chunks + synthesis
 {
-  storage.clear();
   stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s2" ? text("boom", 502) : happy(req, attempt, null)));
   const first = await runReview(base);
   stub(happy);
   const second = await runReview(base, first.state);
   assert.deepEqual(calls.map((c) => (c.pass === "extract" ? c.chunk.id : "synth")), ["s2", "synth"]);
   assert.equal(second.result.coverage.failed.length, 0);
-  assert.equal(reviewsRemaining(), FREE_REVIEWS_PER_DEVICE - 1, "a resume never counts a second use");
+  assert.equal(starts.length, 0, "a resume is never charged again");
+  assert.ok(tickets.every((t) => t === "t1"), "it reuses the first ticket");
 }
 // 7. synthesis failure keeps the partial; resume issues exactly one synth call
 {
-  storage.clear();
   stub((req, attempt) => (req.pass === "synthesize" ? text("boom", 502) : happy(req, attempt, null)));
   const err = await runReview(base).catch((e: unknown) => e);
   assert.ok(err instanceof ReviewSynthesisError);
   assert.equal(attempts.get("synth"), 2, "synthesis retries once");
   assert.ok(err.partial.statisticalReporting.length > 0 && err.partial.journalFit === null);
-  assert.equal(reviewsRemaining(), FREE_REVIEWS_PER_DEVICE, "no use counted without a synthesis");
   stub(happy);
   await runReview(base, err.state);
   assert.deepEqual(calls.map((c) => c.pass), ["synthesize"]);
-  assert.equal(reviewsRemaining(), FREE_REVIEWS_PER_DEVICE - 1, "the resume that completes the review counts it, once");
+  assert.equal(starts.length, 0, "retrying the cross-check costs nothing more");
 }
 // 8. quick tier extracts only abstract/results/discussion
 {
-  storage.clear();
   stub(happy);
   const { result } = await runReview({ ...base, tier: "quick" });
   assert.deepEqual(extracts().map((e) => e.chunk.kind).sort(), ["abstract", "discussion", "results"]);
   assert.equal(extracts()[0].claimsCap, 20);
   assert.equal(result.coverage.skipped.length, 4, "front matter, intro, methods, references skipped");
 }
-// 9. caller abort mid-run → AbortError, nothing counted
+// 9. caller abort mid-run → AbortError
 {
-  storage.clear();
   const ac = new AbortController();
   stub((req, attempt) => {
     if (req.pass === "extract" && req.chunk.id === "s2") ac.abort();
@@ -187,11 +186,9 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   });
   await assert.rejects(runReview({ ...base, signal: ac.signal }), (e: unknown) => (e as Error).name === "AbortError");
   assert.ok(!calls.some((c) => c.pass === "synthesize"), "no synthesis after an abort");
-  assert.equal(reviewsRemaining(), FREE_REVIEWS_PER_DEVICE);
 }
 // 10. no headings → fixed chunks, abstractText null
 {
-  storage.clear();
   stub(happy);
   const { state } = await runReview({ ...base, text: para(900, "Flat") }); // ≈ 36k chars, no headings, no newlines
   assert.equal(synthCall().abstractText, null);
@@ -199,7 +196,6 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 }
 // 11. abstract-only submission → exactly one extract pass, a valid result
 {
-  storage.clear();
   stub(happy);
   const { result } = await runReview({ ...base, text: `Abstract\n\n${para(4, "Only")}` });
   assert.equal(extracts().length, 1);
@@ -208,7 +204,6 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 }
 // 12. 422 retries once with a halved cap, then fails as "too dense"
 {
-  storage.clear();
   stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s4" ? text("truncated", 422) : happy(req, attempt, null)));
   const { result } = await runReview(base);
   assert.deepEqual(extracts().filter((e) => e.chunk.id === "s4").map((e) => e.claimsCap), [30, 15]);
@@ -220,17 +215,26 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   assert.equal(planChunks(chunks, "thorough").skipped.length, 1);
   assert.equal(planChunks(chunks, "quick").run.length, 3);
 }
-// 14. no free reviews left → ReviewLimitError before any request
+// 14. start refuses: signed out, too few coins, fully booked; nothing is sent
 {
-  storage.clear();
-  storage.setItem("margalink-review-uses", String(FREE_REVIEWS_PER_DEVICE));
-  stub(happy);
-  await assert.rejects(runReview(base), /free pilot reviews/);
-  assert.equal(calls.length, 0);
+  stub(happy, () => text("Sign in to get a review.", 401));
+  await assert.rejects(runReview(base), SignInRequiredError);
+  stub(happy, () => json({ coins: 9, balance: 4 }, 402));
+  const short = await runReview(base).catch((e: unknown) => e);
+  assert.ok(short instanceof NotEnoughCoinsError && short.coins === 9 && short.balance === 4, String(short));
+  stub(happy, () => text("fully booked", 429));
+  await assert.rejects(runReview(base), ReviewCapacityError);
+  assert.equal(calls.length, 0, "no pass is sent without a ticket");
+}
+// 14b. a pass refused for the ticket (expired, used up) ends the run with the server's reason; signed out mid-run too
+{
+  stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s1" ? text("This review's ticket has expired.", 403) : happy(req, attempt, null)));
+  await assert.rejects(runReview(base), /ticket has expired/);
+  stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s1" ? text("Sign in to get a review.", 401) : happy(req, attempt, null)));
+  await assert.rejects(runReview(base), SignInRequiredError);
 }
 // 15. a 400 (contract bug) aborts the whole run with the server's text
 {
-  storage.clear();
   stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s1" ? text("chunk kind is not a known section kind", 400) : happy(req, attempt, null)));
   await assert.rejects(runReview(base), /chunk kind is not a known section kind/);
   assert.ok(!calls.some((c) => c.pass === "synthesize"));
@@ -239,7 +243,6 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 // --- Fixes from the whole-branch review ---
 // R1. a very long paper: every chunk maxes out notes and stats, and the synthesis body still passes the server's gates
 {
-  storage.clear();
   const busy: Handler = (req, attempt) =>
     req.pass === "extract"
       ? json({
@@ -256,7 +259,6 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 }
 // R1b. a 400 on synthesis keeps the state (retryable), not a dead end
 {
-  storage.clear();
   stub((req, attempt) => (req.pass === "synthesize" ? text("notes must be an array of at most 100 entries", 400) : happy(req, attempt, null)));
   const err = await runReview(base).catch((e: unknown) => e);
   assert.ok(err instanceof ReviewSynthesisError, String(err));
@@ -265,7 +267,6 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 }
 // R2. quick tier on a paper with no recognizable headings still reviews it
 {
-  storage.clear();
   stub(happy);
   const { result } = await runReview({ ...base, tier: "quick", text: para(900, "Flat") });
   assert.ok(extracts().length >= 2, "headless text is reviewed on quick too");
@@ -273,7 +274,6 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 }
 // R5. cancel mid-run: coverage names what wasn't reached, and onState lets it resume
 {
-  storage.clear();
   const ac = new AbortController();
   const seen: { state: ReviewState | null; partial: ReviewProgress["partial"] | null } = { state: null, partial: null };
   stub((req, attempt) => {
@@ -292,11 +292,10 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   assert.equal(extracts().length, 6 - finishedBefore.size, "and sends every unfinished one");
   assert.equal(resumed.result.coverage.reviewed.length, 6);
   assert.equal(resumed.result.coverage.pending.length, 0);
-  assert.equal(reviewsRemaining(), FREE_REVIEWS_PER_DEVICE - 1, "the resumed review counts one use");
+  assert.equal(starts.length, 0, "the resumed review isn't charged again");
 }
 // R6. a cancel during a retry delay settles immediately, not after the delay
 {
-  storage.clear();
   const ac = new AbortController();
   stub((req, attempt) => {
     if (req.pass === "extract" && req.chunk.id === "s1") {
@@ -311,7 +310,6 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 }
 // R9. a 200 with a non-JSON body fails just that pass (retried), not the whole run
 {
-  storage.clear();
   stub((req, attempt) =>
     req.pass === "extract" && req.chunk.id === "s3" && attempt === 1 ? new Response("<html>oops</html>", { status: 200 }) : happy(req, attempt, null)
   );
@@ -322,7 +320,6 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 
 // O1. the user's outline: an excluded section's text is in no request body at all, and coverage says why it was skipped
 {
-  storage.clear();
   stub(happy);
   const results = splitIntoSections(PAPER).find((x) => x.kind === "results")!;
   const outline = buildOutline(PAPER, [], { ...NO_EDITS, kinds: { [results.charStart]: "excluded" } });
@@ -339,7 +336,6 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
 }
 // O2. a kind override changes what a tier extracts
 {
-  storage.clear();
   stub(happy);
   const methods = splitIntoSections(PAPER).find((x) => x.kind === "methods")!;
   const outline = buildOutline(PAPER, [], { ...NO_EDITS, kinds: { [methods.charStart]: "results" } });

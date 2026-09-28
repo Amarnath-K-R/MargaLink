@@ -1,6 +1,5 @@
 "use client";
 
-import { reviewsRemaining } from "@/lib/review";
 import { NO_EDITS } from "@/lib/reviewSections";
 import type { Citation, SectionKind } from "@/lib/reviewTypes";
 import ErrorText from "@/components/ErrorText";
@@ -36,10 +35,10 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
         <button
           type="button"
           onClick={() => r.setConsentOpen(true)}
-          disabled={r.reviewLoading || reviewsRemaining() <= 0}
+          disabled={r.reviewLoading}
           className="clay-btn clay-primary h-11 px-6 text-sm font-medium"
         >
-          {r.reviewLoading ? "Reviewing…" : reviewsRemaining() <= 0 ? "Pilot review limit reached on this device" : `Get a ${r.tier} review by Claude`}
+          {r.reviewLoading ? "Reviewing…" : `Get a ${r.tier} review by Claude`}
         </button>
         {r.reviewLoading && (
           <button type="button" onClick={r.cancel} className="clay-btn h-11 px-5 text-sm">
@@ -74,7 +73,6 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
           tier={r.tier}
           passCount={r.passCount}
           excludedCount={r.outline?.excluded.length ?? 0}
-          reviewsRemaining={reviewsRemaining()}
           onConfirm={() => void r.startReview()}
           onCancel={() => r.setConsentOpen(false)}
         />

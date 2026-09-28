@@ -3,7 +3,7 @@
 // the one that sends actual paper text; the other, figure.ts, sends a
 // spreadsheet's column names/types and the user's request, never its values. This module owns what happens to
 // the text before anything is sent (stripping, normalization, the size
-// ceiling) and the per-device limit; reviewOrchestrator.ts does the sending.
+// ceiling); reviewOrchestrator.ts pays for the review and does the sending.
 // Callers MUST get explicit consent (components/ReviewConsent.tsx) before
 // calling runReview() — neither module enforces that itself.
 import { normalizeText } from "./reviewGrounding.ts";
@@ -17,29 +17,6 @@ export const MAX_REVIEW_CHARS = 400_000;
 // grounding check reads. Newlines survive — sectioning needs them.
 export function prepareForReview(fullText: string): string {
   return normalizeText(stripIdentifyingInfo(fullText));
-}
-
-const USAGE_KEY = "margalink-review-uses";
-export const FREE_REVIEWS_PER_DEVICE = 3;
-
-export function reviewsUsed(): number {
-  try {
-    return Number(localStorage.getItem(USAGE_KEY) ?? "0");
-  } catch {
-    return 0; // storage blocked (private browsing etc.) — treat as unused rather than block the feature
-  }
-}
-
-export function reviewsRemaining(): number {
-  return Math.max(0, FREE_REVIEWS_PER_DEVICE - reviewsUsed());
-}
-
-export function recordReviewUsed(): void {
-  try {
-    localStorage.setItem(USAGE_KEY, String(reviewsUsed() + 1));
-  } catch {
-    // ignore — worst case the per-device counter under-counts
-  }
 }
 
 // Best-effort, not a guarantee: strips lines in the first ~500 characters
@@ -67,5 +44,4 @@ export function stripIdentifyingInfo(text: string): string {
   return cleanedHead + rest;
 }
 
-export class ReviewLimitError extends Error {}
 export class ReviewCapacityError extends Error {}

@@ -1,6 +1,5 @@
 "use client";
 
-import { FREE_REVIEWS_PER_DEVICE } from "@/lib/review";
 import type { ReviewTier } from "@/lib/reviewTypes";
 
 // The one place in the app where a plain-language notice and an explicit
@@ -12,7 +11,6 @@ export default function ReviewConsent({
   tier,
   passCount,
   excludedCount,
-  reviewsRemaining,
   onConfirm,
   onCancel,
 }: {
@@ -20,7 +18,6 @@ export default function ReviewConsent({
   tier: ReviewTier;
   passCount: number;
   excludedCount: number;
-  reviewsRemaining: number;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -42,11 +39,6 @@ export default function ReviewConsent({
         your paper&apos;s text off your device.
         {excludedCount > 0 &&
           ` The ${excludedCount} section${excludedCount === 1 ? "" : "s"} you marked "Don't send" won't be sent at all.`}
-      </p>
-      <p className="mt-2 text-xs text-ink-soft">
-        {reviewsRemaining} of {FREE_REVIEWS_PER_DEVICE} free pilot review
-        {reviewsRemaining === 1 ? "" : "s"} left on this device. Retrying a section that
-        failed doesn&apos;t use another one.
       </p>
       <div className="mt-5 flex flex-wrap gap-3 text-sm">
         <button type="button" onClick={onConfirm} className="clay-btn clay-primary h-10 px-5 font-medium">

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import ErrorText from "@/components/ErrorText";
 import FigureConsent from "@/components/FigureConsent";
-import { askClaude, figureConsentGiven, figuresRemaining, recordFigureConsent, type ClaudeResult } from "@/lib/figure";
+import { askClaude, figureConsentGiven, recordFigureConsent, type ClaudeResult } from "@/lib/figure";
 import { REQUEST_MAX_CHARS, buildFigurePayload, levelsToSend, type FigureMode } from "@/lib/figureSchema";
 import type { FigureSpec } from "@/lib/figureSpec";
 import type { Dataset } from "@/lib/spreadsheet";
@@ -28,7 +28,6 @@ export default function Describe({
   const [summary, setSummary] = useState<string | null>(null);
   const labels = levelsToSend(dataset);
   const payload = buildFigurePayload(dataset, spec, request, { sendLevels, mode: "spec" });
-  const remaining = figuresRemaining();
 
   async function run(mode: FigureMode) {
     setBusy(mode);
@@ -77,16 +76,15 @@ export default function Describe({
         </span>
       </label>
       <div className="mt-3 flex flex-wrap gap-3">
-        <button type="button" disabled={!request.trim() || !!busy || remaining <= 0} onClick={() => ask("spec")} className={button}>
+        <button type="button" disabled={!request.trim() || !!busy} onClick={() => ask("spec")} className={button}>
           {busy === "spec" ? "Asking Claude…" : "Ask Claude for a figure"}
         </button>
-        <button type="button" disabled={!request.trim() || !spec || !!busy || remaining <= 0} onClick={() => ask("hook")} className={button}>
+        <button type="button" disabled={!request.trim() || !spec || !!busy} onClick={() => ask("hook")} className={button}>
           {busy === "hook" ? "Asking Claude…" : "Ask for a custom tweak (code)"}
         </button>
       </div>
       <p className="mt-2 text-xs text-ink-soft">
-        {remaining > 0 ? `${remaining} of 5 free Claude requests left on this device.` : "No free Claude requests left on this device."} Templates, editing and
-        exports are unlimited and never send anything.
+        Templates, editing and exports are unlimited and never send anything.
       </p>
       {pending && (
         <FigureConsent
