@@ -5,7 +5,7 @@
 // deletes the account and everything tied to it (foreign keys cascade);
 // only the welcome fingerprint in welcome_claims stays (no address in it).
 // Pro is cancelled at Paddle first, so a deleted account is never charged.
-import { getSession, readJson, sessionCookies, text, withCookies, type AccountEnv } from "../../src/lib/auth.ts";
+import { fingerprint, getSession, hashSecret, readJson, sessionCookies, text, withCookies, type AccountEnv } from "../../src/lib/auth.ts";
 import { cancelSubscription, type PaddleApiEnv } from "../../src/lib/paddle.ts";
 import { normalEmail } from "../../src/lib/coins.ts";
 import { balance, history } from "../../src/lib/ledger.ts";
@@ -39,6 +39,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   for (const sub of live) {
     if (!(await cancelSubscription(env, sub.id))) return text("We couldn't cancel your Pro subscription, so nothing was deleted. Try again in a minute.", 502);
   }
-  await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(s.userId).run();
+  // The account cascades; what's keyed by its address (sign-in links, their counters) goes too.
+  const secret = hashSecret(env, request);
+  const fp = secret ? await fingerprint(secret, s.email) : null;
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM users WHERE id = ?").bind(s.userId),
+    env.DB.prepare("DELETE FROM magic_links WHERE email = ?").bind(s.email),
+    ...(fp ? [env.DB.prepare("DELETE FROM rate_limits WHERE key IN (?, ?)").bind(`mail15:${fp}`, `mailday:${fp}`)] : []),
+  ]);
   return withCookies(Response.json({ ok: true }), sessionCookies(null));
 };

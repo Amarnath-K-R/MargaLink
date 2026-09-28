@@ -190,6 +190,14 @@ export async function portalUrl(env: PaddleApiEnv, customerId: string, subscript
   return str(obj(obj(data.urls).general).overview);
 }
 
+/**
+ * Cancels Pro at once. true: cancelled, or Paddle says there's nothing to
+ * cancel (any 4xx but auth and rate limits: already cancelled, unknown).
+ * false: Paddle couldn't be asked (down, rate-limited, our key refused), so
+ * the caller mustn't assume it's cancelled.
+ */
 export async function cancelSubscription(env: PaddleApiEnv, subscriptionId: string): Promise<boolean> {
-  return (await api(env, `/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, { effective_from: "immediately" })).ok;
+  const res = await api(env, `/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, { effective_from: "immediately" }).catch(() => null);
+  if (!res) return false;
+  return res.ok || (res.status >= 400 && res.status < 500 && ![401, 403, 429].includes(res.status));
 }

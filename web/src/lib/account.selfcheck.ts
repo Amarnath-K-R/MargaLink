@@ -8,7 +8,7 @@ import { createSession, signInUser } from "./auth.ts";
 import { credit, grantWelcome } from "./ledger.ts";
 import { onRequestGet, onRequestPost } from "../../functions/api/account.ts";
 
-const env = { DB: testD1() };
+const env = { DB: testD1(), HASH_SECRET: "key" };
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
 const now = Date.now();
 const u = await signInUser(env.DB, { email: "ann@example.org", google: "g-1" }, now);
@@ -33,14 +33,22 @@ assert.equal(data.coins.ledger.length, 2);
 assert.equal(data.sessions.length, 1);
 assert.deepEqual([data.purchases, data.subscriptions], [[], []], "payments are part of the export");
 
+// what's keyed by the address goes with the account: sign-in links and its counters
+const { fingerprint } = await import("./auth.ts");
+const fp = await fingerprint("key", "ann@example.org");
+await env.DB.batch([
+  env.DB.prepare("INSERT INTO magic_links (token_hash, email, next, expires_at) VALUES ('m1', 'ann@example.org', '/', ?)").bind(now + 60_000),
+  env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 1, ?), (?, 1, ?), ('mail-new', 3, ?)").bind(`mail15:${fp}`, now + 60_000, `mailday:${fp}`, now + 60_000, now + 60_000),
+]);
 assert.equal((await del({ delete: "someone@else.org" })).status, 400, "the address must match");
 assert.equal((await del({})).status, 400);
 const gone = await del({ delete: " Ann@Example.org " });
 assert.equal(gone.status, 200);
 assert.ok(gone.headers.getSetCookie().every((c) => c.endsWith("Max-Age=0")));
-for (const t of ["users", "identities", "sessions", "coin_ledger"]) {
+for (const t of ["users", "identities", "sessions", "coin_ledger", "magic_links"]) {
   assert.equal((await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first<{ n: number }>())?.n, 0, t);
 }
 assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM welcome_claims").first<{ n: number }>())?.n, 1);
+assert.deepEqual((await env.DB.prepare("SELECT key FROM rate_limits").all<{ key: string }>()).results.map((r) => r.key), ["mail-new"], "only the site-wide counter stays");
 assert.equal((await get()).status, 401, "signed out");
 console.log("account.selfcheck: OK");

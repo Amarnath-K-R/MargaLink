@@ -98,9 +98,11 @@ assert.deepEqual(mine.pro, { interval: "year", status: "active", renews: true, p
 // the customer portal, and deleting an account with Pro
 const calls: { url: string; body: string }[] = [];
 let paddleUp = true;
+let alreadyCancelled = false;
 globalThis.fetch = (async (url: string, init?: RequestInit) => {
   calls.push({ url, body: String(init?.body ?? "") });
   if (!paddleUp) return new Response("{}", { status: 500 });
+  if (alreadyCancelled && url.includes("/cancel")) return Response.json({ error: { code: "subscription_update_when_canceled" } }, { status: 400 });
   if (url.includes("/portal-sessions")) return Response.json({ data: { urls: { general: { overview: "https://customer-portal.paddle.com/x" } } } });
   return Response.json({ data: {} });
 }) as typeof fetch;
@@ -117,6 +119,13 @@ paddleUp = false;
 assert.equal((await post(account, "/api/account", { delete: "yan@x.org" }, yCookie)).status, 502, "Pro couldn't be cancelled: nothing is deleted");
 assert.ok(await env.DB.prepare("SELECT 1 FROM users WHERE id = ?").bind(y.id).first());
 paddleUp = true;
+// Paddle says there's nothing to cancel (already cancelled there): that doesn't block deleting
+const z = await signInUser(env.DB, { email: "zed@x.org" }, t0);
+await deliver("subscription.created", sub(z.id, { id: "sub_z", start: t0, end: t0 + 31 * DAY }), t0);
+const zCookie = `__Host-ml_session=${await createSession(env.DB, z.id, Date.now())}`;
+alreadyCancelled = true;
+assert.equal((await post(account, "/api/account", { delete: "zed@x.org" }, zCookie)).status, 200);
+alreadyCancelled = false;
 calls.length = 0;
 assert.equal((await post(account, "/api/account", { delete: "yan@x.org" }, yCookie)).status, 200);
 assert.equal(calls[0].url, "https://sandbox-api.paddle.com/subscriptions/sub_y/cancel");

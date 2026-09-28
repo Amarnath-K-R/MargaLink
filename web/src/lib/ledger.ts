@@ -74,6 +74,21 @@ export async function sweepTickets(db: D1Database, now: number) {
   ]);
 }
 
+/**
+ * Clears what has expired: review tickets (refunding what they didn't
+ * deliver), sign-in links (which hold an address), sessions and rate
+ * counters. There's no scheduler on Pages, so any API request runs this, at
+ * most once a minute (functions/api/_middleware.ts).
+ */
+export async function housekeeping(db: D1Database, now: number) {
+  await sweepTickets(db, now);
+  await db.batch([
+    db.prepare("DELETE FROM magic_links WHERE expires_at <= ?").bind(now),
+    db.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(now),
+    db.prepare("DELETE FROM rate_limits WHERE expires_at <= ?").bind(now),
+  ]);
+}
+
 // No pass starts this close to a ticket's end: a synthesis may run for up to
 // 290 s upstream, and must finish while its ticket still exists.
 const CLAIM_MARGIN_MS = 5 * 60 * 1000;

@@ -109,4 +109,23 @@ assert.equal(ok.status, 200);
 assert.equal(ok.headers.get("cache-control"), "no-store");
 assert.equal((await mw({ request: post("/api/pay/webhook"), next })).status, 200);
 assert.equal((await mw({ request: new Request("https://m.test/api/me"), next })).status, 200);
+
+// housekeeping: any API request (at most once a minute) clears what has expired
+const hk = testD1();
+const old = Date.now() - 1000;
+await hk.prepare("INSERT INTO users (id, email, created_at) VALUES ('h1', 'h@x.org', 0)").run();
+await hk.batch([
+  hk.prepare("INSERT INTO sessions (id_hash, user_id, expires_at) VALUES ('s-old', 'h1', ?), ('s-live', 'h1', ?)").bind(old, Date.now() + 60_000),
+  hk.prepare("INSERT INTO magic_links (token_hash, email, next, expires_at) VALUES ('m-old', 'h@x.org', '/', ?)").bind(old),
+  hk.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES ('r-old', 1, ?)").bind(old),
+  hk.prepare("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) VALUES ('h1', -4, 'review', 't-old', 0)"),
+  hk.prepare("INSERT INTO review_tickets (id_hash, user_id, tier, coins, chunks, extract_left, synth_left, created_at, expires_at) VALUES ('t-old', 'h1', 'quick', 4, '{}', 0, 0, 0, ?)").bind(old),
+]);
+const waits: Promise<unknown>[] = [];
+const mwEnv = onRequest as unknown as (ctx: { request: Request; next: () => Promise<Response>; env: object; waitUntil: (p: Promise<unknown>) => void }) => Promise<Response>;
+await mwEnv({ request: new Request("https://m.test/api/me"), next, env: { DB: hk }, waitUntil: (p) => void waits.push(p) });
+await Promise.all(waits);
+const count = async (t: string) => (await hk.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first<{ n: number }>())?.n;
+assert.deepEqual([await count("sessions"), await count("magic_links"), await count("rate_limits"), await count("review_tickets")], [1, 0, 0, 0], "expired rows gone");
+assert.equal((await hk.prepare("SELECT SUM(delta) AS b FROM coin_ledger").first<{ b: number }>())?.b, 0, "the expired ticket was refunded on the way");
 console.log("auth.selfcheck: OK");
