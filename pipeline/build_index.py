@@ -18,8 +18,10 @@ so a rebuild can never publish stale accuracy.
 """
 
 import hashlib
+import inspect
 import itertools
 import json
+import os
 import random
 import sys
 import tempfile
@@ -82,6 +84,8 @@ def load_splits(path: Path) -> dict[str, tuple[list[dict], list[dict]]]:
     """Journal id -> (index, held-out) papers, slimmed, in file order."""
     out = {}
     for j in safe_iter_jsonl(path):
+        if j["id"] in out:
+            continue  # a journal written twice (two fetch runs): the first wins, as in iter_texts
         idx, held = split_papers(j["papers"])
         out[j["id"]] = ([slim(p) for p in idx], [slim(p) for p in held])
     return out
@@ -90,9 +94,10 @@ def load_splits(path: Path) -> dict[str, tuple[list[dict], list[dict]]]:
 def iter_texts(path: Path, ids: list[str], which: int):
     """The papers' texts streamed from the works file, journal by journal in `ids`
     order, which must be file order: which=0 the index papers, 1 the held-out."""
-    want = set(ids)
+    want, seen = set(ids), set()
     for j in safe_iter_jsonl(path):
-        if j["id"] in want:
+        if j["id"] in want and j["id"] not in seen:
+            seen.add(j["id"])
             yield from (paper_text(p) for p in split_papers(j["papers"])[which])
 
 
@@ -138,18 +143,41 @@ def int8_top10(query: np.ndarray, centres: np.ndarray, spans: list[tuple[int, in
 EMBED_CHUNK = 20_000
 
 
+def settings_tag() -> str:
+    """Everything besides the works file and the journal ids that decides which
+    vectors a cache holds: the split sizes, the text each paper becomes, the
+    input cap and the model. A change to any of them names a new cache file."""
+    parts = (HELDOUT_MAX, INDEX_CAP, MIN_INDEX_PAPERS, embedding.MAX_CHARS, embedding.MODEL_NAME, inspect.getsource(paper_text))
+    return hashlib.sha1(repr(parts).encode()).hexdigest()[:8]
+
+
+# The settings the caches written before settings_tag existed were made with
+# (the full v2 build of 2026-09-28): while they hold, those files keep their
+# names and are reused; any change to the settings gets a tagged name instead.
+LEGACY_TAG = "0f59cdb8"
+
+
 def embed_cached(model, texts, count: int, dim: int, kind: str, key: str, cache_dir: Path = DATA_DIR) -> np.ndarray:
     """Paper vectors, embedded chunk by chunk straight into a float16 file on disk
     and returned memory-mapped, so millions never sit in memory at once. Cached
     by model + kind + key, so re-running the build to tune the quality pass
     doesn't re-embed; an interrupted run (OOM, sleep, SIGKILL) resumes where the
     last finished chunk left off."""
-    path = cache_dir / f"embcache_{embedding.MODEL_NAME.replace('/', '_')}_{kind}_{key}.npy"
+    tag = settings_tag()
+    suffix = "" if tag == LEGACY_TAG else f"_{tag}"
+    path = cache_dir / f"embcache_{embedding.MODEL_NAME.replace('/', '_')}_{kind}_{key}{suffix}.npy"
     if path.exists():
-        print(f"using cached vectors {path.name}", flush=True)
-        return np.load(path, mmap_mode="r")
+        cached = np.load(path, mmap_mode="r")
+        if cached.shape == (count, dim):
+            print(f"using cached vectors {path.name}", flush=True)
+            return cached
+        print(f"{path.name} holds {cached.shape}, not {(count, dim)}: embedding again", flush=True)
+        del cached
     part, done_file = path.with_suffix(".partial.npy"), path.with_suffix(".done")
     resume = part.exists() and done_file.exists()
+    if resume:
+        # Only a partial file of the right size, with a readable count, is picked up.
+        resume = np.load(part, mmap_mode="r").shape == (count, dim) and done_file.read_text().strip().isdigit()
     out = np.lib.format.open_memmap(part, mode="r+" if resume else "w+", dtype=np.float16, shape=(count, dim))
     done = int(done_file.read_text()) if resume else 0
     if done:
@@ -159,7 +187,10 @@ def embed_cached(model, texts, count: int, dim: int, kind: str, key: str, cache_
         out[done : done + len(chunk)] = embedding.embed_texts(model, chunk, kind, progress=False)
         out.flush()
         done += len(chunk)
-        done_file.write_text(str(done))
+        # Written aside and renamed into place, so a kill mid-write can't leave it empty.
+        tmp = done_file.with_suffix(".done.tmp")
+        tmp.write_text(str(done))
+        os.replace(tmp, done_file)
         rate = (done - first) / max(time.time() - start, 1e-9)
         print(f"{kind}: {done}/{count} ({rate:.0f}/s, ~{(count - done) / rate / 3600:.1f} h left)", flush=True)
     if done != count:
@@ -343,7 +374,36 @@ def _self_check() -> None:
         assert m.seen == items[2:], "only the unfinished chunks are re-embedded"
         assert np.allclose(vecs, embedding.normalize(np.array([[len(t), 1.0] for t in items], dtype=np.float32)), atol=1e-3)
         assert embed_cached(Model(fail_after=0), iter(items), 5, 2, "passage", "k", Path(tmp)).shape == (5, 2), "cached: nothing re-embedded"
+        # A cache of the wrong size (the split settings changed) is embedded again, not used.
+        m = Model()
+        wrong = embed_cached(m, iter(items[:4]), 4, 2, "passage", "k", Path(tmp))
+        assert wrong.shape == (4, 2) and m.seen == items[:4], "a mismatched cache is re-embedded"
+
+        # A progress file left empty by a kill mid-write means starting over, not a crash.
+        np.save(Path(tmp) / f"embcache_{embedding.MODEL_NAME.replace('/', '_')}_query_k.partial.npy", np.zeros((5, 2), np.float16))
+        (Path(tmp) / f"embcache_{embedding.MODEL_NAME.replace('/', '_')}_query_k.done").write_text("")
+        m = Model()
+        assert embed_cached(m, iter(items), 5, 2, "query", "k", Path(tmp)).shape == (5, 2) and m.seen == items
+
+        # Changed settings name a new cache; today's settings keep the old names.
+        global INDEX_CAP
+        assert settings_tag() == LEGACY_TAG, "the recorded settings are today's"
+        cap, INDEX_CAP = INDEX_CAP, INDEX_CAP + 1
+        try:
+            assert settings_tag() != LEGACY_TAG
+            m = Model()
+            embed_cached(m, iter(items), 5, 2, "passage", "k", Path(tmp))
+            assert m.seen == items, "not the cache made under the old settings"
+        finally:
+            INDEX_CAP = cap
         EMBED_CHUNK = chunk
+
+        # A journal written twice: the first copy wins, in both passes.
+        dup = Path(tmp) / "dup.jsonl"
+        dup.write_text("\n".join(json.dumps(journal(j, n)) for j, n in [("A", 20), ("A", 40), ("B", 12)]) + "\n")
+        sp = load_splits(dup)
+        assert len(sp["A"][0]) == 15, "first copy"
+        assert len(list(iter_texts(dup, ["A", "B"], 0))) == 15 + 12, "texts match the counts"
 
     print("build_index self-check: OK")
 
