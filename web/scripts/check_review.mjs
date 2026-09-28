@@ -181,6 +181,25 @@ await page.waitForTimeout(300);
 check("an outline edit mid-run offers no stale resume", !(await page.getByRole("button", { name: /Resume review|Retry failed sections/ }).isVisible().catch(() => false)));
 slow = false;
 
+// Signed out mid-run (a session that expired): the run stops, and resuming it later isn't charged again.
+let signedOutOnce = true;
+await page.route("**/api/review", async (route) => {
+  if (signedOutOnce && route.request().postDataJSON().pass === "extract") {
+    signedOutOnce = false;
+    return route.fulfill({ status: 401, contentType: "text/plain", body: "Sign in to get a review." });
+  }
+  return route.fallback();
+});
+const startsBefore = account.starts.length;
+await getReview().click();
+await page.click("text=Send it and review");
+await page.waitForSelector("text=Sign in to get a review.", { timeout: 10000 });
+await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
+check("a run stopped by an expired sign-in can be resumed", await page.getByRole("button", { name: "Resume review" }).isVisible());
+await page.getByRole("button", { name: "Resume review" }).click();
+await page.waitForSelector('[data-testid="review-summary"]', { timeout: 30000 });
+check("and resuming it wasn't charged again", account.starts.length === startsBefore + 1);
+
 // Too few coins: the server says 402, the page says how many and won't send.
 account.balance = 0;
 await getReview().click();

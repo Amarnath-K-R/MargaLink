@@ -208,12 +208,13 @@ async function attempt(endpoint: string, body: Req, ticket: string, timeoutMs: n
 type Req = ExtractRequest | SynthesizeRequest;
 
 // Pays for the review: section ids and lengths go up, a ticket comes back.
+// Never aborted mid-flight: a charge the server made must reach the state,
+// so a cancel pressed meanwhile takes effect once it has (see runReview).
 async function startReview(endpoint: string, opts: RunReviewOptions, run: Chunk[]): Promise<{ ticket: string; balance: number }> {
   const res = await fetch(`${endpoint}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tier: opts.tier, journalId: opts.journalId, chunks: run.map((c) => ({ id: c.id, chars: c.text.length })) }),
-    signal: opts.signal,
   });
   if (res.ok) return (await res.json()) as { ticket: string; balance: number };
   if (res.status === 401) throw new SignInRequiredError();
@@ -238,6 +239,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
   opts.onState?.(state);
   const { run, skipped } = planChunks(state.chunks, opts.tier);
   if (!state.ticket) {
+    if (opts.signal?.aborted) throw abortError(opts.signal);
     const paid = await startReview(endpoint, opts, run);
     state.ticket = paid.ticket;
     opts.onCharged?.(paid.balance);

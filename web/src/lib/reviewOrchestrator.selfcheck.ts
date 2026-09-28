@@ -37,7 +37,10 @@ function stub(handler: Handler, onStart?: () => Response) {
   (globalThis as unknown as { fetch: typeof fetch }).fetch = (async (url: string, init?: RequestInit) => {
     if (url.endsWith("/start")) {
       starts.push(JSON.parse(init!.body as string));
-      return startReply();
+      const reply = startReply();
+      // like fetch: a request aborted before its answer arrives rejects, answer discarded
+      if (init?.signal?.aborted) throw new DOMException("aborted", "AbortError");
+      return reply;
     }
     tickets.push(new Headers(init!.headers).get("x-review-ticket"));
     const req = JSON.parse(init!.body as string) as Req;
@@ -225,6 +228,22 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   stub(happy, () => text("fully booked", 429));
   await assert.rejects(runReview(base), ReviewCapacityError);
   assert.equal(calls.length, 0, "no pass is sent without a ticket");
+}
+// 14a. cancelled while the review was being paid for: the charge still lands on the state, so a resume isn't charged again
+{
+  const ac = new AbortController();
+  let saved: ReviewState | null = null;
+  stub(happy, () => {
+    ac.abort();
+    return json({ ticket: "t-paid", coins: 9, balance: 33 });
+  });
+  await assert.rejects(runReview({ ...base, signal: ac.signal, onState: (st) => (saved = st) }), (e: unknown) => (e as Error).name === "AbortError");
+  assert.equal((saved as ReviewState | null)?.ticket, "t-paid", "the ticket was kept");
+  assert.equal(calls.length, 0, "nothing was sent after the cancel");
+  stub(happy);
+  await runReview(base, saved!);
+  assert.equal(starts.length, 0, "resuming it costs nothing more");
+  assert.deepEqual([...new Set(tickets)], ["t-paid"], "on the ticket it paid for");
 }
 // 14b. a pass refused for the ticket (expired, used up) ends the run with the server's reason; signed out mid-run too
 {

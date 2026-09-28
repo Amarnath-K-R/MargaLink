@@ -64,14 +64,25 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (used >= DAILY_CAP) return text("Ask Claude is fully booked for today. Try again tomorrow; nothing was charged.", 429);
   const ref = randomToken(12);
   if (!(await debit(env.DB, s.userId, FIGURE_PRICE, "figure", ref, now))) return Response.json({ coins: FIGURE_PRICE, balance: await balance(env.DB, s.userId) }, { status: 402 });
-  await env.FIGURES_KV.put(kvKey, String(used + 1), { expirationTtl: 60 * 60 * 24 * 2 });
-
-  const res = await askClaude(body, problem, env.ANTHROPIC_API_KEY);
-  if (res.status !== 200) {
-    await credit(env.DB, s.userId, FIGURE_PRICE, "figure_refund", ref, Date.now());
-    return res;
+  // From here the coin comes back unless an answer goes out, whatever happens
+  // (the Worker itself being stopped midway is the one case this can't cover).
+  let answer: unknown = null;
+  try {
+    try {
+      await env.FIGURES_KV.put(kvKey, String(used + 1), { expirationTtl: 60 * 60 * 24 * 2 });
+    } catch {
+      // an under-count, not a failure (as in api/review.ts)
+    }
+    const res = await askClaude(body, problem, env.ANTHROPIC_API_KEY);
+    if (res.status !== 200) return res;
+    answer = await res.json();
+    return Response.json({ ...(answer as object), balance: await balance(env.DB, s.userId) });
+  } catch (err) {
+    console.error(`figure request failed: ${err instanceof Error ? err.message : String(err)}`);
+    return text("The figure request failed. Try again in a moment.", 502);
+  } finally {
+    if (answer === null) await credit(env.DB, s.userId, FIGURE_PRICE, "figure_refund", ref, Date.now());
   }
-  return Response.json({ ...((await res.json()) as object), balance: await balance(env.DB, s.userId) });
 };
 
 // The upstream call and every output gate; any non-200 is refunded above.

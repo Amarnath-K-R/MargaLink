@@ -184,6 +184,10 @@ export function useReview() {
         if (err instanceof ReviewSynthesisError) {
           setResumeState(err.state);
           setReviewResult(err.partial);
+        } else if (runStateRef.current?.ticket) {
+          // Whatever stopped a paid run (a sign-in that expired, today's
+          // capacity), it can be picked up again on the same ticket, free.
+          setResumeState(runStateRef.current);
         }
         if (err instanceof NotEnoughCoinsError) setBalance(err.balance);
         if (err instanceof SignInRequiredError) {

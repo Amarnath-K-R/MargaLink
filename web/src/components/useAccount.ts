@@ -81,18 +81,21 @@ export async function signOut(everywhere = false) {
 
 /**
  * Google sign-in in a popup, so the page (and a loaded paper) stays as it
- * is. A blocked popup falls back to a full-page redirect.
+ * is. If the popup is blocked: a full-page redirect where there's nothing to
+ * lose (`redirectIfBlocked`, the sign-in page itself), otherwise false, so
+ * the caller can say so rather than throw away the page.
  */
-export function signInWithGoogle(next: string) {
+export function signInWithGoogle(next: string, { redirectIfBlocked = false } = {}): boolean {
   const url = `/api/auth/google/start?next=${encodeURIComponent(next)}`;
   const w = window.open(`${url}&popup=1`, "margalink-signin", "popup,width=480,height=640");
   if (!w) {
-    location.assign(new URL(url, location.origin).href); // an API route, not a page
-    return;
+    if (redirectIfBlocked) location.assign(new URL(url, location.origin).href); // an API route, not a page
+    return false;
   }
   const timer = setInterval(() => {
     if (!w.closed) return;
     clearInterval(timer);
     void refreshAccount();
   }, 500);
+  return true;
 }

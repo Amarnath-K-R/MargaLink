@@ -48,7 +48,7 @@ export default function SignInView() {
   }
   return (
     <div className="sheet max-w-md p-6 sm:p-8">
-      <SignInPanel next={next} notice={error ? (ERRORS[error] ?? ERRORS.google) : undefined} />
+      <SignInPanel next={next} notice={error ? (ERRORS[error] ?? ERRORS.google) : undefined} fullPage />
     </div>
   );
 }

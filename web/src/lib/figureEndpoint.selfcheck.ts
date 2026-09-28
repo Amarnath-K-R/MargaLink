@@ -13,7 +13,18 @@ import { createSession, signInUser } from "./auth.ts";
 import { balance, credit } from "./ledger.ts";
 
 const kv = new Map<string, string>();
-const env = { DB: testD1(), ANTHROPIC_API_KEY: "k", FIGURES_KV: { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v) } };
+let kvDown = false;
+const env = {
+  DB: testD1(),
+  ANTHROPIC_API_KEY: "k",
+  FIGURES_KV: {
+    get: async (k: string) => kv.get(k) ?? null,
+    put: async (k: string, v: string) => {
+      if (kvDown) throw new Error("KV unavailable");
+      kv.set(k, v);
+    },
+  },
+};
 const user = await signInUser(env.DB, { email: "ann@x.org" }, Date.now());
 let cookie = `__Host-ml_session=${await createSession(env.DB, user.id, Date.now())}`;
 let toolJson = "";
@@ -85,4 +96,16 @@ assert.deepEqual([...kv.values()], ["7"], "every call that reached Claude was co
 assert.equal(await balance(env.DB, user.id), 16);
 const refunds = await env.DB.prepare("SELECT COUNT(*) AS n FROM coin_ledger WHERE kind = 'figure_refund'").first<{ n: number }>();
 assert.equal(refunds?.n, 3);
+// the daily counter failing to save is an under-count, not a failure, and never keeps a coin without an answer
+kvDown = true;
+toolJson = JSON.stringify({ spec, summary: "ok" });
+const before = await balance(env.DB, user.id);
+r = await call(ask);
+assert.equal(r.status, 200, r.text);
+assert.equal(await balance(env.DB, user.id), before - 1, "charged once, answered");
+toolJson = "{not json";
+r = await call(ask);
+assert.notEqual(r.status, 200);
+assert.equal(await balance(env.DB, user.id), before - 1, "no answer, no charge");
+kvDown = false;
 console.log("figureEndpoint.selfcheck: OK");

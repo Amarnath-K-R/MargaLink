@@ -14,7 +14,9 @@ import { signInWithGoogle } from "./useAccount";
 // Turnstile's check (its script loads only then).
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || null;
 // `notice`: a problem from an earlier attempt, shown until the next one.
-export default function SignInPanel({ next, lead, notice }: { next?: string; lead?: ReactNode; notice?: string }) {
+// `fullPage`: on the sign-in page itself, where a blocked popup can fall
+// back to a redirect (elsewhere that would lose whatever the page holds).
+export default function SignInPanel({ next, lead, notice, fullPage = false }: { next?: string; lead?: ReactNode; notice?: string; fullPage?: boolean }) {
   const [email, setEmail] = useState("");
   const [phase, setPhase] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -72,10 +74,17 @@ export default function SignInPanel({ next, lead, notice }: { next?: string; lea
         </p>
       )}
       {lead ?? <p className="text-sm leading-relaxed text-ink-soft">AI reviews and Ask Claude need an account. New accounts get {WELCOME_COINS} M coins.</p>}
-      <button type="button" onClick={() => {
+      <button
+        type="button"
+        onClick={() => {
           setTried(true);
-          signInWithGoogle(target());
-        }} className="clay-btn mt-4 h-11 w-full justify-center gap-2.5 text-sm font-medium">
+          setError(null);
+          if (!signInWithGoogle(target(), { redirectIfBlocked: fullPage }) && !fullPage) {
+            setError("Your browser blocked the Google window. Allow pop-ups for this site and try again, or use an email link below.");
+          }
+        }}
+        className="clay-btn mt-4 h-11 w-full justify-center gap-2.5 text-sm font-medium"
+      >
         <GoogleMark /> Continue with Google
       </button>
       <div className="my-4 flex items-center gap-3 text-xs text-ink-soft">
