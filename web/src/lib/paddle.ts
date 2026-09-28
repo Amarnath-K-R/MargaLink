@@ -73,9 +73,13 @@ const when = (v: unknown) => {
 export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: Record<string, Product>, now: number): Promise<{ statements: D1PreparedStatement[]; grantFor: string | null }> {
   const none = { statements: [], grantFor: null };
   const d = e.data;
+  // Our checkout names the account in custom_data; an event about a
+  // subscription we already know may not carry it, so it's looked up there.
+  const knownOwner = async (subId: string | null) =>
+    subId ? await db.prepare("SELECT user_id AS u FROM subscriptions WHERE id = ?").bind(subId).first<string>("u") : null;
   if (e.event_type.startsWith("subscription.")) {
     const id = str(d.id);
-    const userId = str(obj(d.custom_data).user_id);
+    const userId = str(obj(d.custom_data).user_id) ?? (await knownOwner(id));
     const priceId = str(obj(obj((d.items as unknown[] | undefined)?.[0]).price).id);
     const product = priceId ? prices[priceId] : undefined;
     if (!id || !userId || !product || !("pro" in product)) {
@@ -102,7 +106,7 @@ export async function paddleStatements(db: D1Database, e: PaddleEvent, prices: R
   if (e.event_type === "transaction.completed" && d.subscription_id) {
     // A Pro payment adds nothing itself (the month's grant does); it's kept so a refund can find its month.
     const txn = str(d.id);
-    const userId = str(obj(d.custom_data).user_id);
+    const userId = str(obj(d.custom_data).user_id) ?? (await knownOwner(str(d.subscription_id)));
     if (!txn || !userId) return none;
     return {
       statements: [

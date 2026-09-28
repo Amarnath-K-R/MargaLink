@@ -138,6 +138,18 @@ await grantDuePro(env.DB, f.id, t0 + 400 * DAY);
 assert.equal(await balance(env.DB, f.id), 0, "no months after a full refund");
 assert.equal((await env.DB.prepare("SELECT kind FROM coin_ledger WHERE user_id = ? AND delta < 0").bind(f.id).first<{ kind: string }>())?.kind, "pro_reversal");
 
+// a renewal payment and a subscription update that don't carry custom_data still find their account
+const r2 = await signInUser(env.DB, { email: "ren@x.org" }, t0);
+await deliver("subscription.created", sub(r2.id, { id: "sub_r2", start: t0, end: t0 + 31 * DAY }), t0);
+await grantDuePro(env.DB, r2.id, t0 + DAY);
+const bare = { ...sub(r2.id, { id: "sub_r2", start: t0 + 31 * DAY, end: t0 + 61 * DAY }), custom_data: null };
+await deliver("subscription.updated", bare, t0 + 31 * DAY);
+await grantDuePro(env.DB, r2.id, t0 + 32 * DAY);
+assert.equal(await balance(env.DB, r2.id), 200, "the update without custom_data still moved the plan on");
+await deliver("transaction.completed", { id: "txn_r2", subscription_id: "sub_r2", customer_id: "ctm_1", currency_code: "USD", custom_data: null, items: [{ price: { id: "pri_pm" } }], details: { totals: { total: "900" } }, billing_period: { starts_at: iso(t0 + 31 * DAY), ends_at: iso(t0 + 61 * DAY) } });
+await deliver("adjustment.created", { id: "adj_r2", action: "refund", status: "approved", type: "full", transaction_id: "txn_r2", subscription_id: "sub_r2", totals: { total: "900" } });
+assert.equal(await balance(env.DB, r2.id), 100, "the renewal's refund found its month");
+
 // /api/me says what the plan is
 const yCookie = `__Host-ml_session=${await createSession(env.DB, y.id, Date.now())}`;
 const mine = (await (await (me as unknown as Handler)({ request: new Request("https://m.test/api/me", { headers: { cookie: yCookie } }), env })).json()) as { pro: unknown };
