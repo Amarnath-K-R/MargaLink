@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 // palette (paper, sand, teal, clay), soft top-left light, warm shadows.
 // Inline SVG, no images; each has its own id prefix so several can share a
 // page. Decorative — the text beside each says the same thing. `bare` drops
-// the clay frame, for a caller that frames it itself.
+// the clay frame and fills its box, for a caller that frames and sizes it.
 
 const C = {
   paper: "#fbfaf6",
@@ -22,8 +22,9 @@ const C = {
 
 function Frame({ id, label, bare = false, children }: { id: string; label: string; bare?: boolean; children: ReactNode }) {
   return (
-    <figure className={bare ? "overflow-hidden rounded-[18px]" : "clay overflow-hidden rounded-[22px] p-2"}>
-      <svg viewBox="0 0 320 220" role="img" aria-label={label} className="block h-auto w-full">
+    <figure className={bare ? "h-full overflow-hidden rounded-[18px]" : "clay overflow-hidden rounded-[22px] p-2"}>
+      {/* Bare, it fills its box (scaled to fit, centred), for a caller that sizes it. */}
+      <svg viewBox="0 0 320 220" role="img" aria-label={label} className={bare ? "block h-full w-full" : "block h-auto w-full"}>
         <defs>
           <radialGradient id={`${id}-desk`} cx="30%" cy="0%" r="120%">
             <stop offset="0" stopColor="#f7f6f1" />

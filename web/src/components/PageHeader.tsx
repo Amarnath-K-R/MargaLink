@@ -45,7 +45,7 @@ export default function PageHeader({
   width: keyof typeof TITLE_CLASS;
   tool?: ToolId;
   page?: "home" | "guide" | "architecture" | "privacy"; // a non-tool page to show as current
-  title: ReactNode;
+  title?: ReactNode; // none: the tray only — the page draws its own heading, with id="content"
   subtitle?: ReactNode;
 }) {
   // The bead beside the title: the tool's, or the house on Home.
@@ -58,7 +58,7 @@ export default function PageHeader({
       </a>
       {/* Wider than the page's column: the tray is the same size on every route.
           A sibling of the <header>, not inside it, so it sticks for the whole page. */}
-      <div className="sticky top-3 z-30 mx-[calc((100%_-_min(100vw_-_1.5rem,76rem))/2)] mb-12 sm:mb-14">
+      <div className={`sticky top-3 z-30 mx-[calc((100%_-_min(100vw_-_1.5rem,76rem))/2)] ${title === undefined ? "mb-6" : "mb-12 sm:mb-14"}`}>
         <nav aria-label="MargaLink" className="clay flex items-center gap-1.5 px-2.5 py-2">
           <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-xl pr-2">
             <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-accent font-serif text-base font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,.3),inset_0_-2px_4px_rgba(0,0,0,.2),0_3px_8px_-2px_rgba(44,95,111,.45)]">
@@ -94,17 +94,19 @@ export default function PageHeader({
           </Link>
         </nav>
       </div>
-      <header id="content" className={`flex scroll-mt-24 items-start gap-5 ${HEADER_SPACING[width]}`}>
-        {current && (
-          <span aria-hidden className="bead mt-1.5 hidden h-12 w-12 shrink-0 sm:grid" style={{ background: current.bead }}>
-            <current.Icon size={22} strokeWidth={1.8} />
-          </span>
-        )}
-        <div className="min-w-0">
-          <h1 className={TITLE_CLASS[width]}>{title}</h1>
-          {subtitle}
-        </div>
-      </header>
+      {title !== undefined && (
+        <header id="content" className={`flex scroll-mt-24 items-start gap-5 ${HEADER_SPACING[width]}`}>
+          {current && (
+            <span aria-hidden className="bead mt-1.5 hidden h-12 w-12 shrink-0 sm:grid" style={{ background: current.bead }}>
+              <current.Icon size={22} strokeWidth={1.8} />
+            </span>
+          )}
+          <div className="min-w-0">
+            <h1 className={TITLE_CLASS[width]}>{title}</h1>
+            {subtitle}
+          </div>
+        </header>
+      )}
     </>
   );
 }
