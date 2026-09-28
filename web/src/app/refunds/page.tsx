@@ -12,13 +12,14 @@ export const metadata: Metadata = {
 export default function RefundsPage() {
   return (
     <main className="mx-auto w-full max-w-2xl px-6 pt-3 pb-20">
-      <PageHeader width="2xl" title="Refunds" subtitle={<p className="mt-3 text-lg text-ink-soft">Coins come back on their own when a run fails. Money comes back for coins you haven&apos;t used.</p>} />
+      <PageHeader width="2xl" title="Refunds" subtitle={<p className="mt-3 text-lg text-ink-soft">Coins come back on their own for anything that didn&apos;t run. Money comes back for coins you haven&apos;t used.</p>} />
 
       <div className="mt-10 space-y-8 text-ink-soft [&_strong]:font-medium [&_strong]:text-ink">
         <Part title="Coins back, automatically">
           <p>
-            A review that doesn&apos;t finish is refunded in full, within two hours of starting it. An Ask Claude request that fails, or whose answer
-            can&apos;t be used, is refunded at once. You don&apos;t need to ask; your coin history on{" "}
+            A review is priced in parts: one for each section it sends, and one for the final cross-check. Any part that doesn&apos;t come back is
+            refunded, whether or not the rest of the review finished, about two hours after the review started. An Ask Claude request that fails, or
+            whose answer can&apos;t be used, is refunded at once. You don&apos;t need to ask; your coin history on{" "}
             <Link href="/account" className="text-accent hover:underline">
               your account page
             </Link>{" "}

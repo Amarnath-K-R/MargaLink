@@ -7,7 +7,8 @@
 import assert from "node:assert/strict";
 import { testD1 } from "./testD1.ts";
 import { createSession, signInUser } from "./auth.ts";
-import { balance, credit, sweepTickets } from "./ledger.ts";
+import { balance, claimReviewPass, credit, sweepTickets } from "./ledger.ts";
+import { sha256Hex } from "./auth.ts";
 import { reviewPrice, REVIEW_TICKET_TTL_MS } from "./coins.ts";
 import { DAILY_PASS_CAP } from "./reviewPasses.ts";
 import { JOURNAL_RULES } from "./journalRules.ts";
@@ -90,20 +91,50 @@ assert.equal(upstreamCalls, 1);
 for (let i = 1; i < 2 * chunks.length + 2; i++) assert.equal((await extract(t1.ticket, "s2-p1")).status, 200, `pass ${i}`);
 assert.equal((await extract(t1.ticket, "s2-p1")).status, 403, "budget spent");
 
-// --- a finished run keeps its coins; an unfinished one gets them back once
+// --- a pass refused by today's capacity doesn't use up the ticket
+const left = async (ticket: string) => (await env.DB.prepare("SELECT extract_left AS n FROM review_tickets WHERE id_hash = ?").bind(await sha256Hex(ticket)).first<{ n: number }>())?.n;
+const dayKey = `review-pass-count:${new Date().toISOString().slice(0, 10)}`;
+const usedBefore = kv.get(dayKey);
+kv.set(dayKey, String(DAILY_PASS_CAP));
+r = await begin(annCookie); // (refused too: nothing charged)
+assert.equal(r.status, 429);
+kv.set(dayKey, usedBefore ?? "0");
+
+// --- a finished run keeps its coins; an unfinished one gets back the share it didn't deliver, once
 assert.equal((await synthesize(t1.ticket)).status, 200);
 r = await begin(annCookie);
 const t2 = (await r.json()) as { ticket: string; balance: number };
 assert.equal(t2.balance, 12);
+const t2left = await left(t2.ticket);
+kv.set(dayKey, String(DAILY_PASS_CAP));
+assert.equal((await extract(t2.ticket)).status, 429);
+assert.equal(await left(t2.ticket), t2left, "a capacity refusal spends no pass");
+kv.set(dayKey, usedBefore ?? "0");
 assert.equal((await extract(t2.ticket)).status, 200);
+assert.equal((await extract(t2.ticket)).status, 200, "the same section twice is delivered once");
+r = await begin(annCookie);
+const t3 = (await r.json()) as { ticket: string; balance: number };
+for (const c of chunks) assert.equal((await extract(t3.ticket, c.id, "x".repeat(100))).status, 200);
+assert.equal(t3.balance, 6);
 const later = Date.now() + REVIEW_TICKET_TTL_MS + 1000; // tickets expire on the handler's clock
 await sweepTickets(env.DB, later);
 await sweepTickets(env.DB, later);
-assert.equal(await balance(env.DB, ann.id), 18, "t2 refunded once, t1 kept");
+// t2: 1 of 3 sections, no cross-check: 3 of 4 parts undelivered, 6 * 3/4 = 4 back.
+// t3: every section but no cross-check: 1 of 4 parts, 6 * 1/4 = 1 back.
+// t1: finished, but section s2-p2 never came back: 1 of 4 parts, 1 back.
+assert.equal(await balance(env.DB, ann.id), 6 + 4 + 1 + 1, "refunds for what wasn't delivered, once");
 assert.equal((await extract(t2.ticket)).status, 403, "an expired ticket is gone");
 
+// --- no pass starts within five minutes of the ticket's end (a pass can run that long)
+r = await begin(annCookie);
+const t4 = (await r.json()) as { ticket: string };
+const expires = (await env.DB.prepare("SELECT expires_at AS e FROM review_tickets WHERE id_hash = ?").bind(await sha256Hex(t4.ticket)).first<{ e: number }>())!.e;
+assert.equal(await claimReviewPass(env.DB, t4.ticket, ann.id, { pass: "synthesize", tier: "quick" }, expires - 6 * 60_000), null);
+assert.match((await claimReviewPass(env.DB, t4.ticket, ann.id, { pass: "synthesize", tier: "quick" }, expires - 4 * 60_000)) ?? "", /expired/);
+
 // --- the global daily cap is checked before anything is charged
-kv.set(`review-pass-count:${new Date().toISOString().slice(0, 10)}`, String(DAILY_PASS_CAP - 2));
+const before = await balance(env.DB, ann.id);
+kv.set(dayKey, String(DAILY_PASS_CAP - 2));
 assert.equal((await begin(annCookie)).status, 429);
-assert.equal(await balance(env.DB, ann.id), 18);
+assert.equal(await balance(env.DB, ann.id), before);
 console.log("reviewTicket.selfcheck: OK");

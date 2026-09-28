@@ -47,22 +47,44 @@ export async function grantWelcome(db: D1Database, userId: string, email: string
 }
 
 /**
- * Review runs past their expiry: an unfinished one's coins come back (once:
- * the refund's ref is the ticket's), and every expired ticket is deleted, so
- * none outlives its two hours by more than the next sweep. Anyone's request
- * can run it; it touches only expired rows.
+ * Review runs past their expiry: an unfinished one is refunded for the share
+ * it didn't deliver (each paid section is one part, the final cross-check
+ * one more; rounded down), once, since the refund's ref is the ticket's.
+ * Paying for passes and never finishing isn't free: the parts that came
+ * back are kept. Every expired ticket is deleted (its deliveries with it).
+ * Anyone's request can run it; it touches only expired rows.
  */
 export async function sweepTickets(db: D1Database, now: number) {
   await db.batch([
     db
       .prepare(
         `INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at)
-         SELECT user_id, coins, 'review_refund', id_hash, ?1 FROM review_tickets WHERE expires_at <= ?1 AND synthesized = 0
+         SELECT user_id, refund, 'review_refund', id_hash, ?1 FROM (
+           SELECT user_id, id_hash, coins * (parts - delivered - synthesized) / parts AS refund FROM (
+             SELECT t.user_id, t.id_hash, t.coins, t.synthesized,
+                    (SELECT COUNT(*) FROM json_each(t.chunks)) + 1 AS parts,
+                    (SELECT COUNT(*) FROM review_deliveries d WHERE d.ticket = t.id_hash) AS delivered
+             FROM review_tickets t WHERE t.expires_at <= ?1
+           )
+         ) WHERE refund > 0
          ON CONFLICT DO NOTHING`,
       )
       .bind(now),
     db.prepare("DELETE FROM review_tickets WHERE expires_at <= ?").bind(now),
   ]);
+}
+
+// No pass starts this close to a ticket's end: a synthesis may run for up to
+// 290 s upstream, and must finish while its ticket still exists.
+const CLAIM_MARGIN_MS = 5 * 60 * 1000;
+
+/** A paid section that came back with a result. Recorded once, however often it's retried. */
+export async function markDelivered(db: D1Database, ticket: string, chunkId: string) {
+  const idHash = await sha256Hex(ticket);
+  await db
+    .prepare("INSERT INTO review_deliveries (ticket, chunk_id) SELECT ?1, ?2 WHERE EXISTS (SELECT 1 FROM review_tickets WHERE id_hash = ?1) ON CONFLICT DO NOTHING")
+    .bind(idHash, chunkId)
+    .run();
 }
 
 /**
@@ -81,15 +103,15 @@ export async function claimReviewPass(
 ): Promise<string | null> {
   if (!ticket || ticket.length > 100) return "This review has no ticket. Start it again from the review page.";
   const idHash = await sha256Hex(ticket);
-  const t = await db.prepare("SELECT tier, chunks FROM review_tickets WHERE id_hash = ? AND user_id = ? AND expires_at > ?").bind(idHash, userId, now).first<{ tier: string; chunks: string }>();
-  if (!t) return "This review's ticket has expired. Start a new review; an unfinished one is refunded automatically.";
+  const t = await db.prepare("SELECT tier, chunks FROM review_tickets WHERE id_hash = ? AND user_id = ? AND expires_at > ?").bind(idHash, userId, now + CLAIM_MARGIN_MS).first<{ tier: string; chunks: string }>();
+  if (!t) return "This review's ticket has expired. Start a new review; what the old one didn't finish is refunded automatically.";
   if (t.tier !== want.tier) return "This pass doesn't match the review that was paid for.";
   if (want.pass === "extract") {
     const paid = (JSON.parse(t.chunks) as Record<string, number>)[want.chunkId ?? ""];
     if (!paid || (want.chars ?? Infinity) > paid) return "This section wasn't part of the review that was paid for.";
   }
   const col = want.pass === "extract" ? "extract_left" : "synth_left";
-  const r = await db.prepare(`UPDATE review_tickets SET ${col} = ${col} - 1 WHERE id_hash = ? AND ${col} > 0 AND expires_at > ?`).bind(idHash, now).run();
+  const r = await db.prepare(`UPDATE review_tickets SET ${col} = ${col} - 1 WHERE id_hash = ? AND ${col} > 0 AND expires_at > ?`).bind(idHash, now + CLAIM_MARGIN_MS).run();
   return r.meta.changes === 1 ? null : "This review has used all its passes. Start a new one.";
 }
 

@@ -34,7 +34,7 @@ export const UPDATES: Update[] = [
     summary: "The AI review and Ask Claude now run on M coins, held in an account. New accounts get 10 M coins; everything else stays free, with no account.",
     points: [
       "Sign in with Google or an email link, without losing a loaded paper",
-      "The price is on the button, and a run that doesn't finish is refunded",
+      "The price is on the button, and any part of a run that doesn't come back is refunded",
       "Coin packs, and Pro with 100 M coins a month",
     ],
     href: "/pricing",

@@ -420,10 +420,14 @@ one batch, debits and creates a ticket bound to the tier, those sections
 and lengths, and a pass budget (2n+2 extracts, 4 syntheses) for two hours.
 Every pass sends `X-Review-Ticket`; `review.ts` spends one pass of it
 (`claimReviewPass`) before calling Claude, so nothing unpaid reaches the
-API. A synthesis that comes back marks the ticket finished; a ticket that
-expires unfinished is refunded in full by `sweepTickets`, run lazily from
-`/api/me` and `review/start`. Resume and Retry reuse the ticket: a review
-is paid for once. Ask Claude debits 1 coin per call and refunds any
+API; none starts within five minutes of the ticket's end, so a pass can't
+outlive it. Each section that comes back is recorded (`review_deliveries`),
+as is a synthesis. When the ticket expires, `sweepTickets` refunds the
+share it didn't deliver: a review is priced in parts, one per section plus
+one for the cross-check, so a client that takes every section's analysis
+and never asks for the cross-check still pays for what it got. Resume and
+Retry reuse the ticket: a review is paid for once. A pass refused for
+today's capacity is refused before it spends one of the ticket's. Ask Claude debits 1 coin per call and refunds any
 non-200 after the charge.
 
 **Payments.** Paddle Billing is the merchant of record. The browser loads

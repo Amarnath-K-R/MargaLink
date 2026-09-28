@@ -95,7 +95,7 @@ export default function GuidePage() {
           <Aside tone="away" title="The two things that can leave it, only when you confirm">
             <p>
               <strong>The AI review</strong> sends your paper&apos;s text to Claude, in short requests, after a notice that says exactly that. It needs an
-              account and costs M coins; the price is on the button, and a review that doesn&apos;t finish is refunded.
+              account and costs M coins; the price is on the button, and any part of a review that doesn&apos;t come back is refunded.
             </p>
             <p>
               <strong>Ask Claude</strong> in the figure studio sends a description of your data: column names and types, the row count, your request;
@@ -350,8 +350,8 @@ export default function GuidePage() {
                 numbers found. Author names and email addresses are stripped first (best effort).
               </>,
               <>
-                <strong>The price</strong>: what this review costs in M coins, and your balance. A review that doesn&apos;t finish is refunded within 2
-                hours; resuming or retrying it costs nothing more.
+                <strong>The price</strong>: what this review costs in M coins, and your balance. Any part that doesn&apos;t come back (a section, or the
+                final cross-check) is refunded about two hours after it starts; resuming or retrying costs nothing more.
               </>,
               <>
                 <strong>Send it and review</strong>: the only way a review starts. Cancel sends nothing.
@@ -859,8 +859,9 @@ export default function GuidePage() {
           />
           <Aside title="Coins come back on their own">
             <p>
-              A review that doesn&apos;t finish is refunded in full within two hours; an Ask Claude request that fails is refunded at once. Your
-              history on the account page shows each refund.
+              A review is priced in parts, one per section it sends and one for the final cross-check; any part that doesn&apos;t come back is
+              refunded about two hours after the review started. An Ask Claude request that fails is refunded at once. Your history on the account
+              page shows each refund.
             </p>
           </Aside>
           <DocPart title="Buying coins">

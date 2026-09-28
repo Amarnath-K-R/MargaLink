@@ -43,7 +43,8 @@ export default function PricingPage() {
       <section aria-labelledby="costs" className="mt-14">
         <h2 id="costs" className="font-serif text-2xl font-medium">What costs M coins</h2>
         <p className="mt-2 max-w-2xl text-ink-soft">
-          You see the price before anything is sent, and a run that doesn&apos;t finish is refunded automatically. A new account starts with{" "}
+          You see the price before anything is sent, and you get coins back automatically for any part of a run that doesn&apos;t come back. A new
+          account starts with{" "}
           {WELCOME_COINS} M coins.
         </p>
         <div className="sheet mt-5 overflow-x-auto">

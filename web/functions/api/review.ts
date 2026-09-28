@@ -16,7 +16,7 @@ import { DAILY_PASS_CAP, parsePassRequest, passCallConfig, validateSynthesisOutp
 import { groundExtractOutput } from "../../src/lib/reviewGrounding.ts";
 import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/anthropicStream.ts";
 import { getSession, type AccountEnv } from "../../src/lib/auth.ts";
-import { claimReviewPass, markSynthesized } from "../../src/lib/ledger.ts";
+import { claimReviewPass, markDelivered, markSynthesized } from "../../src/lib/ledger.ts";
 
 type Env = AccountEnv & { ANTHROPIC_API_KEY: string; REVIEWS_KV: KVNamespace };
 
@@ -54,6 +54,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const session = await getSession(env.DB, request, Date.now());
   if (!session) return new Response("Sign in to get a review.", { status: 401 });
+  // Capacity first, so a pass refused for it doesn't spend one of the ticket's.
+  const kvKey = `review-pass-count:${new Date().toISOString().slice(0, 10)}`;
+  const usedToday = parseInt((await env.REVIEWS_KV.get(kvKey)) ?? "0", 10);
+  if (usedToday >= DAILY_PASS_CAP) return new Response("Reviews are fully booked for today. Try again tomorrow.", { status: 429 });
   const ticket = request.headers.get("x-review-ticket") ?? "";
   const refused = await claimReviewPass(
     env.DB,
@@ -64,9 +68,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   );
   if (refused) return new Response(refused, { status: 403 });
 
-  const kvKey = `review-pass-count:${new Date().toISOString().slice(0, 10)}`;
-  const usedToday = parseInt((await env.REVIEWS_KV.get(kvKey)) ?? "0", 10);
-  if (usedToday >= DAILY_PASS_CAP) return new Response("Pilot is fully booked for today", { status: 429 });
   // KV allows one write per second per key and the client runs 3 passes
   // concurrently — a lost increment under-counts slightly; acceptable for a
   // pilot cap (same check-then-put race the figure endpoint accepts).
@@ -109,6 +110,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const result =
       req.pass === "extract" ? groundExtractOutput(toolInput, req.chunk.text, req.claimsCap) : validateSynthesisOutput(toolInput, req);
     if (req.pass === "synthesize") await markSynthesized(env.DB, ticket);
+    else await markDelivered(env.DB, ticket, req.chunk.id);
     return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
     console.error(`review ${req.pass} malformed output: ${err instanceof Error ? err.stack : String(err)}`);

@@ -54,8 +54,8 @@ export default function TermsPage() {
               month&apos;s arrive. Pro coins are spent before others.
             </li>
             <li>
-              The price of every use is shown before anything is sent. A review that doesn&apos;t finish is refunded automatically, and a failed Ask
-              Claude request is refunded at once.
+              The price of every use is shown before anything is sent. Any part of a review that doesn&apos;t come back (a section, or the final
+              cross-check) is refunded automatically, and a failed Ask Claude request is refunded at once.
             </li>
             <li>Deleting your account ends its coins; they can&apos;t be restored.</li>
             <li>We may change what things cost or what coins cost; coins you already have keep working at the prices shown when you use them.</li>

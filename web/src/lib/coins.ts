@@ -107,7 +107,7 @@ const LABELS: Record<LedgerKind, string> = {
   pro_grant: "Pro monthly coins",
   pro_expire: "Pro coins over the carry-over limit",
   review: "Pre-submission review",
-  review_refund: "Refund: review didn't finish",
+  review_refund: "Refund: part of a review that didn't run",
   figure: "Ask Claude (figure)",
   figure_refund: "Refund: figure request failed",
   reversal: "Payment refunded or reversed",

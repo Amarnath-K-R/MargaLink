@@ -259,7 +259,7 @@ export default function ArchitecturePage() {
                 what: (
                   <>
                     {code("review/start")} gets section ids and lengths (never text), charges {code("reviewPrice")} and issues a ticket bound to them, with a pass
-                    budget, for two hours. Every pass spends one before Claude is called; an unfinished ticket is refunded when it expires.
+                    budget, for two hours. Every pass spends one before Claude is called; when the ticket expires, the parts it didn&apos;t deliver (sections, the cross-check) are refunded.
                   </>
                 ),
                 away: true,

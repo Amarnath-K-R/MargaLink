@@ -48,8 +48,9 @@ export default function ReviewConsent({
       <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed" data-testid="review-price">
         <Coin className="mt-0.5" />
         <span>
-          This review costs <strong className="font-medium">{price} M coins</strong>; you have {balance}. If it doesn&apos;t finish, the coins come back
-          automatically within 2 hours, and resuming or retrying it costs nothing more.
+          This review costs <strong className="font-medium">{price} M coins</strong>; you have {balance}. If part of it doesn&apos;t come back (a
+          section, or the final cross-check), you get that part&apos;s coins back automatically, about two hours after it starts. Resuming or retrying
+          costs nothing more.
         </span>
       </p>
       {balance < price && (
