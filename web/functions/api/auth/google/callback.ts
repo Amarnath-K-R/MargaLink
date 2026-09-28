@@ -4,7 +4,7 @@
 // secret and the PKCE verifier) for an id_token, check its claims, and sign
 // the account in. A popup lands on /signin?done=1, which closes itself; the
 // page that opened it notices on focus.
-import { checkIdClaims, createSession, jwtPayload, OAUTH_COOKIE, readCookie, redirect, safeNext, sessionCookies, signInUser, type AccountEnv } from "../../../../src/lib/auth.ts";
+import { checkIdClaims, createSession, hashSecret, jwtPayload, OAUTH_COOKIE, readCookie, redirect, safeNext, sessionCookies, signInUser, type AccountEnv } from "../../../../src/lib/auth.ts";
 import { grantWelcome } from "../../../../src/lib/ledger.ts";
 
 const decodeNext = (s: string) => {
@@ -26,6 +26,8 @@ export const onRequestGet: PagesFunction<AccountEnv> = async ({ request, env }) 
   if (!state || !verifier || url.searchParams.get("state") !== state) return fail("state");
   if (url.searchParams.get("error")) return fail("cancelled");
   const code = url.searchParams.get("code");
+  const secret = hashSecret(env, request);
+  if (!secret) return fail("google-off");
   if (!code || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REDIRECT_URI) return fail("google");
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
@@ -39,7 +41,7 @@ export const onRequestGet: PagesFunction<AccountEnv> = async ({ request, env }) 
   if (typeof who === "string") return fail("google");
 
   const user = await signInUser(env.DB, { email: who.email, google: who.sub }, now);
-  await grantWelcome(env.DB, user.id, user.email, now);
+  await grantWelcome(env.DB, user.id, user.email, now, secret);
   const token = await createSession(env.DB, user.id, now);
   return redirect(popup === "1" ? `/signin?done=1&next=${encodeURIComponent(next)}` : next, [clear, ...sessionCookies(token)]);
 };

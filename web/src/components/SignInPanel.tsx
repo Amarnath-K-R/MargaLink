@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Mail } from "lucide-react";
 import { WELCOME_COINS } from "@/lib/coins";
@@ -9,13 +9,18 @@ import { signInWithGoogle } from "./useAccount";
 // Sign in without leaving the page: Google in a popup, or a one-time link
 // by email (it opens in a new tab). Either way this tab notices on focus, so
 // a loaded paper, dataset or figure is never lost. Used by /signin, the
-// tray's Sign in button, and the review and figure consents.
+// tray's Sign in button, and the review and figure consents. Where
+// NEXT_PUBLIC_TURNSTILE_SITE_KEY is set, the email form carries Cloudflare
+// Turnstile's check (its script loads only then).
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || null;
 // `notice`: a problem from an earlier attempt, shown until the next one.
 export default function SignInPanel({ next, lead, notice }: { next?: string; lead?: ReactNode; notice?: string }) {
   const [email, setEmail] = useState("");
   const [phase, setPhase] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
+  const [human, setHuman] = useState<string | null>(null); // Turnstile's token, when it's on
+  const [attempt, setAttempt] = useState(0); // a token works once: a new attempt gets a new check
   const target = () => next ?? `${location.pathname}${location.search}`;
 
   async function sendLink(e: React.FormEvent) {
@@ -27,13 +32,15 @@ export default function SignInPanel({ next, lead, notice }: { next?: string; lea
       const res = await fetch("/api/auth/email/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, next: target() }),
+        body: JSON.stringify({ email, next: target(), ...(TURNSTILE_SITE_KEY ? { turnstile: human } : {}) }),
       });
       if (!res.ok) throw new Error((await res.text().catch(() => "")) || `Something went wrong (${res.status}). Try again.`);
       setPhase("sent");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("idle");
+      setHuman(null);
+      setAttempt((a) => a + 1);
     }
   }
 
@@ -88,7 +95,8 @@ export default function SignInPanel({ next, lead, notice }: { next?: string; lea
           placeholder="you@university.edu"
           className="clay-input h-11 text-sm"
         />
-        <button type="submit" disabled={phase === "sending"} className="clay-btn clay-primary h-11 justify-center text-sm font-medium">
+        {TURNSTILE_SITE_KEY && <Turnstile key={attempt} siteKey={TURNSTILE_SITE_KEY} onToken={setHuman} />}
+        <button type="submit" disabled={phase === "sending" || (!!TURNSTILE_SITE_KEY && !human)} className="clay-btn clay-primary h-11 justify-center text-sm font-medium">
           {phase === "sending" ? "Sending…" : "Send the link"}
         </button>
       </form>
@@ -105,6 +113,47 @@ export default function SignInPanel({ next, lead, notice }: { next?: string; lea
       </p>
     </div>
   );
+}
+
+type TurnstileJs = { render: (el: HTMLElement, o: Record<string, unknown>) => string; remove: (id: string) => void };
+let turnstileLoading: Promise<TurnstileJs> | null = null;
+function loadTurnstile(): Promise<TurnstileJs> {
+  turnstileLoading ??= new Promise<TurnstileJs>((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    s.async = true;
+    s.onload = () => {
+      const ts = (window as unknown as { turnstile?: TurnstileJs }).turnstile;
+      if (ts) resolve(ts);
+      else reject(new Error("Turnstile didn't load"));
+    };
+    s.onerror = () => {
+      turnstileLoading = null;
+      reject(new Error("Turnstile didn't load"));
+    };
+    document.head.appendChild(s);
+  });
+  return turnstileLoading;
+}
+
+// Cloudflare's check that a person, not a script, is asking for a link.
+function Turnstile({ siteKey, onToken }: { siteKey: string; onToken: (token: string | null) => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let id: string | undefined;
+    let gone = false;
+    loadTurnstile()
+      .then((ts) => {
+        if (gone || !box.current) return;
+        id = ts.render(box.current, { sitekey: siteKey, callback: onToken, "expired-callback": () => onToken(null), "error-callback": () => onToken(null) });
+      })
+      .catch(() => onToken(null));
+    return () => {
+      gone = true;
+      if (id) (window as unknown as { turnstile?: TurnstileJs }).turnstile?.remove(id);
+    };
+  }, [siteKey, onToken]);
+  return <div ref={box} className="min-h-[65px]" />;
 }
 
 // Google's "G", in its own colours (their sign-in branding asks for it).

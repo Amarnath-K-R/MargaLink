@@ -136,8 +136,38 @@ export async function rateLimit(db: D1Database, key: string, limit: number, wind
   return (row?.count ?? Infinity) <= limit;
 }
 
-/** A per-day hash of the caller's IP, for rate limits: the address itself is never stored. */
-export const ipKey = async (req: Request, now: number) => sha256Hex(`${req.headers.get("cf-connecting-ip") ?? "local"}:${new Date(now).toISOString().slice(0, 10)}`);
+/**
+ * A keyed fingerprint (HMAC-SHA256 with HASH_SECRET): what we keep instead
+ * of an email address or IP where only "have we seen this?" matters. A
+ * plain hash of an address could be checked by anyone holding the
+ * database; this can't, without the key.
+ */
+export async function fingerprint(secret: string, value: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value)));
+}
+
+/** The fingerprint key: HASH_SECRET, or a fixed one on localhost only. Deployed without one: null (fail closed). */
+export const hashSecret = (env: { HASH_SECRET?: string }, req: Request) => env.HASH_SECRET ?? (new URL(req.url).hostname === "localhost" ? "localhost-dev-key" : null);
+
+/** The network an address belongs to: an IPv4 address as is, an IPv6 one as its /64 (a subscriber usually has a whole /64). */
+export function networkOf(ip: string): string {
+  const v4 = ip.match(/^(?:::ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/i);
+  if (v4) return v4[1];
+  if (!ip.includes(":")) return ip;
+  const [head, tail] = ip.toLowerCase().split("::");
+  const h = head ? head.split(":") : [];
+  const t = tail ? tail.split(":") : [];
+  const groups = tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t];
+  return groups
+    .slice(0, 4)
+    .map((g) => parseInt(g || "0", 16).toString(16))
+    .join(":");
+}
+
+/** A per-day keyed fingerprint of the caller's network, for rate limits: the address itself is never stored. */
+export const networkKey = (secret: string, req: Request, now: number) =>
+  fingerprint(secret, `${networkOf(req.headers.get("cf-connecting-ip") ?? "local")}:${new Date(now).toISOString().slice(0, 10)}`);
 
 export type AccountEnv = {
   DB: D1Database;
@@ -147,6 +177,8 @@ export type AccountEnv = {
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   DEV_EMAIL_LOG?: string; // "1" on localhost only: print sign-in links instead of emailing them
+  HASH_SECRET?: string; // keys the fingerprints kept for rate limits and the welcome bonus
+  TURNSTILE_SECRET?: string; // when set, an email sign-in request must pass Cloudflare Turnstile
 };
 
 export function withCookies(res: Response, cookies: string[]): Response {

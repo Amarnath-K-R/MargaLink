@@ -12,7 +12,7 @@ const env = { DB: testD1() };
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
 const now = Date.now();
 const u = await signInUser(env.DB, { email: "ann@example.org", google: "g-1" }, now);
-await grantWelcome(env.DB, u.id, u.email, now);
+await grantWelcome(env.DB, u.id, u.email, now, "key");
 await credit(env.DB, u.id, 50, "pack", "txn_1", now + 1);
 const cookie = `__Host-ml_session=${await createSession(env.DB, u.id, now)}`;
 const get = (q = "", c = cookie) => (onRequestGet as unknown as Handler)({ request: new Request(`https://m.test/api/account${q}`, { headers: { cookie: c } }), env });

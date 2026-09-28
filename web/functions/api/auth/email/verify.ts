@@ -4,11 +4,13 @@
 // proves the inbox, which is the email verification. With {token, peek:
 // true} it only says which address the link is for, so the page can ask
 // "Sign in as …?" truthfully before anything is spent.
-import { createSession, readJson, safeNext, sessionCookies, sha256Hex, signInUser, text, withCookies, type AccountEnv } from "../../../../src/lib/auth.ts";
+import { createSession, hashSecret, readJson, safeNext, sessionCookies, sha256Hex, signInUser, text, withCookies, type AccountEnv } from "../../../../src/lib/auth.ts";
 import { grantWelcome } from "../../../../src/lib/ledger.ts";
 
 export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env }) => {
   const now = Date.now();
+  const secret = hashSecret(env, request);
+  if (!secret) return text("Email sign-in isn't set up yet. Use Google for now.", 503);
   const body = await readJson(request);
   const token = typeof body?.token === "string" ? body.token : "";
   const gone = () => text("This sign-in link has expired or was already used. Ask for a new one.", 400);
@@ -22,6 +24,6 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
   if (!link || link.expiresAt <= now) return gone();
 
   const user = await signInUser(env.DB, { email: link.email }, now);
-  await grantWelcome(env.DB, user.id, user.email, now);
+  await grantWelcome(env.DB, user.id, user.email, now, secret);
   return withCookies(Response.json({ next: safeNext(link.next), email: user.email }), sessionCookies(await createSession(env.DB, user.id, now)));
 };

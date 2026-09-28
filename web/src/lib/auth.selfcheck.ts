@@ -3,7 +3,7 @@
 // linking in both directions, rate limits and the cross-site guard.
 //   node src/lib/auth.selfcheck.ts
 import assert from "node:assert/strict";
-import { checkIdClaims, createSession, endSession, getSession, jwtPayload, pkce, rateLimit, safeNext, sameOrigin, sessionCookies, sha256Hex, signInUser } from "./auth.ts";
+import { checkIdClaims, createSession, endSession, fingerprint, getSession, hashSecret, jwtPayload, networkOf, pkce, rateLimit, safeNext, sameOrigin, sessionCookies, sha256Hex, signInUser } from "./auth.ts";
 import { onRequest } from "../../functions/api/_middleware.ts";
 import { testD1 } from "./testD1.ts";
 
@@ -70,6 +70,26 @@ const s2 = await getSession(db, req(tok2), now);
 await createSession(db, a.id, now);
 await endSession(db, s2!, true);
 assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?").bind(a.id).first<{ n: number }>())?.n, 0, "everywhere");
+
+// networks: an IPv6 /64 is one network (one subscriber gets a whole /64)
+const nets: [string, string][] = [
+  ["203.0.113.7", "203.0.113.7"],
+  ["2001:db8:1:2:3:4:5:6", "2001:db8:1:2"],
+  ["2001:db8:1:2::9", "2001:db8:1:2"],
+  ["2001:DB8:0001:0002::", "2001:db8:1:2"],
+  ["2001:db8::1", "2001:db8:0:0"],
+  ["::1", "0:0:0:0"],
+  ["::ffff:203.0.113.7", "203.0.113.7"],
+];
+for (const [ip, net] of nets) assert.equal(networkOf(ip), net, ip);
+
+// fingerprints are keyed: the same value under another key doesn't match
+assert.equal(await fingerprint("k1", "ann@x.org"), await fingerprint("k1", "ann@x.org"));
+assert.notEqual(await fingerprint("k1", "ann@x.org"), await fingerprint("k2", "ann@x.org"));
+assert.notEqual(await fingerprint("k1", "ann@x.org"), await sha256Hex("ann@x.org"), "not a plain hash");
+assert.equal(hashSecret({ HASH_SECRET: "s" }, new Request("https://m.test/")), "s");
+assert.equal(hashSecret({}, new Request("http://localhost:8788/")), "localhost-dev-key", "a fixed key for local development only");
+assert.equal(hashSecret({}, new Request("https://m.test/")), null, "deployed without a key: no fingerprints");
 
 // fixed-window rate limit
 assert.deepEqual([await rateLimit(db, "k", 2, 1000, now), await rateLimit(db, "k", 2, 1000, now), await rateLimit(db, "k", 2, 1000, now)], [true, true, false]);

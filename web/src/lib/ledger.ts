@@ -3,7 +3,7 @@
 // SUM(delta), a debit is one conditional INSERT (so two at once can't both
 // spend the last coins), and UNIQUE(kind, ref) makes every row idempotent.
 import { canonicalEmail, dueProGrants, ledgerLabel, proCoinsLeft, PRO, WELCOME_COINS, type LedgerKind } from "./coins.ts";
-import { sha256Hex } from "./auth.ts";
+import { fingerprint, sha256Hex } from "./auth.ts";
 
 export async function balance(db: D1Database, userId: string): Promise<number> {
   return (await db.prepare("SELECT COALESCE(SUM(delta), 0) AS b FROM coin_ledger WHERE user_id = ?").bind(userId).first<number>("b")) ?? 0;
@@ -30,9 +30,9 @@ export async function credit(db: D1Database, userId: string, coins: number, kind
   return r.meta.changes === 1;
 }
 
-/** The welcome bonus, once per canonical address ever (the fingerprint outlives account deletion). */
-export async function grantWelcome(db: D1Database, userId: string, email: string, now: number): Promise<boolean> {
-  const hash = await sha256Hex(canonicalEmail(email));
+/** The welcome bonus, once per canonical address ever (its keyed fingerprint outlives account deletion). */
+export async function grantWelcome(db: D1Database, userId: string, email: string, now: number, secret: string): Promise<boolean> {
+  const hash = await fingerprint(secret, canonicalEmail(email));
   const [paid] = await db.batch([
     db
       .prepare(

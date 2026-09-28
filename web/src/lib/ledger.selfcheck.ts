@@ -5,7 +5,8 @@
 //   node src/lib/ledger.selfcheck.ts
 import assert from "node:assert/strict";
 import { balance, credit, debit, grantWelcome, history, sweepTickets } from "./ledger.ts";
-import { signInUser } from "./auth.ts";
+import { fingerprint, signInUser } from "./auth.ts";
+import { canonicalEmail } from "./coins.ts";
 import { testD1 } from "./testD1.ts";
 
 const db = testD1();
@@ -13,8 +14,10 @@ const now = 1_000_000;
 const u = await signInUser(db, { email: "ann.lee@gmail.com" }, now);
 assert.equal(await balance(db, u.id), 0);
 
-assert.equal(await grantWelcome(db, u.id, u.email, now), true);
-assert.equal(await grantWelcome(db, u.id, u.email, now), false, "once");
+assert.equal(await grantWelcome(db, u.id, u.email, now, "key"), true);
+assert.equal(await grantWelcome(db, u.id, u.email, now, "key"), false, "once");
+const claim = await db.prepare("SELECT email_hash AS h FROM welcome_claims").first<{ h: string }>();
+assert.equal(claim?.h, await fingerprint("key", canonicalEmail(u.email)), "kept as a keyed fingerprint, not a plain hash");
 assert.equal(await balance(db, u.id), 10);
 
 // a debit that fits, one that doesn't, and two racing for the last coins
@@ -34,7 +37,7 @@ assert.equal(await balance(db, u.id), 52);
 // deleting the account and signing up again, even as a dotted +tag alias, pays no second bonus
 await db.prepare("DELETE FROM users WHERE id = ?").bind(u.id).run();
 const again = await signInUser(db, { email: "annlee+2@googlemail.com" }, now);
-assert.equal(await grantWelcome(db, again.id, again.email, now), false);
+assert.equal(await grantWelcome(db, again.id, again.email, now, "key"), false);
 assert.equal(await balance(db, again.id), 0);
 
 // review tickets: an expired, unfinished one is refunded once; a finished one isn't

@@ -12,10 +12,11 @@ import { onRequestGet as googleCallback } from "../../functions/api/auth/google/
 import { onRequestPost as logout } from "../../functions/api/auth/logout.ts";
 import { onRequestGet as me } from "../../functions/api/me.ts";
 
-const env = { DB: testD1(), GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "sec", GOOGLE_REDIRECT_URI: "https://m.test/api/auth/google/callback", RESEND_API_KEY: "re", EMAIL_FROM: "MargaLink <signin@m.test>" };
+const env = { DB: testD1(), HASH_SECRET: "test-key", GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "sec", GOOGLE_REDIRECT_URI: "https://m.test/api/auth/google/callback", RESEND_API_KEY: "re", EMAIL_FROM: "MargaLink <signin@m.test>" };
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
 const run = (h: unknown, request: Request, e: object = env) => (h as Handler)({ request, env: e as typeof env });
-const post = (path: string, body: unknown, cookie = "") => new Request(`https://m.test${path}`, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", cookie } });
+const post = (path: string, body: unknown, cookie = "", ip = "203.0.113.1") =>
+  new Request(`https://m.test${path}`, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", cookie, "cf-connecting-ip": ip } });
 const get = (path: string, cookie = "") => new Request(`https://m.test${path}`, { headers: { cookie } });
 const cookieHeader = (res: Response) => res.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
@@ -23,7 +24,12 @@ const cookieHeader = (res: Response) => res.headers.getSetCookie().map((c) => c.
 const sent: { to: string[]; text: string }[] = [];
 let idToken = "";
 let tokenForm: URLSearchParams | null = null;
+let human = true;
 globalThis.fetch = (async (url: string, init?: RequestInit) => {
+  if (url === "https://challenges.cloudflare.com/turnstile/v0/siteverify") {
+    const form = new URLSearchParams(init!.body as string);
+    return Response.json({ success: human && form.get("secret") === "ts-secret" && form.get("response") === "ts-token" });
+  }
   if (url === "https://api.resend.com/emails") {
     sent.push(JSON.parse(init!.body as string));
     return new Response("{}", { status: 200 });
@@ -83,6 +89,29 @@ r = await run(emailRequest, new Request("http://localhost:8788/api/auth/email/re
 console.log = log;
 assert.equal(r.status, 200);
 assert.match(logged.join(""), /http:\/\/localhost:8788\/signin\/verify#t=[\w-]+$/);
+
+// new addresses: five a day per network (an IPv6 /64 counts as one)
+for (let i = 1; i <= 5; i++) assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: `new${i}@x.org` }, "", `2001:db8:5:6::${i}`))).status, 200, `new ${i}`);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "new6@x.org" }, "", "2001:db8:5:6:ffff::1"))).status, 429, "same /64");
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "new6@x.org" }, "", "2001:db8:5:7::1"))).status, 200, "another network");
+// the day's budget for new addresses spent: people with an account still get their link
+await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES ('mail-new', 90, ?) ON CONFLICT(key) DO UPDATE SET count = 90").bind(Date.now() + 3_600_000).run();
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "new7@x.org" }, "", "198.51.100.7"))).status, 503);
+const { signInUser } = await import("./auth.ts");
+await signInUser(env.DB, { email: "old@x.org" }, Date.now());
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "old@x.org" }, "", "198.51.100.7"))).status, 200);
+await env.DB.prepare("DELETE FROM rate_limits WHERE key = 'mail-new'").run();
+// deployed without a fingerprint key: fail closed
+const keyless = { ...env, HASH_SECRET: undefined };
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "k@x.org" }), keyless)).status, 503);
+assert.equal((await run(emailVerify, post("/api/auth/email/verify", { token: "x".repeat(43) }), keyless)).status, 503);
+// with Turnstile configured, a request needs a passing token
+const guarded = { ...env, TURNSTILE_SECRET: "ts-secret" };
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "t1@x.org" }, "", "192.0.2.9"), guarded)).status, 400);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "t1@x.org", turnstile: "ts-token" }, "", "192.0.2.9"), guarded)).status, 200);
+human = false;
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { email: "t2@x.org", turnstile: "ts-token" }, "", "192.0.2.9"), guarded)).status, 400);
+human = true;
 
 // --- Google
 r = await run(googleStart, get("/api/auth/google/start?next=/review&popup=1"));

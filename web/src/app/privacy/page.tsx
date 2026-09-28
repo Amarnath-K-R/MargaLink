@@ -231,14 +231,18 @@ export default function PrivacyPage() {
       </ul>
       <h3 className="mt-6 font-medium">Kept briefly</h3>
       <ul className="mt-2 list-disc space-y-2 pl-5 text-ink-soft">
-        <li>While a paid review runs: which sections it covers and their lengths, deleted about two hours after it starts.</li>
-        <li>An emailed sign-in link&apos;s fingerprint, until it&apos;s used or 15 minutes pass.</li>
-        <li>Counters that limit how many sign-in emails an address or a network can ask for, keyed by one-way fingerprints that change daily. They expire within a day.</li>
+        <li>While a paid review runs: which sections it covers, their lengths and which came back (never their text), deleted shortly after its two hours end.</li>
+        <li>An emailed sign-in link: the address it was sent to and the page to return to, with a one-way fingerprint of the link, deleted when it&apos;s used or shortly after its 15 minutes.</li>
+        <li>
+          Counters that limit how many sign-in emails an address or a network can ask for. They&apos;re keyed by fingerprints made with a secret key
+          only our server holds (a network&apos;s also changes daily), never the address itself, and they expire within a day.
+        </li>
       </ul>
       <h3 className="mt-6 font-medium">Kept after you delete your account</h3>
       <p className="mt-2 text-ink-soft">
-        A one-way fingerprint of your email address, so the welcome bonus is given once per
-        address. It can&apos;t be turned back into the address.
+        A fingerprint of your email address, made with a secret key only our server holds, so the
+        welcome bonus is given once per address. It holds no address, and without that key it
+        can&apos;t be matched to one.
       </p>
       <h3 className="mt-6 font-medium">Never kept</h3>
       <p className="mt-2 text-ink-soft">
@@ -255,7 +259,7 @@ export default function PrivacyPage() {
       </p>
       <h3 className="mt-6 font-medium">Who else is involved</h3>
       <ul className="mt-2 list-disc space-y-2 pl-5 text-ink-soft">
-        <li>Cloudflare hosts the site and the account database.</li>
+        <li>Cloudflare hosts the site and the account database and, where it&apos;s switched on, checks that an email sign-in request comes from a person (Turnstile).</li>
         <li>Google, only if you choose it, tells us your verified email address and its id for your account.</li>
         <li>Resend sends sign-in emails: your address and the link.</li>
         <li>Paddle takes payments, as the merchant of record.</li>
