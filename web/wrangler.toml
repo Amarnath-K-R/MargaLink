@@ -12,3 +12,30 @@ id = "8378b6ae716e4ba18cf06f4fe7a605ba"
 [[kv_namespaces]]
 binding = "FIGURES_KV"
 id = "331dc785a2dc4f93912f8e8cd95b00c5"
+
+# Accounts, sign-in and the M coin ledger (migrations/). The ids below are
+# placeholders until the owner runs `wrangler d1 create margalink --location
+# apac` (and `margalink-preview`); local dev (`npm run db:local`, `npm run
+# dev:full`) works without them. Deploying needs the real ids.
+[[d1_databases]]
+binding = "DB"
+database_name = "margalink"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Preview deployments get their own database, so a preview never touches
+# real accounts or coins. Bindings aren't inherited, so the KV ones repeat.
+[env.preview]
+[[env.preview.kv_namespaces]]
+binding = "REVIEWS_KV"
+id = "8378b6ae716e4ba18cf06f4fe7a605ba"
+
+[[env.preview.kv_namespaces]]
+binding = "FIGURES_KV"
+id = "331dc785a2dc4f93912f8e8cd95b00c5"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "margalink-preview"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "migrations"
