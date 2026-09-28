@@ -400,9 +400,10 @@ spent only when the person confirms, so mail scanners can't burn it; the
 page asks the server which address the link is for rather than trusting
 the link). `safeNext` checks every post-sign-in destination after URL
 normalisation, on the way in and on the way out. Email requests are
-limited per address, per network (an IPv6 /64 is one) and, for addresses
-without an account, by a daily budget that existing users never draw on,
-so strangers can't lock anyone out; Turnstile guards the form when its
+limited per address and network (so a stranger's network can't lock you
+out of yours), per address overall (against spam), per network (an IPv6
+/64 is one) and, for addresses without an account, by a daily budget
+that existing users never draw on; Turnstile guards the form when its
 keys are set. One
 account per verified address, whichever way you come in. A session is an
 opaque token in an HttpOnly `__Host-` cookie, stored only as its sha256; a
@@ -434,15 +435,20 @@ first.
 sections' ids and lengths, never text; prices them with `reviewPrice`
 (the same function the consent quotes); checks today's capacity; and, in
 one batch, debits and creates a ticket bound to the tier, those sections
-and lengths, and a pass budget (2n+2 extracts, 4 syntheses) for two hours.
-Every pass sends `X-Review-Ticket`; `review.ts` spends one pass of it
-(`claimReviewPass`) before calling Claude, so nothing unpaid reaches the
-API; none starts within five minutes of the ticket's end, so a pass can't
-outlive it. Each section that comes back is recorded (`review_deliveries`),
-as is a synthesis. When the ticket expires, `sweepTickets` refunds the
-share it didn't deliver: a review is priced in parts, one per section plus
-one for the cross-check, so a client that takes every section's analysis
-and never asks for the cross-check still pays for what it got. Resume and
+and lengths, for two hours. Every pass sends `X-Review-Ticket`;
+`review.ts` spends one of it (`claimReviewPass`) before calling Claude, so
+nothing unpaid reaches the API: a section that already came back is
+refused (409), each section gets at most four tries (`TRIES_PER_SECTION`,
+counted in the same statement that checks them, in the ticket's `passes`),
+the cross-check runs once, and none starts within five minutes of the
+ticket's end, so a pass can't outlive it. That binds what a ticket buys to
+what it cost: Claude reads each paid section at most four times. Each
+section that comes back is recorded (`review_deliveries`), as is a
+synthesis. When the ticket expires, `sweepTickets` refunds the share it
+didn't deliver, rounded up: sections weigh by their length and the
+cross-check like an average section, so padding a review with tiny
+sections buys nothing, and a client that takes every section and skips the
+cross-check still pays for what it got. Resume and
 Retry reuse the ticket: a review is paid for once. A pass refused for
 today's capacity is refused before it spends one of the ticket's. A
 cancel pressed while a review is being paid for takes effect once the
@@ -451,8 +457,12 @@ leaves it resumable. Ask Claude debits 1 coin per call and gives it back
 unless an answer goes out.
 
 **Payments.** Paddle Billing is the merchant of record. The browser loads
-Paddle.js only when Buy is clicked and names the account in
-`custom_data.user_id`. `pay/webhook.ts` checks Paddle's signature
+Paddle.js only when Buy is clicked and names the account in `custom_data`
+with its signature (`checkoutSig`, from `/api/me`), so the webhook credits
+only the account that bought, never one a stranger names. An event that
+refers to something not seen yet (a refund of a purchase, a won dispute
+before its chargeback) is answered 503 and not recorded, so Paddle sends
+it again later. `pay/webhook.ts` checks Paddle's signature
 (HMAC-SHA256 over `ts:rawBody`, five minutes of skew, any `h1`), records
 the event id in the same batch as its effects, and credits a pack, records
 a Pro payment with its billing period, upserts a subscription (ignoring

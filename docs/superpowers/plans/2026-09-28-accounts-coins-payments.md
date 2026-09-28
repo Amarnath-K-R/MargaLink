@@ -222,3 +222,23 @@ were fixed on the branch (cee73e2..5a8e064). What changed from the plan above:
 - **Housekeeping** in `_middleware.ts` (at most once a minute) instead of lazy sweeps only.
 - **Site-wide** `X-Frame-Options: DENY`; a blocked Google popup no longer redirects away from a paper.
 
+### Second audit (same day)
+
+Three more audits (an attacker's view, a randomized money simulation over the real handlers, and the pages'
+promises against the code) found one more critical gap and several smaller ones; all fixed:
+
+- **A review's price and what it buys are bound together.** The ticket's pass budget was shared across
+  sections, so one large section plus many one-character ones bought hundreds of passes of the large one for
+  a few coins. Now a section that came back isn't sent again, each section gets at most four tries
+  (`0006_review_tries.sql`), and refunds weigh sections by length (the cross-check like an average section),
+  rounded up so any part that didn't come back returns at least a coin.
+- **Checkout is signed**: custom_data carries the account's signature, so nobody can buy coins onto someone
+  else's account.
+- **Email sign-in limits** count per address and network, so a stranger can't lock anyone out.
+- **Webhooks that arrive early** (a refund before its purchase, a won dispute before its chargeback) are
+  answered 503 so Paddle retries; the Pro-coin count never exceeds the balance; credits to a just-deleted
+  account are dropped.
+- **Promises kept**: the privacy page lists purchase records and says Paddle event ids are kept 90 days (and
+  housekeeping deletes them after); the data export includes everything stored; deleting an account with Pro
+  warns that Pro ends at once; plain error messages throughout.
+
