@@ -10,14 +10,20 @@
 // with typed text blanked and group references as "#n", and — only if the
 // user opted in — the labels of small categorical columns. Never a cell
 // value. What goes back: a FigureSpec (or a customize() hook) that the
-// browser renders locally against the real data. Nothing is stored.
+// browser renders locally against the real data. Nothing from the request
+// is stored; each request costs 1 M coin (signed in), refunded if the
+// answer isn't usable.
 // See docs/ARCHITECTURE.md, "The figure generator", before changing this.
 import { checkLabels, checkSpecAgainstColumns, validateFigureSpec } from "../../src/lib/figureSpec.ts";
 import { isValidFigurePayload } from "../../src/lib/figureSchema.ts";
 import { HOOK_SYSTEM_PROMPT, HOOK_TOOL, SPEC_SYSTEM_PROMPT, SPEC_TOOL, buildFigurePrompt, isCodeSafeToRun } from "../../src/lib/figurePrompt.ts";
 import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/anthropicStream.ts";
+import { getSession, randomToken, type AccountEnv } from "../../src/lib/auth.ts";
+import { FIGURE_PRICE } from "../../src/lib/coins.ts";
+import { balance, credit, debit } from "../../src/lib/ledger.ts";
+import type { FigurePayload } from "../../src/lib/figureSchema.ts";
 
-type Env = { ANTHROPIC_API_KEY: string; FIGURES_KV: KVNamespace };
+type Env = AccountEnv & { ANTHROPIC_API_KEY: string; FIGURES_KV: KVNamespace };
 
 const DAILY_CAP = 200;
 const MODEL = "claude-sonnet-5";
@@ -47,20 +53,36 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const problem = body.spec ? checkSpecAgainstColumns(body.columns, body.spec) : null;
   if (!body.request.trim()) return text("Describe the figure you want first.", 400);
 
-  // Global daily cap, counted before the upstream call (a failed call still
-  // costs). Same benign check-then-put race as api/review.ts — a pilot guard.
-  const kvKey = `figure-count:${new Date().toISOString().slice(0, 10)}`;
+  const now = Date.now();
+  const s = await getSession(env.DB, request, now);
+  if (!s) return text("Sign in to ask Claude.", 401);
+  // Global daily cap, checked before charging and counted before the
+  // upstream call (a failed call still costs). Same benign check-then-put
+  // race as api/review.ts.
+  const kvKey = `figure-count:${new Date(now).toISOString().slice(0, 10)}`;
   const used = parseInt((await env.FIGURES_KV.get(kvKey)) ?? "0", 10);
-  if (used >= DAILY_CAP) return text("Pilot is fully booked for today", 429);
+  if (used >= DAILY_CAP) return text("Ask Claude is fully booked for today. Try again tomorrow; nothing was charged.", 429);
+  const ref = randomToken(12);
+  if (!(await debit(env.DB, s.userId, FIGURE_PRICE, "figure", ref, now))) return Response.json({ coins: FIGURE_PRICE, balance: await balance(env.DB, s.userId) }, { status: 402 });
   await env.FIGURES_KV.put(kvKey, String(used + 1), { expirationTtl: 60 * 60 * 24 * 2 });
 
+  const res = await askClaude(body, problem, env.ANTHROPIC_API_KEY);
+  if (res.status !== 200) {
+    await credit(env.DB, s.userId, FIGURE_PRICE, "figure_refund", ref, Date.now());
+    return res;
+  }
+  return Response.json({ ...((await res.json()) as object), balance: await balance(env.DB, s.userId) });
+};
+
+// The upstream call and every output gate; any non-200 is refunded above.
+async function askClaude(body: FigurePayload, problem: string | null, apiKey: string): Promise<Response> {
   const hook = body.mode === "hook";
   const tool = hook ? HOOK_TOOL : SPEC_TOOL;
   let toolInput: unknown;
   let stopReason: string | undefined;
   try {
     ({ toolInput, stopReason } = await callAnthropicTool(
-      env.ANTHROPIC_API_KEY,
+      apiKey,
       {
         model: MODEL,
         max_tokens: hook ? 2000 : 4000,
@@ -98,4 +120,4 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const unfit = checkSpecAgainstColumns(body.columns, spec) ?? checkLabels(spec, body.levels);
   if (unfit) return text(`Claude's figure description didn't fit your data: ${unfit}`, 422);
   return Response.json({ spec, summary });
-};
+}

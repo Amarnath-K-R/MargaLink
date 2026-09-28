@@ -1,15 +1,21 @@
 // Runnable check for functions/api/figure.ts — drives the real handler with
-// a stubbed Anthropic stream and an in-memory KV: input validation, the
-// labels opt-in reaching (or not reaching) the model, and every output gate.
+// a stubbed Anthropic stream, an in-memory KV and the node:sqlite D1: input
+// validation, the labels opt-in reaching (or not reaching) the model, every
+// output gate, and the 1 M coin charge (signed in, refunded on failure).
 //   node src/lib/figureEndpoint.selfcheck.ts
 import assert from "node:assert/strict";
 import { onRequestPost } from "../../functions/api/figure.ts";
 import { buildFigurePayload } from "./figureSchema.ts";
 import { DEFAULT_SPEC } from "./figureSpec.ts";
 import type { Dataset } from "./spreadsheet.ts";
+import { testD1 } from "./testD1.ts";
+import { createSession, signInUser } from "./auth.ts";
+import { balance, credit } from "./ledger.ts";
 
 const kv = new Map<string, string>();
-const env = { ANTHROPIC_API_KEY: "k", FIGURES_KV: { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v) } };
+const env = { DB: testD1(), ANTHROPIC_API_KEY: "k", FIGURES_KV: { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v) } };
+const user = await signInUser(env.DB, { email: "ann@x.org" }, Date.now());
+let cookie = `__Host-ml_session=${await createSession(env.DB, user.id, Date.now())}`;
 let toolJson = "";
 let upstreamBody: { tools: { name: string }[]; system: string } = { tools: [], system: "" };
 globalThis.fetch = (async (_u: string, init?: RequestInit) => {
@@ -26,14 +32,23 @@ globalThis.fetch = (async (_u: string, init?: RequestInit) => {
 const ds = { columns: [{ name: "arm", dtype: "categorical" }, { name: "change", dtype: "numeric" }], rowCount: 60, levels: { arm: ["Placebo", "Low"] } } as unknown as Dataset;
 const call = async (payload: unknown) => {
   const handler = onRequestPost as unknown as (ctx: { request: Request; env: typeof env }) => Promise<Response>;
-  const res = await handler({ request: new Request("http://x/api/figure", { method: "POST", body: JSON.stringify(payload) }), env });
+  const res = await handler({ request: new Request("http://x/api/figure", { method: "POST", body: JSON.stringify(payload), headers: { cookie } }), env });
   return { status: res.status, text: await res.text() };
 };
 const spec = structuredClone(DEFAULT_SPEC); Object.assign(spec.panels[0].roles, { x: "arm", y: "change" });
 
 toolJson = JSON.stringify({ spec, summary: "ok" });
-let r = await call(buildFigurePayload(ds, null, "bars of change by arm", { sendLevels: false, mode: "spec" }));
+const ask = buildFigurePayload(ds, null, "bars of change by arm", { sendLevels: false, mode: "spec" });
+// signed in, with a coin to spend
+const anon = cookie; cookie = "";
+let r = await call(ask);
+assert.equal(r.status, 401); cookie = anon;
+r = await call(ask);
+assert.equal(r.status, 402); assert.deepEqual(JSON.parse(r.text), { coins: 1, balance: 0 });
+await credit(env.DB, user.id, 20, "admin", "seed", Date.now());
+r = await call(ask);
 assert.equal(r.status, 200, r.text); assert.equal(JSON.parse(r.text).summary, "ok");
+assert.equal(JSON.parse(r.text).balance, 19, "the new balance comes back");
 assert.equal(upstreamBody.tools[0].name, "submit_figure_spec"); assert.ok(upstreamBody.system.includes("Chart families"));
 assert.ok(!JSON.stringify(upstreamBody).includes("Placebo"), "no labels upstream by default");
 
@@ -66,4 +81,8 @@ assert.ok(JSON.stringify(upstreamBody).includes("PROBLEM WITH THE CURRENT SPEC")
 assert.equal((await call({ ...buildFigurePayload(ds, null, "x", { sendLevels: false, mode: "spec" }), rows: [[1]] })).status, 400);
 assert.equal((await call(buildFigurePayload(ds, null, "   ", { sendLevels: false, mode: "spec" }))).status, 400);
 assert.deepEqual([...kv.values()], ["7"], "every call that reached Claude was counted, rejected-input calls weren't");
+// seven calls reached Claude, three of them came back unusable (422): 7 charged, 3 refunded
+assert.equal(await balance(env.DB, user.id), 16);
+const refunds = await env.DB.prepare("SELECT COUNT(*) AS n FROM coin_ledger WHERE kind = 'figure_refund'").first<{ n: number }>();
+assert.equal(refunds?.n, 3);
 console.log("figureEndpoint.selfcheck: OK");
