@@ -127,6 +127,18 @@ try {
   }, JOURNAL_ID);
   check(`a review costing more than the balance is refused (${big.status})`, big.status === 402 && big.body.balance === afterReview.balance && big.body.coins > big.body.balance);
 
+  // a paid review that never ran: once its ticket expires, the sweep (real D1, json_each) refunds all of it
+const unused = await page.evaluate(async (journalId) => {
+    const r = await fetch("/api/review/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tier: "quick", journalId, chunks: [{ id: "s1", chars: 1000 }, { id: "s2", chars: 1000 }] }) });
+    return r.json();
+  }, JOURNAL_ID);
+  check("an unused review was charged", unused.balance === afterReview.balance - unused.coins);
+  execFileSync("npx", ["wrangler", "d1", "execute", "margalink", "--local", "--persist-to", state, "--command", "UPDATE review_tickets SET expires_at = 0"], { cwd: WEB, stdio: "ignore" });
+  const swept = await page.evaluate(() => fetch("/api/me").then((r) => r.json()));
+  // Both tickets expired: the unused one, and the first review's, whose passes were mocked
+  // in the browser, so the server never saw a part delivered. Each is refunded in full.
+  check(`expiry refunds what wasn't delivered (${swept.balance})`, swept.balance === afterReview.balance + price);
+
   // sign out
   await page.evaluate(() => fetch("/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }));
   const out = await page.evaluate(() => fetch("/api/me").then((r) => r.json()));
