@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BarChart3, Boxes, ClipboardCheck, FileCheck2, FlaskConical, FolderTree, Palette, PenLine, Rocket, ScanSearch, ShieldCheck } from "lucide-react";
+import { BarChart3, Boxes, ClipboardCheck, Coins, FileCheck2, FlaskConical, FolderTree, Palette, PenLine, Rocket, ScanSearch, ShieldCheck } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { Aside, DocBody, DocPart, DocSection, OptionTable, type TocItem } from "@/components/docs/Doc";
 import { Steps, Swatches, SystemDiagram } from "@/components/docs/Diagrams";
@@ -17,6 +17,7 @@ const TOC: TocItem[] = [
   { id: "reviewing", label: "The AI review", tint: "#ecdcc0" },
   { id: "figures", label: "Figures", tint: "#f1d2c2" },
   { id: "writing", label: "The workspace", tint: "#dde6e6" },
+  { id: "accounts", label: "Accounts and M coins", tint: "#f3e4bd" },
   { id: "design", label: "The clay design system" },
   { id: "code", label: "Where things live" },
   { id: "testing", label: "Tests" },
@@ -224,6 +225,68 @@ export default function ArchitecturePage() {
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
+        <DocSection
+          id="accounts"
+          title="Accounts and M coins"
+          tint="#f3e4bd"
+          icon={icon(Coins)}
+          lead="The two AI features cost money per run, so they're paid in M coins and need an account. Nothing else does, and nothing from a paper is ever part of one."
+        >
+          <OptionTable
+            title="How it holds together"
+            rows={[
+              {
+                name: "Signing in",
+                what: (
+                  <>
+                    Google (OIDC code flow with PKCE, scope openid email) or a one-time email link whose token rides in the #fragment and is spent only on
+                    confirm. A session is an opaque token in an HttpOnly {code("__Host-")} cookie, stored only as its sha256; a readable {code("ml_in")} cookie
+                    lets signed-out pages skip {code("/api/me")} entirely.
+                  </>
+                ),
+              },
+              {
+                name: "The ledger",
+                what: (
+                  <>
+                    Append-only; the balance is SUM(delta). A debit is one conditional INSERT, so two can&apos;t spend the last coins, and UNIQUE(kind, ref)
+                    makes every credit, debit and refund idempotent. SQL lives in {code("lib/ledger.ts")}, prices in {code("lib/coins.ts")}.
+                  </>
+                ),
+              },
+              {
+                name: "Paying for a review",
+                what: (
+                  <>
+                    {code("review/start")} gets section ids and lengths (never text), charges {code("reviewPrice")} and issues a ticket bound to them, with a pass
+                    budget, for two hours. Every pass spends one before Claude is called; an unfinished ticket is refunded when it expires.
+                  </>
+                ),
+                away: true,
+              },
+              { name: "Ask Claude", what: "1 coin per call, refunded on any answer that isn't usable." },
+              {
+                name: "Payments",
+                what: (
+                  <>
+                    Paddle as merchant of record. Paddle.js loads only on Buy; the webhook checks the signature, records each event id with its effects, credits
+                    packs, keeps Pro subscriptions in order, and takes back refunds and chargebacks. Pro&apos;s monthly coins are granted lazily from{" "}
+                    {code("/api/me")}; there&apos;s no scheduler.
+                  </>
+                ),
+              },
+            ]}
+          />
+          <Aside title="The same three rules">
+            <p>
+              The account tables hold an email address, Google&apos;s id for it, hashed sessions, coin history, Paddle references and, for a running review,
+              section ids and lengths. Deleting an account cascades through all of it (cancelling Pro at Paddle first); only a one-way fingerprint that
+              pays the welcome bonus once per address stays.
+            </p>
+          </Aside>
+        </DocSection>
+
+        {/* ---------------------------------------------------------------- */}
         <DocSection id="design" title="The clay design system" icon={icon(Palette)} lead="One palette, one light, a handful of surfaces, shared by the tool pages, the workspace and these docs.">
           <Swatches
             colors={[
@@ -259,13 +322,14 @@ export default function ArchitecturePage() {
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
-        <DocSection id="code" title="Where things live" icon={icon(FolderTree)} lead="Routes own their pages and pieces; shared logic is flat in lib/; the two server files are in functions/.">
+        <DocSection id="code" title="Where things live" icon={icon(FolderTree)} lead="Routes own their pages and pieces; shared logic is flat in lib/; the server code is in functions/.">
           <OptionTable
             rows={[
               { name: "web/src/app/", what: "Routes. Each tool's page is JSX over a hook in its _components/ (useMatch, useReview, useFigures) that the workspace reuses. The homepage lives in _home/." },
               { name: "web/src/components/", what: "Shared pieces: PageHeader (the tray), Step, Dialog, the consent notices, result panels, docs/ (these pages' blocks), three/ (the homepage's 3D scenes)." },
               { name: "web/src/lib/", what: "Framework-agnostic logic, deliberately flat: match*/rank/topics/references, review*, figure*, tex*, projectStore, spreadsheet, journalRules. A relative lib import carries .ts (Node runs the selfchecks natively)." },
-              { name: "web/functions/api/", what: "review.ts and figure.ts, the only server code. They may import from src/lib/ only modules that are pure or isomorphic (no window, localStorage or fs)." },
+              { name: "web/functions/api/", what: "review.ts and figure.ts (the AI features), and the account, sign-in and payment Functions. They may import from src/lib/ only modules that are pure or isomorphic (no window, localStorage or fs)." },
+              { name: "web/migrations/", what: "The D1 schema: accounts and the coin ledger, payments, subscriptions. Applied with wrangler d1 migrations apply; the selfchecks apply them to node:sqlite." },
               { name: "web/public/", what: "The index, templates, the figure gallery, the TeX and figure workers, figurelib.py, fonts, the guide's screenshots." },
               { name: "pipeline/", what: "The offline Python (uv) pipeline: fetch from OpenAlex, enrich from DOAJ and NLM, k-means centres, quality filters, build the index." },
               { name: "web/scripts/", what: "The Playwright smokes (check_*.mjs), the ranker's evaluation (eval_match.ts), the guide's screenshots (guide_shots.mjs)." },
@@ -284,6 +348,7 @@ export default function ArchitecturePage() {
             rows={[
               { name: "npm run check", what: "Typecheck, lint, and every *.selfcheck.ts (plain Node, no framework): grounding, payload sentinels, the ranker's drift guard, LaTeX helpers…", def: "web/ · CI" },
               { name: "npm run smoke", what: "The Playwright checks below, against a running dev server.", def: "web/ · local" },
+              { name: "e2e_accounts.mjs", what: "The account Functions for real, on a fresh local D1 under wrangler pages dev: an email sign-in, a signed Paddle webhook, a paid review, a 402, sign out.", def: "web/ · after a build" },
               { name: "uv run selfcheck.py", what: "figurelib.py under CPython with Pyodide's library versions; and the pipeline's own checks.", def: "web/figurelib, pipeline · CI" },
             ]}
           />
@@ -293,7 +358,8 @@ export default function ArchitecturePage() {
               { name: "check_match", what: "What is read from a real PDF, topics, fit badges, a why panel, the correction and paste paths, and not one request with a body." },
               { name: "check_filters · check_format", what: "Filters really re-rank; the format check on a multi-page PDF." },
               { name: "check_journals_browse · check_journal_page", what: "Browsing without the vector file; a result opens a real journal page." },
-              { name: "check_review", what: "Against a mocked /api/review: consent naming the request count, per-pass progress, a failed section, Retry, grounded citations, cancel, the capacity stop." },
+              { name: "check_review", what: "Against a mocked /api/review: consent naming the request count and price, one charge and the ticket on every pass, per-pass progress, a failed section, Retry, grounded citations, cancel, the capacity stop, too few coins, signed out." },
+              { name: "check_account", what: "No account request while signed out; the email link and its confirm step; Google's popup; the account page; a pack and Pro through a stubbed Paddle.js; the portal." },
               { name: "check_figures · check_figure_sandbox", what: "A messy spreadsheet read right, templates, editors, recipes, a mocked Ask Claude; tweaks that try every way out fail with zero requests." },
               { name: "check_write", what: "Compile, diagnostics, backups, files, the hub windows (a mocked review, the figure window), the formatting bar, suggestions, the outline, views, a failed engine download." },
               { name: "check_keyboard · check_intro · check_homepage", what: "The dropzone by keyboard; the first-visit intro; the homepage." },
@@ -302,13 +368,14 @@ export default function ArchitecturePage() {
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
-        <DocSection id="deploying" title="Deploying" icon={icon(Rocket)} lead="A static build to Cloudflare Pages, the two Functions alongside it.">
+        <DocSection id="deploying" title="Deploying" icon={icon(Rocket)} lead="A static build to Cloudflare Pages, the Functions alongside it, D1 behind them.">
           <DocPart title="npm run deploy">
             <p>
               Builds the static export, removes one oversized WASM file Next copies in (the ONNX runtime is loaded from a CDN instead; Pages rejects files
-              over 25 MB), then {code("wrangler pages deploy")}. The Functions need one secret, {code("ANTHROPIC_API_KEY")}, set in the Pages dashboard (
-              {code("web/.dev.vars")} locally), and KV namespaces for the daily counters. The index must be built first ({code("pipeline/README.md")}); the
-              TeX engine is published separately to R2 ({code("scripts/publish_busytex.sh")}).
+              over 25 MB), then {code("wrangler pages deploy")}. The AI Functions need {code("ANTHROPIC_API_KEY")} (the Pages dashboard, or{" "}
+              {code("web/.dev.vars")} locally) and KV namespaces for the daily counters; the account Functions need the D1 databases in{" "}
+              {code("wrangler.toml")}, their migrations applied, and the Google, Resend and Paddle secrets listed in {code("CLAUDE.md")}. The index must be
+              built first ({code("pipeline/README.md")}); the TeX engine is published separately to R2 ({code("scripts/publish_busytex.sh")}).
             </p>
           </DocPart>
         </DocSection>
@@ -320,7 +387,8 @@ export default function ArchitecturePage() {
               ["New requests", "Does anything new call fetch, XHR or a worker import? Every new request must be a bodyless GET for a public file, or go through one of the two notices."],
               ["Consent paths", "Can the review or Ask Claude start without a click on its notice? Is any new default on? Does the notice still say exactly what's sent?"],
               ["What's in a payload", "Does anything add a field to what's sent? The review's pass requests and Ask Claude's payload have exact shapes, checked on both sides."],
-              ["Server state", "Does a Function now keep anything between requests beyond the daily counters?"],
+              ["Server state", "Does a Function now keep anything beyond the daily counters and the account tables? Nothing from a paper, ever, for anyone."],
+              ["Coins", "Does anything change a balance outside ledger.ts? Every coin in or out is one ledger row with a unique ref, charged before the upstream call and refunded if it fails."],
               ["Functions' imports", "Anything new imported by functions/ must be pure or isomorphic."],
               ["Tests", "npm run check green; the smokes for the flows touched; a selfcheck for new pure logic, written first."],
               ["The away colour", "Used only for what leaves the device. Nothing else may borrow it."],

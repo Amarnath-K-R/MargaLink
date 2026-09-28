@@ -6,7 +6,7 @@
 // the UI. Needs `npm run dev` and the local journal index (for Match).
 // The AI review is mocked (as check_review.mjs does), signed in through
 // mock_account.mjs; Ask Claude isn't used.
-// Run: node scripts/guide_shots.mjs [journals|match|review|figures|write|tray]
+// Run: node scripts/guide_shots.mjs [journals|match|review|figures|write|tray|coins]
 import { chromium } from "playwright";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mockAccount } from "./mock_account.mjs";
@@ -25,7 +25,7 @@ const ctx = await chromium.launchPersistentContext(PROFILE, { viewport: { width:
 const page = ctx.pages()[0] ?? (await ctx.newPage());
 page.on("pageerror", (e) => console.log("pageerror:", e.message));
 page.on("dialog", (d) => void d.accept());
-await mockAccount(ctx, { balance: 42 });
+await mockAccount(ctx, { balance: 42, paddle: { env: "sandbox", token: "test_guide", prices: { S: "pri_s", M: "pri_m", L: "pri_l", PRO_MONTH: "pri_pm", PRO_YEAR: "pri_py" } } });
 
 // The review's passes, mocked: every extract quotes its chunk's first sentence.
 const firstSentence = (t) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12 && l !== l.toUpperCase()) ?? t.trim()).split(". ")[0];
@@ -245,6 +245,42 @@ if (want("write")) {
   await sc.waitFor();
   await shot("write-shortcuts", [sc], [], 0);
   await page.keyboard.press("Escape");
+}
+
+if (want("coins")) {
+  // Signed out: signing in.
+  await ctx.clearCookies();
+  await go("/signin");
+  const card = page.locator("main .sheet").first();
+  await shot("coins-signin", [card], [page.getByRole("button", { name: "Continue with Google" }), page.locator("#signin-email"), page.getByRole("button", { name: "Send the link" }), card.getByRole("link", { name: "What an account stores" })]);
+  await ctx.addCookies([{ name: "ml_in", value: "1", url: BASE }]);
+  // What things cost, and buying coins.
+  await go("/pricing");
+  const costs = "main section:has(#costs)";
+  await shot("coins-costs", [`${costs} .sheet`, `${costs} p.clay-well`], [`${costs} tbody tr:nth-child(2) th`, `${costs} tbody tr:first-child td:nth-child(3)`, `${costs} .sheet > p`, `${costs} p.clay-well`]);
+  await shot("coins-packs", ['[data-pack="S"]', '[data-pack="L"]'], ['[data-pack="S"] p.text-2xl', '[data-pack="S"] p.text-4xl', '[data-pack="S"] button']);
+  await shot("coins-pro", ['[data-testid="pro"]'], ['[data-testid="pro"] p.text-2xl', page.getByRole("button", { name: "Get Pro monthly" }), page.getByRole("button", { name: "Get Pro yearly" })]);
+  // The account page.
+  await ctx.route("**/api/account", (r) =>
+    r.fulfill({
+      json: {
+        email: "you@university.edu",
+        balance: 42,
+        google: true,
+        history: [
+          { kind: "review", label: "Pre-submission review", delta: -6, at: Date.parse("2026-09-28T10:12:00Z") },
+          { kind: "pack", label: "Coin pack", delta: 50, at: Date.parse("2026-09-27T16:40:00Z") },
+          { kind: "figure_refund", label: "Refund: figure request failed", delta: 1, at: Date.parse("2026-09-26T09:05:00Z") },
+          { kind: "figure", label: "Ask Claude (figure)", delta: -1, at: Date.parse("2026-09-26T09:05:00Z") },
+          { kind: "welcome", label: "Welcome bonus", delta: 10, at: Date.parse("2026-09-25T08:00:00Z") },
+        ],
+      },
+    }),
+  );
+  await go("/account");
+  await page.waitForSelector("text=Welcome bonus");
+  const coins = "main section:has(#coins)";
+  await shot("coins-account", [coins], [`${coins} p.text-4xl`, `${coins} ol li:first-child`, `${coins} ol li:nth-child(3)`, `${coins} a:has-text("Buy coins")`]);
 }
 
 writeFileSync(MANIFEST, JSON.stringify(manifest, null, 1) + "\n");

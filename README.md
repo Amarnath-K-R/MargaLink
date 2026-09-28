@@ -27,6 +27,12 @@ it (matching and the checks read the compiled PDF, on-device; the two opt-in AI 
 behind their notices). Both AI features sit behind an explicit consent step that names exactly
 what happens before anything is sent. See `docs/ARCHITECTURE.md`.
 
+Those two features cost money per run, so they're paid in M coins and need
+an account (Google or an email link; only an email address is kept, never
+anything from a paper). Everything else is free, with no account. Coins
+come from a welcome bonus, packs, or Pro, sold through Paddle as the
+merchant of record.
+
 ## Layout
 
 | Path | What |
@@ -36,7 +42,8 @@ what happens before anything is sent. See `docs/ARCHITECTURE.md`.
 | `web/src/app/` | Routes — one folder per URL, `_home/` holds the homepage's own sections. |
 | `web/src/components/` | Shared UI, including `components/three/` for the two scroll-driven 3D scenes. |
 | `web/src/lib/` | Framework-agnostic logic — matching (the ranker, topic estimates, reference lists), format checks, the AI review's sectioning/prompts/grounding/orchestration, the figure studio's spec/payload/prompt, the writing workspace's TeX runner and project storage. Kept flat by design. |
-| `web/functions/api/review.ts`, `web/functions/api/figure.ts` | The two server-side files — Cloudflare Pages Functions holding the Anthropic API key for the opt-in AI review and the opt-in figure generator. |
+| `web/functions/api/review.ts`, `web/functions/api/figure.ts` | Cloudflare Pages Functions holding the Anthropic API key for the opt-in AI review and the opt-in figure generator. |
+| `web/functions/api/` (the rest), `web/migrations/` | Accounts, sign-in, the M coin ledger and Paddle payments, on Cloudflare D1. None of it ever receives paper content. |
 | `docs/ARCHITECTURE.md` | Why the system is built this way, plus a one-line-per-file map of everything above — start here after this file. |
 | `/guide`, `/architecture` (in the app) | The illustrated user guide — every tool and option, on screenshots of the real UI (`web/scripts/guide_shots.mjs` re-makes them) — and a tour of this architecture for developers and reviewers, with diagrams and a review checklist. |
 
@@ -59,6 +66,7 @@ meta.json}`** — gitignored, produced by the pipeline (see
 ```bash
 cd web && npm run check    # typecheck + lint + selfchecks
 cd web && npm run smoke    # Playwright checks against a running dev server
+cd web && npm run build && node scripts/e2e_accounts.mjs   # the account Functions, on a fresh local D1
 cd pipeline && uv run selfcheck.py && uv run ruff check .
 ```
 

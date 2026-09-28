@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BarChart3, BookOpen, Compass, FileCheck2, LifeBuoy, PenLine, ScanSearch } from "lucide-react";
+import { BarChart3, BookOpen, Coins, Compass, FileCheck2, LifeBuoy, PenLine, ScanSearch } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { Aside, DocBody, DocPart, DocSection, Keys, OptionTable, Shot, type TocItem } from "@/components/docs/Doc";
 import { FiguresArt, JournalsArt, MatchArt, PrivacyArt, ReviewArt, WriteArt } from "@/components/docs/Art";
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description: "How to use every MargaLink tool (browse journals, match your paper, get it reviewed, make figures and write it), option by option, with screenshots.",
 };
 
-const TINT = { journals: "#efe3cf", match: "#cfe0e1", review: "#ecdcc0", figures: "#f1d2c2", write: "#dde6e6", start: "#ebe8df" };
+const TINT = { journals: "#efe3cf", match: "#cfe0e1", review: "#ecdcc0", figures: "#f1d2c2", write: "#dde6e6", start: "#ebe8df", coins: "#f3e4bd" };
 
 const TOC: TocItem[] = [
   { id: "start", label: "Getting around", tint: TINT.start },
@@ -19,6 +19,7 @@ const TOC: TocItem[] = [
   { id: "review", label: "Get it reviewed", tint: TINT.review },
   { id: "figures", label: "Make figures", tint: TINT.figures },
   { id: "write", label: "Write your paper", tint: TINT.write },
+  { id: "coins", label: "Accounts and M coins", tint: TINT.coins },
   { id: "help", label: "When something's off", tint: TINT.start },
 ];
 
@@ -796,6 +797,108 @@ export default function GuidePage() {
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
+        <DocSection
+          id="coins"
+          title="Accounts and M coins"
+          tint={TINT.coins}
+          icon={icon(Coins)}
+          lead={
+            <>
+              Only the AI review and Ask Claude need an account, because each run costs money. They&apos;re paid in M coins; everything else stays
+              free, with no account.
+            </>
+          }
+        >
+          <DocPart title="Signing in">
+            <p>
+              From the tray&apos;s <strong>Sign in</strong>, from a review or figure button, or from the sign-in page. Google opens in a small window
+              and an email link opens in a new tab, so a paper you&apos;ve loaded stays exactly where it is; the page notices you&apos;ve signed in
+              when you come back to it. A new account starts with 10 M coins.
+            </p>
+          </DocPart>
+          <Shot
+            name="coins-signin"
+            narrow
+            alt="Signing in: Continue with Google, or an emailed link"
+            notes={[
+              <>
+                <strong>Continue with Google</strong>: shares only your verified email address with us.
+              </>,
+              <>
+                <strong>Your email address</strong>, for a one-time link instead. It works once, within 15 minutes.
+              </>,
+              <>
+                <strong>Send the link</strong>. Opening it asks you to confirm before signing in, so an email scanner can&apos;t use it up.
+              </>,
+              <>
+                <strong>What an account stores</strong>: the list, on the privacy page.
+              </>,
+            ]}
+          />
+          <DocPart title="What things cost">
+            <p>
+              A review&apos;s price depends on its depth and on how much text it sends, counting only the sections it actually reviews. You see it on
+              the button and in the notice, before anything is sent.
+            </p>
+          </DocPart>
+          <Shot
+            name="coins-costs"
+            alt="The price table: review depth against length, and Ask Claude at 1 M coin"
+            notes={[
+              <>
+                <strong>Depth</strong>: quick, standard or thorough, as chosen on the review page.
+              </>,
+              <>
+                <strong>Length</strong>: the characters sent, in steps of 50,000.
+              </>,
+              <>Sections you mark &ldquo;Don&apos;t send&rdquo;, and those a depth skips, don&apos;t count. Resuming or retrying is free.</>,
+              <>
+                <strong>Ask Claude</strong>: 1 M coin a request.
+              </>,
+            ]}
+          />
+          <Aside title="Coins come back on their own">
+            <p>
+              A review that doesn&apos;t finish is refunded in full within two hours; an Ask Claude request that fails is refunded at once. Your
+              history on the account page shows each refund.
+            </p>
+          </Aside>
+          <DocPart title="Buying coins">
+            <p>
+              Packs never expire. Paddle, our merchant of record, runs the checkout over the page, takes the payment and sends the receipt; we never
+              see your card. The coins arrive a few seconds after you pay.
+            </p>
+          </DocPart>
+          <Shot
+            name="coins-packs"
+            alt="The three coin packs, each with its price and a Buy button"
+            notes={[<>How many M coins.</>, <>The price, with the Indian price beneath; checkout shows the final amount in your currency.</>, <>Opens the checkout.</>]}
+          />
+          <Shot
+            name="coins-pro"
+            alt="Pro: 100 M coins a month, monthly or yearly"
+            notes={[
+              <>
+                <strong>Pro</strong> adds 100 M coins every month. Unspent Pro coins carry over, up to 100.
+              </>,
+              <>Monthly.</>,
+              <>Yearly, two months free: the coins still arrive month by month.</>,
+            ]}
+          />
+          <DocPart title="Your account">
+            <p>
+              Click your balance in the tray. You can see every coin in and out, sign out here or on every browser, manage Pro in Paddle&apos;s
+              portal, download everything we hold about you, and delete your account, which also cancels Pro.
+            </p>
+          </DocPart>
+          <Shot
+            name="coins-account"
+            narrow
+            alt="The account page: the balance and the coin history"
+            notes={[<>Your balance.</>, <>Each charge, with its date.</>, <>A refund, made automatically.</>, <>More coins.</>]}
+          />
+        </DocSection>
+
         <DocSection id="help" title="When something's off" tint={TINT.start} icon={icon(LifeBuoy)}>
           <div className="grid gap-4 md:grid-cols-2">
             {[

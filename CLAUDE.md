@@ -137,6 +137,7 @@ one-off checks:
 ```bash
 cd web && npm run check     # typecheck + lint + the *.selfcheck.ts files
 cd web && npm run smoke     # Playwright checks against a running dev server
+cd web && npm run build && node scripts/e2e_accounts.mjs   # the account Functions for real, on a fresh local D1
 cd web/figurelib && uv run selfcheck.py && uv run ruff check . ../public/figurelib.py
 cd pipeline && uv run selfcheck.py && uv run ruff check .
 ```

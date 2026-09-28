@@ -99,10 +99,12 @@ const SHOTS = shots as Record<string, ShotData>;
 // A screenshot of the real UI (made by scripts/guide_shots.mjs, which also
 // measures where each numbered marker goes), on a paper sheet, with its
 // numbered notes under it. A shot the script hasn't made yet says so.
-export function Shot({ name, alt, notes = [], caption }: { name: string; alt: string; notes?: ReactNode[]; caption?: ReactNode }) {
+// `narrow`: a small region (a card, a panel) shown near its real size
+// rather than stretched across the column.
+export function Shot({ name, alt, notes = [], caption, narrow = false }: { name: string; alt: string; notes?: ReactNode[]; caption?: ReactNode; narrow?: boolean }) {
   const s = SHOTS[name];
   return (
-    <figure className="space-y-4">
+    <figure className={`space-y-4 ${narrow ? "max-w-xl" : ""}`}>
       <div className="sheet relative bg-[#f3f1ea] p-2 sm:p-3">
         {s ? (
           <div className="relative">

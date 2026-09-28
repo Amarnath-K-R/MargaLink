@@ -102,12 +102,19 @@ instead of a local one for exactly this reason (see its comment); the
 `rm -f` in the deploy script is a defensive second layer in case Next's
 bundler still copies a local copy into the export regardless.
 
-The exceptions to "no backend": two Cloudflare Pages Functions,
-`web/functions/api/review.ts` and `web/functions/api/figure.ts`. Both
-exist only because their feature needs somewhere to hold the Anthropic
-API key that the browser must never see — see `CLAUDE.md`'s "two
-disclosed exceptions." Everything else in `web/` is static files served
-from Cloudflare's edge, no server involved.
+The exceptions to "no backend": Cloudflare Pages Functions in
+`web/functions/api/`. Two, `review.ts` and `figure.ts`, exist because
+their feature needs somewhere to hold the Anthropic API key that the
+browser must never see — see `CLAUDE.md`'s "two disclosed exceptions."
+The rest run accounts, M coins and payments (see "Accounts, M coins and
+payments" below) on a D1 database; none of them ever receives anything
+from a paper. Everything else in `web/` is static files served from
+Cloudflare's edge.
+
+Deploying needs, beyond `ANTHROPIC_API_KEY` and the two KV namespaces:
+the D1 databases created and their ids in `wrangler.toml` (production and
+`[env.preview]`), `wrangler d1 migrations apply margalink --remote` after
+every new migration, and the account secrets listed in `CLAUDE.md`.
 
 ### The AI review: what it defends against, and why
 
@@ -275,8 +282,9 @@ emits a canonical CSV plus first-appearance `levels` — the order `"#n"`
 means on both sides.
 
 Costs: a spec call is roughly $0.02–0.04 (effort low); previews and
-exports are free and unlimited; 5 Claude calls per device, 200 per day
-globally (`figure-count:<date>` in `FIGURES_KV`).
+exports are free and unlimited; each Claude call costs the user 1 M coin
+(refunded when the answer isn't usable), with 200 calls a day globally
+(`figure-count:<date>` in `FIGURES_KV`).
 
 The worker's own fetches (Pyodide from jsDelivr, `figurelib.py`, fonts) happen
 off the main thread. They are bodyless GETs for public, versioned assets —
@@ -377,6 +385,65 @@ Nothing in the workspace shows a network trace any more (the tool pages
 lost theirs too); the status line says whether a request carried text
 you agreed to send (a review or Ask Claude).
 
+### Accounts, M coins and payments
+
+The two AI features cost real money per run (a review ~$0.12–0.32, up to
+~$1.7 for a 400k-character thorough one; an Ask Claude call ~$0.03), so
+they're paid in M coins and need an account. Nothing else does. Plan and
+reasoning: `docs/superpowers/plans/2026-09-28-accounts-coins-payments.md`.
+
+**Who you are.** Google (OIDC code flow with PKCE and `state`, scope
+`openid email`; the id_token comes straight from Google's token endpoint,
+so its claims are checked but not its signature, per OIDC Core 3.1.3.7) or
+a one-time email link (Resend; the token rides in the URL #fragment and is
+spent only when the person confirms, so mail scanners can't burn it). One
+account per verified address, whichever way you come in. A session is an
+opaque token in an HttpOnly `__Host-` cookie, stored only as its sha256; a
+readable `ml_in=1` cookie tells pages someone is signed in, so a
+signed-out visitor never calls `/api/me`. Google opens in a popup and the
+link in a new tab, so a loaded paper is never lost; the page picks up the
+sign-in when it regains focus. `_middleware.ts` refuses any non-GET without
+our own `Origin` (the Paddle webhook excepted) and marks everything
+`no-store`.
+
+**The ledger.** `coin_ledger` is append-only and the balance is
+`SUM(delta)`: a debit is one conditional `INSERT … SELECT … WHERE SUM >=
+cost`, so two requests can't both spend the last coins, and
+`UNIQUE(kind, ref)` makes every credit and debit idempotent (webhook
+retries, refund sweeps). The welcome bonus is keyed on a hash of the
+canonical address in `welcome_claims`, which outlives account deletion.
+
+**Paying for a review.** `POST /api/review/start` receives the planned
+sections' ids and lengths, never text; prices them with `reviewPrice`
+(the same function the consent quotes); checks today's capacity; and, in
+one batch, debits and creates a ticket bound to the tier, those sections
+and lengths, and a pass budget (2n+2 extracts, 4 syntheses) for two hours.
+Every pass sends `X-Review-Ticket`; `review.ts` spends one pass of it
+(`claimReviewPass`) before calling Claude, so nothing unpaid reaches the
+API. A synthesis that comes back marks the ticket finished; a ticket that
+expires unfinished is refunded in full by `sweepTickets`, run lazily from
+`/api/me` and `review/start`. Resume and Retry reuse the ticket: a review
+is paid for once. Ask Claude debits 1 coin per call and refunds any
+non-200 after the charge.
+
+**Payments.** Paddle Billing is the merchant of record. The browser loads
+Paddle.js only when Buy is clicked and names the account in
+`custom_data.user_id`. `pay/webhook.ts` checks Paddle's signature
+(HMAC-SHA256 over `ts:rawBody`, five minutes of skew, any `h1`), records
+the event id in the same batch as its effects, and credits a pack, records
+a Pro payment with its billing period, upserts a subscription (ignoring
+events older than the row), or takes back an approved refund's or a
+chargeback's share (the balance may go negative, which blocks spending).
+Pro's monthly coins are granted lazily by `grantDuePro` from `/api/me` and
+the webhook (no scheduler); a yearly plan drips monthly, and unspent Pro
+coins above 100 lapse as the next month arrives. Deleting an account
+cancels live Pro at Paddle first.
+
+**Testing.** The account selfchecks run the real handlers on Node's
+built-in SQLite through `testD1.ts`; the smokes sign in through
+`scripts/mock_account.mjs`; `scripts/e2e_accounts.mjs` runs the real
+Functions on a fresh local D1 under `wrangler pages dev`.
+
 ## The invariant that keeps `src/lib/` and `functions/` from duplicating types
 
 `functions/api/review.ts` already imports directly from `src/lib/`
@@ -415,7 +482,11 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `home/page.tsx`, `home/updates.ts` | The dashboard ("Home" in the tray; the landing page's Dashboard button leads here): two ways in — the workspace and the guide — and, further down, What's new, read from `updates.ts` (newest first; to announce something, add an entry at the top). |
 | `guide/page.tsx`, `guide/shots.json` | The user guide: every tool and option on screenshots of the real UI, with numbered markers whose positions `scripts/guide_shots.mjs` measures and writes to `shots.json` (the images are in `public/guide/`). Re-run the script after a screen changes. |
 | `architecture/page.tsx` | The developers' and reviewers' tour: the system diagram, the privacy rules in code, each tool's pipeline, the design system, tests, deploying, a review checklist. This file stays the source; the page distills it. |
-| `privacy/page.tsx` | Static prose + the privacy-flow SVG diagram. |
+| `privacy/page.tsx` | Static prose + the privacy-flow SVG diagram, and the itemised account notice (`#accounts`). |
+| `signin/page.tsx`, `signin/SignInView.tsx`, `signin/verify/` | Sign in (Google popup or email link); where Google's popup lands and closes; the email link's confirm step. |
+| `account/page.tsx`, `account/AccountView.tsx` | The balance and coin history, Pro, sign out (here or everywhere), download my data, delete. |
+| `pricing/page.tsx`, `pricing/Packs.tsx` | What's free, the price table, the packs and Pro; the checkout (Paddle.js on Buy) and the wait for the webhook's coins. |
+| `terms/page.tsx`, `refunds/page.tsx` | The terms (M coins as prepaid usage credits) and the refund policy. |
 | `journal/[id]/page.tsx` | Static-generated per-journal page (`generateStaticParams` from `getPrerenderedJournals()`). |
 | `journals/page.tsx`, `journals/layout.tsx` | Browse/search/filter the full journal index. |
 | `match/page.tsx` | JSX over `useMatch()`: the input, the steps run on the device, the results. |
@@ -505,7 +576,7 @@ real technical concern, not a speculative grouping).
 | `site.ts` | Site-wide metadata (`SITE_TITLE`, `SITE_DESCRIPTION`, `BRAND` colors) — single source for `layout.tsx`, `opengraph-image.tsx`, `sitemap.ts`, `robots.ts`. |
 | `easing.ts` | `clamp01`, `smooth`, `between`, `lerp` — the one shared animation-math kit (was reimplemented 3× before Phase 5). |
 | `errorMessage.ts` | `errorMessage(err, fallback?)` — the one shared `instanceof Error` normalization. |
-| `review.ts` | Before anything is sent: `prepareForReview()` (strip + normalize), `MAX_REVIEW_CHARS`, the per-device usage counter. |
+| `review.ts` | Before anything is sent: `prepareForReview()` (strip + normalize), `MAX_REVIEW_CHARS`. |
 | `reviewOrchestrator.ts` | Client: `runReview()` — plans chunks, runs extract passes (≤3 concurrent, retries, resume), builds the claims ledger, runs synthesis, assembles `ReviewResult` with `coverage`. |
 | `reviewSections.ts` | Pure: `splitIntoSections()` (document headings first, word list as fallback), `chunkSections()`, `buildPaperMap()`, `buildOutline()` (the user's outline edits). |
 | `headingHints.ts` | Pure: the document's own heading structure — `pickPdfHeadings()` from per-line font data, `pickDocxHeadings()` from Word heading styles. |
@@ -519,7 +590,13 @@ real technical concern, not a speculative grouping).
 | `figureSpec.ts` | `FigureSpec` types, the strict `FIGURE_SPEC_SCHEMA`, `validateFigureSpec()`, `checkSpecAgainstColumns()`, `checkLabels()`, `scrubSpec()`, `mergeTextFields()`. Imported by `functions/`. |
 | `figureSchema.ts` | The safety-critical file: `buildFigurePayload()` is the only function allowed to construct the outbound payload; `isValidFigurePayload()`. See "The figure generator" above. |
 | `figurePrompt.ts` | The spec and hook system prompts, `SPEC_TOOL`/`HOOK_TOOL`, `buildFigurePrompt()`, `isCodeSafeToRun()` — imported by `functions/api/figure.ts`. |
-| `figure.ts` | Client: `askClaude()` (re-checks everything returned), the per-device usage counter, session-scoped consent. |
+| `figure.ts` | Client: `askClaude()` (re-checks everything returned, passes on the new balance), session-scoped consent. |
+| `coins.ts` | The prices (`reviewPrice`, `FIGURE_PRICE`, packs, Pro), `proCoinsLeft`, `dueProGrants`, email canonicalisation, ledger labels, and the two errors the client throws. Shared by client and server. |
+| `auth.ts`, `safeNext.ts` | Server: sessions and cookies, Google claims and PKCE, account linking, rate limits, the Origin check; `safeNext` is shared with the sign-in pages. |
+| `ledger.ts` | Server: the coin ledger's SQL: balance, debit, credit, welcome, the ticket sweep and pass claims, Pro grants, history. |
+| `paddle.ts` | Server: the webhook signature, price ids, what each event does to the ledger, and the portal and cancel calls. |
+| `paddleCheckout.ts` | Client: Paddle.js loaded on demand, the checkout, the customer portal. |
+| `testD1.ts` | Selfchecks only: D1's API over `node:sqlite` with every migration applied. |
 | `figureRunner.ts` | The worker lifecycle: `warmUp()`, `renderFigure()` (stale previews dropped), `exportFigure()`, `FigureRenderError`. Talks to `public/figureWorker.mjs`, which runs `public/figurelib.py`. |
 | `figureTemplates.ts` | `loadTemplates()`, `bindTemplate()` (remaps a template's roles to the user's columns by type). |
 | `texEngine.ts` | The engine's R2 URL, release, files and data packs; `packsFor()`. |
@@ -537,7 +614,12 @@ relative paths) and only genuinely server-specific code stays here.
 | File | What |
 |---|---|
 | `api/review.ts` | One of the two server-side files in the project: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the KV daily pass cap, one `callAnthropicTool`, grounding/validation. |
-| `api/figure.ts` | The other: body-size guard, `isValidFigurePayload`, the KV daily cap, one `callAnthropicTool` with a strict tool, then the output gates (`validateFigureSpec`, `checkSpecAgainstColumns`, `checkLabels`, or the hook denylist). |
+| `api/_middleware.ts` | The Origin check on every non-GET (not the Paddle webhook) and `Cache-Control: no-store`. |
+| `api/me.ts`, `api/account.ts` | Who's signed in, the balance, Pro, Paddle's public config; the account page's data, the export, deletion. |
+| `api/auth/google/*`, `api/auth/email/*`, `api/auth/logout.ts` | Signing in and out. |
+| `api/review/start.ts` | Charges a review and issues its ticket. |
+| `api/pay/webhook.ts`, `api/pay/portal.ts` | Paddle's events; the customer-portal link. |
+| `api/figure.ts` | The other AI Function: body-size guard, `isValidFigurePayload`, the KV daily cap, one `callAnthropicTool` with a strict tool, then the output gates (`validateFigureSpec`, `checkSpecAgainstColumns`, `checkLabels`, or the hook denylist). |
 
 ## `lib/` conventions
 

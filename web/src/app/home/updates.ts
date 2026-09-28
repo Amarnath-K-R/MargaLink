@@ -2,7 +2,7 @@
 // something, add an entry at the top: the date (YYYY-MM-DD), which part of
 // MargaLink it's about, a title, a sentence or two, optional highlights, and
 // where to try it. Entries on the same date are grouped under it.
-export type UpdateTag = "Write" | "Match" | "Review" | "Figures" | "Journals" | "Guide" | "Design";
+export type UpdateTag = "Write" | "Match" | "Review" | "Figures" | "Journals" | "Guide" | "Design" | "Accounts";
 
 export type Update = {
   date: string;
@@ -23,9 +23,23 @@ export const TAG_TINT: Record<UpdateTag, string> = {
   Journals: "#efe3cf",
   Guide: "#ebe8df",
   Design: "#ebe8df",
+  Accounts: "#f3e4bd",
 };
 
 export const UPDATES: Update[] = [
+  {
+    date: "2026-09-28",
+    tag: "Accounts",
+    title: "Accounts and M coins",
+    summary: "The AI review and Ask Claude now run on M coins, held in an account. New accounts get 10 M coins; everything else stays free, with no account.",
+    points: [
+      "Sign in with Google or an email link, without losing a loaded paper",
+      "The price is on the button, and a run that doesn't finish is refunded",
+      "Coin packs, and Pro with 100 M coins a month",
+    ],
+    href: "/pricing",
+    cta: "See pricing",
+  },
   {
     date: "2026-09-28",
     tag: "Guide",
