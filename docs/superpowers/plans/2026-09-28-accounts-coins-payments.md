@@ -198,3 +198,27 @@ daily caps, small bonus; Turnstile next if needed) · chargebacks (reversal row;
 spending) · Indian recurring-card mandates (renewals may fail; packs stay reliable) · previews touching
 production (separate D1, Paddle sandbox, no Google) · log hygiene (never log emails, tokens or bodies) ·
 D1 outage (AI features fail closed; local tools unaffected).
+
+---
+
+## Amendments after the whole-branch review (2026-09-28)
+
+A fresh review of the finished branch found one critical, four important and ten minor problems; all
+were fixed on the branch (cee73e2..5a8e064). What changed from the plan above:
+
+- **Review refunds are for what wasn't delivered, not the whole run.** A ticket that expired without a
+  synthesis used to be refunded in full, which made every section's analysis free for a client that
+  never asked for the cross-check. A review is now priced in parts (one per section, one for the
+  cross-check) and the sweep refunds the parts that didn't come back (`review_deliveries`). No pass
+  starts within five minutes of a ticket's end. All user-facing copy says so.
+- **Fingerprints are HMACs** with a new secret, `HASH_SECRET` (not plain sha256).
+- **Email sign-in** limits count an IPv6 /64 as one network, and only addresses without an account draw
+  on the daily budget; optional Cloudflare Turnstile (`TURNSTILE_SECRET`,
+  `NEXT_PUBLIC_TURNSTILE_SITE_KEY`).
+- **Magic links carry only the token**; the verify page asks the server which address it's for.
+- **Refund accounting** (`0005_refund_accounting.sql`): `pro_reversal` and `reinstated` ledger kinds, an
+  `adjustments` table, Pro periods worth their unrefunded share, bucket-aware `proCoinsLeft`, race-free
+  reversals, pack quantities, won disputes.
+- **Housekeeping** in `_middleware.ts` (at most once a minute) instead of lazy sweeps only.
+- **Site-wide** `X-Frame-Options: DENY`; a blocked Google popup no longer redirects away from a paper.
+

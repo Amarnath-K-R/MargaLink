@@ -396,22 +396,39 @@ reasoning: `docs/superpowers/plans/2026-09-28-accounts-coins-payments.md`.
 `openid email`; the id_token comes straight from Google's token endpoint,
 so its claims are checked but not its signature, per OIDC Core 3.1.3.7) or
 a one-time email link (Resend; the token rides in the URL #fragment and is
-spent only when the person confirms, so mail scanners can't burn it). One
+spent only when the person confirms, so mail scanners can't burn it; the
+page asks the server which address the link is for rather than trusting
+the link). `safeNext` checks every post-sign-in destination after URL
+normalisation, on the way in and on the way out. Email requests are
+limited per address, per network (an IPv6 /64 is one) and, for addresses
+without an account, by a daily budget that existing users never draw on,
+so strangers can't lock anyone out; Turnstile guards the form when its
+keys are set. One
 account per verified address, whichever way you come in. A session is an
 opaque token in an HttpOnly `__Host-` cookie, stored only as its sha256; a
 readable `ml_in=1` cookie tells pages someone is signed in, so a
 signed-out visitor never calls `/api/me`. Google opens in a popup and the
 link in a new tab, so a loaded paper is never lost; the page picks up the
-sign-in when it regains focus. `_middleware.ts` refuses any non-GET without
-our own `Origin` (the Paddle webhook excepted) and marks everything
-`no-store`.
+sign-in when it regains focus (a blocked popup says so rather than
+redirecting away). `_middleware.ts` refuses any non-GET without our own
+`Origin` (the Paddle webhook excepted), marks everything `no-store`, and,
+at most once a minute, runs `housekeeping` after answering: expired
+tickets swept, sign-in links, sessions and rate counters deleted, since
+Pages has no scheduler. Every fingerprint kept for rate limits and the
+welcome bonus is an HMAC with `HASH_SECRET` (sign-in fails closed without
+it when deployed), so holding the database isn't enough to test an
+address. No page may be framed by another site.
 
 **The ledger.** `coin_ledger` is append-only and the balance is
 `SUM(delta)`: a debit is one conditional `INSERT … SELECT … WHERE SUM >=
 cost`, so two requests can't both spend the last coins, and
 `UNIQUE(kind, ref)` makes every credit and debit idempotent (webhook
-retries, refund sweeps). The welcome bonus is keyed on a hash of the
-canonical address in `welcome_claims`, which outlives account deletion.
+retries, refund sweeps). The welcome bonus is keyed on a keyed fingerprint
+of the canonical address in `welcome_claims`, which outlives account
+deletion. For Pro's carry-over, `proCoinsLeft` walks the ledger: Pro coins
+are spent first, a refund returns to the coins it was paid with, a
+reversed pack takes pack coins first and a reversed Pro payment Pro coins
+first.
 
 **Paying for a review.** `POST /api/review/start` receives the planned
 sections' ids and lengths, never text; prices them with `reviewPrice`
@@ -427,8 +444,11 @@ share it didn't deliver: a review is priced in parts, one per section plus
 one for the cross-check, so a client that takes every section's analysis
 and never asks for the cross-check still pays for what it got. Resume and
 Retry reuse the ticket: a review is paid for once. A pass refused for
-today's capacity is refused before it spends one of the ticket's. Ask Claude debits 1 coin per call and refunds any
-non-200 after the charge.
+today's capacity is refused before it spends one of the ticket's. A
+cancel pressed while a review is being paid for takes effect once the
+charge has landed on the run's state, and any error that stops a paid run
+leaves it resumable. Ask Claude debits 1 coin per call and gives it back
+unless an answer goes out.
 
 **Payments.** Paddle Billing is the merchant of record. The browser loads
 Paddle.js only when Buy is clicked and names the account in
@@ -436,12 +456,20 @@ Paddle.js only when Buy is clicked and names the account in
 (HMAC-SHA256 over `ts:rawBody`, five minutes of skew, any `h1`), records
 the event id in the same batch as its effects, and credits a pack, records
 a Pro payment with its billing period, upserts a subscription (ignoring
-events older than the row), or takes back an approved refund's or a
-chargeback's share (the balance may go negative, which blocks spending).
-Pro's monthly coins are granted lazily by `grantDuePro` from `/api/me` and
-the webhook (no scheduler); a yearly plan drips monthly, and unspent Pro
-coins above 100 lapse as the next month arrives. Deleting an account
-cancels live Pro at Paddle first.
+events older than the row), or applies an adjustment (`adjustments`): an
+approved refund or a chargeback takes back its share, worked out inside
+the statement so two landing together can't take too much (the balance
+may go negative, which blocks spending), and a won dispute gives back what
+its chargeback took. Events without `custom_data` find their account
+through the subscription they belong to. Pro's monthly coins are granted
+lazily by `grantDuePro` from `/api/me` and the webhook (no scheduler); a
+yearly plan drips monthly; a period is worth its entitlement (100 a month,
+1,200 a year) times the share of its payment not refunded, so a refund
+also stops later drips; unspent Pro coins above 100 lapse as the next
+month arrives, and that lapse is only written if the ledger hasn't moved
+since it was read. Deleting an account cancels live Pro at Paddle first
+(an outage stops the deletion; Paddle saying there's nothing to cancel
+doesn't) and takes the address's sign-in links and counters with it.
 
 **Testing.** The account selfchecks run the real handlers on Node's
 built-in SQLite through `testD1.ts`; the smokes sign in through
