@@ -7,7 +7,9 @@ import { useSyncExternalStore } from "react";
 // the ml_in hint cookie (set beside the HttpOnly session) says someone is
 // signed in. It's asked again when the tab regains focus, which is how a
 // sign-in finished in a popup or another tab reaches this one.
-export type Account = { status: "unknown" } | { status: "out" } | { status: "in"; email: string; balance: number };
+// `paddle`: what Paddle.js needs to open a checkout, or null until payments are set up.
+export type PaddleConfig = { env: "sandbox" | "production"; token: string; prices: Record<string, string> };
+export type Account = { status: "unknown" } | { status: "out" } | { status: "in"; id: string; email: string; balance: number; paddle: PaddleConfig | null };
 
 const SERVER: Account = { status: "unknown" };
 let state: Account = SERVER;
@@ -22,8 +24,8 @@ async function load() {
   try {
     const res = await fetch("/api/me");
     if (!res.ok) throw new Error(String(res.status));
-    const d = (await res.json()) as { user: { email: string } | null; balance?: number };
-    set(d.user ? { status: "in", email: d.user.email, balance: d.balance ?? 0 } : { status: "out" });
+    const d = (await res.json()) as { user: { id: string; email: string } | null; balance?: number; paddle?: PaddleConfig | null };
+    set(d.user ? { status: "in", id: d.user.id, email: d.user.email, balance: d.balance ?? 0, paddle: d.paddle ?? null } : { status: "out" });
   } catch {
     // Offline or a server hiccup: keep what we knew; if we knew nothing, show signed out.
     if (state.status === "unknown") set({ status: "out" });
@@ -58,6 +60,9 @@ function subscribe(listener: () => void) {
 }
 
 export const useAccount = () => useSyncExternalStore(subscribe, () => state, () => SERVER);
+
+/** The store's value right now, for code outside React (waiting for a purchase to land). */
+export const currentAccount = () => state;
 
 /** After a charge, the server's new balance. */
 export function setBalance(balance: number) {

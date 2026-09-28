@@ -54,7 +54,11 @@ export default function ReviewConsent({
       </p>
       {balance < price && (
         <p className="mt-2 text-sm text-away">
-          You need {price - balance} more M coin{price - balance === 1 ? "" : "s"} for this review.
+          You need {price - balance} more M coin{price - balance === 1 ? "" : "s"} for this review.{" "}
+          <a href="/pricing#packs" target="_blank" rel="noopener" className="text-accent underline-offset-2 hover:underline">
+            Buy coins
+          </a>{" "}
+          <span className="text-ink-soft">(opens in a new tab; your paper stays here)</span>
         </p>
       )}
       <div className="mt-5 flex flex-wrap gap-3 text-sm">

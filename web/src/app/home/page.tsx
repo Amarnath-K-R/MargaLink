@@ -82,6 +82,9 @@ export default function HomeDashboard() {
             <Link href="/privacy" className="hover:text-ink">
               Privacy
             </Link>
+            <Link href="/pricing" className="hover:text-ink">
+              Pricing
+            </Link>
             <Link href="/terms" className="hover:text-ink">
               Terms
             </Link>

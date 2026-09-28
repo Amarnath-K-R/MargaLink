@@ -65,6 +65,9 @@ export default function AccountView() {
           A review costs 4 to 45 M coins, by depth and length; Ask Claude costs 1. The price is always shown before anything is sent, and a run that
           doesn&apos;t finish is refunded automatically.
         </p>
+        <Link href="/pricing#packs" className="clay-btn clay-primary mt-4 h-10 px-5 text-sm font-medium">
+          Buy coins
+        </Link>
         <h3 className="mt-7 text-xs font-medium text-ink-soft">History</h3>
         {error && <p className="mt-2 text-sm text-away">{error}</p>}
         {details && details.history.length === 0 && <p className="mt-2 text-sm text-ink-soft">No coin activity yet.</p>}

@@ -114,6 +114,14 @@ export default function Describe({
       )}
       <p className="mt-2 text-xs text-ink-soft">
         {account.status === "in" && `Each request costs ${FIGURE_PRICE} M coin (you have ${balance}); a request that fails is refunded. `}
+        {account.status === "in" && balance < FIGURE_PRICE && (
+          <>
+            <a href="/pricing#packs" target="_blank" rel="noopener" className="text-accent hover:underline">
+              Buy coins
+            </a>{" "}
+            (a new tab; your data stays here).{" "}
+          </>
+        )}
         Templates, editing and exports are unlimited and never send anything.
       </p>
       {pending && (

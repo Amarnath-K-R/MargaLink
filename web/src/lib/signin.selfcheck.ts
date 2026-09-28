@@ -56,7 +56,9 @@ assert.equal((await run(emailVerify, post("/api/auth/email/verify", { token: lin
 assert.equal((await run(emailVerify, post("/api/auth/email/verify", { token: "x" }))).status, 400);
 
 r = await run(me, get("/api/me", annCookie));
-assert.deepEqual(await r.json(), { user: { email: "ann@example.org" }, balance: 10 });
+const annMe = (await r.json()) as { user: { id: string; email: string }; balance: number; paddle: unknown };
+assert.deepEqual([annMe.user.email, annMe.balance, annMe.paddle], ["ann@example.org", 10, null], "no Paddle config, no checkout");
+assert.match(annMe.user.id, /^[0-9a-f]{32}$/, "the id checkout names in custom_data");
 assert.equal(r.headers.getSetCookie().length, 0, "a fresh session isn't re-sent");
 
 // rate limits: three per address per 15 minutes
@@ -104,7 +106,7 @@ assert.ok(tokenForm!.get("code_verifier")!.length >= 43, "PKCE verifier sent");
 const googleCookie = cookieHeader(r);
 assert.match(googleCookie, /__Host-ml_oauth=; __Host-ml_session=/, "the oauth cookie is cleared");
 r = await run(me, get("/api/me", googleCookie));
-assert.deepEqual(await r.json(), { user: { email: "ann@example.org" }, balance: 10 }, "same account, no second welcome");
+assert.deepEqual(await r.json(), { user: { id: annMe.user.id, email: "ann@example.org" }, balance: 10, paddle: null }, "same account, no second welcome");
 
 // --- sign out, and a stale hint is cleared
 r = await run(logout, post("/api/auth/logout", {}, googleCookie));
@@ -113,7 +115,12 @@ assert.ok(r.headers.getSetCookie().every((c) => c.endsWith("Max-Age=0")));
 r = await run(me, get("/api/me", googleCookie));
 assert.deepEqual(await r.json(), { user: null });
 assert.equal(r.headers.getSetCookie().length, 2, "hint cookie cleared");
-assert.deepEqual(await (await run(me, get("/api/me", annCookie))).json(), { user: { email: "ann@example.org" }, balance: 10 }, "the other device is still in");
+assert.equal(((await (await run(me, get("/api/me", annCookie))).json()) as { balance: number }).balance, 10, "the other device is still in");
+// with Paddle configured, the page gets what Paddle.js needs (never a secret)
+const paddled = { ...env, PADDLE_ENV: "sandbox", PADDLE_CLIENT_TOKEN: "test_tok", PADDLE_PRICE_IDS: '{"S":"pri_s"}', PADDLE_API_KEY: "secret", PADDLE_WEBHOOK_SECRET: "secret" };
+const withPaddle = (await (await run(me, get("/api/me", annCookie), paddled)).json()) as { paddle: unknown };
+assert.deepEqual(withPaddle.paddle, { env: "sandbox", token: "test_tok", prices: { S: "pri_s" } });
+assert.ok(!JSON.stringify(withPaddle).includes("secret"));
 await run(logout, post("/api/auth/logout", { all: true }, annCookie));
 assert.deepEqual(await (await run(me, get("/api/me", annCookie))).json(), { user: null });
 assert.equal((await run(me, get("/api/me"))).headers.getSetCookie().length, 0, "no hint, nothing to clear");

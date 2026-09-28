@@ -19,6 +19,9 @@ export default function AccountStrip() {
             <strong className="font-medium">{account.balance}</strong> M coins
           </span>
           <span aria-hidden className="h-4 w-px bg-line" />
+          <Link href="/pricing" className="text-accent hover:underline">
+            Buy coins
+          </Link>
           <Link href="/account" className="text-accent hover:underline">
             Account
           </Link>
