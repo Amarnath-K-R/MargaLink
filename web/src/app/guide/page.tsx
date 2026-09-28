@@ -50,14 +50,18 @@ export default function GuidePage() {
           tint={TINT.start}
           icon={icon(Compass)}
           art={<PrivacyArt />}
-          lead="Five tools share one tray at the top of every page. Almost everything they do happens in your browser, on your device."
+          lead="Home, five tools, this guide and the privacy notes share one tray at the top of every page. Almost everything the tools do happens in your browser, on your device."
         >
           <Shot
             name="tray"
             alt="The tray at the top of every page: the MargaLink mark, the five tools, Guide and Privacy"
             notes={[
               <>
-                <strong>Home</strong> — the MargaLink mark.
+                <strong>The MargaLink mark</strong> — back to the landing page.
+              </>,
+              <>
+                <strong>Home</strong> — your dashboard: start writing, open this guide, and see what&apos;s new. The landing page&apos;s Dashboard button
+                comes here too.
               </>,
               <>
                 <strong>The tools</strong> — Journals, Match, Review, Figures, Write. Each has its own colour bead, used on its page too.

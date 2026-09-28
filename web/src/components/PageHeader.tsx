@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BarChart3, BookOpen, CircleHelp, FileCheck2, PenLine, ScanSearch, ShieldCheck } from "lucide-react";
+import { BarChart3, BookOpen, CircleHelp, FileCheck2, House, PenLine, ScanSearch, ShieldCheck } from "lucide-react";
 
-// The shared header for every non-homepage route: a sticky clay tray (home,
-// the five tools with the current one pressed in, the guide, privacy) that is the same
+// The shared header for every non-homepage route: a sticky clay tray (the
+// landing, Home — the dashboard — the five tools with the current one
+// pressed in, the guide, privacy) that is the same
 // width on every page, so moving between tools feels like one app; then the
 // page's h1 with its tool's bead, and an optional subtitle. The h1 keeps
 // three content-width tiers, matched to what each route renders; each page
@@ -43,14 +44,15 @@ export default function PageHeader({
 }: {
   width: keyof typeof TITLE_CLASS;
   tool?: ToolId;
-  page?: "guide" | "architecture" | "privacy"; // a non-tool page to show as current
+  page?: "home" | "guide" | "architecture" | "privacy"; // a non-tool page to show as current
   title: ReactNode;
   subtitle?: ReactNode;
 }) {
-  const current = TOOL_NAV.find((t) => t.id === tool);
+  // The bead beside the title: the tool's, or the house on Home.
+  const current = TOOL_NAV.find((t) => t.id === tool) ?? (page === "home" ? { bead: "#fbfaf6", Icon: House } : undefined);
   return (
     <>
-      {/* The first tab stop: past the tray's eight links, straight to the page. */}
+      {/* The first tab stop: past the tray's links, straight to the page. */}
       <a href="#content" className="clay-btn clay-primary fixed left-4 top-4 z-50 -translate-y-24 focus:translate-y-0">
         Skip to content
       </a>
@@ -65,8 +67,15 @@ export default function PageHeader({
             <span className="hidden font-serif text-[1.05rem] font-medium tracking-[-0.01em] md:inline">MargaLink</span>
           </Link>
           <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5 overflow-x-auto">
+            <Link href="/home" aria-current={page === "home" ? "page" : undefined} className="clay-ghost shrink-0 text-xs max-sm:px-1">
+              <span className="bead" style={{ background: "#fbfaf6" }}>
+                <House size={13} strokeWidth={2} />
+              </span>
+              <span className="sr-only sm:not-sr-only">Home</span>
+            </Link>
+            <span aria-hidden className="mx-1 hidden h-5 w-px bg-line sm:block" />
             {TOOL_NAV.map(({ id, href, label, Icon, bead }) => (
-              <Link key={id} href={href} aria-current={id === tool ? "page" : undefined} className="clay-ghost shrink-0 text-xs">
+              <Link key={id} href={href} aria-current={id === tool ? "page" : undefined} className="clay-ghost shrink-0 text-xs max-sm:px-1">
                 <span className="bead" style={{ background: bead }}>
                   <Icon size={13} strokeWidth={2} />
                 </span>
@@ -75,11 +84,11 @@ export default function PageHeader({
             ))}
           </div>
           {/* Words from sm up; on a phone an icon each, so all five tools still fit. */}
-          <Link href="/guide" aria-current={page === "guide" ? "page" : undefined} className="clay-ghost shrink-0 px-2.5 text-xs text-ink-soft sm:px-3">
+          <Link href="/guide" aria-current={page === "guide" ? "page" : undefined} className="clay-ghost shrink-0 px-1.5 text-xs text-ink-soft sm:px-3">
             <CircleHelp size={15} strokeWidth={1.9} className="sm:hidden" />
             <span className="sr-only sm:not-sr-only">Guide</span>
           </Link>
-          <Link href="/privacy" aria-current={page === "privacy" ? "page" : undefined} className="clay-ghost shrink-0 px-2.5 text-xs text-ink-soft sm:px-3">
+          <Link href="/privacy" aria-current={page === "privacy" ? "page" : undefined} className="clay-ghost shrink-0 px-1.5 text-xs text-ink-soft sm:px-3">
             <ShieldCheck size={15} strokeWidth={1.9} className="sm:hidden" />
             <span className="sr-only sm:not-sr-only">Privacy</span>
           </Link>

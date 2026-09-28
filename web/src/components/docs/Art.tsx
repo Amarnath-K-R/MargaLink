@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 // Small clay illustrations for the guide: one per tool, in the homepage's
 // palette (paper, sand, teal, clay), soft top-left light, warm shadows.
 // Inline SVG, no images; each has its own id prefix so several can share a
-// page. Decorative — the text beside each says the same thing.
+// page. Decorative — the text beside each says the same thing. `bare` drops
+// the clay frame, for a caller that frames it itself.
 
 const C = {
   paper: "#fbfaf6",
@@ -19,9 +20,9 @@ const C = {
   ink: "#2a2f38",
 };
 
-function Frame({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+function Frame({ id, label, bare = false, children }: { id: string; label: string; bare?: boolean; children: ReactNode }) {
   return (
-    <figure className="clay overflow-hidden rounded-[22px] p-2">
+    <figure className={bare ? "overflow-hidden rounded-[18px]" : "clay overflow-hidden rounded-[22px] p-2"}>
       <svg viewBox="0 0 320 220" role="img" aria-label={label} className="block h-auto w-full">
         <defs>
           <radialGradient id={`${id}-desk`} cx="30%" cy="0%" r="120%">
@@ -57,7 +58,7 @@ function Lines({ x, y, w, widths, gap = 9, color = C.line, h = 3.5 }: { x: numbe
   );
 }
 
-export function JournalsArt() {
+export function JournalsArt({ bare = false }: { bare?: boolean }) {
   const id = "art-j";
   const books = [
     { x: 58, h: 92, c: C.tealPale },
@@ -68,7 +69,7 @@ export function JournalsArt() {
     { x: 186, h: 104, c: C.tealSoft },
   ];
   return (
-    <Frame id={id} label="A shelf of journals, one being looked at through a magnifier">
+    <Frame id={id} bare={bare} label="A shelf of journals, one being looked at through a magnifier">
       <ellipse cx="160" cy="186" rx="130" ry="10" fill="#3a2c1c" opacity="0.07" />
       <rect x="40" y="168" width="240" height="14" rx="7" fill={C.wood} filter={`url(#${id}-shadow)`} />
       {books.map((b, i) => (
@@ -92,10 +93,10 @@ export function JournalsArt() {
   );
 }
 
-export function MatchArt() {
+export function MatchArt({ bare = false }: { bare?: boolean }) {
   const id = "art-m";
   return (
-    <Frame id={id} label="A paper connected by a dashed path to three journal cards, the best one marked in teal">
+    <Frame id={id} bare={bare} label="A paper connected by a dashed path to three journal cards, the best one marked in teal">
       <g filter={`url(#${id}-shadow)`}>
         <rect x="28" y="36" width="104" height="140" rx="8" fill={C.paper} />
       </g>
@@ -121,10 +122,10 @@ export function MatchArt() {
   );
 }
 
-export function ReviewArt() {
+export function ReviewArt({ bare = false }: { bare?: boolean }) {
   const id = "art-r";
   return (
-    <Frame id={id} label="A paper with highlighted passages and margin notes">
+    <Frame id={id} bare={bare} label="A paper with highlighted passages and margin notes">
       <g filter={`url(#${id}-shadow)`}>
         <rect x="46" y="24" width="140" height="172" rx="8" fill={C.paper} />
       </g>
@@ -157,7 +158,7 @@ export function ReviewArt() {
   );
 }
 
-export function FiguresArt() {
+export function FiguresArt({ bare = false }: { bare?: boolean }) {
   const id = "art-f";
   const bars = [
     { x: 150, h: 46, c: C.tealPale },
@@ -166,7 +167,7 @@ export function FiguresArt() {
     { x: 240, h: 62, c: C.clay },
   ];
   return (
-    <Frame id={id} label="A spreadsheet behind a chart of rounded clay bars">
+    <Frame id={id} bare={bare} label="A spreadsheet behind a chart of rounded clay bars">
       <g filter={`url(#${id}-shadow)`}>
         <rect x="24" y="30" width="118" height="130" rx="8" fill="#f4efe3" />
       </g>
@@ -196,10 +197,10 @@ export function FiguresArt() {
   );
 }
 
-export function WriteArt() {
+export function WriteArt({ bare = false }: { bare?: boolean }) {
   const id = "art-w";
   return (
-    <Frame id={id} label="The writing workspace: a tray of tools above the LaTeX source and the compiled PDF">
+    <Frame id={id} bare={bare} label="The writing workspace: a tray of tools above the LaTeX source and the compiled PDF">
       <g filter={`url(#${id}-shadow)`}>
         <rect x="20" y="18" width="280" height="30" rx="15" fill={`url(#${id}-clay)`} />
       </g>
@@ -240,10 +241,10 @@ export function WriteArt() {
   );
 }
 
-export function PrivacyArt() {
+export function PrivacyArt({ bare = false }: { bare?: boolean }) {
   const id = "art-p";
   return (
-    <Frame id={id} label="Your device holds the paper; public files come in, and only two opt-in requests ever go out, each behind a notice">
+    <Frame id={id} bare={bare} label="Your device holds the paper; public files come in, and only two opt-in requests ever go out, each behind a notice">
       <g filter={`url(#${id}-shadow)`}>
         <rect x="70" y="40" width="180" height="128" rx="18" fill={`url(#${id}-clay)`} />
       </g>
@@ -267,6 +268,50 @@ export function PrivacyArt() {
         <g key={y} filter={`url(#${id}-soft)`}>
           <circle cx="276" cy={y} r="9" fill={`url(#${id}-clay)`} />
           <circle cx="276" cy={y} r="3.5" fill="#a15a3f" />
+        </g>
+      ))}
+    </Frame>
+  );
+}
+
+export function GuideArt({ bare = false }: { bare?: boolean }) {
+  const id = "art-g";
+  const marks = [
+    { x: 58, y: 62 },
+    { x: 150, y: 104 },
+    { x: 96, y: 150 },
+  ];
+  return (
+    <Frame id={id} bare={bare} label="A screen with numbered markers beside a list of numbered notes">
+      <g filter={`url(#${id}-shadow)`}>
+        <rect x="28" y="30" width="170" height="160" rx="12" fill={C.paper} />
+      </g>
+      <rect x="40" y="42" width="146" height="16" rx="8" fill="#f1eee6" />
+      <rect x="46" y="47" width="8" height="6" rx="3" fill={C.teal} />
+      {[C.tealPale, C.sand, C.claySoft].map((c, i) => (
+        <circle key={i} cx={98 + i * 14} cy="50" r="4" fill={c} />
+      ))}
+      <rect x="40" y="70" width="70" height="44" rx="8" fill="#eef3f3" />
+      <rect x="118" y="70" width="68" height="44" rx="8" fill="#f4efe3" />
+      <Lines x={40} y={124} w={146} widths={[1, 0.9, 0.95, 0.6]} gap={9} />
+      <rect x="40" y="164" width="52" height="14" rx="7" fill={C.teal} />
+      {marks.map((m, i) => (
+        <g key={i} filter={`url(#${id}-soft)`}>
+          <circle cx={m.x} cy={m.y} r="9" fill={C.teal} stroke={C.paper} strokeWidth="2.5" />
+          <text x={m.x} y={m.y + 3.5} textAnchor="middle" fontSize="10" fontWeight="600" fill="#fff" fontFamily="ui-monospace, monospace">
+            {i + 1}
+          </text>
+        </g>
+      ))}
+      {[0, 1, 2].map((i) => (
+        <g key={i} filter={`url(#${id}-shadow)`}>
+          <rect x="212" y={44 + i * 48} width="84" height="38" rx="12" fill={`url(#${id}-clay)`} />
+          <circle cx="226" cy={63 + i * 48} r="7" fill={C.teal} />
+          <text x="226" y={66 + i * 48} textAnchor="middle" fontSize="8.5" fontWeight="600" fill="#fff" fontFamily="ui-monospace, monospace">
+            {i + 1}
+          </text>
+          <rect x="238" y={56 + i * 48} width="48" height="4" rx="2" fill={C.ink} opacity="0.5" />
+          <rect x="238" y={65 + i * 48} width="34" height="3" rx="1.5" fill={C.line} />
         </g>
       ))}
     </Frame>

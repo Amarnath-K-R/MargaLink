@@ -67,7 +67,7 @@ function Home() {
       <ClayDesk layout={LANDING_DESK} narrowLayout={LANDING_DESK_NARROW} className="landing-desk" style={{ opacity: 1 - deskOut }} active={deskOut < 1} />
       <div className="grain" aria-hidden="true" />
 
-      <SiteHeader onOpenTools={() => setToolsOpen(true)} />
+      <SiteHeader />
       <ToolsOverlay open={toolsOpen} onClose={() => setToolsOpen(false)} />
 
       <main>
@@ -155,14 +155,6 @@ function Home() {
                 <mark className="gap-cut">Not this time.</mark>
               </h2>
               <p>Unlock your paper&apos;s true potential. Find the journal it fits, meet its format and get a second read before an editor does.</p>
-              <div className="finale-actions">
-                <Link href="/match" className="button button-primary">
-                  Find my journal <ArrowUpRight size={16} />
-                </Link>
-                <Link href="/journals" className="landing-link">
-                  Browse journals
-                </Link>
-              </div>
               <dl className="finale-proof">
                 <div>
                   <dt>0</dt>

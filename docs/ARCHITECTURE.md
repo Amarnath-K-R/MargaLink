@@ -412,6 +412,7 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `clay.css` | The clay theme the tool pages and the workspace share, in the components layer (so a Tailwind utility on the same element wins): `.clay` (raised slab), `.clay-well` (pressed in), `.sheet` (paper), `.clay-btn` / `.clay-primary` / `.clay-ghost` / `.clay-key` / `.clay-chip`, `.clay-input` / `.clay-field` / `.clay-select`, `.clay-card` (a choice; `aria-pressed`/`aria-checked`/`data-selected` press it in), `.bead`, `.grip`, `.desk`, `.clay-window` (dialogs). Warm shadows only, one light from the top left; the `--away` colour stays reserved for what leaves the device. |
 | `opengraph-image.tsx` | OG image, rendered with `satori` — can't resolve CSS custom properties, so `lib/site.ts`'s `BRAND` colors are duplicated here as literal hex, deliberately. |
 | `robots.ts`, `sitemap.ts` | SEO. |
+| `home/page.tsx`, `home/updates.ts` | The dashboard ("Home" in the tray; the landing page's Dashboard button leads here): two ways in — the workspace and the guide — and, further down, What's new, read from `updates.ts` (newest first; to announce something, add an entry at the top). |
 | `guide/page.tsx`, `guide/shots.json` | The user guide: every tool and option on screenshots of the real UI, with numbered markers whose positions `scripts/guide_shots.mjs` measures and writes to `shots.json` (the images are in `public/guide/`). Re-run the script after a screen changes. |
 | `architecture/page.tsx` | The developers' and reviewers' tour: the system diagram, the privacy rules in code, each tool's pipeline, the design system, tests, deploying, a review checklist. This file stays the source; the page distills it. |
 | `privacy/page.tsx` | Static prose + the privacy-flow SVG diagram. |
@@ -456,13 +457,13 @@ from routing; nothing outside `app/page.tsx` imports from it).
 | `home.css` | The ~87% of the old single `globals.css` that's homepage-only. |
 | `useScrollProgress.ts` | The one rAF-throttled scroll listener: hero progress, the closing section's progress (the landing crossfades into it), overall page progress for the 3D paper, and the reduced-motion query. |
 | `motion.ts` | `localProgress`, `stagger`, `motionStyle`, `countUp`, `decodeText` — the homepage's own animation-math kit (builds on `lib/easing.ts`'s `between`). |
-| `SiteHeader.tsx`, `HeroSection.tsx`, `FinalSection.tsx`, `TypedPaper.tsx`, `ToolsOverlay.tsx` | The homepage is two screens: the landing (`HeroSection` — the wordmark with the Link cutout, "Find your path.", over the clay desk) and the closing call to action (`FinalSection`), which the landing crossfades into; its right column holds the desk's self-writing 3D paper (on phones, `TypedPaper`, the same manuscript as an HTML page). The middle sections (workflow, journals, matching, review, privacy) were removed on 2026-09-26. |
+| `SiteHeader.tsx`, `HeroSection.tsx`, `FinalSection.tsx`, `TypedPaper.tsx`, `ToolsOverlay.tsx` | The homepage is two screens: the landing (`HeroSection` — the wordmark with the Link cutout, "Find your path.", over the clay desk) and the closing call to action (`FinalSection`), which the landing crossfades into; its right column holds the desk's self-writing 3D paper (on phones, `TypedPaper`, the same manuscript as an HTML page). The middle sections (workflow, journals, matching, review, privacy) were removed on 2026-09-26. The fixed header's one link is Dashboard (`/home`); the finale's tool buttons were removed on 2026-09-28 (the closing section's Explore our tools still opens `ToolsOverlay`). |
 
 **`src/components/`** — shared across routes.
 
 | File | What |
 |---|---|
-| `PageHeader.tsx` | Every non-homepage route's header: a sticky clay tray (home, the five tools with the current one pressed in, privacy) the same width on every page, then the h1 with its tool's bead; 3 content-width tiers for the h1. |
+| `PageHeader.tsx` | Every non-homepage route's header: a skip link, then a sticky clay tray (the landing, Home, the five tools with the current one pressed in, Guide, Privacy) the same width on every page, then the h1 with its tool's bead; 3 content-width tiers for the h1. |
 | `Step.tsx` | A numbered step of a tool page on a clay slab (Review, Figures). |
 | `docs/Doc.tsx`, `docs/Art.tsx`, `docs/Diagrams.tsx` | The documentation pages' blocks (contents list, sections, screenshots with markers, option tables, asides), their clay illustrations (inline SVG) and diagrams. |
 | `NetworkTrace.tsx` | `useNetworkTrace()` — patches `fetch` for the page's lifetime; `/write` uses it to count requests that carried a body (the status line's "sent"). The on-page request list it once fed was removed on 2026-09-27. |

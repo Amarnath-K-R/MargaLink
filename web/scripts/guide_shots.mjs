@@ -104,7 +104,7 @@ const PAPER = new URL("./fixtures/test-paper.pdf", import.meta.url).pathname;
 if (want("tray")) {
   await go("/match", { tray: true });
   const tray = 'nav[aria-label="MargaLink"]';
-  await shot("tray", [tray], [`${tray} a[href="/"]`, `${tray} a[href="/journals"]`, `${tray} a[href="/match"]`, `${tray} a[href="/write"]`, `${tray} a[href="/guide"]`, `${tray} a[href="/privacy"]`], 10);
+  await shot("tray", [tray], [`${tray} a[href="/"]`, `${tray} a[href="/home"]`, `${tray} a[href="/journals"]`, `${tray} a[href="/match"]`, `${tray} a[href="/write"]`, `${tray} a[href="/guide"]`, `${tray} a[href="/privacy"]`], 10);
 }
 
 if (want("journals")) {
