@@ -65,6 +65,39 @@ export async function sweepTickets(db: D1Database, now: number) {
   ]);
 }
 
+/**
+ * Spends one pass of a paid review, or says why not: the ticket must be
+ * this account's and unexpired, the tier the one paid for, an extract pass
+ * a section that was paid for and no longer than paid, and the ticket's
+ * budget for that kind of pass not yet used up. Called before the upstream
+ * request, so a refused pass never reaches Claude.
+ */
+export async function claimReviewPass(
+  db: D1Database,
+  ticket: string,
+  userId: string,
+  want: { pass: "extract" | "synthesize"; tier: string; chunkId?: string; chars?: number },
+  now: number,
+): Promise<string | null> {
+  if (!ticket || ticket.length > 100) return "This review has no ticket. Start it again from the review page.";
+  const idHash = await sha256Hex(ticket);
+  const t = await db.prepare("SELECT tier, chunks FROM review_tickets WHERE id_hash = ? AND user_id = ? AND expires_at > ?").bind(idHash, userId, now).first<{ tier: string; chunks: string }>();
+  if (!t) return "This review's ticket has expired. Start a new review; an unfinished one is refunded automatically.";
+  if (t.tier !== want.tier) return "This pass doesn't match the review that was paid for.";
+  if (want.pass === "extract") {
+    const paid = (JSON.parse(t.chunks) as Record<string, number>)[want.chunkId ?? ""];
+    if (!paid || (want.chars ?? Infinity) > paid) return "This section wasn't part of the review that was paid for.";
+  }
+  const col = want.pass === "extract" ? "extract_left" : "synth_left";
+  const r = await db.prepare(`UPDATE review_tickets SET ${col} = ${col} - 1 WHERE id_hash = ? AND ${col} > 0 AND expires_at > ?`).bind(idHash, now).run();
+  return r.meta.changes === 1 ? null : "This review has used all its passes. Start a new one.";
+}
+
+/** A review whose synthesis came back: it's finished, so its coins are kept. */
+export async function markSynthesized(db: D1Database, ticket: string) {
+  await db.prepare("UPDATE review_tickets SET synthesized = 1 WHERE id_hash = ?").bind(await sha256Hex(ticket)).run();
+}
+
 export type LedgerEntry = { kind: LedgerKind; label: string; delta: number; at: number };
 
 export async function history(db: D1Database, userId: string, limit: number): Promise<LedgerEntry[]> {

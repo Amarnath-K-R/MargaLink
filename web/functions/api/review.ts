@@ -12,22 +12,22 @@
 // against, is in ../../../docs/ARCHITECTURE.md under "The AI review" — read
 // that before changing a prompt, a cap, or the grounding.
 import { findJournalRules } from "../../src/lib/journalRules.ts";
-import { parsePassRequest, passCallConfig, validateSynthesisOutput } from "../../src/lib/reviewPasses.ts";
+import { DAILY_PASS_CAP, parsePassRequest, passCallConfig, validateSynthesisOutput } from "../../src/lib/reviewPasses.ts";
 import { groundExtractOutput } from "../../src/lib/reviewGrounding.ts";
 import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/anthropicStream.ts";
+import { getSession, type AccountEnv } from "../../src/lib/auth.ts";
+import { claimReviewPass, markSynthesized } from "../../src/lib/ledger.ts";
 
-type Env = { ANTHROPIC_API_KEY: string; REVIEWS_KV: KVNamespace };
+type Env = AccountEnv & { ANTHROPIC_API_KEY: string; REVIEWS_KV: KVNamespace };
 
 const MODEL = "claude-sonnet-5";
-// Counts passes, not reviews: a typical review is 4-8 passes, a 400k-char
-// thorough one ~27, so 1,500 ≈ 200-300 reviews/day. Honest clients average
-// ~$0.03/pass (measured); a tampered client sending maximal thorough
-// synthesis bodies could reach ~$0.5/pass, so the true worst case is several
-// hundred dollars a day — a per-IP rate-limit rule in the Cloudflare
-// dashboard is the next guard if this is ever abused. Incremented BEFORE the
-// upstream call — with client-side retries, counting only successes would
-// let failures spend money uncounted.
-const DAILY_PASS_CAP = 1500;
+// Every pass is paid for: it must carry the ticket review/start.ts issued
+// (X-Review-Ticket), which binds the tier, the sections and their lengths,
+// and a pass budget. DAILY_PASS_CAP (reviewPasses.ts) still bounds the whole
+// service: honest clients average ~$0.03/pass (measured), a tampered one
+// sending maximal thorough synthesis bodies up to ~$0.5/pass, within what
+// its ticket allows. Counted BEFORE the upstream call, so failures and
+// retries can't spend money uncounted.
 // A synthesize body carries up to 1,000 ledger entries (~500 KB); an extract
 // body one ≤24k-char chunk. Anything larger can't be a legitimate pass.
 const MAX_BODY_BYTES = 1_000_000;
@@ -51,6 +51,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const rules = req.pass === "synthesize" ? findJournalRules(req.journalId) : undefined;
   if (req.pass === "synthesize" && !rules) return new Response("No pilot rules for this journal", { status: 404 });
+
+  const session = await getSession(env.DB, request, Date.now());
+  if (!session) return new Response("Sign in to get a review.", { status: 401 });
+  const ticket = request.headers.get("x-review-ticket") ?? "";
+  const refused = await claimReviewPass(
+    env.DB,
+    ticket,
+    session.userId,
+    req.pass === "extract" ? { pass: "extract", tier: req.tier, chunkId: req.chunk.id, chars: req.chunk.text.length } : { pass: "synthesize", tier: req.tier },
+    Date.now(),
+  );
+  if (refused) return new Response(refused, { status: 403 });
 
   const kvKey = `review-pass-count:${new Date().toISOString().slice(0, 10)}`;
   const usedToday = parseInt((await env.REVIEWS_KV.get(kvKey)) ?? "0", 10);
@@ -96,6 +108,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const result =
       req.pass === "extract" ? groundExtractOutput(toolInput, req.chunk.text, req.claimsCap) : validateSynthesisOutput(toolInput, req);
+    if (req.pass === "synthesize") await markSynthesized(env.DB, ticket);
     return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
     console.error(`review ${req.pass} malformed output: ${err instanceof Error ? err.stack : String(err)}`);

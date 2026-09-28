@@ -127,6 +127,37 @@ function parseSynthesize(body: Loose): SynthesizeRequest | string {
 }
 
 // Returns the parsed request, or a string that is the 400 message.
+// Counts passes, not reviews: a typical review is 4-8 passes, a 400k-char
+// thorough one ~27, so 1,500 is 200-300 reviews a day. Checked by
+// review/start.ts before anything is charged, and counted per pass by
+// review.ts before each upstream call.
+export const DAILY_PASS_CAP = 1500;
+export const MAX_REVIEW_CHUNKS = 250;
+
+/** The passes a paid review may make: every chunk twice over plus two, and four syntheses (retries, a Resume). */
+export const passBudget = (chunks: number) => ({ extract: 2 * chunks + 2, synthesize: 4 });
+
+export type StartRequest = { tier: ReviewTier; journalId: string; chunks: { id: string; chars: number }[] };
+
+/** POST /api/review/start's body: what the review will send, as section ids and lengths (never text). */
+export function parseStartRequest(body: unknown): StartRequest | string {
+  if (!isObj(body)) return "Expected a JSON object";
+  const keyErr = keysExactly(body, ["tier", "journalId", "chunks"], "request");
+  if (keyErr) return keyErr;
+  if (!isTier(body.tier)) return "tier must be quick, standard or thorough";
+  if (!shortString(body.journalId, 64)) return "journalId must be a string";
+  const c = body.chunks;
+  if (!Array.isArray(c) || c.length < 1 || c.length > MAX_REVIEW_CHUNKS) return `chunks must list 1 to ${MAX_REVIEW_CHUNKS} sections`;
+  const seen = new Set<string>();
+  for (const x of c) {
+    if (!isObj(x) || keysExactly(x, ["id", "chars"], "chunk")) return "each chunk must have exactly id, chars";
+    if (typeof x.id !== "string" || !CHUNK_ID.test(x.id) || seen.has(x.id)) return "chunk ids must be unique and look like s3 or s3-p2";
+    if (!isInt(x.chars) || x.chars < 1 || x.chars > CHUNK_TEXT_MAX) return `chunk chars must be an integer from 1 to ${CHUNK_TEXT_MAX}`;
+    seen.add(x.id);
+  }
+  return body as unknown as StartRequest;
+}
+
 export function parsePassRequest(body: unknown): PassRequest | string {
   if (!isObj(body)) return "Expected a JSON object";
   if (body.pass === "extract") return parseExtract(body);
