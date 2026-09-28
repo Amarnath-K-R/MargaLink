@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import PageHeader from "@/components/PageHeader";
 import { Aside, DocBody, OptionTable, type TocItem } from "@/components/docs/Doc";
-import { CONTACT_EMAIL, OPERATOR } from "@/lib/site";
+import { PADDLE_RESELLER } from "@/lib/site";
+import { ContactEmail as Contact, OperatorDetails } from "@/components/ContactDetails";
 import { FIGURE_PRICE, WELCOME_COINS } from "@/lib/coins";
 
 export const metadata: Metadata = {
@@ -17,7 +18,9 @@ export const metadata: Metadata = {
 // complain) ask for, from what the code actually does. When the product
 // changes what it collects or sends, change this page in the same commit,
 // and bump the version and date below.
-const VERSION = "Version 1, 28 September 2026";
+// users.notice_version (migrations/0001) records which version each account
+// agreed to: bump its default with the version.
+const VERSION = "Version 1, last updated 28 September 2026";
 
 const TOC: TocItem[] = [
   { id: "summary", label: "In short" },
@@ -35,15 +38,6 @@ const TOC: TocItem[] = [
   { id: "children", label: "Children" },
   { id: "changes", label: "Changes and contact" },
 ];
-
-const Contact = () =>
-  CONTACT_EMAIL ? (
-    <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">
-      {CONTACT_EMAIL}
-    </a>
-  ) : (
-    <>the contact address listed here once accounts open</>
-  );
 
 export default function PrivacyPage() {
   return (
@@ -65,8 +59,9 @@ export default function PrivacyPage() {
           <Section id="summary" title="In short">
             <ul className="list-disc space-y-2 pl-5">
               <li>
-                <strong>Your papers never reach our servers.</strong> Matching, the format and journal-rules checks, figures and writing all run in
-                your browser. Nothing from a paper is stored on a server, for anyone, signed in or not.
+                <strong>Your papers stay on your device</strong> for matching, the format and journal-rules checks, figures and writing: these run
+                in your browser. If you choose an AI feature, the text you approve passes through our server to Anthropic, and our server doesn&apos;t
+                store it. We store nothing from a paper, for anyone, signed in or not.
               </li>
               <li>
                 <strong>Two optional features send something to Anthropic&apos;s Claude</strong>, and only after you confirm a notice that says
@@ -78,7 +73,7 @@ export default function PrivacyPage() {
                 name, not your papers.
               </li>
               <li>
-                <strong>No ads, no analytics, no tracking cookies</strong>, and we never sell or rent anything about you.
+                <strong>No ads, no analytics, no advertising or analytics cookies</strong>, and we never sell or rent anything about you.
               </li>
               <li>
                 <strong>You&apos;re in control:</strong> download everything we hold, or delete your account, on your account page, at any time.
@@ -88,10 +83,17 @@ export default function PrivacyPage() {
 
           <Section id="who" title="Who runs MargaLink">
             <p>
-              MargaLink is run by {OPERATOR ?? "an individual in India"}, who decides what personal data is collected and why (the
-              &ldquo;controller&rdquo; under GDPR, the &ldquo;Data Fiduciary&rdquo; under India&apos;s Digital Personal Data Protection Act). For any
-              question about your data, a request, or a complaint, write to <Contact />. The same address reaches the person responsible for
-              handling grievances.
+              MargaLink is run by a sole proprietor in India, who decides what personal data is collected and why. That makes them the
+              &ldquo;controller&rdquo; under the GDPR and UK GDPR, and the &ldquo;Data Fiduciary&rdquo; under India&apos;s Digital Personal Data
+              Protection Act, 2023. For any question about your data, a request or a complaint:
+            </p>
+            <OperatorDetails />
+            <p>
+              The same details, with help for payments, are on the{" "}
+              <Link href="/contact" className="text-accent hover:underline">
+                contact page
+              </Link>
+              .
             </p>
           </Section>
 
@@ -102,10 +104,11 @@ export default function PrivacyPage() {
                 <strong>Your paper is never uploaded</strong> for matching or the format and journal checks. The file stays on your device.
               </li>
               <li>
-                <strong>Nothing from a paper is stored on a server</strong>, not even for signed-in users.
+                <strong>We store nothing from a paper on our servers</strong>, not even for signed-in users.
               </li>
               <li>
-                <strong>Anything that sends text off your device is opt-in</strong>, behind a plain-language notice. Only the two features below do.
+                <strong>Anything that sends text off your device is opt-in</strong>, behind a plain-language notice. Only the two features below do,
+                and what they send passes through our server to Anthropic without being stored.
               </li>
             </ol>
             <PrivacyDiagram />
@@ -116,8 +119,8 @@ export default function PrivacyPage() {
             </p>
             <p>
               <strong>What an embedding is.</strong> Matching turns your title and abstract into a list of a few hundred numbers that capture the
-              topic, not the words, and compares it with the same kind of list for each journal. It can&apos;t practically be turned back into your
-              text, but it comes from your paper, so it never leaves the tab either; nor do the research topics and cited journals worked out from
+              topic, not the words, and compares it with the same kind of list for each journal. We believe it can&apos;t practically be turned back
+              into your text, but it comes from your paper, so it never leaves the tab either; nor do the research topics and cited journals worked out from
               the same text.
             </p>
           </Section>
@@ -125,7 +128,7 @@ export default function PrivacyPage() {
           <Section id="no-account" title="Using MargaLink without an account">
             <p>
               Browsing journals, matching, the checks, the figure studio (drawing, statistics, exports) and the writing workspace need no account and
-              send nothing about you or your work. To run in your browser, the page downloads public files, the same for everyone:
+              don&apos;t send your papers or your data anywhere. To run in your browser, the page downloads public files, the same for everyone:
             </p>
             <OptionTable
               title="What your browser downloads, and from where"
@@ -139,7 +142,8 @@ export default function PrivacyPage() {
             <p>
               Like any request on the web, each of these reaches its host with your IP address and ordinary browser details (such as its version),
               which the host uses to deliver the file and protect its service under its own privacy policy. None of them carries anything from your
-              papers, spreadsheets or drafts. We run no analytics and keep no access logs of our own; Cloudflare processes request data to serve and
+              papers, spreadsheets or drafts. So besides our host, Cloudflare, Hugging Face and jsDelivr also receive your IP address when their
+              files load. We don&apos;t run analytics or keep access logs of our own; Cloudflare keeps request logs under its own terms to serve and
               protect the site.
             </p>
             <p>
@@ -182,9 +186,15 @@ export default function PrivacyPage() {
               ]}
             />
             <p>
-              <strong>What Anthropic does with it.</strong> Under its commercial terms, Anthropic doesn&apos;t use API data to train its models and
-              deletes inputs and outputs within 30 days, except that content flagged for breaking its usage policy may be kept for up to 2 years
-              (and as the law requires).{" "}
+              <strong>Please don&apos;t send other people&apos;s data.</strong> Leave out identifiable data about study participants, patients or
+              anyone else, and don&apos;t send a manuscript you received as a reviewer or editor, or work you have no permission to share. Removing
+              author names is automatic and can miss some. The review&apos;s notice says this each time.
+            </p>
+            <p>
+              <strong>What Anthropic does with it.</strong> Anthropic provides the AI model under its commercial terms. It acts as our service
+              provider and doesn&apos;t use this data to train its models. It deletes inputs and outputs within 30 days. It may keep them longer where
+              the law requires, or to enforce its Usage Policy: content flagged as breaking that policy may be kept for up to 2 years, and the related
+              safety scores for up to 7 years.{" "}
               <a href="https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data" className="text-accent hover:underline">
                 Anthropic&apos;s retention policy
               </a>
@@ -218,10 +228,14 @@ export default function PrivacyPage() {
                 },
                 {
                   name: "Welcome-bonus fingerprint",
-                  what: `A fingerprint of your email address made with a secret key, so the ${WELCOME_COINS}-coin welcome bonus is given once per address. It holds no address and can't be matched to one without that key.`,
-                  def: "Kept after you delete your account",
+                  what: `A fingerprint of your email address made with a secret key, so the ${WELCOME_COINS}-coin welcome bonus is given once per address. It holds no address, and we can't turn it back into one without that address. For our legitimate interest in preventing abuse.`,
+                  def: "While you have an account, then 12 months after you delete it",
                 },
-                { name: "Notice version", what: "Which version of this notice you signed up under.", def: "Until you delete your account" },
+                {
+                  name: "Your agreement",
+                  what: "When you created the account, confirming you're 18 or older and agreeing to the terms and this notice, and which version of this notice it was.",
+                  def: "Until you delete your account",
+                },
               ]}
             />
             <p>
@@ -232,8 +246,11 @@ export default function PrivacyPage() {
 
           <Section id="payments" title="Buying M coins">
             <p>
-              Coin packs and Pro are sold by Paddle, which acts as the merchant of record: it takes the payment, charges any sales tax, sends the
-              receipt and handles refund requests, as the controller of that payment data under{" "}
+              {PADDLE_RESELLER} Paddle takes the payment, charges any sales tax, sends the receipt and handles refund requests, under{" "}
+              <a href="https://www.paddle.com/legal/buyer-terms" className="text-accent hover:underline">
+                its buyer terms
+              </a>
+              , and is the controller of that payment data under{" "}
               <a href="https://www.paddle.com/legal/privacy" className="text-accent hover:underline">
                 its own privacy notice
               </a>
@@ -257,14 +274,17 @@ export default function PrivacyPage() {
                 },
                 {
                   name: "The AI review and Ask Claude",
-                  what: "Your consent, given each time you confirm the notice (GDPR Art. 6(1)(a)). Not confirming, or simply not using them, is how you withhold it.",
+                  what: "Your consent, given each time you confirm the notice (GDPR Art. 6(1)(a)); and, if a manuscript holds health or other sensitive information about you, your explicit consent, which the review's notice asks for (Art. 9(2)(a)). Not confirming, or simply not using them, is how you withhold it.",
                   away: true,
                 },
                 {
                   name: "Abuse limits, the welcome fingerprint, payment event ids",
-                  what: "Our legitimate interest in keeping the service secure and fair, weighed against yours: they hold no address, name or IP (GDPR Art. 6(1)(f)).",
+                  what: "Our legitimate interest in keeping the service secure and fair, weighed against yours: they hold no address, name or IP, and each is kept only as long as shown above (GDPR Art. 6(1)(f)).",
                 },
-                { name: "Purchase records", what: "Also to meet accounting and tax duties (GDPR Art. 6(1)(c)).", def: "" },
+                {
+                  name: "Purchase records",
+                  what: "We keep them because Indian tax and accounting law requires it. For users in the EU and UK, the legal basis is our legitimate interest in meeting those duties (GDPR Art. 6(1)(f)).",
+                },
               ]}
             />
             <p>
@@ -281,32 +301,35 @@ export default function PrivacyPage() {
               rows={[
                 {
                   name: "Cloudflare",
-                  what: "Hosts the site, the account database (primarily in the Asia-Pacific region) and our file storage; protects them from attacks; runs the optional Turnstile check on the email sign-in form.",
+                  what: "Hosts the site, the account database and our file storage; protects them from attacks; runs the optional Turnstile check on the email sign-in form. The database's main copy is in the Asia Pacific region; Cloudflare may handle requests and temporary copies elsewhere on its global network.",
                   def: "Global network",
                 },
                 { name: "Anthropic", what: "Runs the AI review and Ask Claude, as described above.", def: "United States", away: true },
                 { name: "Google", what: "Only if you choose Continue with Google: confirms your email address and its id for your account.", def: "United States" },
                 { name: "Resend", what: "Sends your sign-in emails: your address and the link.", def: "United States" },
                 { name: "Paddle", what: "Sells coin packs and Pro as merchant of record.", def: "UK / United States" },
+                { name: "Hugging Face", what: "Serves the matching model's files; receives your IP address when they load.", def: "United States" },
+                { name: "jsDelivr", what: "Serves the ONNX runtime and Pyodide; receives your IP address when they load.", def: "Global network" },
               ]}
             />
             <p>
-              Some of them are outside your country, so your data may be processed in the United States and elsewhere. We rely on each
-              provider&apos;s data-protection terms (including the standard contractual clauses the EU and UK recognise) for those transfers. We may
-              also disclose data if the law requires it, for example to answer a valid court order.
+              Our providers are in the United States, the United Kingdom and elsewhere, so your data may be processed outside your country. For users
+              in the EU and UK, we rely on the EU US Data Privacy Framework and its UK extension where a provider is certified, and otherwise on the
+              standard contractual clauses in the provider&apos;s data processing terms. Indian law allows these transfers, as the United States is
+              not a restricted country. We may also disclose data if the law requires it, for example to answer a valid court order.
             </p>
           </Section>
 
           <Section id="cookies" title="Cookies and browser storage">
             <p>
-              MargaLink sets no advertising, analytics or tracking cookies, so it shows no cookie banner. Only these, all strictly necessary, and only
-              when you&apos;re signed in or signing in:
+              We don&apos;t use advertising or analytics cookies, so we don&apos;t show a cookie banner. We use three cookies, only when you sign in
+              or are signed in, and each is needed to provide what you asked for:
             </p>
             <OptionTable
               title="Cookies"
               rows={[
                 { name: "__Host-ml_session", what: "Keeps you signed in. Can't be read by pages; holds a random token, never your details.", def: "30 days, renewed as you use it" },
-                { name: "ml_in", what: "Only says that you're signed in, so pages of a signed-out visitor never ask for account details.", def: "30 days, renewed as you use it" },
+                { name: "ml_in", what: "Only tells the page to show that you're signed in, so pages of a signed-out visitor never ask for account details. It holds no identifier.", def: "30 days, renewed as you use it" },
                 { name: "__Host-ml_oauth", what: "Exists only during a Google sign-in, to complete it safely.", def: "10 minutes" },
               ]}
             />
@@ -315,15 +338,20 @@ export default function PrivacyPage() {
               and their settings (layout, open files, whether to compile automatically), cached copies of the downloads listed above so they
               aren&apos;t fetched again, whether you&apos;ve seen the introduction, and, for this browser session, that you&apos;ve read the Ask Claude
               notice. When you buy coins, Paddle&apos;s checkout runs its own script, and where it&apos;s switched on so does Cloudflare&apos;s
-              Turnstile check; each follows its own cookie and privacy terms.
+              Turnstile check; each follows its own cookie and privacy terms. You can clear everything this site keeps in your browser with
+              &ldquo;Reset site data&rdquo; on the{" "}
+              <Link href="/guide#reset" className="text-accent hover:underline">
+                Guide page
+              </Link>
+              .
             </p>
           </Section>
 
           <Section id="keeping" title="How long, and how safe">
             <p>
-              Each item above shows how long it&apos;s kept. When something expires, or you delete your account, it&apos;s deleted from the live
-              database straight away or within minutes. Our database provider keeps a point-in-time recovery copy for up to 30 days, so a deleted
-              record can linger there for that long before it&apos;s gone for good; it&apos;s used only to recover from a failure.
+              Each item above shows how long it&apos;s kept. When something expires, or you delete your account, we remove it from our live database
+              straight away or within minutes. Our database provider keeps recovery copies for up to 30 days. We use these only to recover from a
+              fault, never restore them for any other use, and they expire on their own.
             </p>
             <p>
               <strong>Safeguards.</strong> Everything travels over HTTPS. Sign-in tokens and links are stored only as one-way fingerprints, and the
@@ -344,6 +372,9 @@ export default function PrivacyPage() {
                 shows your coin history and has &ldquo;Download my data&rdquo;, a complete copy in a machine-readable file.
               </li>
               <li>
+                <strong>Know who received it</strong>: the download lists the providers that received your account&apos;s data, and you can ask us.
+              </li>
+              <li>
                 <strong>Delete it</strong>: &ldquo;Delete my account&rdquo; on the same page removes it at once (it also cancels Pro).
               </li>
               <li>
@@ -362,16 +393,18 @@ export default function PrivacyPage() {
               </li>
             </ul>
             <p>
-              For anything the account page doesn&apos;t do, write to <Contact />. We&apos;ll answer within 30 days. If you&apos;re not satisfied,
-              you can complain to your data-protection authority: in India, the Data Protection Board of India; in the EU, the authority where you
-              live; in the UK, the Information Commissioner&apos;s Office.
+              For anything the account page doesn&apos;t do, write to <Contact />. We&apos;ll answer within 30 days. Under Indian law you may also raise
+              a grievance with our Grievance Officer (see Who runs MargaLink): we acknowledge it within 48 hours and resolve it within the time the law
+              allows. If you&apos;re not satisfied, you can complain to your data protection authority: in India, the Data Protection Board of India;
+              in the EU, the authority where you live; in the UK, the Information Commissioner&apos;s Office.
             </p>
           </Section>
 
           <Section id="children" title="Children">
             <p>
-              Accounts are for people 18 or older. The tools that need no account collect no personal data from anyone. If you believe someone under
-              18 has created an account, write to us and we&apos;ll delete it.
+              Accounts are only for people aged 18 or older, and you confirm your age when you sign up. If we learn that an account belongs to someone
+              under 18, we will close it, delete its data and arrange a refund of any payment through Paddle. Write to <Contact /> if you believe this
+              has happened. The tools that need no account don&apos;t collect personal data through them.
             </p>
           </Section>
 
@@ -383,7 +416,11 @@ export default function PrivacyPage() {
             </p>
             <Aside title="Questions, requests and complaints">
               <p>
-                Write to <Contact />. The{" "}
+                Write to <Contact />, or see the{" "}
+                <Link href="/contact" className="text-accent hover:underline">
+                  contact page
+                </Link>
+                . The{" "}
                 <Link href="/terms" className="text-accent hover:underline">
                   terms
                 </Link>{" "}

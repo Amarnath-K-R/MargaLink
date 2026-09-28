@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BarChart3, BookOpen, Coins, Compass, FileCheck2, LifeBuoy, PenLine, ScanSearch } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
+import ResetSiteData from "@/components/ResetSiteData";
 import { Aside, DocBody, DocPart, DocSection, Keys, OptionTable, Shot, type TocItem } from "@/components/docs/Doc";
 import { FiguresArt, JournalsArt, MatchArt, PrivacyArt, ReviewArt, WriteArt } from "@/components/docs/Art";
 
@@ -354,17 +355,31 @@ export default function GuidePage() {
                 final cross-check) is refunded about two hours after it starts; resuming or retrying costs nothing more.
               </>,
               <>
-                <strong>Send it and review</strong>: the only way a review starts. Cancel sends nothing.
+                <strong>Send it and review</strong>: the only way a review starts, and only once you tick the box agreeing to send the text. Cancel
+                sends nothing.
               </>,
             ]}
           />
           <Aside tone="away" title="What a review sends, and what happens to it">
             <p>
               The text of the sections you didn&apos;t mark <strong>Don&apos;t send</strong>, to Anthropic&apos;s Claude API. Anthropic doesn&apos;t train
-              on API data and keeps it only under its API data policy; MargaLink stores none of it. Papers over 400,000 characters are refused before the
-              notice, never cut short.
+              on API data and deletes it within 30 days, keeping it longer only to enforce its Usage Policy or where the law requires; MargaLink stores
+              none of it. Papers over 400,000 characters are refused before the notice, never cut short.
             </p>
           </Aside>
+          <DocPart title="Using AI review responsibly">
+            <ul className="list-disc space-y-1.5 pl-5">
+              <li>Use it only for your own manuscripts, or with your co-authors&apos; agreement.</li>
+              <li>Never use it for a manuscript or grant you received as a peer reviewer or editor: funders and journals forbid sending those to AI tools.</li>
+              <li>Leave out identifiable data about study participants or patients.</li>
+              <li>Check your target journal&apos;s AI policy, and disclose AI assistance where it asks.</li>
+            </ul>
+            <p>If your journal wants a disclosure, you can adapt this:</p>
+            <blockquote className="clay-well rounded-xl p-4 text-sm">
+              The authors used MargaLink&apos;s AI review, which uses Claude by Anthropic, to check the manuscript against the journal&apos;s guidelines
+              before submission. The authors reviewed all suggestions and take full responsibility for the content.
+            </blockquote>
+          </DocPart>
           <DocPart title="While it runs">
             <p>
               A bar shows each section as it&apos;s read. <strong>Cancel</strong> stops it without using a review; <strong>Resume review</strong> picks up
@@ -822,7 +837,8 @@ export default function GuidePage() {
             alt="Signing in: Continue with Google, or an emailed link"
             notes={[
               <>
-                <strong>Continue with Google</strong>: shares your verified email address and Google&apos;s id for your account, nothing else.
+                <strong>Continue with Google</strong>, once you&apos;ve ticked the two boxes above it (you&apos;re 18 or older; you agree to the terms
+                and have read the privacy notice): shares your verified email address and Google&apos;s id for your account, nothing else.
               </>,
               <>
                 <strong>Your email address</strong>, for a one-time link instead. It works once, within 15 minutes.
@@ -918,6 +934,13 @@ export default function GuidePage() {
               </div>
             ))}
           </div>
+          <DocPart id="reset" title="Clearing what this site keeps in your browser">
+            <p>
+              Your projects, settings, cached downloads and whether you&apos;ve seen the introduction live in this browser. This clears all of it;
+              signing out is separate, on your account page.
+            </p>
+            <ResetSiteData />
+          </DocPart>
           <p className="text-sm text-ink-soft">
             Still stuck? The{" "}
             <Link href="/privacy" className="text-accent hover:underline">

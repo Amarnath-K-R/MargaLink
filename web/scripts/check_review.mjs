@@ -93,6 +93,7 @@ check("consent names the request count", /in \d+ short requests/.test(await page
 const priceLine = await page.locator('[data-testid="review-price"]').innerText();
 const price = Number(priceLine.match(/costs (\d+) M coins/)?.[1]);
 check(`consent names the price and the balance (${priceLine})`, price > 0 && /you have 100\b/.test(priceLine));
+await page.getByLabel(/I agree to send this text to Anthropic/).check();
 await page.click("text=Send it and review");
 
 await page.waitForSelector('[data-testid="review-coverage"]', { timeout: 30000 });
@@ -122,6 +123,7 @@ check("the tray shows the new balance", (await page.locator('a[href="/account"]'
 // Cancel mid-run.
 slow = true;
 await getReview().click();
+await page.getByLabel(/I agree to send this text to Anthropic/).check();
 await page.click("text=Send it and review");
 await page.getByRole("button", { name: "Cancel" }).click();
 await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
@@ -133,6 +135,7 @@ slow = false;
 // A route registered later wins; { times: 1 } unregisters it after one use.
 await page.route("**/api/review", (route) => route.fulfill({ status: 429, contentType: "text/plain", body: "Pilot is fully booked for today" }), { times: 1 });
 await getReview().click();
+await page.getByLabel(/I agree to send this text to Anthropic/).check();
 await page.click("text=Send it and review");
 await page.waitForSelector("text=fully booked", { timeout: 10000 });
 await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
@@ -160,6 +163,7 @@ await lastRow.locator("select").selectOption("excluded");
 const after = await countIn();
 check(`excluding a section lowers the request count (${before} → ${after})`, after === before - 1);
 check("consent says the excluded section won't be sent", /won't be sent at all/.test(await page.locator('[role="alertdialog"]').innerText()));
+await page.getByLabel(/I agree to send this text to Anthropic/).check();
 await page.click("text=Send it and review");
 await page.waitForSelector('[data-testid="review-summary"]', { timeout: 30000 });
 check(`no request carried the excluded section "${excludedTitle}"`, bodies.length > 0 && bodies.every((b) => !b.includes(excludedTitle)));
@@ -173,6 +177,7 @@ check("an unknown typed heading is reported", await page.locator("text=Couldn't 
 // replay the old outline (which could include a section just excluded).
 slow = true;
 await getReview().click();
+await page.getByLabel(/I agree to send this text to Anthropic/).check();
 await page.click("text=Send it and review");
 await page.waitForSelector('[data-testid="review-progress"]');
 await rows.first().locator("select").selectOption("excluded");
@@ -192,6 +197,7 @@ await page.route("**/api/review", async (route) => {
 });
 const startsBefore = account.starts.length;
 await getReview().click();
+await page.getByLabel(/I agree to send this text to Anthropic/).check();
 await page.click("text=Send it and review");
 await page.waitForSelector("text=Sign in to get a review.", { timeout: 10000 });
 await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
@@ -203,6 +209,7 @@ check("and resuming it wasn't charged again", account.starts.length === startsBe
 // Too few coins: the server says 402, the page says how many and won't send.
 account.balance = 0;
 await getReview().click();
+await page.getByLabel(/I agree to send this text to Anthropic/).check();
 await page.click("text=Send it and review");
 await page.waitForSelector("text=you have 0", { timeout: 10000 });
 await getReview().click();

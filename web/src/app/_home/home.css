@@ -284,6 +284,9 @@ body.intro-bridge-fading .scroll-hint { opacity: 1; filter: blur(0); transform: 
 .final-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding: 20px 0 24px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 10px; }
 .final-footer button { display: inline-flex; align-items: center; gap: 7px; padding: 0; background: transparent; color: var(--ink); font-size: 11px; cursor: pointer; }
 .final-footer button:hover { color: var(--accent); }
+.final-links { display: flex; flex-wrap: wrap; gap: 16px; font-size: 11px; }
+.final-links a { color: var(--ink-soft); }
+.final-links a:hover { color: var(--accent); }
 
 @media (max-width: 900px) {
   .site-header { padding: 20px 24px; }

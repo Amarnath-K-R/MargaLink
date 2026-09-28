@@ -6,6 +6,7 @@ import { Coin } from "@/components/AccountButton";
 import { FIGURE_PRICE, WELCOME_COINS, reviewPrice } from "@/lib/coins";
 import { REVIEW_TIERS } from "@/lib/reviewTypes";
 import { Packs, ProPlans } from "./Packs";
+import { PADDLE_RESELLER } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Pricing | MargaLink",
@@ -101,7 +102,12 @@ export default function PricingPage() {
         <ProPlans />
       </section>
 
-      <p className="mt-12 text-sm leading-relaxed text-ink-soft">Payments are handled by Paddle, our merchant of record; MargaLink never sees your card.</p>
+      <p className="mt-12 max-w-2xl text-sm leading-relaxed text-ink-soft">
+        {PADDLE_RESELLER} MargaLink never sees your card.{" "}
+        <a href="https://www.paddle.com/legal/buyer-terms" className="text-accent hover:underline">
+          Paddle&apos;s buyer terms
+        </a>
+      </p>
       <p className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
         <Link href="/refunds" className="text-accent hover:underline">
           Refunds
@@ -111,6 +117,9 @@ export default function PricingPage() {
         </Link>
         <Link href="/privacy#accounts" className="text-accent hover:underline">
           What an account stores
+        </Link>
+        <Link href="/contact" className="text-accent hover:underline">
+          Contact and support
         </Link>
       </p>
     </main>

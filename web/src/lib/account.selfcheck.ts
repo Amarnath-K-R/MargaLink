@@ -1,6 +1,7 @@
 // Runnable check for functions/api/account.ts: the account page's data,
 // the "download my data" export, and deleting an account (typing the
-// address; everything of theirs goes, except the welcome fingerprint).
+// address; everything of theirs goes, except the welcome fingerprint, for
+// 12 months).
 //   node src/lib/account.selfcheck.ts
 import assert from "node:assert/strict";
 import { testD1 } from "./testD1.ts";
@@ -19,10 +20,11 @@ const get = (q = "", c = cookie) => (onRequestGet as unknown as Handler)({ reque
 const del = (body: unknown) => (onRequestPost as unknown as Handler)({ request: new Request("https://m.test/api/account", { method: "POST", body: JSON.stringify(body), headers: { cookie } }), env });
 
 assert.equal((await get("", "")).status, 401);
-const page = (await (await get()).json()) as { email: string; balance: number; google: boolean; history: { kind: string; delta: number; label: string }[] };
+const page = (await (await get()).json()) as { email: string; balance: number; google: boolean; noticeVersion: number; since: number; history: { kind: string; delta: number; label: string }[] };
 assert.equal(page.email, "ann@example.org");
 assert.equal(page.balance, 60);
 assert.equal(page.google, true);
+assert.deepEqual([page.noticeVersion, typeof page.since], [1, "number"], "when they agreed, and to which version of the notice");
 assert.deepEqual(page.history.map((h) => [h.kind, h.delta]), [["pack", 50], ["welcome", 10]]);
 
 const dl = await get("?download=1");
@@ -34,6 +36,11 @@ assert.equal(data.sessions.length, 1);
 assert.deepEqual([data.purchases, data.subscriptions, data.adjustments, data.reviews], [[], [], [], []], "payments and running reviews are part of the export");
 assert.equal(data.account.id, u.id, "the account's own id");
 assert.deepEqual(data.identities, [{ provider: "google", subject: "g-1" }], "the Google id we keep, not just a yes");
+assert.deepEqual(
+  data.sharedWith.map((p: { name: string }) => p.name),
+  ["Cloudflare", "Google", "Resend"],
+  "who has received this account's data (no Paddle without a purchase, no Anthropic without an AI request)",
+);
 
 // what's keyed by the address goes with the account: sign-in links and its counters
 const { fingerprint } = await import("./auth.ts");
@@ -50,7 +57,12 @@ assert.ok(gone.headers.getSetCookie().every((c) => c.endsWith("Max-Age=0")));
 for (const t of ["users", "identities", "sessions", "coin_ledger", "magic_links"]) {
   assert.equal((await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first<{ n: number }>())?.n, 0, t);
 }
-assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM welcome_claims").first<{ n: number }>())?.n, 1);
+const claim = await env.DB.prepare("SELECT released_at AS at FROM welcome_claims").first<{ at: number | null }>();
+assert.ok(claim && claim.at !== null && claim.at >= now, "the welcome fingerprint stays, its 12 months counted from deletion");
+// signing up again with the same address (a +tag counts as the same): no second bonus, and the fingerprint is held again
+const again = await signInUser(env.DB, { email: "ann+2@example.org" }, now + 5);
+assert.equal(await grantWelcome(env.DB, again.id, again.email, now + 5, "key"), false);
+assert.equal((await env.DB.prepare("SELECT released_at AS at FROM welcome_claims").first<{ at: number | null }>())?.at, null);
 assert.deepEqual((await env.DB.prepare("SELECT key FROM rate_limits").all<{ key: string }>()).results.map((r) => r.key), ["mail-new"], "only the site-wide counter stays");
 assert.equal((await get()).status, 401, "signed out");
 console.log("account.selfcheck: OK");

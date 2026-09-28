@@ -3,12 +3,13 @@
 // history). GET /api/account?download=1: everything we hold about the
 // account, as a JSON file. POST /api/account {delete: "<their address>"}:
 // deletes the account and everything tied to it (foreign keys cascade);
-// only the welcome fingerprint in welcome_claims stays (no address in it).
+// only the welcome fingerprint in welcome_claims stays (no address in it),
+// for 12 months (housekeeping deletes it then).
 // Pro is cancelled at Paddle first, so a deleted account is never charged.
 import { fingerprint, getSession, hashSecret, readJson, sessionCookies, text, withCookies, type AccountEnv } from "../../src/lib/auth.ts";
 import { cancelSubscription, type PaddleApiEnv } from "../../src/lib/paddle.ts";
 import { normalEmail } from "../../src/lib/coins.ts";
-import { balance, history } from "../../src/lib/ledger.ts";
+import { balance, history, releaseWelcomeStatement } from "../../src/lib/ledger.ts";
 
 type Env = AccountEnv & PaddleApiEnv;
 
@@ -17,7 +18,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   if (!s) return text("Sign in first.", 401);
   const google = !!(await env.DB.prepare("SELECT 1 AS y FROM identities WHERE user_id = ?").bind(s.userId).first());
   if (new URL(request.url).searchParams.get("download") !== "1") {
-    return Response.json({ email: s.email, balance: await balance(env.DB, s.userId), google, history: await history(env.DB, s.userId, 200) });
+    const agreed = await env.DB.prepare("SELECT created_at AS since, notice_version AS noticeVersion FROM users WHERE id = ?").bind(s.userId).first<{ since: number; noticeVersion: number }>();
+    return Response.json({ email: s.email, balance: await balance(env.DB, s.userId), google, history: await history(env.DB, s.userId, 200), ...agreed });
   }
   const account = await env.DB.prepare("SELECT id, email, created_at AS createdAt, notice_version AS noticeVersion FROM users WHERE id = ?").bind(s.userId).first();
   const identities = (await env.DB.prepare("SELECT provider, subject FROM identities WHERE user_id = ?").bind(s.userId).all()).results;
@@ -48,7 +50,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .bind(s.userId)
       .all()
   ).results;
-  const data = { exportedAt: new Date().toISOString(), account, signInWithGoogle: google, identities, sessions, coins: { balance: await balance(env.DB, s.userId), ledger }, purchases, subscriptions, adjustments, reviews };
+  // Who has received this account's data (the right to know who it was shared with).
+  const usedAi = ledger.some((e) => ["review", "figure"].includes(String(e.kind)));
+  const sharedWith = [
+    { name: "Cloudflare", what: "Hosts the site and this account's database (its main copy in the Asia Pacific region)." },
+    ...(google ? [{ name: "Google", what: "Confirmed your email address and gave us its id for you when you signed in with Google." }] : []),
+    { name: "Resend", what: "Sent your sign-in emails: your address and each link, if you asked for one." },
+    ...(purchases.length || subscriptions.length ? [{ name: "Paddle", what: "Sold you coins or Pro as merchant of record; the purchases above are its references." }] : []),
+    ...(usedAi ? [{ name: "Anthropic", what: "Received the text you chose to send for AI reviews or Ask Claude requests, never your account details." }] : []),
+  ];
+  const data = { exportedAt: new Date().toISOString(), account, signInWithGoogle: google, identities, sessions, coins: { balance: await balance(env.DB, s.userId), ledger }, purchases, subscriptions, adjustments, reviews, sharedWith };
   return new Response(JSON.stringify(data, null, 2), {
     headers: { "content-type": "application/json", "content-disposition": 'attachment; filename="margalink-account-data.json"' },
   });
@@ -71,6 +82,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     env.DB.prepare("DELETE FROM magic_links WHERE email = ?").bind(s.email),
     // the address's counters: mail15:<fp>:<network>, mailday:<fp>:<network>, mailall:<fp>
     ...(fp ? [env.DB.prepare("DELETE FROM rate_limits WHERE instr(key, ?) > 0").bind(`:${fp}`)] : []),
+    ...(secret ? [await releaseWelcomeStatement(env.DB, s.email, Date.now(), secret)] : []),
   ]);
   return withCookies(Response.json({ ok: true }), sessionCookies(null));
 };

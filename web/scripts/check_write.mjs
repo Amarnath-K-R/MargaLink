@@ -302,6 +302,7 @@ if (!(await reviewWindow.getByText("(your target journal)").count())) await revi
 await reviewWindow.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
 await reviewWindow.locator('[role="alertdialog"]').waitFor();
 check("the consent notice appears inside the window", /in \d+ short requests/.test(await reviewWindow.locator('[role="alertdialog"]').innerText()));
+await reviewWindow.getByLabel(/I agree to send this text to Anthropic/).check();
 await reviewWindow.getByText("Send it and review").click();
 await reviewWindow.locator('[data-testid="review-coverage"]').waitFor({ timeout: 60_000 });
 await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });

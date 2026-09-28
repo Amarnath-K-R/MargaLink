@@ -284,7 +284,7 @@ export default function ArchitecturePage() {
             <p>
               The account tables hold an email address, Google&apos;s id for it, hashed sessions, coin history, Paddle references and, for a running review,
               section ids and lengths. Deleting an account cascades through all of it (cancelling Pro at Paddle first); only a one-way fingerprint that
-              pays the welcome bonus once per address stays.
+              pays the welcome bonus once per address stays, for 12 months.
             </p>
           </Aside>
         </DocSection>

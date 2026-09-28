@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
-// POST /api/auth/email/request {email, next, turnstile?}: emails a one-time
+// POST /api/auth/email/request {email, next, agree, turnstile?}: emails a one-time
 // sign-in link (15 minutes). The link carries only the token, in its
 // #fragment, which never reaches a server; the page asks the server which
 // address it's for, and asks the person before spending it, so a mail
@@ -15,6 +15,8 @@
 // network has used its 5, a new address is told so and an existing one
 // isn't: the only times the answer depends on whether an account exists.
 // With TURNSTILE_SECRET set, a request must also pass Cloudflare Turnstile.
+// `agree: true` is the sign-in form's two boxes (18 or older; the terms and
+// the privacy notice): no link, so no account, without them.
 import { fingerprint, hashSecret, networkKey, randomToken, rateLimit, readJson, safeNext, sha256Hex, text, type AccountEnv } from "../../../../src/lib/auth.ts";
 import { isEmail, normalEmail } from "../../../../src/lib/coins.ts";
 
@@ -37,6 +39,7 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
   const body = await readJson(request);
   const email = typeof body?.email === "string" ? normalEmail(body.email) : "";
   if (!isEmail(email)) return text("Enter a valid email address.", 400);
+  if (body?.agree !== true) return text("Tick both boxes above the buttons first.", 400);
   const next = safeNext(body?.next);
   const url = new URL(request.url);
   const dev = env.DEV_EMAIL_LOG === "1" && url.hostname === "localhost";

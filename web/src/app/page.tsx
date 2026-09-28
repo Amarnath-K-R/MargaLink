@@ -175,6 +175,13 @@ function Home() {
         <footer className="final-footer section-shell">
           <span>© 2026 MargaLink</span>
           <span className="mono">CALM TOOLS FOR SERIOUS PAPERS</span>
+          <nav aria-label="About MargaLink" className="final-links">
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/terms">Terms</Link>
+            <Link href="/refunds">Refunds</Link>
+            <Link href="/contact">Contact</Link>
+            <Link href="/guide">Guide</Link>
+          </nav>
           <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
             Back to top <ArrowUpRight size={14} />
           </button>

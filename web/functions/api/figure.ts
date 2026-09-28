@@ -26,6 +26,8 @@ import type { FigurePayload } from "../../src/lib/figureSchema.ts";
 type Env = AccountEnv & { ANTHROPIC_API_KEY: string; FIGURES_KV: KVNamespace };
 
 const DAILY_CAP = 200;
+// Pinned, and not one of Anthropic's "Covered Models" (Mythos class), which have their own
+// retention rules: moving to one means changing the privacy notice first.
 const MODEL = "claude-sonnet-5";
 // Columns + a scrubbed spec + ≤ 12×30 labels + a 1,000-char request: tens of
 // KB at most. A body that can't fit that can't be a legitimate request — a

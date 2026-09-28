@@ -7,10 +7,12 @@ import { Coin } from "@/components/AccountButton";
 import SignInPanel from "@/components/SignInPanel";
 import { ProStatus } from "../pricing/Packs";
 import { PRO } from "@/lib/coins";
+import { openPortal } from "@/lib/paddleCheckout";
 import { refreshAccount, signOut, useAccount } from "@/components/useAccount";
 import type { LedgerKind } from "@/lib/coins";
 
-type Details = { email: string; balance: number; google: boolean; history: { kind: LedgerKind; label: string; delta: number; at: number }[] };
+type Details = { email: string; balance: number; google: boolean; since?: number; noticeVersion?: number; history: { kind: LedgerKind; label: string; delta: number; at: number }[] };
+const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
 
 // The account page: the balance and every coin in or out, how you sign in,
 // signing out (here or everywhere), a copy of everything we hold, and
@@ -65,11 +67,15 @@ export default function AccountView() {
         </p>
         <p className="mt-3 max-w-lg text-sm leading-relaxed text-ink-soft">
           A review costs 4 to 45 M coins, by depth and length; Ask Claude costs 1. The price is always shown before anything is sent, and any part of
-          a run that doesn&apos;t come back is refunded automatically.
+          a run that doesn&apos;t come back is refunded automatically. Pro coins are spent first and up to {PRO.carryCap} carry over each month; pack
+          coins never expire.
         </p>
-        <Link href="/pricing#packs" className="clay-btn clay-primary mt-4 h-10 px-5 text-sm font-medium">
-          Buy coins
-        </Link>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link href="/pricing#packs" className="clay-btn clay-primary h-10 px-5 text-sm font-medium">
+            Buy coins
+          </Link>
+          {details?.history.some((h) => h.kind === "pack" || h.kind === "pro_grant") && <BillingButton />}
+        </div>
         <h3 className="mt-7 text-xs font-medium text-ink-soft">History</h3>
         {error && <p className="mt-2 text-sm text-away">{error}</p>}
         {details && details.history.length === 0 && <p className="mt-2 text-sm text-ink-soft">No coin activity yet.</p>}
@@ -124,12 +130,17 @@ export default function AccountView() {
             The full list
           </Link>
         </p>
+        {details?.since && (
+          <p className="mt-2">
+            You confirmed you&apos;re 18 or older and agreed to the terms and privacy notice (version {details.noticeVersion ?? 1}) on {day(details.since)}.
+          </p>
+        )}
         <a href="/api/account?download=1" download className="clay-btn mt-4 h-10 px-5 text-sm">
           <Download size={15} strokeWidth={2} /> Download my data
         </a>
       </Panel>
 
-      <DeletePanel email={account.email} pro={!!account.pro && account.pro.status !== "canceled"} onDeleted={() => setDeleted(true)} />
+      <DeletePanel email={account.email} coins={account.balance} pro={!!account.pro && account.pro.status !== "canceled"} onDeleted={() => setDeleted(true)} />
     </div>
   );
 }
@@ -143,7 +154,24 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function DeletePanel({ email, pro, onDeleted }: { email: string; pro: boolean; onDeleted: () => void }) {
+// Paddle's customer portal: receipts, refunds (its 14-day withdrawal button) and Pro.
+function BillingButton() {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      <button type="button" onClick={() => void openPortal().then(setError)} className="clay-btn h-10 px-5 text-sm">
+        Receipts, refunds and billing (Paddle)
+      </button>
+      {error && (
+        <p role="alert" className="basis-full text-sm text-away">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
+function DeletePanel({ email, coins, pro, onDeleted }: { email: string; coins: number; pro: boolean; onDeleted: () => void }) {
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,10 +192,20 @@ function DeletePanel({ email, pro, onDeleted }: { email: string; pro: boolean; o
   return (
     <section className="sheet border-l-4 border-away p-6 text-sm leading-relaxed text-ink-soft sm:p-8">
       <h2 className="mb-2 font-serif text-lg font-medium text-ink">Delete your account</h2>
-      <p>This deletes your email address, sign-ins and coin history straight away. Any M coins left are lost, and it can&apos;t be undone.</p>
+      <p>
+        This deletes your email address, sign-ins and coin history straight away, and it can&apos;t be undone.{" "}
+        {coins > 0 && (
+          <>
+            <strong>You&apos;ll lose your {coins} M coin{coins === 1 ? "" : "s"}</strong>, and coins can&apos;t be refunded after deletion: if you bought a
+            pack in the last 14 days, ask for its refund first.{" "}
+          </>
+        )}
+        We keep a keyed fingerprint of your email address for 12 months, so the welcome bonus isn&apos;t given to it again; it can&apos;t be turned back
+        into your address.
+      </p>
       {pro && (
         <p className="mt-2 text-away">
-          It also ends Pro at once: the rest of the period you&apos;ve paid for is lost. To keep it until then, cancel in Manage subscription instead and
+          It also ends Pro at once: the rest of the period you&apos;ve paid for is lost. To keep it until then, use Cancel or manage Pro instead and
           delete your account after it ends.
         </p>
       )}

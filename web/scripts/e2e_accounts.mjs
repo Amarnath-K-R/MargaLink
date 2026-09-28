@@ -64,7 +64,9 @@ try {
 
   // sign in with an email link, read from the dev log
   await page.goto(`${O}/signin?next=/review`);
-  await page.fill("#signin-email", "e2e@example.org");
+  await page.getByLabel("Email me a sign-in link").fill("e2e@example.org");
+  await page.getByLabel("I confirm I'm 18 or older.").check();
+  await page.getByLabel(/I agree to the terms/).check();
   await page.click("text=Send the link");
   await page.waitForSelector("text=Check your email");
   let link = null;
@@ -112,6 +114,7 @@ try {
   await page.getByRole("button", { name: /^JAMA/ }).click();
   await page.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
   const price = Number((await page.locator('[data-testid="review-price"]').innerText()).match(/costs (\d+) M coins/)?.[1]);
+  await page.getByLabel(/I agree to send this text to Anthropic/).check();
   await page.click("text=Send it and review");
   await page.waitForSelector('[data-testid="review-summary"], [data-testid="review-coverage"]', { timeout: 30000 });
   await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 30000 });

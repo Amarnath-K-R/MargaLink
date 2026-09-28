@@ -159,6 +159,7 @@ if (want("review")) {
   await page.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
   await page.waitForSelector('[role="alertdialog"]');
   await shot("review-consent", ['[role="alertdialog"]'], ['[role="alertdialog"] p.text-away', '[role="alertdialog"] p.font-serif', '[data-testid="review-price"]', "text=Send it and review"]);
+  await page.getByLabel(/I agree to send this text to Anthropic/).check();
   await page.click("text=Send it and review");
   await page.waitForSelector('[data-testid="review-coverage"]', { timeout: 60_000 });
   await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });
@@ -252,7 +253,7 @@ if (want("coins")) {
   await ctx.clearCookies();
   await go("/signin");
   const card = page.locator("main .sheet").first();
-  await shot("coins-signin", [card], [page.getByRole("button", { name: "Continue with Google" }), page.locator("#signin-email"), page.getByRole("button", { name: "Send the link" }), card.getByRole("link", { name: "What an account stores" })]);
+  await shot("coins-signin", [card], [page.getByRole("button", { name: "Continue with Google" }), page.getByLabel("Email me a sign-in link"), page.getByRole("button", { name: "Send the link" }), card.getByRole("link", { name: "What an account stores" })]);
   await ctx.addCookies([{ name: "ml_in", value: "1", url: BASE }]);
   // What things cost, and buying coins.
   await go("/pricing");

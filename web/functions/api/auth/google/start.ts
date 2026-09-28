@@ -1,6 +1,8 @@
 /// <reference types="@cloudflare/workers-types" />
-// GET /api/auth/google/start?next=/path[&popup=1]: off to Google's consent
-// screen (scope "openid email" only: no name, no photo). The state, the PKCE
+// GET /api/auth/google/start?next=/path&agree=1[&popup=1]: off to Google's
+// consent screen (scope "openid email" only: no name, no photo). `agree=1` is
+// the sign-in form's two boxes (18 or older; the terms and the privacy
+// notice); without it, back to the sign-in page to tick them. The state, the PKCE
 // verifier and where to return go in a 10-minute HttpOnly cookie that only
 // the callback reads.
 import { b64url, OAUTH_COOKIE, pkce, randomToken, redirect, safeNext, type AccountEnv } from "../../../../src/lib/auth.ts";
@@ -9,6 +11,7 @@ export const onRequestGet: PagesFunction<AccountEnv> = async ({ request, env }) 
   const url = new URL(request.url);
   const next = safeNext(url.searchParams.get("next"));
   const popup = url.searchParams.get("popup") === "1";
+  if (url.searchParams.get("agree") !== "1") return redirect(`/signin?next=${encodeURIComponent(next)}${popup ? "&popup=1" : ""}`);
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REDIRECT_URI) return redirect(`/signin?error=google-off&next=${encodeURIComponent(next)}${popup ? "&popup=1" : ""}`);
   const state = randomToken(16);
   const { verifier, challenge } = await pkce();

@@ -33,7 +33,7 @@ export async function credit(db: D1Database, userId: string, coins: number, kind
   return r.meta.changes === 1;
 }
 
-/** The welcome bonus, once per canonical address ever (its keyed fingerprint outlives account deletion). */
+/** The welcome bonus, once per canonical address (its keyed fingerprint outlives account deletion by WELCOME_RELEASE_DAYS). */
 export async function grantWelcome(db: D1Database, userId: string, email: string, now: number, secret: string): Promise<boolean> {
   const hash = await fingerprint(secret, canonicalEmail(email));
   const [paid] = await db.batch([
@@ -44,7 +44,7 @@ export async function grantWelcome(db: D1Database, userId: string, email: string
          ON CONFLICT DO NOTHING`,
       )
       .bind(userId, WELCOME_COINS, now, hash),
-    db.prepare("INSERT INTO welcome_claims (email_hash, created_at) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(hash, now),
+    db.prepare("INSERT INTO welcome_claims (email_hash, created_at) VALUES (?, ?) ON CONFLICT DO UPDATE SET released_at = NULL").bind(hash, now),
   ]);
   return paid.meta.changes === 1;
 }
@@ -90,6 +90,13 @@ const PAYMENT_EVENT_DAYS = 90;
  * counters. There's no scheduler on Pages, so any API request runs this, at
  * most once a minute (functions/api/_middleware.ts).
  */
+// How long a deleted account's welcome fingerprint is kept (the privacy page says 12 months).
+export const WELCOME_RELEASE_DAYS = 365;
+
+/** On account deletion: the welcome fingerprint's 12 months start now. */
+export const releaseWelcomeStatement = async (db: D1Database, email: string, now: number, secret: string) =>
+  db.prepare("UPDATE welcome_claims SET released_at = ? WHERE email_hash = ?").bind(now, await fingerprint(secret, canonicalEmail(email)));
+
 export async function housekeeping(db: D1Database, now: number) {
   await sweepTickets(db, now);
   await db.batch([
@@ -98,6 +105,7 @@ export async function housekeeping(db: D1Database, now: number) {
     db.prepare("DELETE FROM rate_limits WHERE expires_at <= ?").bind(now),
     // Paddle's event ids (no personal data) only need to outlive its retries.
     db.prepare("DELETE FROM payment_events WHERE received_at <= ?").bind(now - PAYMENT_EVENT_DAYS * 24 * 60 * 60 * 1000),
+    db.prepare("DELETE FROM welcome_claims WHERE released_at <= ?").bind(now - WELCOME_RELEASE_DAYS * 24 * 60 * 60 * 1000),
   ]);
 }
 

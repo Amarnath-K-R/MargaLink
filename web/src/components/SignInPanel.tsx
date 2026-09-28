@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import Link from "next/link";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Mail } from "lucide-react";
 import { WELCOME_COINS } from "@/lib/coins";
+import { CONTACT_EMAIL } from "@/lib/site";
 import { signInWithGoogle } from "./useAccount";
 
 // Sign in without leaving the page: Google in a popup, or a one-time link
@@ -11,7 +11,10 @@ import { signInWithGoogle } from "./useAccount";
 // a loaded paper, dataset or figure is never lost. Used by /signin, the
 // tray's Sign in button, and the review and figure consents. Where
 // NEXT_PUBLIC_TURNSTILE_SITE_KEY is set, the email form carries Cloudflare
-// Turnstile's check (its script loads only then).
+// Turnstile's check (its script loads only then). Before either button
+// works, two unticked boxes (18 or older; the terms and the privacy notice),
+// under the itemised notice of what an account keeps; the server refuses a
+// sign-in without them. Links open in a new tab, so the page stays as it is.
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || null;
 // `notice`: a problem from an earlier attempt, shown until the next one.
 // `fullPage`: on the sign-in page itself, where a blocked popup can fall
@@ -23,6 +26,10 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
   const [tried, setTried] = useState(false);
   const [human, setHuman] = useState<string | null>(null); // Turnstile's token, when it's on
   const [attempt, setAttempt] = useState(0); // a token works once: a new attempt gets a new check
+  const [adult, setAdult] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const ready = adult && agreed;
+  const id = useId();
   const target = () => next ?? `${location.pathname}${location.search}`;
 
   async function sendLink(e: React.FormEvent) {
@@ -34,7 +41,7 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
       const res = await fetch("/api/auth/email/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, next: target(), ...(TURNSTILE_SITE_KEY ? { turnstile: human } : {}) }),
+        body: JSON.stringify({ email, next: target(), agree: ready, ...(TURNSTILE_SITE_KEY ? { turnstile: human } : {}) }),
       });
       if (!res.ok) throw new Error((await res.text().catch(() => "")) || `Something went wrong (${res.status}). Try again.`);
       setPhase("sent");
@@ -74,8 +81,29 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
         </p>
       )}
       {lead ?? <p className="text-sm leading-relaxed text-ink-soft">AI reviews and Ask Claude need an account. New accounts get {WELCOME_COINS} M coins.</p>}
+      <p className="mt-3 text-xs leading-relaxed text-ink-soft">
+        An account keeps your email address (and Google&apos;s id for you, if you use Google), your M coin history and purchases, fingerprints of
+        your sign-in tokens, and a keyed fingerprint of your address so the welcome bonus is given once (kept 12 months after you delete the
+        account). Never anything from your papers. Download or delete it all on your account page at any time; deleting withdraws your consent.
+        Questions or complaints: {CONTACT_EMAIL ? <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">{CONTACT_EMAIL}</a> : "the address on the privacy page"}, or
+        the Data Protection Board of India.{" "}
+        <NewTab href="/privacy#accounts">What an account stores</NewTab>
+      </p>
+      <div className="mt-3 space-y-1.5 text-sm">
+        <label htmlFor={`${id}-adult`} className="flex items-start gap-2">
+          <input id={`${id}-adult`} type="checkbox" checked={adult} onChange={(e) => setAdult(e.target.checked)} className="mt-1 accent-[var(--accent)]" />
+          <span>I confirm I&apos;m 18 or older.</span>
+        </label>
+        <label htmlFor={`${id}-terms`} className="flex items-start gap-2">
+          <input id={`${id}-terms`} type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1 accent-[var(--accent)]" />
+          <span>
+            I agree to the <NewTab href="/terms">terms</NewTab> and have read the <NewTab href="/privacy">privacy notice</NewTab>.
+          </span>
+        </label>
+      </div>
       <button
         type="button"
+        disabled={!ready}
         onClick={() => {
           setTried(true);
           setError(null);
@@ -83,7 +111,7 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
             setError("Your browser blocked the Google window. Allow pop-ups for this site and try again, or use an email link below.");
           }
         }}
-        className="clay-btn mt-4 h-11 w-full justify-center gap-2.5 text-sm font-medium"
+        className="clay-btn mt-4 h-11 w-full justify-center gap-2.5 text-sm font-medium disabled:opacity-50"
       >
         <GoogleMark /> Continue with Google
       </button>
@@ -91,11 +119,11 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
         <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
       </div>
       <form onSubmit={sendLink} className="flex flex-col gap-2">
-        <label htmlFor="signin-email" className="text-xs font-medium text-ink-soft">
+        <label htmlFor={`${id}-email`} className="text-xs font-medium text-ink-soft">
           Email me a sign-in link
         </label>
         <input
-          id="signin-email"
+          id={`${id}-email`}
           type="email"
           required
           autoComplete="email"
@@ -105,28 +133,25 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
           className="clay-input h-11 text-sm"
         />
         {TURNSTILE_SITE_KEY && <Turnstile key={attempt} siteKey={TURNSTILE_SITE_KEY} onToken={setHuman} />}
-        <button type="submit" disabled={phase === "sending" || (!!TURNSTILE_SITE_KEY && !human)} className="clay-btn clay-primary h-11 justify-center text-sm font-medium">
+        <button type="submit" disabled={!ready || phase === "sending" || (!!TURNSTILE_SITE_KEY && !human)} className="clay-btn clay-primary h-11 justify-center text-sm font-medium disabled:opacity-50">
           {phase === "sending" ? "Sending…" : "Send the link"}
         </button>
       </form>
+      {!ready && <p className="mt-2 text-xs text-ink-soft">Tick both boxes above to continue.</p>}
       {error && (
         <p role="alert" className="mt-3 text-sm text-away">
           {error}
         </p>
       )}
-      <p className="mt-4 text-xs leading-relaxed text-ink-soft">
-        By continuing you confirm you&apos;re 18 or older and accept the{" "}
-        <Link href="/terms" className="text-accent hover:underline">
-          terms
-        </Link>
-        . We keep your email address and your M coin history, never anything from your papers.{" "}
-        <Link href="/privacy#accounts" className="text-accent hover:underline">
-          What an account stores
-        </Link>
-      </p>
     </div>
   );
 }
+
+const NewTab = ({ href, children }: { href: string; children: ReactNode }) => (
+  <a href={href} target="_blank" rel="noopener" className="text-accent hover:underline">
+    {children}
+  </a>
+);
 
 type TurnstileJs = { render: (el: HTMLElement, o: Record<string, unknown>) => string; remove: (id: string) => void };
 let turnstileLoading: Promise<TurnstileJs> | null = null;

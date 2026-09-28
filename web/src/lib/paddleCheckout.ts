@@ -53,7 +53,7 @@ export async function openPortal(): Promise<string | null> {
   const res = await fetch("/api/pay/portal", { method: "POST" }).catch(() => null);
   if (!res?.ok) {
     tab?.close();
-    return (res && (await res.text().catch(() => ""))) || "Couldn't open the subscription page. Check your connection and try again.";
+    return (res && (await res.text().catch(() => ""))) || "Couldn't open Paddle's billing page. Check your connection and try again.";
   }
   const { url } = (await res.json()) as { url: string };
   if (tab) {

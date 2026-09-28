@@ -121,6 +121,8 @@ await hk.batch([
   hk.prepare("INSERT INTO payment_events (id, type, received_at) VALUES ('evt_old', 't', ?), ('evt_new', 't', ?)").bind(Date.now() - 91 * 864e5, Date.now() - 89 * 864e5),
   hk.prepare("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) VALUES ('h1', -4, 'review', 't-old', 0)"),
   hk.prepare("INSERT INTO review_tickets (id_hash, user_id, tier, coins, chunks, extract_left, synth_left, created_at, expires_at) VALUES ('t-old', 'h1', 'quick', 4, '{}', 0, 0, 0, ?)").bind(old),
+  // welcome fingerprints: a live account's stays; a deleted account's, 12 months
+  hk.prepare("INSERT INTO welcome_claims (email_hash, created_at, released_at) VALUES ('w-live', 0, NULL), ('w-old', 0, ?), ('w-new', 0, ?)").bind(Date.now() - 366 * 864e5, Date.now() - 364 * 864e5),
 ]);
 const waits: Promise<unknown>[] = [];
 const mwEnv = onRequest as unknown as (ctx: { request: Request; next: () => Promise<Response>; env: object; waitUntil: (p: Promise<unknown>) => void }) => Promise<Response>;
@@ -129,4 +131,5 @@ await Promise.all(waits);
 const count = async (t: string) => (await hk.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first<{ n: number }>())?.n;
 assert.deepEqual([await count("sessions"), await count("magic_links"), await count("rate_limits"), await count("review_tickets"), await count("payment_events")], [1, 0, 0, 0, 1], "expired rows gone; Paddle event ids kept 90 days");
 assert.equal((await hk.prepare("SELECT SUM(delta) AS b FROM coin_ledger").first<{ b: number }>())?.b, 0, "the expired ticket was refunded on the way");
+assert.deepEqual((await hk.prepare("SELECT email_hash AS h FROM welcome_claims ORDER BY h").all<{ h: string }>()).results.map((r) => r.h), ["w-live", "w-new"], "a deleted account's welcome fingerprint goes after 12 months");
 console.log("auth.selfcheck: OK");

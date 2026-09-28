@@ -14,10 +14,13 @@ const perReview = reviewPrice("standard", 50_000);
 
 // Buying: Paddle's checkout opens over the page; when it says the payment
 // went through, we wait for the webhook to add the coins (usually a few
-// seconds) and say so. Pro's first month arrives the same way.
+// seconds) and say so. Pro's first month arrives the same way. Nothing opens
+// until the buyer ticks the (unticked) box accepting the terms and the
+// refund policy, and for Pro, that it renews until cancelled.
 function useCheckout() {
   const account = useAccount();
   const [status, setStatus] = useState<Status | null>(null);
+  const [agreed, setAgreed] = useState(false);
 
   async function waitForCoins(key: Key, before: number) {
     setStatus({ key, phase: "adding" });
@@ -50,16 +53,35 @@ function useCheckout() {
     }
   }
   const busy = !!status && (status.phase === "opening" || status.phase === "adding");
-  return { account, status, buy, busy };
+  return { account, status, buy, busy, agreed, setAgreed };
+}
+
+const NewTab = ({ href, children }: { href: string; children: ReactNode }) => (
+  <a href={href} target="_blank" rel="noopener" className="text-accent hover:underline">
+    {children}
+  </a>
+);
+
+function AgreeBox({ c, pro = false }: { c: ReturnType<typeof useCheckout>; pro?: boolean }) {
+  if (c.account.status !== "in") return null;
+  return (
+    <label className="mt-4 flex items-start gap-2 text-sm text-ink-soft">
+      <input type="checkbox" checked={c.agreed} onChange={(e) => c.setAgreed(e.target.checked)} className="mt-1 accent-[var(--accent)]" />
+      <span>
+        I agree to the <NewTab href="/terms">terms</NewTab> and the <NewTab href="/refunds">refund policy</NewTab>
+        {pro ? ", and I understand Pro renews automatically at the price shown until I cancel it." : "."}
+      </span>
+    </label>
+  );
 }
 
 function BuyButton({ k, label, c }: { k: Key; label: string; c: ReturnType<typeof useCheckout> }) {
-  const { account, status, buy, busy } = c;
+  const { account, status, buy, busy, agreed } = c;
   const mine = status?.key === k ? status : null;
   return (
     <div aria-live="polite">
       {account.status === "in" ? (
-        <button type="button" onClick={() => void buy(k)} disabled={!account.paddle?.prices[k] || busy} className="clay-btn clay-primary h-11 w-full justify-center text-sm font-medium">
+        <button type="button" onClick={() => void buy(k)} disabled={!account.paddle?.prices[k] || busy || !agreed} className="clay-btn clay-primary h-11 w-full justify-center text-sm font-medium">
           {mine?.phase === "opening" ? "Opening checkout…" : mine?.phase === "adding" ? "Adding your coins…" : label}
         </button>
       ) : (
@@ -90,6 +112,8 @@ function BuyButton({ k, label, c }: { k: Key; label: string; c: ReturnType<typeo
 export function Packs() {
   const c = useCheckout();
   return (
+    <>
+    <AgreeBox c={c} />
     <div className="mt-5 grid gap-4 sm:grid-cols-3">
       {PACKS.map((p) => (
         <div key={p.id} className="sheet flex flex-col p-6" data-pack={p.id}>
@@ -106,6 +130,7 @@ export function Packs() {
         </div>
       ))}
     </div>
+    </>
   );
 }
 
@@ -120,9 +145,13 @@ export function ProPlans() {
           {PRO.coinsPerMonth} M coins every month
         </p>
         <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-          About {Math.floor(PRO.coinsPerMonth / perReview)} standard reviews a month. Unspent Pro coins carry over, up to {PRO.carryCap}. Cancel any time;
-          Pro runs to the end of what you&apos;ve paid for.
+          About {Math.floor(PRO.coinsPerMonth / perReview)} standard reviews a month. Unspent Pro coins carry over, up to {PRO.carryCap}.
         </p>
+        <p className="mt-3 text-sm leading-relaxed text-ink-soft">
+          Pro renews automatically every month or every year, at the price shown, until you cancel. You can cancel at any time on your account page;
+          your plan runs to the end of the period you paid for.
+        </p>
+        {!pro && <AgreeBox c={c} pro />}
       </div>
       {pro ? (
         <ProStatus pro={pro} />
@@ -166,14 +195,14 @@ export function ProStatus({ pro }: { pro: NonNullable<Extract<ReturnType<typeof 
       : pro.status === "paused"
         ? "Pro is paused."
         : pro.renews
-          ? `Renews${date ? ` on ${date}` : ""}.`
+          ? `Renews automatically${date ? ` on ${date}` : ""} at ${pro.interval === "year" ? `$${PRO.year.usd} a year (₹${PRO.year.inr.toLocaleString("en-IN")} in India)` : `$${PRO.month.usd} a month (₹${PRO.month.inr.toLocaleString("en-IN")} in India)`}, until you cancel.`
           : `Cancelled: it ends${date ? ` on ${date}` : " at the end of this period"}.`;
   return (
     <div className="clay-well rounded-2xl p-5 text-sm">
       <p className="font-medium text-ink">You have Pro, {pro.interval === "year" ? "yearly" : "monthly"}.</p>
       <p className={`mt-1 ${pro.status === "past_due" ? "text-away" : "text-ink-soft"}`}>{line}</p>
       <button type="button" onClick={() => void openPortal().then(setError)} className="clay-btn mt-4 h-10 px-5 text-sm">
-        Manage subscription
+        Cancel or manage Pro
       </button>
       {error && (
         <p role="alert" className="mt-2 text-away">

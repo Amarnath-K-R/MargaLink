@@ -87,7 +87,7 @@ export async function signOut(everywhere = false) {
  * the caller can say so rather than throw away the page.
  */
 export function signInWithGoogle(next: string, { redirectIfBlocked = false } = {}): boolean {
-  const url = `/api/auth/google/start?next=${encodeURIComponent(next)}`;
+  const url = `/api/auth/google/start?next=${encodeURIComponent(next)}&agree=1`; // only from SignInPanel, once both boxes are ticked
   const w = window.open(`${url}&popup=1`, "margalink-signin", "popup,width=480,height=640");
   if (!w) {
     if (redirectIfBlocked) location.assign(new URL(url, location.origin).href); // an API route, not a page

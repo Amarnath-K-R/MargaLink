@@ -88,6 +88,12 @@ export default function HomeDashboard() {
             <Link href="/terms" className="hover:text-ink">
               Terms
             </Link>
+            <Link href="/refunds" className="hover:text-ink">
+              Refunds
+            </Link>
+            <Link href="/contact" className="hover:text-ink">
+              Contact
+            </Link>
             <Link href="/architecture" className="hover:text-ink">
               How it&apos;s built
             </Link>

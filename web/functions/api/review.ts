@@ -20,6 +20,8 @@ import { claimReviewPass, markDelivered, markSynthesized } from "../../src/lib/l
 
 type Env = AccountEnv & { ANTHROPIC_API_KEY: string; REVIEWS_KV: KVNamespace };
 
+// Pinned, and not one of Anthropic's "Covered Models" (Mythos class), which have their own
+// retention rules: moving to one means changing the privacy notice first.
 const MODEL = "claude-sonnet-5";
 // Every pass is paid for: it must carry the ticket review/start.ts issued
 // (X-Review-Ticket), which binds the tier, the sections and their lengths,

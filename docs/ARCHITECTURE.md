@@ -414,7 +414,8 @@ sign-in when it regains focus (a blocked popup says so rather than
 redirecting away). `_middleware.ts` refuses any non-GET without our own
 `Origin` (the Paddle webhook excepted), marks everything `no-store`, and,
 at most once a minute, runs `housekeeping` after answering: expired
-tickets swept, sign-in links, sessions and rate counters deleted, since
+tickets swept, sign-in links, sessions and rate counters deleted, and a
+deleted account's welcome fingerprint once it's 12 months old, since
 Pages has no scheduler. Every fingerprint kept for rate limits and the
 welcome bonus is an HMAC with `HASH_SECRET` (sign-in fails closed without
 it when deployed), so holding the database isn't enough to test an
@@ -426,7 +427,10 @@ cost`, so two requests can't both spend the last coins, and
 `UNIQUE(kind, ref)` makes every credit and debit idempotent (webhook
 retries, refund sweeps). The welcome bonus is keyed on a keyed fingerprint
 of the canonical address in `welcome_claims`, which outlives account
-deletion. For Pro's carry-over, `proCoinsLeft` walks the ledger: Pro coins
+deletion by 12 months (`released_at`). Signing in needs the form's two
+boxes (18 or older; the terms and the privacy notice): the email request
+refuses a link without `agree: true`, and Google's start without
+`agree=1`. For Pro's carry-over, `proCoinsLeft` walks the ledger: Pro coins
 are spent first, a refund returns to the coins it was paid with, a
 reversed pack takes pack coins first and a reversed Pro payment Pro coins
 first.

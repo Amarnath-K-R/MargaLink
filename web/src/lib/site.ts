@@ -9,9 +9,19 @@ export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://example-pla
 // accounts shouldn't open without it.
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || null;
 
-// Who runs MargaLink, as the privacy notice and the terms name them (for
-// example "Jane Doe, Kochi, India"). Unset: "an individual in India".
+// Who runs MargaLink: the sole proprietor's full legal name, as the privacy
+// notice, the terms and /contact give it (also the grievance officer), and
+// the postal address and support phone number they and Paddle's seller
+// policy ask for. Set all three before accounts open; unset, the pages say
+// the details are still to come.
 export const OPERATOR = process.env.NEXT_PUBLIC_OPERATOR || null;
+export const POSTAL_ADDRESS = process.env.NEXT_PUBLIC_POSTAL_ADDRESS || null;
+export const SUPPORT_PHONE = process.env.NEXT_PUBLIC_SUPPORT_PHONE || null;
+
+// Paddle's seller policy asks for this sentence, word for word, wherever we
+// sell (pricing, terms, refunds).
+export const PADDLE_RESELLER =
+  "Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all our orders. Paddle provides all customer service inquiries and handles returns.";
 
 export const SITE_NAME = "MargaLink";
 export const SITE_TITLE = "MargaLink: match, check, and review your paper without it leaving your device";

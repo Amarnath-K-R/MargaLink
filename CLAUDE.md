@@ -130,7 +130,8 @@ Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
 | `PADDLE_ENV`, `PADDLE_CLIENT_TOKEN`, `PADDLE_API_KEY`, `PADDLE_WEBHOOK_SECRET` | `.dev.vars` / dashboard secrets | Coin packs and Pro through Paddle (`sandbox` or `production`). The client token is public (Paddle.js); the other two are secret. |
 | `PADDLE_PRICE_IDS` | `.dev.vars` / dashboard | Our products' Paddle price ids, as JSON: `{"S":"pri_…","M":"pri_…","L":"pri_…","PRO_MONTH":"pri_…","PRO_YEAR":"pri_…"}` (they differ between sandbox and live). |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | `web/`, build-time | The address the privacy page and the terms give for questions and complaints. Set before accounts open. |
-| `NEXT_PUBLIC_OPERATOR` | `web/`, build-time | Who runs MargaLink, as the privacy notice and the terms name them (e.g. "Jane Doe, Kochi, India"). Unset: "an individual in India". |
+| `NEXT_PUBLIC_OPERATOR` | `web/`, build-time | The sole proprietor's full legal name, as the privacy notice, the terms and `/contact` give it (also the grievance officer). Set before accounts open. |
+| `NEXT_PUBLIC_POSTAL_ADDRESS`, `NEXT_PUBLIC_SUPPORT_PHONE` | `web/`, build-time | The postal address and buyer-support phone number on `/contact`, the privacy notice and the terms (Paddle's seller policy and India's rules ask for both). Set before accounts open. |
 | `NEXT_PUBLIC_SITE_URL` | `web/`, build-time | Absolute URL for `sitemap.ts`/`robots.ts`/OG tags. Unset in dev; no domain registered yet (see `journal-finder-plan.md` §13). |
 
 ## Verification

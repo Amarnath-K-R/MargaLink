@@ -35,10 +35,13 @@ const watch = (page) => {
   let requested = null;
   await ctx.route("**/api/auth/email/request", (r) => ((requested = r.request().postDataJSON()), r.fulfill({ json: { ok: true } })));
   await page.goto(O + "/signin?next=/review");
-  await page.fill("#signin-email", "ann@example.org");
+  await page.getByLabel("Email me a sign-in link").fill("ann@example.org");
+  check("no sign-in before both boxes are ticked", (await page.getByRole("button", { name: "Send the link" }).isDisabled()) && (await page.getByRole("button", { name: "Continue with Google" }).isDisabled()));
+  await page.getByLabel("I confirm I'm 18 or older.").check();
+  await page.getByLabel(/I agree to the terms/).check();
   await page.click("text=Send the link");
   await page.waitForSelector("text=Check your email");
-  check("the link is asked for with the page to return to", requested?.email === "ann@example.org" && requested?.next === "/review");
+  check("the link is asked for with the page to return to, and the boxes ticked", requested?.email === "ann@example.org" && requested?.next === "/review" && requested?.agree === true);
 
   // the verify page asks first, then signs in and clears the token
   let spent = 0;
@@ -62,12 +65,16 @@ const watch = (page) => {
 
   // Google: the popup lands on /signin?done=1 and closes itself
   await page.goto(O + "/signin");
-  await ctx.route("**/api/auth/google/start**", (r) => r.fulfill({ status: 302, headers: { location: "/signin?done=1&next=%2Fhome" } }));
+  let googleStart = "";
+  await ctx.route("**/api/auth/google/start**", (r) => ((googleStart = r.request().url()), r.fulfill({ status: 302, headers: { location: "/signin?done=1&next=%2Fhome" } })));
   await ctx.clearCookies();
   await page.goto(O + "/signin");
+  await page.getByLabel("I confirm I'm 18 or older.").check();
+  await page.getByLabel(/I agree to the terms/).check();
   const [popup] = await Promise.all([page.waitForEvent("popup"), page.getByRole("button", { name: "Continue with Google" }).click()]);
   await popup.waitForEvent("close", { timeout: 10000 });
   check("Google's popup closes itself when it's done", popup.isClosed());
+  check("Google's sign-in carries the ticked boxes", new URL(googleStart).searchParams.get("agree") === "1");
   await ctx.close();
 }
 
@@ -102,6 +109,8 @@ const watch = (page) => {
   await page.goto(O + "/pricing");
   await page.waitForSelector('[data-pack="S"] button');
   check("Paddle.js isn't loaded just by visiting", scripts.length === 0);
+  check("no checkout before the terms and refund policy are accepted", await page.locator('[data-pack="S"] button').isDisabled());
+  await page.getByLabel(/I agree to the terms and the refund policy\.$/).check();
   await page.locator('[data-pack="S"] button').click();
   await page.waitForFunction(() => window.__opened);
   const opened = await page.evaluate(() => ({ o: window.__opened, env: window.__env }));
@@ -111,6 +120,8 @@ const watch = (page) => {
   check("the new coins show up after checkout", true);
 
   // Pro: the same checkout with the monthly price; then the plan and its portal
+  check("Pro has its own box, naming the renewal", await page.getByRole("button", { name: "Get Pro monthly" }).isDisabled());
+  await page.getByLabel(/Pro renews automatically at the price shown until I cancel it/).check();
   await page.getByRole("button", { name: "Get Pro monthly" }).click();
   await page.waitForFunction(() => window.__opened?.items[0].priceId === "pri_pm");
   check("Pro opens the checkout with its price", true);
@@ -120,11 +131,11 @@ const watch = (page) => {
   check("once Pro lands, the pricing page shows the plan instead of the offer", true);
   await page.goto(O + "/account");
   await page.waitForSelector("text=You have Pro, monthly.");
-  check("the account page says when Pro renews", await page.locator("text=Renews on").isVisible());
+  check("the account page says when Pro renews, and at what price", await page.locator("text=/Renews automatically on .* at \\$9 a month/").isVisible());
   await ctx.route("**/api/pay/portal", (r) => r.fulfill({ json: { url: `${O}/terms?portal=1` } }));
-  const [tab] = await Promise.all([ctx.waitForEvent("page"), page.getByRole("button", { name: "Manage subscription" }).click()]);
+  const [tab] = await Promise.all([ctx.waitForEvent("page"), page.getByRole("button", { name: "Cancel or manage Pro" }).click()]);
   await tab.waitForURL(/portal=1/, { timeout: 10000 });
-  check("Manage subscription opens the portal in a new tab", true);
+  check("Cancel or manage Pro opens the portal in a new tab", true);
   await ctx.close();
 }
 
