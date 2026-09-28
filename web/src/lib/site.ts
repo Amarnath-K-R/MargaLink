@@ -4,6 +4,11 @@
 // NEXT_PUBLIC_SITE_URL once one is.
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://example-placeholder.margalink.invalid";
 
+// Where people write about their account or their data (the privacy page
+// and the terms name it). Set NEXT_PUBLIC_CONTACT_EMAIL with the domain;
+// accounts shouldn't open without it.
+export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || null;
+
 export const SITE_NAME = "MargaLink";
 export const SITE_TITLE = "MargaLink: match, check, and review your paper without it leaving your device";
 export const SITE_DESCRIPTION =

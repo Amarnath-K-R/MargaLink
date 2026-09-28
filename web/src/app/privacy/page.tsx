@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import PageHeader from "@/components/PageHeader";
+import { CONTACT_EMAIL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "How privacy works | MargaLink",
@@ -136,6 +137,11 @@ export default function PrivacyPage() {
           send it, and in the writing workspace the status line counts every request that
           carried text you agreed to send.
         </li>
+        <li>
+          A review is paid in M coins, charged when you confirm. So that each request can be
+          checked against what was paid for, the server keeps which sections the review covers
+          and their lengths (never their text) for about two hours.
+        </li>
       </ul>
 
       <h2 id="figures-exception" className="mt-12 font-serif text-xl font-medium">
@@ -207,11 +213,80 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      <h2 className="mt-12 font-serif text-xl font-medium">Accounts and payment</h2>
+      <h2 id="accounts" className="mt-12 scroll-mt-24 font-serif text-xl font-medium">
+        Accounts, M coins and payment
+      </h2>
       <p className="mt-3 text-ink-soft">
-        If accounts exist later, they&apos;ll need only an email address.
-        Payment details stay with the payment provider; MargaLink never
-        sees or stores card numbers.
+        Only the two features above that cost money each time they run, the AI review and Ask
+        Claude, need an account. Everything else works without one, and a visitor who isn&apos;t
+        signed in makes no account requests at all. The three rules at the top of this page apply
+        to accounts too: nothing from a paper is ever part of one.
+      </p>
+      <h3 className="mt-6 font-medium">What an account keeps</h3>
+      <ul className="mt-2 list-disc space-y-2 pl-5 text-ink-soft">
+        <li>Your email address. If you use &ldquo;Continue with Google&rdquo;, also Google&apos;s id for your account, so we recognise it. Not your name, not your photo.</li>
+        <li>Your M coin history: each welcome bonus, purchase, charge and refund, with its date and the payment provider&apos;s reference for purchases.</li>
+        <li>Your sign-ins: for each browser you&apos;re signed in on, a one-way fingerprint of its sign-in token and when it expires (30 days, extended while you use it).</li>
+        <li>Which version of this notice you signed up under.</li>
+      </ul>
+      <h3 className="mt-6 font-medium">Kept briefly</h3>
+      <ul className="mt-2 list-disc space-y-2 pl-5 text-ink-soft">
+        <li>While a paid review runs: which sections it covers and their lengths, deleted about two hours after it starts.</li>
+        <li>An emailed sign-in link&apos;s fingerprint, until it&apos;s used or 15 minutes pass.</li>
+        <li>Counters that limit how many sign-in emails an address or a network can ask for, keyed by one-way fingerprints that change daily. They expire within a day.</li>
+      </ul>
+      <h3 className="mt-6 font-medium">Kept after you delete your account</h3>
+      <p className="mt-2 text-ink-soft">
+        A one-way fingerprint of your email address, so the welcome bonus is given once per
+        address. It can&apos;t be turned back into the address.
+      </p>
+      <h3 className="mt-6 font-medium">Never kept</h3>
+      <p className="mt-2 text-ink-soft">
+        Anything from your papers, spreadsheets or figures. Card or bank details: buying M coins
+        goes through Paddle, which sells them to you as the merchant of record, takes the payment,
+        handles the tax and sends the receipt. MargaLink never sees or stores card numbers.
+      </p>
+      <h3 className="mt-6 font-medium">Cookies</h3>
+      <p className="mt-2 text-ink-soft">
+        Signed in, your browser holds two: one carries your sign-in and can&apos;t be read by
+        pages, the other only says that you&apos;re signed in, so signed-out pages ask nothing. A
+        third, short-lived one exists only during a Google sign-in. No tracking or advertising
+        cookies, ever.
+      </p>
+      <h3 className="mt-6 font-medium">Who else is involved</h3>
+      <ul className="mt-2 list-disc space-y-2 pl-5 text-ink-soft">
+        <li>Cloudflare hosts the site and the account database.</li>
+        <li>Google, only if you choose it, tells us your verified email address and its id for your account.</li>
+        <li>Resend sends sign-in emails: your address and the link.</li>
+        <li>Paddle takes payments, as the merchant of record.</li>
+        <li>Anthropic runs the AI review and Ask Claude, as described above.</li>
+      </ul>
+      <h3 className="mt-6 font-medium">What we use it for, and your choices</h3>
+      <p className="mt-2 text-ink-soft">
+        Your address signs you in and receives sign-in links; we don&apos;t send marketing email.
+        Your coin history runs the service and our accounts. On{" "}
+        <Link href="/account" className="text-accent hover:underline">
+          your account page
+        </Link>{" "}
+        you can see that history, download everything we hold as a file, sign out on every
+        browser, and delete your account, which is immediate. For anything else about your data,
+        or a complaint,{" "}
+        {CONTACT_EMAIL ? (
+          <>
+            write to{" "}
+            <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">
+              {CONTACT_EMAIL}
+            </a>
+            .
+          </>
+        ) : (
+          "write to the contact address listed here once accounts open."
+        )}{" "}
+        The{" "}
+        <Link href="/terms" className="text-accent hover:underline">
+          terms
+        </Link>{" "}
+        cover how M coins work.
       </p>
     </main>
   );

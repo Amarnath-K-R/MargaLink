@@ -4,10 +4,12 @@
 // marker's position (a percentage of its image, measured from the element it
 // points at) — so re-running this after a UI change moves the markers with
 // the UI. Needs `npm run dev` and the local journal index (for Match).
-// The AI review is mocked (as check_review.mjs does); Ask Claude isn't used.
+// The AI review is mocked (as check_review.mjs does), signed in through
+// mock_account.mjs; Ask Claude isn't used.
 // Run: node scripts/guide_shots.mjs [journals|match|review|figures|write|tray]
 import { chromium } from "playwright";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mockAccount } from "./mock_account.mjs";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const OUT = new URL("../public/guide/", import.meta.url).pathname;
@@ -23,6 +25,7 @@ const ctx = await chromium.launchPersistentContext(PROFILE, { viewport: { width:
 const page = ctx.pages()[0] ?? (await ctx.newPage());
 page.on("pageerror", (e) => console.log("pageerror:", e.message));
 page.on("dialog", (d) => void d.accept());
+await mockAccount(ctx, { balance: 42 });
 
 // The review's passes, mocked: every extract quotes its chunk's first sentence.
 const firstSentence = (t) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12 && l !== l.toUpperCase()) ?? t.trim()).split(". ")[0];
@@ -104,7 +107,7 @@ const PAPER = new URL("./fixtures/test-paper.pdf", import.meta.url).pathname;
 if (want("tray")) {
   await go("/match", { tray: true });
   const tray = 'nav[aria-label="MargaLink"]';
-  await shot("tray", [tray], [`${tray} a[href="/"]`, `${tray} a[href="/home"]`, `${tray} a[href="/journals"]`, `${tray} a[href="/match"]`, `${tray} a[href="/write"]`, `${tray} a[href="/guide"]`, `${tray} a[href="/privacy"]`], 10);
+  await shot("tray", [tray], [`${tray} a[href="/"]`, `${tray} a[href="/home"]`, `${tray} a[href="/journals"]`, `${tray} a[href="/match"]`, `${tray} a[href="/write"]`, `${tray} a[href="/guide"]`, `${tray} a[href="/privacy"]`, `${tray} a[href="/account"]`], 10);
 }
 
 if (want("journals")) {
@@ -153,9 +156,9 @@ if (want("review")) {
   await page.waitForTimeout(300);
   const s3 = step("Get it reviewed");
   await shot("review-depth", [`${s3} .grid:has([aria-pressed])`, `${s3} button.clay-primary`], [page.getByRole("button", { name: /^Quick/ }), page.getByRole("button", { name: /^Standard/ }), page.getByRole("button", { name: /^Thorough/ }), '[data-testid="review-outline"] select', '[data-testid="review-outline"] #outline-add-heading', `${s3} button.clay-primary`]);
-  await page.getByRole("button", { name: /^Get a standard review by Claude$/ }).click();
+  await page.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
   await page.waitForSelector('[role="alertdialog"]');
-  await shot("review-consent", ['[role="alertdialog"]'], ['[role="alertdialog"] p.text-away', '[role="alertdialog"] p.font-serif', "text=free pilot review", "text=Send it and review"]);
+  await shot("review-consent", ['[role="alertdialog"]'], ['[role="alertdialog"] p.text-away', '[role="alertdialog"] p.font-serif', '[data-testid="review-price"]', "text=Send it and review"]);
   await page.click("text=Send it and review");
   await page.waitForSelector('[data-testid="review-coverage"]', { timeout: 60_000 });
   await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });

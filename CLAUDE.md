@@ -53,10 +53,23 @@ neither has a default-on path.
    Function re-validates it and gates Claude's reply (valid spec, columns
    that exist, no label it wasn't given; hooks through the denylist).
 
-These two Pages Functions are the project's only server-side code, and
-they share one credential (`ANTHROPIC_API_KEY`) — no new environment
-variable. Every other feature keeps rule 1 absolutely; these two are rule
-3's carve-outs, not quiet exceptions to rule 1.
+These two Pages Functions are the only server code that ever receives
+anything from a paper or a dataset, and they share one credential
+(`ANTHROPIC_API_KEY`). Every other feature keeps rule 1 absolutely; these
+two are rule 3's carve-outs, not quiet exceptions to rule 1.
+
+**Accounts, M coins and payments** (`docs/superpowers/plans/2026-09-28-accounts-coins-payments.md`):
+the two AI features cost M coins, so they need an account; nothing else
+does, and a signed-out visitor makes no account request (`useAccount.ts`
+asks `/api/me` only when the `ml_in` hint cookie exists). The account
+Functions (`functions/api/_middleware.ts`, `me.ts`, `account.ts`,
+`auth/*`, `review/start.ts`, and later `pay/*`) keep an email address,
+Google's account id, hashed sessions and an append-only coin ledger in D1
+(`migrations/`, SQL in `src/lib/ledger.ts`, prices in `src/lib/coins.ts`).
+None of them ever receives paper content: `review/start.ts` takes section
+ids and character counts, and its ticket row keeps only those, for two
+hours. Rule 2 holds for signed-in users exactly as before. Never log an
+email address, a token or a request body.
 
 ## Layout
 
@@ -64,10 +77,11 @@ variable. Every other feature keeps rule 1 absolutely; these two are rule
   journal/paper data, builds the journal index. Never runs in production;
   its output (`web/public/index/*`) is static files the browser fetches.
 - `web/` — Next.js app, static export (`output: "export"` in
-  `next.config.ts`) — no backend, **except** the two Cloudflare Pages
-  Functions in `web/functions/api/` (`review.ts`, `figure.ts`), holding the
-  Anthropic API key server-side since the browser must never see it — see
-  the disclosed exceptions above.
+  `next.config.ts`) — no backend, **except** the Cloudflare Pages
+  Functions in `web/functions/api/`: `review.ts` and `figure.ts`, holding
+  the Anthropic API key server-side since the browser must never see it
+  (see the disclosed exceptions above), and the account and payment
+  Functions beside them (see "Accounts, M coins and payments").
 
 ## Frozen decisions (Phase 0)
 
@@ -107,6 +121,12 @@ Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
 |---|---|---|
 | `OPENALEX_API_KEY` | `pipeline/.env` | Raises OpenAlex's rate limit; the fetchers work without it, just slower. |
 | `ANTHROPIC_API_KEY` | `web/.dev.vars` locally, the Cloudflare Pages dashboard in prod | The credential for both server-side features — `functions/api/review.ts` and `functions/api/figure.ts`. Server-side only. |
+| `DB` | `wrangler.toml` binding (D1) | Accounts, sessions, the coin ledger, review tickets. Local: `npm run db:local`; the ids in `wrangler.toml` are placeholders until `wrangler d1 create`. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | `.dev.vars` / dashboard secrets | "Continue with Google" (scope `openid email`). Unset: the Google button explains it's not set up. |
+| `RESEND_API_KEY`, `EMAIL_FROM` | `.dev.vars` / dashboard secrets | Email sign-in links. |
+| `DEV_EMAIL_LOG` | `.dev.vars` only | `1` on localhost prints sign-in links to the console instead of emailing them. |
+| `PADDLE_ENV`, `PADDLE_CLIENT_TOKEN`, `PADDLE_API_KEY`, `PADDLE_WEBHOOK_SECRET` | `.dev.vars` / dashboard secrets | Coin packs and Pro through Paddle (sandbox or live). |
+| `NEXT_PUBLIC_CONTACT_EMAIL` | `web/`, build-time | The address the privacy page and the terms give for questions and complaints. Set before accounts open. |
 | `NEXT_PUBLIC_SITE_URL` | `web/`, build-time | Absolute URL for `sitemap.ts`/`robots.ts`/OG tags. Unset in dev; no domain registered yet (see `journal-finder-plan.md` §13). |
 
 ## Verification

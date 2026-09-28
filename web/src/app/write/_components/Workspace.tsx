@@ -287,7 +287,7 @@ export default function Workspace({
   };
   // From a match result: the Review window, loaded with this PDF against that
   // journal — unless a review is running, which changing the journal would
-  // abort (and it costs one of the free reviews): then just show it.
+  // abort (and it's paid for): then just show it.
   const openReview = (journalId: string) => {
     if (review.reviewLoading) {
       // keep the run

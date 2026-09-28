@@ -54,7 +54,7 @@ export default function GuidePage() {
         >
           <Shot
             name="tray"
-            alt="The tray at the top of every page: the MargaLink mark, the five tools, Guide and Privacy"
+            alt="The tray at the top of every page: the MargaLink mark, the five tools, Guide, Privacy and your M coins"
             notes={[
               <>
                 <strong>The MargaLink mark</strong>: back to the landing page.
@@ -78,6 +78,10 @@ export default function GuidePage() {
               <>
                 <strong>Privacy</strong>: the rules below, in full, with a diagram.
               </>,
+              <>
+                <strong>Your M coins</strong>, once you&apos;re signed in: the balance, and a click to your account. Signed out, it says{" "}
+                <em>Sign in</em>; only the AI review and Ask Claude need an account.
+              </>,
             ]}
           />
           <Aside title="What stays on your device">
@@ -89,12 +93,12 @@ export default function GuidePage() {
           </Aside>
           <Aside tone="away" title="The two things that can leave it, only when you confirm">
             <p>
-              <strong>The AI review</strong> sends your paper&apos;s text to Claude, in short requests, after a notice that says exactly that. You get 3
-              free reviews on a device.
+              <strong>The AI review</strong> sends your paper&apos;s text to Claude, in short requests, after a notice that says exactly that. It needs an
+              account and costs M coins; the price is on the button, and a review that doesn&apos;t finish is refunded.
             </p>
             <p>
               <strong>Ask Claude</strong> in the figure studio sends a description of your data: column names and types, the row count, your request;
-              never a value from a cell. Group labels go only if you tick a box. 5 requests on a device.
+              never a value from a cell. Group labels go only if you tick a box. 1 M coin a request, refunded if it fails.
             </p>
             <p>Anywhere in MargaLink, this colour marks something that would leave your device.</p>
           </Aside>
@@ -345,7 +349,8 @@ export default function GuidePage() {
                 numbers found. Author names and email addresses are stripped first (best effort).
               </>,
               <>
-                <strong>Your allowance</strong>: 3 free reviews on this device; retrying a failed section doesn&apos;t use another.
+                <strong>The price</strong>: what this review costs in M coins, and your balance. A review that doesn&apos;t finish is refunded within 2
+                hours; resuming or retrying it costs nothing more.
               </>,
               <>
                 <strong>Send it and review</strong>: the only way a review starts. Cancel sends nothing.
@@ -465,8 +470,8 @@ export default function GuidePage() {
           <Aside tone="away" title="What Ask Claude sends">
             <p>
               Column names and their types, the row count, your request, and the current figure with every text you typed blanked. Group labels only when
-              ticked, and listed in the notice each time. Never a cell value, never a sample row, never an error message from your data. 5 requests on a
-              device; templates, editing and exports are unlimited and send nothing.
+              ticked, and listed in the notice each time. Never a cell value, never a sample row, never an error message from your data. Each request
+              costs 1 M coin and is refunded if it fails; templates, editing and exports are free, unlimited and send nothing.
             </p>
           </Aside>
           <Shot
