@@ -30,6 +30,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/terms`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${SITE_URL}/refunds`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${SITE_URL}/contact`, changeFrequency: "yearly", priority: 0.2 },
+    { url: `${SITE_URL}/team`, changeFrequency: "monthly", priority: 0.3 },
     ...journalUrls,
   ];
 }

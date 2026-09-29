@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowRight, House } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
+import SiteFooter from "@/components/SiteFooter";
 import { GuideArt, WriteArt } from "@/components/docs/Art";
 import NewsRail from "./NewsRail.tsx";
 import AccountStrip from "./AccountStrip.tsx";
@@ -73,36 +74,8 @@ export default function HomeDashboard() {
             </div>
           }
         />
-        <footer className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line/80 pt-4 text-xs text-ink-soft">
-          <span>© 2026 MargaLink</span>
-          <span className="flex gap-4">
-            <Link href="/guide" className="hover:text-ink">
-              Guide
-            </Link>
-            <Link href="/privacy" className="hover:text-ink">
-              Privacy
-            </Link>
-            <Link href="/pricing" className="hover:text-ink">
-              Pricing
-            </Link>
-            <Link href="/terms" className="hover:text-ink">
-              Terms
-            </Link>
-            <Link href="/refunds" className="hover:text-ink">
-              Refunds
-            </Link>
-            <Link href="/contact" className="hover:text-ink">
-              Contact
-            </Link>
-            <Link href="/architecture" className="hover:text-ink">
-              How it&apos;s built
-            </Link>
-            <a href="#content" className="hover:text-ink">
-              Back to top
-            </a>
-          </span>
-        </footer>
       </section>
+      <SiteFooter />
     </main>
   );
 }
