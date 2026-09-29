@@ -13,14 +13,15 @@ id = "8378b6ae716e4ba18cf06f4fe7a605ba"
 binding = "FIGURES_KV"
 id = "331dc785a2dc4f93912f8e8cd95b00c5"
 
-# Accounts, sign-in and the M coin ledger (migrations/). The ids below are
-# placeholders until the owner runs `wrangler d1 create margalink --location
-# apac` (and `margalink-preview`); local dev (`npm run db:local`, `npm run
-# dev:full`) works without them. Deploying needs the real ids.
+# Accounts, sign-in and the M coin ledger (migrations/). Created 2026-09-29
+# with `wrangler d1 create margalink --location apac` (and
+# `margalink-preview`): the privacy notice says the main copy is in Asia
+# Pacific. Ids, not secrets. Local dev (`npm run db:local`, `npm run
+# dev:full`) uses a local copy.
 [[d1_databases]]
 binding = "DB"
 database_name = "margalink"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "127c5108-f396-483d-a629-3bf7cbad5d9a"
 migrations_dir = "migrations"
 
 # Preview deployments get their own database, so a preview never touches
@@ -37,5 +38,5 @@ id = "331dc785a2dc4f93912f8e8cd95b00c5"
 [[env.preview.d1_databases]]
 binding = "DB"
 database_name = "margalink-preview"
-database_id = "00000000-0000-0000-0000-000000000001"
+database_id = "ce8431ec-f7b1-4251-921b-c1e1f02c607f"
 migrations_dir = "migrations"
