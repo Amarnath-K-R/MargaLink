@@ -7,6 +7,7 @@
   --ink-soft: #565b66;
   --accent: #2c5f6f;
   --accent-soft: #dde6e6;
+  --spark: #b8862f; /* the logo's dot (and the wordmark's i), nothing else */
   --line: #d8d5cc;
   --away: #a15a3f; /* the "would leave this device" color — used only for that */
   --white: #fbfaf6;
@@ -20,6 +21,7 @@
   --color-ink-soft: var(--ink-soft);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
+  --color-spark: var(--spark);
   --color-line: var(--line);
   --color-away: var(--away);
   --font-serif: var(--font-serif);

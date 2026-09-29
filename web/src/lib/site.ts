@@ -38,4 +38,5 @@ export const BRAND = {
   ink: "#1B1F27",
   inkSoft: "#565B66",
   accent: "#2C5F6F",
+  spark: "#B8862F", // the logo's dot
 } as const;

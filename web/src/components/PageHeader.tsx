@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { BarChart3, BookOpen, CircleHelp, FileCheck2, House, PenLine, ScanSearch, ShieldCheck } from "lucide-react";
 import AccountButton from "./AccountButton";
 import BetaTag from "./BetaTag";
+import { LogoMark, Wordmark } from "./Logo";
 
 // The shared header for every non-homepage route: a sticky clay tray (the
 // landing, Home — the dashboard — the five tools with the current one
@@ -63,11 +64,9 @@ export default function PageHeader({
           A sibling of the <header>, not inside it, so it sticks for the whole page. */}
       <div className={`sticky top-3 z-30 mx-[calc((100%_-_min(100vw_-_1.5rem,76rem))/2)] ${title === undefined ? "mb-6" : "mb-12 sm:mb-14"}`}>
         <nav aria-label="MargaLink" className="clay flex items-center gap-1 px-2 py-2 sm:gap-1.5 sm:px-2.5">
-          <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-xl sm:pr-2">
-            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-accent font-serif text-base font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,.3),inset_0_-2px_4px_rgba(0,0,0,.2),0_3px_8px_-2px_rgba(44,95,111,.45)]">
-              M
-            </span>
-            <span className="hidden font-serif text-[1.05rem] font-medium tracking-[-0.01em] md:inline">MargaLink</span>
+          <Link href="/" aria-label="MargaLink, home" className="flex shrink-0 items-center gap-2 rounded-xl sm:pr-2">
+            <LogoMark className="h-8 w-8" />
+            <Wordmark className="hidden text-[1.1rem] md:inline" />
             <BetaTag />
           </Link>
           <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5 overflow-x-auto">
