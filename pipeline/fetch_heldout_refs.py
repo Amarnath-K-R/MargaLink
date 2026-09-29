@@ -57,19 +57,40 @@ def resolve(work_id: str) -> dict:
     return {"work": work_id, "refs": len(refs), "counts": dict(counts)}
 
 
+def resolve_all(todo: list[str], resolve_fn, write, workers: int = WORKERS) -> tuple[int, int]:
+    """Resolves every work, writing each as it finishes (not in order), so a
+    crash keeps everything already resolved. A work that fails is counted
+    and left for the next run (it isn't written, so it's retried), without
+    stopping or discarding the others."""
+    written = failed = 0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(resolve_fn, w): w for w in todo}
+        for fut in as_completed(futures):
+            try:
+                write(fut.result())
+                written += 1
+            except (OSError, ValueError, RuntimeError) as e:  # network (URLError is an OSError), bad JSON, anything else a fetch raises
+                failed += 1
+                print(f"{futures[fut]} failed ({e!r}); retried next run", flush=True)
+            if (written + failed) % 50 == 0:
+                print(f"resolved {written}/{len(todo)}", flush=True)
+    return written, failed
+
+
 def main() -> None:
     sample = json.loads(SAMPLE.read_text())
     done = {r["work"] for r in safe_iter_jsonl(PARTIAL)}
     todo = [w for w in sample if w not in done]
     print(f"{len(done)} done, {len(todo)} to resolve", flush=True)
-    # Written as each finishes (not in order), so a crash keeps everything already resolved.
-    with PARTIAL.open("a") as out, ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        for i, fut in enumerate(as_completed(pool.submit(resolve, w) for w in todo)):
-            row = fut.result()
+    with PARTIAL.open("a") as out:
+
+        def write(row: dict) -> None:
             out.write(json.dumps(row) + "\n")
             out.flush()
-            if (i + 1) % 50 == 0:
-                print(f"resolved {i + 1}/{len(todo)}", flush=True)
+
+        _, failed = resolve_all(todo, resolve, write)
+    if failed:
+        print(f"{failed} failed; run again to retry them", flush=True)
     rows = list(safe_iter_jsonl(PARTIAL))
     OUT.write_text(json.dumps({r["work"]: r["counts"] for r in rows if r["counts"]}))
     with_refs = sum(1 for r in rows if r["counts"])
@@ -98,6 +119,16 @@ def _self_check() -> None:
         assert resolve("W1") == {"work": "W1", "refs": 0, "counts": {}}
     finally:
         get = real
+    # one work failing doesn't lose the others, or keep the run waiting on them
+    rows = []
+
+    def flaky(w: str) -> dict:
+        if w == "W3":
+            raise RuntimeError("network down")
+        return {"work": w, "refs": 0, "counts": {}}
+
+    written, failed = resolve_all([f"W{i}" for i in range(1, 13)], flaky, rows.append, workers=4)
+    assert (written, failed) == (11, 1) and sorted(r["work"] for r in rows) == sorted(f"W{i}" for i in range(1, 13) if i != 3)
     print("fetch_heldout_refs self-check: OK")
 
 

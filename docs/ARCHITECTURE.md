@@ -60,7 +60,7 @@ Design and plan: `docs/superpowers/specs/2026-09-24-matching-v2-design.md`,
   top 200 by embedding plus every cited journal are scored. A journal's
   names include NLM's standard abbreviations for its ISSNs ("J Am Coll
   Cardiol", `pipeline/fetch_nlm_abbrevs.py`), since medical reference lists
-  use those rather than full titles: 12,293 journals have one.
+  use those rather than full titles: 12,356 journals have one.
 - **Weights and the fit scale are measured, not chosen.** `build_index.py`
   holds back each journal's newest papers (never indexed);
   `web/scripts/eval_match.ts` runs `rank.ts` itself over them, reports a
@@ -75,29 +75,47 @@ Design and plan: `docs/superpowers/specs/2026-09-24-matching-v2-design.md`,
   topic mix and share no single field (junk such as an astronomy
   colloquium full of social-science papers), not merely when they disagree
   with OpenAlex's top label, which is wrong for many old or broad journals
-  (it files The Lancet under Engineering). Records with neither an ISSN nor
-  a publisher (PMC, "Default journal", AGU abstracts, encyclopedias) go
-  too. The coherence floor (0.85) sits under the lowest real journal
-  (Cureus, 0.858; `data/coherence.tsv` lists all).
+  (it files The Lancet under Engineering). A record with neither an ISSN
+  nor a publisher goes too, but only when its name says it isn't a journal
+  (`enrichment.is_placeholder_source`: conference abstract codes such as
+  AGUFM, encyclopedias, meetings and forums, book series, repository pages,
+  "PMC"): 108 records. Real journals without an ISSN in OpenAlex
+  (Proceedings of the CSEE, TAIWANIA, Chinese Annals of Mathematics) stay.
+  The coherence floor (0.85) sits under the lowest real journal (Cureus,
+  0.858; `data/coherence.tsv` lists all), so in practice it drops nothing.
+- **Reference names** must start where a journal name starts in a
+  reference, right after the title, as well as be followed by a year or
+  volume (`references.ts`). Without the left edge, NLM abbreviations (built
+  from parts) credited an unindexed journal's citation to an indexed one
+  whose abbreviation it ends in ("Acta Belg Med Phys" to Medical Physics).
+  On one synthetic Vancouver citation per MEDLINE journal: 12,750 of 13,548
+  indexed journals credited correctly, 1 to the wrong one, and 132 of
+  24,512 unindexed journals credited to some indexed one.
 
-**Measured (2026-09-29, 18,911 journals, 54,211 centres).** Held-out
-papers (5,344; each journal's newest, never indexed), the real journal's
-rank:
+**Measured (2026-09-29, 18,965 journals, 54,369 centres).** The held-out
+set is each journal's newest papers, never indexed (347,619); the harness
+scores a seeded sample of 5,345 of them, which always includes the 351 with
+a resolved reference list. The real journal's rank:
 
 | Configuration | top 1 | top 5 | top 10 |
 |---|---|---|---|
-| One averaged vector per journal (v1) | 12.8% | 29.5% | 39.4% |
-| Multi-centre | 12.3% | 28.8% | 38.7% |
-| Fitted (emb 1, topic 0.02, ref 0.05), on the unseen half | 13.1% | 29.0% | 39.3% |
+| One averaged vector per journal (v1), whole sample | 12.6% | 30.0% | 40.5% |
+| Multi-centre, whole sample | 12.7% | 29.4% | 40.0% |
+| Fitted (emb 1, topic 0.02, ref 0.05), unseen half | 13.3% | 30.3% | 40.3% |
+| Same weights, references off (content alone), unseen half | 13.1% | 29.8% | 39.8% |
 | Papers with a resolved reference list (351): no references | 11.7% | 25.9% | 38.5% |
 | Same papers, references at 0.03 | 15.4% | 38.7% | 48.4% |
 
-On 18,911 journals, content alone finds the real one in the top 10 for
-about 4 papers in 10; the paper's own reference list adds about 10 points,
-and the top 10 is mostly the right field either way (field of the top
-result right 59%). Real PDFs: IJBNPA #1, J Clin Sleep Med #2; a heart
-failure paper in JACC ranks heart failure journals and the journals it
-cites most (Int J Cardiol, J Card Fail) above JACC.
+On 18,965 journals, content alone finds the real one in the top 10 for
+about 4 papers in 10. Multi-centre and the topic signal don't beat one
+averaged vector on this measure (the differences are within noise); they're
+kept for what they explain (a result's closest cluster and shared topics).
+The paper's own reference list adds about 10 points, measured with
+references resolved perfectly through OpenAlex: parsing a real PDF's list
+finds fewer, so that gain is an upper bound. The top result's field is
+right about 58% of the time either way. Real PDFs: IJBNPA #1, J Clin Sleep
+Med #2; a heart failure paper in JACC ranks heart failure journals and the
+journals it cites most (Int J Cardiol, J Card Fail) above JACC.
 
 ## Why only some journals get a real URL
 
@@ -139,7 +157,7 @@ payments" below) on a D1 database; none of them ever receives anything
 from a paper. Everything else in `web/` is static files served from
 Cloudflare's edge.
 
-Deploying needs, beyond `ANTHROPIC_API_KEY` and the two KV namespaces:
+Deploying needs, beyond `ANTHROPIC_API_KEY`:
 the D1 databases created and their ids in `wrangler.toml` (production and
 `[env.preview]`), `wrangler d1 migrations apply margalink --remote` after
 every new migration, and the account secrets listed in `CLAUDE.md`.
@@ -311,8 +329,10 @@ means on both sides.
 
 Costs: a spec call is roughly $0.02–0.04 (effort low); previews and
 exports are free and unlimited; each Claude call costs the user 1 M coin
-(refunded when the answer isn't usable), with 200 calls a day globally
-(`figure-count:<date>` in `FIGURES_KV`).
+(refunded when the answer isn't usable), with 200 calls a day in all and 50
+per account (`src/lib/dailyCaps.ts`, counted atomically in D1's
+`rate_limits`: the per-account limit is what bounds an account that makes
+its requests fail on purpose to be refunded).
 
 The worker's own fetches (Pyodide from jsDelivr, `figurelib.py`, fonts) happen
 off the main thread. They are bodyless GETs for public, versioned assets —
@@ -687,13 +707,13 @@ relative paths) and only genuinely server-specific code stays here.
 
 | File | What |
 |---|---|
-| `api/review.ts` | One of the two server-side files in the project: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the KV daily pass cap, one `callAnthropicTool`, grounding/validation. |
+| `api/review.ts` | One of the two server-side files in the project: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the daily pass limits (`dailyCaps.ts`: 1,500 a day in all, 150 per account), one `callAnthropicTool`, grounding/validation. |
 | `api/_middleware.ts` | The Origin check on every non-GET (not the Paddle webhook) and `Cache-Control: no-store`. |
 | `api/me.ts`, `api/account.ts` | Who's signed in, the balance, Pro, Paddle's public config; the account page's data, the export, deletion. |
 | `api/auth/google/*`, `api/auth/email/*`, `api/auth/logout.ts` | Signing in and out. |
 | `api/review/start.ts` | Charges a review and issues its ticket. |
 | `api/pay/webhook.ts`, `api/pay/portal.ts` | Paddle's events; the customer-portal link. |
-| `api/figure.ts` | The other AI Function: body-size guard, `isValidFigurePayload`, the KV daily cap, one `callAnthropicTool` with a strict tool, then the output gates (`validateFigureSpec`, `checkSpecAgainstColumns`, `checkLabels`, or the hook denylist). |
+| `api/figure.ts` | The other AI Function: body-size guard, `isValidFigurePayload`, the daily limits (`dailyCaps.ts`), one `callAnthropicTool` with a strict tool, then the output gates (`validateFigureSpec`, `checkSpecAgainstColumns`, `checkLabels`, or the hook denylist). |
 
 ## `lib/` conventions
 

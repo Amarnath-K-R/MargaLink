@@ -32,7 +32,9 @@ def get(url: str, attempts: int = 14) -> dict:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read())
         except urllib.error.HTTPError as e:
-            if attempt == attempts - 1:
+            # A missing or refused resource won't change on retry (a 404 took 13
+            # tries, 7.6 minutes); only rate limits and timeouts are worth waiting out.
+            if attempt == attempts - 1 or (400 <= e.code < 500 and e.code not in (408, 429)):
                 raise
             if e.code == 429:
                 # Retry-After is legally either delta-seconds or an HTTP-date
@@ -115,6 +117,27 @@ def _self_check() -> None:
         rows = list(safe_iter_jsonl(p))
         assert [r["id"] for r in rows] == ["a", "b"], "malformed line skipped, good ones kept"
         assert list(safe_iter_jsonl(Path(d) / "missing.jsonl")) == [], "missing file yields nothing, doesn't crash"
+
+    # a 404 or other 4xx won't change on retry: raised at once (the review found 13 retries, 7.6 minutes, per deleted work)
+    import urllib.error as ue
+    import urllib.request as ur
+
+    calls = []
+
+    def missing(req, timeout=0):
+        calls.append(req)
+        raise ue.HTTPError(req.full_url, 404, "Not Found", None, None)
+
+    real = ur.urlopen
+    ur.urlopen = missing
+    try:
+        try:
+            get("http://x/works/W1")
+        except ue.HTTPError as e:
+            assert e.code == 404
+        assert len(calls) == 1, f"a 404 is tried once, not {len(calls)} times"
+    finally:
+        ur.urlopen = real
 
     print("openalex self-check: OK")
 

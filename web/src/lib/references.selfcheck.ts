@@ -16,6 +16,7 @@ const index = buildNameIndex([
   { id: "GUT", display_name: "Gut" },
   { id: "DUP1", display_name: "Heart Journal" },
   { id: "DUP2", display_name: "Heart Journal" },
+  { id: "MEDPHYS", display_name: "Medical Physics", names: ["Med Phys"] },
 ]);
 const count = (text: string) => countCitedJournals(text, index).counts;
 
@@ -59,5 +60,13 @@ assert.equal(r.entries, 3);
 assert.equal(r.matched, 2);
 assert.equal(r.counts.get("LANCET"), 2);
 assert.equal(countCitedJournals("", index).entries, 0);
+
+// A name counts only where a journal name starts: right after the title. NLM
+// abbreviations are built from parts, so an unindexed journal's abbreviation
+// often ends in an indexed one's ("Acta Belg Med Phys" ends in "Med Phys").
+assert.equal(count("1. A B. A study of doses. Acta Belg Med Phys. 1990;3:1-5.\n2. C D. Title. Lancet. 2020;1:1.\n3. E F. Title. Lancet. 2021;2:2.").get("MEDPHYS"), undefined);
+assert.equal(count("1. A B. A study of doses. Med Phys. 1990;3:1-5.\n2. C D. Title. Lancet. 2020;1:1.\n3. E F. Title. Lancet. 2021;2:2.").get("MEDPHYS"), 1);
+// a title ending in a question mark still ends the title
+assert.equal(count("1. A B. Do doses matter? Med Phys. 1990;3:1-5.\n2. C D. Title. Lancet. 2020;1:1.\n3. E F. Title. Lancet. 2021;2:2.").get("MEDPHYS"), 1);
 
 console.log("references.selfcheck: OK");

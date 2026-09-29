@@ -45,12 +45,35 @@ def is_conference_proceedings_name(display_name: str) -> bool:
     )
 
 
+# Names of OpenAlex "sources" that aren't journals: conference abstract codes
+# (AGUFM, EGUGA) and other one-word codes, encyclopedias and reference works,
+# meetings, forums and poster sessions, book series, working papers,
+# repository pages ("Faculty of Health"), catch-alls, and a few conference
+# series named like topics (Optica's, WORLDCOMP's).
+_NON_JOURNAL = re.compile(
+    r"^[A-Za-z]{1,7}$"
+    r"|encyclop|dictionary|statpearls|reference online|five.minute|consult clinical"
+    r"|presentations|poster|supplement$|abstracts"
+    r"|\bforum\b|meeting|congress|conference|symposium|workshop|joint assembly|technical digest|edulearn|geocongress|cictp|oceans \d|^oceans\b"
+    r"|proceedings series|^proceedings \S+ \d{4}$|^critical transitions in water"
+    r"|\bbooks?\b|ebooks|chapters|publications|publishing|operational studies|working paper|grantee submission"
+    r"|^faculty of|faculty$|school$|university of|^volume \d|^default journal$|^publisher$|학술대회|발표논문집"
+    r"|advanced solid-state|integrated photonics research|frontiers in optics|optical interference coatings|optical fiber sensors"
+    r"|ultrafast phenomena|advanced photonics|digital holography|bragg gratings|optical data storage"
+    r"|^security and management$|^software engineering research and practice$|^description logics$|^grundlagen von datenbanken$"
+    r"|^global learn$|^enviroinfo$|^acr european advances$|^advances in bioengineering$|^trails:",
+    re.IGNORECASE,
+)
+
+
 def is_placeholder_source(source: dict) -> bool:
-    """An OpenAlex source that isn't a journal: no ISSN and no publisher. In
-    the v2 build these were catch-alls ("PMC", "Publisher", "Default
-    journal"), conference abstracts (AGUFM, EGUGA), encyclopedias and poster
-    sessions; the few real journals without an ISSN still name a publisher."""
-    return not (source.get("issn_l") or source.get("issn")) and not source.get("host_organization_name")
+    """An OpenAlex source that isn't a journal: no ISSN, no publisher, and a
+    name that says so (see _NON_JOURNAL). Real journals without either in
+    OpenAlex (Proceedings of the CSEE, TAIWANIA, Chinese Annals of
+    Mathematics) are kept: a missing ISSN alone isn't enough."""
+    if source.get("issn_l") or source.get("issn") or source.get("host_organization_name"):
+        return False
+    return bool(_NON_JOURNAL.search(source.get("display_name") or ""))
 
 
 def _load_jsonl_by_id(path: Path) -> dict[str, dict]:
@@ -119,7 +142,8 @@ def build_meta_entry(
 
 def parse_medline_journals(text: str) -> dict[str, list[str]]:
     """ISSN -> NLM's abbreviations (MedAbbr, IsoAbbr), from J_Medline.txt:
-    records of "Key: value" lines between dashed separators."""
+    records of "Key: value" lines between dashed separators. An ISSN in
+    several records (a journal renamed) keeps all of them, current first."""
     out: dict[str, list[str]] = {}
     for record in text.split("\n--"):
         fields = dict(line.split(": ", 1) for line in record.splitlines() if ": " in line)
@@ -127,7 +151,7 @@ def parse_medline_journals(text: str) -> dict[str, list[str]]:
         for key in ("ISSN (Print)", "ISSN (Online)"):
             issn = (fields.get(key) or "").strip()
             if issn and names:
-                out[issn] = names
+                out[issn] = list(dict.fromkeys([*out.get(issn, []), *names]))
     return out
 
 
@@ -167,6 +191,9 @@ def _self_check() -> None:
     jacc = {"abbreviated_title": "JACC", "issn_l": "0735-1097", "issn": ["0735-1097", "1558-3597"]}
     assert journal_names("Journal of the American College of Cardiology", jacc, abbrevs) == ["JACC", "J Am Coll Cardiol"]
     assert journal_names("Journal of the American College of Cardiology", jacc) == ["JACC"]
+    # an ISSN in more than one record (a journal renamed) keeps every abbreviation: old citations use the old one
+    renamed = medline + "JrId: 3\nJournalTitle: Old name\nMedAbbr: J Am Coll Cardiol Old\nISSN (Print): 0735-1097\nIsoAbbr: J Am Coll Cardiol Old\n----\n"
+    assert parse_medline_journals(renamed)["0735-1097"] == ["J Am Coll Cardiol", "J Am Coll Cardiol Old"]
     assert is_conference_proceedings_name("44th AIAA Aerospace Sciences Meeting and Exhibit")
     assert is_conference_proceedings_name("AGU Fall Meeting Abstracts")
     assert is_conference_proceedings_name("2001 Sacramento, CA July 29-August 1,2001")
@@ -185,6 +212,17 @@ def _self_check() -> None:
     assert is_placeholder_source({"display_name": "PMC", "issn_l": None, "issn": None, "host_organization_name": None})
     assert not is_placeholder_source({"display_name": "Tumori", "issn_l": None, "host_organization_name": "Wichtig"})
     assert not is_placeholder_source({"display_name": "Nature", "issn_l": "0028-0836", "host_organization_name": None})
+    # ...but a record without either is dropped only when its name says it isn't a journal:
+    # real ISSN-less journals stay (the review of the v2 build found ~45 of them among the 162 dropped)
+    bare = lambda name: {"display_name": name, "issn_l": None, "issn": None, "host_organization_name": None}
+    for name in ["PMC", "AGUFM", "epsc", "Encyclopedia of Life Sciences", "StatPearls", "AIAA Scitech 2019 Forum", "Default journal", "Faculty of Health",
+                 "Transportation Research Board 94th Annual MeetingTransportation Research Board", "Poster presentations", "World Scientific Book Chapters",
+                 "Volume 1: Aircraft Engine; Marine; Turbomachinery", "Geochimica et Cosmochimica Acta Supplement", "Ultrafast Phenomena", "한국재무학회 학술대회",
+                 "EGS - AGU - EUG Joint Assembly", "Proceedings IMCS 2012", "IEICE Proceedings Series"]:
+        assert is_placeholder_source(bare(name)), name
+    for name in ["Proceedings of the CSEE", "TAIWANIA", "Chinese Annals of Mathematics", "Generations", "Physiology News", "Pediatric Emergency Medicine",
+                 "Alces : A Journal Devoted to the Biology and Management of Moose", "Acta Geologica Hispanica", "国际外科学杂志", "Czech Journal of Economics and Finance"]:
+        assert not is_placeholder_source(bare(name)), name
     assert not is_conference_proceedings_name("Journal of the 2020s")  # year isn't at the start
 
     sources = {"j1": {"topics": [{"field": {"display_name": "Medicine"}}], "is_in_doaj": True, "apc_usd": 2000, "country_code": "US"}}

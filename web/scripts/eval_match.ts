@@ -226,6 +226,10 @@ for (const i of B) {
 }
 for (const f of Object.keys(byField)) byField[f].top10 = byField[f].n ? byField[f].top10 / byField[f].n : 0;
 row("\nfitted, on held-out half B", fitB);
+// Half B includes the papers with resolved references (every one joins the
+// sample), so the fitted row carries the reference signal for them; content
+// alone is this row.
+row("same weights, references off", evaluate(B, { ...best.w, ref: 0 }));
 console.log("\nper field (half B, top-10):");
 for (const [f, v] of Object.entries(byField).sort((a, b) => b[1].n - a[1].n)) console.log(`  ${f.padEnd(48)} n=${String(v.n).padStart(4)} ${pct(v.top10)}`);
 
