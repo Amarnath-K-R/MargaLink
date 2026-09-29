@@ -1,17 +1,29 @@
 """Index hygiene: some OpenAlex sources carry papers that aren't theirs (a
 Japanese entomology society's record returned Vygotsky and an SPSS textbook).
-A journal whose papers don't hang together, or don't match its own field,
-is dropped and written to data/dropped.txt for a human to look over.
+A journal whose papers don't hang together, or whose papers both miss its
+own topic profile and scatter across fields, is dropped and written to
+data/dropped.txt for a human to look over.
+
+Why both, for the field test: OpenAlex's journal-level topics are often
+wrong for old or broad journals (The Lancet's top topic is "Human auditory
+perception", in Engineering), so disagreeing with them alone dropped The
+Lancet, NEJM, JAMA, Nature and Science. Papers that mostly share one field
+are a real journal with a bad label; papers that miss the label and share
+nothing are the junk this is for.
 """
 
 from collections import Counter
 
 import numpy as np
 
-# Provisional: build_index.py prints the coherence distribution and the
-# value is set from its low tail (Task 3 of the matching v2 plan).
-COHERENCE_FLOOR = 0.55
-AGREEMENT_FLOOR = 0.2
+# gte-small's cosines are compressed: in the full v2 build (19,078
+# journals) coherence ran from 0.858 (Cureus) with p1 0.874 and p50 0.906,
+# and the lowest were broad journals (Cureus, Heliyon, PLoS ONE, Science),
+# not junk. So the floor sits just below all of them: it catches only a
+# journal far outside anything real, and the field test does the rest.
+COHERENCE_FLOOR = 0.85
+OVERLAP_FLOOR = 0.2  # papers' field mix vs the source's own (1.0 = the same mix)
+SCATTERED = 0.5  # below this, no single field holds most of the papers
 
 
 def coherence(vecs: np.ndarray, centres: np.ndarray, labels: np.ndarray) -> float:
@@ -19,22 +31,31 @@ def coherence(vecs: np.ndarray, centres: np.ndarray, labels: np.ndarray) -> floa
     return float(np.mean(np.sum(vecs * centres[labels], axis=1)))
 
 
-def field_agreement(source_field: str | None, paper_topics: list[list[str]], topic_field: dict[str, str]) -> float | None:
-    """Share of papers whose primary topic's field equals the source's field;
-    None when it can't be judged (no source field, no topic-tagged papers)."""
+def field_fit(source_topics: list[dict], paper_topics: list[list[str]], topic_field: dict[str, str]) -> tuple[float, float] | None:
+    """(overlap, dominant): how much the papers' primary-topic fields overlap
+    the source's own count-weighted topic fields (sum of the smaller share per
+    field), and the largest single field's share among the papers. None when
+    it can't be judged (no source topics, no topic-tagged papers)."""
+    src = Counter()
+    for t in source_topics:
+        f = (t.get("field") or {}).get("display_name")
+        if f:
+            src[f] += t.get("count") or 0
     fields = [topic_field.get(t[0]) for t in paper_topics if t]
-    fields = [f for f in fields if f]
-    if not source_field or not fields:
+    papers = Counter(f for f in fields if f)
+    total, n = sum(src.values()), sum(papers.values())
+    if not total or not n:
         return None
-    return sum(f == source_field for f in fields) / len(fields)
+    overlap = sum(min(c / n, src[f] / total) for f, c in papers.items())
+    return overlap, papers.most_common(1)[0][1] / n
 
 
-def is_suspect(coh: float, agreement: float | None) -> str | None:
+def is_suspect(coh: float, fit: tuple[float, float] | None) -> str | None:
     """The reason to drop, or None."""
     if coh < COHERENCE_FLOOR:
         return f"papers don't cohere ({coh:.2f})"
-    if agreement is not None and agreement < AGREEMENT_FLOOR:
-        return f"papers rarely match the journal's field ({agreement:.0%})"
+    if fit is not None and fit[0] < OVERLAP_FLOOR and fit[1] < SCATTERED:
+        return f"papers miss the journal's topics ({fit[0]:.0%} overlap) and share no field ({fit[1]:.0%} at most)"
     return None
 
 
@@ -50,10 +71,22 @@ def top_topics(paper_topics: list[list[str]], n: int = 8) -> list[tuple[str, flo
 def _self_check() -> None:
     same = np.ones((5, 4), dtype=np.float32) / 2
     assert abs(coherence(same, same[:1], np.zeros(5, dtype=int)) - 1.0) < 1e-6
-    tf = {"T1": "Medicine", "T2": "Medicine", "T3": "Physics"}
-    assert field_agreement("Medicine", [["T1"], ["T2", "T3"], ["T3"], []], tf) == 2 / 3
-    assert field_agreement(None, [["T1"]], tf) is None and field_agreement("Medicine", [[]], tf) is None
-    assert is_suspect(0.3, None) and is_suspect(0.9, 0.1) and is_suspect(0.9, None) is None
+    tf = {"T1": "Medicine", "T2": "Medicine", "T3": "Physics", "T4": "Psychology", "T5": "Mathematics", "T6": "Agriculture", "T7": "Engineering"}
+    src = lambda *fc: [{"field": {"display_name": f}, "count": c} for f, c in fc]
+    # the papers' field mix against the source's own count-weighted one, and how scattered the papers are
+    fit = field_fit(src(("Medicine", 3), ("Physics", 1)), [["T1"], ["T2", "T3"], ["T3"], []], tf)
+    assert fit is not None and abs(fit[0] - (0.66667 + 0.25)) < 1e-3 and abs(fit[1] - 2 / 3) < 1e-6
+    assert field_fit([], [["T1"]], tf) is None and field_fit(src(("Medicine", 1)), [[]], tf) is None
+    # a mislabelled source whose papers agree with each other stays (The Lancet: OpenAlex's top topic is Engineering)
+    lancet = field_fit(src(("Engineering", 18), ("Economics", 14), ("Medicine", 1)), [["T1"]] * 9 + [["T3"]], tf)
+    assert is_suspect(0.9, lancet) is None
+    # papers that belong elsewhere and don't hang together go (an entomology record holding Vygotsky and an SPSS manual)
+    junk = field_fit(src(("Agriculture", 50), ("Medicine", 5)), [["T4"], ["T5"], ["T1"], ["T7"], ["T3"]], tf)
+    assert is_suspect(0.9, junk)
+    # a broad journal whose papers are broad like its profile stays
+    broad = field_fit(src(("Medicine", 3), ("Physics", 3), ("Psychology", 3)), [["T1"], ["T3"], ["T4"], ["T5"]], tf)
+    assert is_suspect(0.9, broad) is None
+    assert is_suspect(0.3, None) and is_suspect(0.9, None) is None
     tops = top_topics([["T1"], ["T1", "T2"], ["T2"], ["T3"]], 2)
     assert tops == [("T1", 0.5), ("T2", 0.25)] and top_topics([]) == []
     print("quality self-check: OK")

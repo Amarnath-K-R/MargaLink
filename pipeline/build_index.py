@@ -4,14 +4,16 @@ sources.jsonl + works (v2 if present) + DOAJ/NLM enrichment + topics.
 Per journal: the newest papers are held out for evaluation (never part of the
 index), the rest are embedded and clustered into 1-4 centres; a topic profile,
 centre labels and alternate names are stored for the browser's topic and
-reference-list signals; journals whose papers don't cohere or don't match their
-field are dropped (data/dropped.txt). The OpenAlex topic table is embedded once.
+reference-list signals; journals whose papers don't cohere, or both miss their
+topics and scatter, are dropped (data/dropped.txt; quality.py says why). Every
+journal's coherence goes to data/coherence.tsv, lowest first, for setting the
+floor. The OpenAlex topic table is embedded once.
 
 Usage:
   uv run build_index.py                  # full build (hours: ~110 papers/s on MPS)
   uv run build_index.py --journals 1500  # a seeded dev-sized sample
 Writes web/public/index/{manifest.json, index.bin, meta.json, topics.bin, topics.json}
-and pipeline/data/{heldout.bin, heldout.json, heldout_sample.json, drift_sample.json, dropped.txt}.
+and pipeline/data/{heldout.bin, heldout.json, heldout_sample.json, drift_sample.json, dropped.txt, coherence.tsv}.
 
 manifest.ranking stays null here: web/scripts/eval_match.ts fits and writes it,
 so a rebuild can never publish stale accuracy.
@@ -36,13 +38,14 @@ import embedding
 from enrichment import (
     build_meta_entry,
     is_conference_proceedings_name,
+    is_placeholder_source,
     load_doaj,
     load_nlm,
     load_sources,
 )
 from kmeans import cluster_journal
 from openalex import safe_iter_jsonl
-from quality import coherence, field_agreement, is_suspect, top_topics
+from quality import coherence, field_fit, is_suspect, top_topics
 
 DATA_DIR = Path(__file__).parent / "data"
 OUT_DIR = Path(__file__).parent.parent / "web" / "public" / "index"
@@ -239,9 +242,11 @@ def main() -> None:
         centres, labels = cluster_journal(vecs)
         paper_topics = [p.get("topics") or [] for p in papers]
         coh = coherence(vecs, centres, labels)
-        cohs.append(coh)
+        cohs.append((coh, sources[sid]["display_name"], sid))
         entry = build_meta_entry(sid, sources[sid]["display_name"], sources, doaj, nlm)
-        reason = is_suspect(coh, field_agreement(entry["field"], paper_topics, topic_field))
+        # Placeholders are dropped here, after embedding, not from `ids`: the
+        # embedding cache is keyed on `ids`, and re-embedding takes a day.
+        reason = "not a journal (no ISSN and no publisher)" if is_placeholder_source(sources[sid]) else is_suspect(coh, field_fit(sources[sid].get("topics") or [], paper_topics, topic_field))
         if reason:
             dropped.append(f"{sources[sid]['display_name']}\t{sid}\t{reason}")
             continue
@@ -255,7 +260,7 @@ def main() -> None:
         means.append(embedding.normalize(vecs.mean(axis=0, keepdims=True))[0])
         meta.append(entry)
         kept.append(sid)
-    q = np.percentile(cohs, [1, 5, 10, 50])
+    q = np.percentile([c for c, _, _ in cohs], [1, 5, 10, 50])
     print(f"coherence p1/p5/p10/p50: {q.round(3).tolist()}; dropped {len(dropped)}", flush=True)
     mark_prerendered(meta)
 
@@ -292,6 +297,7 @@ def main() -> None:
     works_ids = [p["work"] for p in h_papers if p["work"]]
     (DATA_DIR / "heldout_sample.json").write_text(json.dumps(rng.sample(works_ids, min(REF_SAMPLE, len(works_ids)))))
     (DATA_DIR / "dropped.txt").write_text("\n".join(dropped) + "\n")
+    (DATA_DIR / "coherence.tsv").write_text("".join(f"{c:.4f}\t{name}\t{sid}\n" for c, name, sid in sorted(cohs)))
     embedding.quantize_int8(np.array(means)).tofile(DATA_DIR / "mean_centroids.bin")
 
     manifest = {

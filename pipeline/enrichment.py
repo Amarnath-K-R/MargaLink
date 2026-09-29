@@ -45,6 +45,14 @@ def is_conference_proceedings_name(display_name: str) -> bool:
     )
 
 
+def is_placeholder_source(source: dict) -> bool:
+    """An OpenAlex source that isn't a journal: no ISSN and no publisher. In
+    the v2 build these were catch-alls ("PMC", "Publisher", "Default
+    journal"), conference abstracts (AGUFM, EGUGA), encyclopedias and poster
+    sessions; the few real journals without an ISSN still name a publisher."""
+    return not (source.get("issn_l") or source.get("issn")) and not source.get("host_organization_name")
+
+
 def _load_jsonl_by_id(path: Path) -> dict[str, dict]:
     return {j["id"]: j for j in safe_iter_jsonl(path)}
 
@@ -138,6 +146,10 @@ def _self_check() -> None:
     assert not is_conference_proceedings_name("The Educational Forum")
     assert not is_conference_proceedings_name("Colloquium Mathematicum")
     assert not is_conference_proceedings_name("Assembly Automation")
+    # OpenAlex catch-alls with neither an ISSN nor a publisher ("PMC", "Default journal", AGU abstracts, encyclopedias)
+    assert is_placeholder_source({"display_name": "PMC", "issn_l": None, "issn": None, "host_organization_name": None})
+    assert not is_placeholder_source({"display_name": "Tumori", "issn_l": None, "host_organization_name": "Wichtig"})
+    assert not is_placeholder_source({"display_name": "Nature", "issn_l": "0028-0836", "host_organization_name": None})
     assert not is_conference_proceedings_name("Journal of the 2020s")  # year isn't at the start
 
     sources = {"j1": {"topics": [{"field": {"display_name": "Medicine"}}], "is_in_doaj": True, "apc_usd": 2000, "country_code": "US"}}
