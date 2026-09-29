@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { BarChart3, BookOpen, ChevronDown, Code, Columns2, FileCheck2, FileText, ListChecks, Loader2, PanelLeft, Play, ScanSearch } from "lucide-react";
 import type { ProjectMeta } from "@/lib/projectStore";
+import { LogoMark } from "@/components/Logo";
 
 export type Tool = "match" | "review" | "figures" | "checks" | "journal" | "palette" | "shortcuts";
 export type View = "source" | "split" | "pdf";
@@ -62,9 +63,9 @@ export default function Toolbar({
       <Link
         href="/"
         aria-label="MargaLink home"
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-accent font-serif text-base font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,.3),inset_0_-2px_4px_rgba(0,0,0,.2),0_3px_8px_-2px_rgba(44,95,111,.45)]"
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px]"
       >
-        M
+        <LogoMark className="h-8 w-8" />
       </Link>
       <button type="button" onClick={onBack} className="clay-btn shrink-0 text-xs text-ink-soft">
         ← All projects
