@@ -61,7 +61,7 @@ export default function AccountButton({ variant = "tray" }: { variant?: "tray" |
         <span className="sr-only sm:not-sr-only">Sign in</span>
       </button>
       {open && (
-        <div role="dialog" aria-label="Sign in" className="clay absolute right-0 top-12 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-3xl p-5">
+        <div role="dialog" aria-label="Sign in" className="clay absolute right-0 top-12 z-40 max-h-[calc(100dvh-5rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto overscroll-contain rounded-3xl p-5">
           <p className="mb-1 font-serif text-lg font-medium">Sign in</p>
           <SignInPanel />
         </div>

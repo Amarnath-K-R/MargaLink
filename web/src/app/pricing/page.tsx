@@ -78,8 +78,9 @@ export default function PricingPage() {
             </tbody>
           </table>
           <p className="border-t border-line/70 px-5 py-3 text-xs leading-relaxed text-ink-soft">
-            Priced by what&apos;s actually sent: sections you mark &ldquo;Don&apos;t send&rdquo;, and the ones a depth skips, don&apos;t count. Resuming or
-            retrying a review costs nothing more.
+            Priced by what&apos;s actually sent: sections you mark &ldquo;Don&apos;t send&rdquo;, and the ones a depth skips, don&apos;t count; a section
+            shorter than 2,000 characters counts as 2,000. Resuming or retrying a review costs nothing more. Each account can make up to 150 review
+            passes and 50 Ask Claude requests a day.
           </p>
         </div>
         <p className="clay-well mt-4 flex items-center gap-3 rounded-2xl px-5 py-3 text-sm">

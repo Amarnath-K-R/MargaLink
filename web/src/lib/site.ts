@@ -24,9 +24,9 @@ export const PADDLE_RESELLER =
   "Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all our orders. Paddle provides all customer service inquiries and handles returns.";
 
 export const SITE_NAME = "MargaLink";
-export const SITE_TITLE = "MargaLink: match, check, and review your paper without it leaving your device";
+export const SITE_TITLE = "MargaLink: find the right journal and get your paper ready to submit";
 export const SITE_DESCRIPTION =
-  "Match your paper to a journal, check its format, and get it reviewed, all without your paper ever leaving your device.";
+  "Match your paper to a journal, check it against the journal's rules and write it in its template, with your paper staying on your device. An optional AI review sends only what you approve.";
 
 // Mirrors globals.css's :root color tokens. Duplicated, not imported: this
 // feeds opengraph-image.tsx's satori-rendered image, which can't resolve

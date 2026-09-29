@@ -25,7 +25,7 @@ const GROUPS: { title: string; links: { href: string; label: string }[] }[] = [
     ],
   },
   {
-    title: "MargaLink",
+    title: "About",
     links: [
       { href: "/team", label: "Our team" },
       { href: "/pricing", label: "Pricing" },
@@ -52,8 +52,8 @@ export default function SiteFooter() {
             <BetaTag />
           </Link>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-ink-soft">
-            Find the journal that fits your paper, check it against the journal&apos;s rules and write it in its template, with your manuscript
-            staying in your browser.
+            Find the journal that fits your paper, check it against the journal&apos;s rules and write it in its template. Your manuscript stays in
+            your browser, unless you choose the AI review.
           </p>
         </div>
         {GROUPS.map((g) => (

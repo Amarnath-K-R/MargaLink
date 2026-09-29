@@ -33,7 +33,6 @@ export default function ArchitecturePage() {
     <main className="mx-auto w-full max-w-7xl px-6 pt-3 pb-24">
       <PageHeader
         width="4xl"
-        page="architecture"
         title="How MargaLink is built."
         subtitle={
           <p className="mt-3 max-w-2xl text-lg text-ink-soft">

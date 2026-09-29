@@ -43,7 +43,6 @@ export default function PrivacyPage() {
   return (
     <main className="mx-auto w-full max-w-6xl px-6 pt-3 pb-24">
       <PageHeader
-        page="privacy"
         width="3xl"
         title="How privacy works"
         subtitle={
@@ -223,13 +222,13 @@ export default function PrivacyPage() {
                 { name: "A running review", what: "Which sections it covers, their lengths, its tries and which came back. Never text.", def: "About 2 hours" },
                 {
                   name: "Abuse limits",
-                  what: "Counters of how many sign-in emails an address or a network asked for, keyed by fingerprints made with a secret key (a network's changes daily). Never the address or IP itself.",
-                  def: "Within a day",
+                  what: "Counters of how many sign-in emails an address, a network or an email domain asked for, keyed by fingerprints made with a secret key (a network's changes daily), never the address or IP itself; and how many AI review passes and Ask Claude requests your account made today. They stay after you delete your account, until they expire.",
+                  def: "Within two days"
                 },
                 {
                   name: "Welcome-bonus fingerprint",
                   what: `A fingerprint of your email address made with a secret key, so the ${WELCOME_COINS}-coin welcome bonus is given once per address. It holds no address, and we can't turn it back into one without that address. For our legitimate interest in preventing abuse.`,
-                  def: "While you have an account, then 12 months after you delete it",
+                  def: "While an account uses it, then 12 months after the last one is deleted",
                 },
                 {
                   name: "Your agreement",
@@ -283,7 +282,7 @@ export default function PrivacyPage() {
                 },
                 {
                   name: "Purchase records",
-                  what: "We keep them because Indian tax and accounting law requires it. For users in the EU and UK, the legal basis is our legitimate interest in meeting those duties (GDPR Art. 6(1)(f)).",
+                  what: "To provide what you bought (our contract with you, GDPR Art. 6(1)(b)). They go when you delete your account; Paddle, as the seller, keeps the records tax law requires.",
                 },
               ]}
             />

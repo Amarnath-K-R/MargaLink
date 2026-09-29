@@ -57,8 +57,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const sharedWith = [
     { name: "Cloudflare", what: "Hosts the site and this account's database (its main copy in the Asia Pacific region)." },
     ...(google ? [{ name: "Google", what: "Confirmed your email address and gave us its id for you when you signed in with Google." }] : []),
-    { name: "Resend", what: "Sent your sign-in emails: your address and each link, if you asked for one." },
-    ...(purchases.length || subscriptions.length ? [{ name: "Paddle", what: "Sold you coins or Pro as merchant of record; the purchases above are its references." }] : []),
+    { name: "Resend", what: "If you asked for a sign-in link by email: your address and each link, to send it." },
+    {
+      name: "Paddle",
+      what: purchases.length || subscriptions.length
+        ? "Sold you coins or Pro as merchant of record; the purchases above are its references."
+        : "If you opened a checkout: your email address and account id, to start it.",
+    },
     ...(usedAi ? [{ name: "Anthropic", what: "Received the text you chose to send for AI reviews or Ask Claude requests, never your account details." }] : []),
   ];
   const data = { exportedAt: new Date().toISOString(), account, signInWithGoogle: google, identities, sessions, coins: { balance: await balance(env.DB, s.userId), ledger }, purchases, subscriptions, adjustments, reviews, sharedWith };

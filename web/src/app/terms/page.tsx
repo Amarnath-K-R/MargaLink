@@ -78,7 +78,10 @@ export default function TermsPage() {
               </Link>{" "}
               or the law provides.
             </li>
-            <li>A new account gets {WELCOME_COINS} M coins, once per person and email address.</li>
+            <li>
+              A new account gets {WELCOME_COINS} M coins, once per person and email address. An address whose account was deleted more than 12
+              months ago counts as new.
+            </li>
             <li>Coins from packs don&apos;t expire.</li>
             <li>
               Pro adds {PRO.coinsPerMonth} M coins each month. Up to {PRO.carryCap} unspent Pro coins carry over; the rest lapse when the next
@@ -147,8 +150,9 @@ export default function TermsPage() {
             </li>
           </ul>
           <p className="mt-2">
-            Daily capacity is limited: if it&apos;s reached before a review or a request starts, nothing is charged; a review stopped midway by it is
-            refunded for what didn&apos;t run.
+            Daily capacity is limited, for the service and for each account (150 review passes and 50 Ask Claude requests a day, resetting at
+            midnight UTC): if a limit is reached before a review or a request starts, nothing is charged; a review stopped midway by it is refunded
+            for what didn&apos;t run.
           </p>
         </Part>
 

@@ -48,7 +48,7 @@ export default function PageHeader({
 }: {
   width: keyof typeof TITLE_CLASS;
   tool?: ToolId;
-  page?: "home" | "guide" | "architecture" | "privacy"; // a non-tool page to show as current
+  page?: "home" | "guide"; // a non-tool page the tray links to, shown as current
   title?: ReactNode; // none: the tray only — the page draws its own heading, with id="content"
   subtitle?: ReactNode;
 }) {
@@ -69,7 +69,7 @@ export default function PageHeader({
             <Wordmark className="hidden text-[1.1rem] md:inline" />
             <BetaTag />
           </Link>
-          <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5 overflow-x-auto">
+          <div className="flex min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto sm:justify-center">
             <Link href="/home" aria-current={page === "home" ? "page" : undefined} className="clay-ghost shrink-0 text-xs max-sm:px-1">
               <span className="bead" style={{ background: "#fbfaf6" }}>
                 <House size={13} strokeWidth={2} />

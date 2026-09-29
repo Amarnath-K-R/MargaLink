@@ -122,12 +122,12 @@ Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
 |---|---|---|
 | `OPENALEX_API_KEY` | `pipeline/.env` | Raises OpenAlex's rate limit; the fetchers work without it, just slower. |
 | `ANTHROPIC_API_KEY` | `web/.dev.vars` locally, the Cloudflare Pages dashboard in prod | The credential for both server-side features — `functions/api/review.ts` and `functions/api/figure.ts`. Server-side only. |
-| `DB` | `wrangler.toml` binding (D1) | Accounts, sessions, the coin ledger, review tickets. Local: `npm run db:local`; the ids in `wrangler.toml` are placeholders until `wrangler d1 create`. |
+| `DB` | `wrangler.toml` binding (D1) | Accounts, sessions, the coin ledger, review tickets, and the AI features' daily limits (`src/lib/dailyCaps.ts`). Local: `npm run db:local`. After a new migration: `wrangler d1 migrations apply margalink --remote`. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | `.dev.vars` / dashboard secrets | "Continue with Google" (scope `openid email`). Unset: the Google button explains it's not set up. |
 | `RESEND_API_KEY`, `EMAIL_FROM` | `.dev.vars` / dashboard secrets | Email sign-in links. |
 | `DEV_EMAIL_LOG` | `.dev.vars` only | `1` on localhost prints sign-in links to the console instead of emailing them. |
 | `HASH_SECRET` | `.dev.vars` / dashboard secret | Keys the fingerprints kept for sign-in rate limits and the once-per-address welcome bonus (HMAC). Required when deployed: sign-in fails closed without it; localhost uses a fixed dev key. |
-| `TURNSTILE_SECRET`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | dashboard secret; `web/`, build-time | Optional: Cloudflare Turnstile on the email sign-in form. Set both or neither. |
+| `TURNSTILE_SECRET`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | dashboard secret; `web/`, build-time | Cloudflare Turnstile on the email sign-in form. Required for email sign-in when deployed (without it the request fails closed, like `HASH_SECRET`); set both. |
 | `PADDLE_ENV`, `PADDLE_CLIENT_TOKEN`, `PADDLE_API_KEY`, `PADDLE_WEBHOOK_SECRET` | `.dev.vars` / dashboard secrets | Coin packs and Pro through Paddle (`sandbox` or `production`). The client token is public (Paddle.js); the other two are secret. |
 | `PADDLE_PRICE_IDS` | `.dev.vars` / dashboard | Our products' Paddle price ids, as JSON: `{"S":"pri_…","M":"pri_…","L":"pri_…","PRO_MONTH":"pri_…","PRO_YEAR":"pri_…"}` (they differ between sandbox and live). |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | `web/`, build-time | The address the privacy page and the terms give for questions and complaints. Set before accounts open. |

@@ -31,7 +31,8 @@ export function LogoMark({ className, tone = "color", small = false }: { classNa
 export function Wordmark({ className = "", tone = "color" }: { className?: string; tone?: keyof typeof COLORS }) {
   return (
     <span className={`font-sans font-semibold tracking-[-0.02em] ${className}`}>
-      <span aria-hidden="true" className={tone === "light" ? "text-[#fbfaf6]" : undefined}>
+      {/* select-none: a copy gives the plain name (the sr-only span), not "MargaLınk". */}
+      <span aria-hidden="true" className={`select-none ${tone === "light" ? "text-[#fbfaf6]" : ""}`}>
         Marga
         <span className={tone === "light" ? "text-[#8fc0cc]" : "text-accent"}>
           L

@@ -38,9 +38,11 @@ assert.equal(data.account.id, u.id, "the account's own id");
 assert.deepEqual(data.identities, [{ provider: "google", subject: "g-1" }], "the Google id we keep, not just a yes");
 assert.deepEqual(
   data.sharedWith.map((p: { name: string }) => p.name),
-  ["Cloudflare", "Google", "Resend"],
-  "who has received this account's data (no Paddle without a purchase, no Anthropic without an AI request)",
+  ["Cloudflare", "Google", "Resend", "Paddle"],
+  "who may have received this account's data (no Anthropic without an AI request)",
 );
+// Paddle gets the address when a checkout opens, bought or not: said as such without a purchase
+assert.match(data.sharedWith.find((p: { name: string }) => p.name === "Paddle").what, /If you opened a checkout/);
 
 // what's keyed by the address goes with the account: sign-in links and its counters
 const { fingerprint } = await import("./auth.ts");
