@@ -81,6 +81,7 @@ def build_meta_entry(
     sources: dict[str, dict],
     doaj: dict[str, dict],
     nlm: dict[str, dict],
+    abbrevs: dict[str, list[str]] | None = None,
 ) -> dict:
     s = sources.get(journal_id)
     d = doaj.get(journal_id)
@@ -109,19 +110,42 @@ def build_meta_entry(
         "doaj_apc_amount": d.get("apc_amount") if d else None,
         "doaj_apc_currency": d.get("apc_currency") if d else None,
         # Matching v2 (sources v2 fields; absent on a v1 sources file)
-        "names": journal_names(display_name, s) if s else [],
+        "names": journal_names(display_name, s, abbrevs) if s else [],
         "h_index": ((s.get("summary_stats") or {}).get("h_index")) if s else None,
         "cited_2yr": ((s.get("summary_stats") or {}).get("2yr_mean_citedness")) if s else None,
         "is_oa": s.get("is_oa") if s else None,
     }
 
 
-def journal_names(display_name: str, source: dict) -> list[str]:
-    """Other names a reference list might use: the abbreviation and alternate
-    titles, de-duplicated case-insensitively, never the display name itself."""
+def parse_medline_journals(text: str) -> dict[str, list[str]]:
+    """ISSN -> NLM's abbreviations (MedAbbr, IsoAbbr), from J_Medline.txt:
+    records of "Key: value" lines between dashed separators."""
+    out: dict[str, list[str]] = {}
+    for record in text.split("\n--"):
+        fields = dict(line.split(": ", 1) for line in record.splitlines() if ": " in line)
+        names = list(dict.fromkeys(n.strip() for n in (fields.get("MedAbbr"), fields.get("IsoAbbr")) if n and n.strip()))
+        for key in ("ISSN (Print)", "ISSN (Online)"):
+            issn = (fields.get(key) or "").strip()
+            if issn and names:
+                out[issn] = names
+    return out
+
+
+def load_nlm_abbrevs() -> dict[str, list[str]]:
+    """NLM's journal abbreviations by ISSN (fetch_nlm_abbrevs.py); empty without the file."""
+    path = DATA_DIR / "J_Medline.txt"
+    return parse_medline_journals(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def journal_names(display_name: str, source: dict, abbrevs: dict[str, list[str]] | None = None) -> list[str]:
+    """Other names a reference list might use: the abbreviation, alternate
+    titles and NLM's standard abbreviations for its ISSNs ("J Am Coll
+    Cardiol"), de-duplicated case-insensitively, never the display name itself."""
     seen = {display_name.strip().lower()}
     out = []
-    for n in [source.get("abbreviated_title"), *(source.get("alternate_titles") or [])]:
+    issns = source.get("issn") or [source.get("issn_l")]
+    nlm = [a for issn in issns if issn for a in (abbrevs or {}).get(issn, [])]
+    for n in [source.get("abbreviated_title"), *(source.get("alternate_titles") or []), *nlm]:
         if n and n.strip().lower() not in seen:
             seen.add(n.strip().lower())
             out.append(n.strip())
@@ -132,6 +156,17 @@ def _self_check() -> None:
     names = journal_names("Nature", {"abbreviated_title": "Nature", "alternate_titles": ["Nat.", "nat.", "Nature (London)"]})
     assert names == ["Nat.", "Nature (London)"], names
     assert journal_names("X", {}) == []
+    # NLM's standard abbreviations, by ISSN, which medical reference lists use ("J Am Coll Cardiol")
+    medline = (
+        "----\nJrId: 1\nJournalTitle: Journal of the American College of Cardiology\nMedAbbr: J Am Coll Cardiol\n"
+        "ISSN (Print): 0735-1097\nISSN (Online): 1558-3597\nIsoAbbr: J Am Coll Cardiol\nNlmId: 8301365\n"
+        "----\nJrId: 2\nJournalTitle: No ISSN\nMedAbbr: No ISSN\nISSN (Print): \nISSN (Online): \nIsoAbbr: No ISSN\n----\n"
+    )
+    abbrevs = parse_medline_journals(medline)
+    assert abbrevs == {"0735-1097": ["J Am Coll Cardiol"], "1558-3597": ["J Am Coll Cardiol"]}, abbrevs
+    jacc = {"abbreviated_title": "JACC", "issn_l": "0735-1097", "issn": ["0735-1097", "1558-3597"]}
+    assert journal_names("Journal of the American College of Cardiology", jacc, abbrevs) == ["JACC", "J Am Coll Cardiol"]
+    assert journal_names("Journal of the American College of Cardiology", jacc) == ["JACC"]
     assert is_conference_proceedings_name("44th AIAA Aerospace Sciences Meeting and Exhibit")
     assert is_conference_proceedings_name("AGU Fall Meeting Abstracts")
     assert is_conference_proceedings_name("2001 Sacramento, CA July 29-August 1,2001")

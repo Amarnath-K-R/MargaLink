@@ -14,7 +14,7 @@ import json
 import time
 import urllib.error
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from openalex import BASE, get, safe_iter_jsonl
@@ -62,8 +62,10 @@ def main() -> None:
     done = {r["work"] for r in safe_iter_jsonl(PARTIAL)}
     todo = [w for w in sample if w not in done]
     print(f"{len(done)} done, {len(todo)} to resolve", flush=True)
+    # Written as each finishes (not in order), so a crash keeps everything already resolved.
     with PARTIAL.open("a") as out, ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        for i, row in enumerate(pool.map(resolve, todo)):
+        for i, fut in enumerate(as_completed(pool.submit(resolve, w) for w in todo)):
+            row = fut.result()
             out.write(json.dumps(row) + "\n")
             out.flush()
             if (i + 1) % 50 == 0:

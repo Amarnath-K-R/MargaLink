@@ -101,7 +101,12 @@ function input(i: number, over: Partial<RankInput> = {}): RankInput {
 }
 
 // --- the sample, its pools (weight-independent), and a "today" baseline pool ---
-const sample = shuffle(heldout.papers.map((_, i) => i), SEED).slice(0, SAMPLE);
+// Every paper with a resolved reference list joins the random sample: those
+// are a separate random draw of ~500 (heldout_sample.json), so intersecting
+// the two left only a handful to measure the reference signal on. Shuffled
+// again so both halves of the fit get their share of them.
+const refPapers = heldout.papers.flatMap((p, i) => (p.work && refs[p.work] ? [i] : []));
+const sample = shuffle([...new Set([...shuffle(heldout.papers.map((_, i) => i), SEED).slice(0, SAMPLE), ...refPapers])], SEED);
 // The v1 baseline: one averaged vector per journal (pipeline/data/mean_centroids.bin).
 const means = existsSync(`${DATA}mean_centroids.bin`) ? int8(`${DATA}mean_centroids.bin`) : null;
 const oneVectorMeta = meta.map((m, j) => ({ ...m, centres: [j, 1] as [number, number] }));

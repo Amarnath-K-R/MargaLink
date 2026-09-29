@@ -29,7 +29,7 @@ const [fc] = await Promise.all([
 await fc.setFiles(`${FIXTURE}`);
 await page.waitForSelector("[data-testid=results] li", { timeout: 30000 });
 
-const firstLink = page.locator("[data-testid=results] a").first();
+const firstLink = page.locator("[data-testid=results] a[href^=\"/journal/\"]").first(); // only journals with their own page link there
 const linkText = await firstLink.innerText();
 const href = await firstLink.getAttribute("href");
 console.log(`clicking result: "${linkText}" -> ${href}`);

@@ -57,7 +57,10 @@ Design and plan: `docs/superpowers/specs/2026-09-24-matching-v2-design.md`,
   topic profile; how often the paper's own reference list cites the journal
   (`references.ts` — a name counts only where a journal name sits in a
   reference, so "Science" in a title doesn't); a small activity prior. The
-  top 200 by embedding plus every cited journal are scored.
+  top 200 by embedding plus every cited journal are scored. A journal's
+  names include NLM's standard abbreviations for its ISSNs ("J Am Coll
+  Cardiol", `pipeline/fetch_nlm_abbrevs.py`), since medical reference lists
+  use those rather than full titles: 12,293 journals have one.
 - **Weights and the fit scale are measured, not chosen.** `build_index.py`
   holds back each journal's newest papers (never indexed);
   `web/scripts/eval_match.ts` runs `rank.ts` itself over them, reports a
@@ -67,9 +70,34 @@ Design and plan: `docs/superpowers/specs/2026-09-24-matching-v2-design.md`,
   real paper→journal pairings; an unfitted build shows raw similarity, no
   percentages. A drift guard checks that `rank.ts` reproduces the pipeline's
   own integer ranking exactly.
-- **Hygiene:** journals whose papers don't cohere or don't match their
-  field are dropped at build time (`pipeline/quality.py`, reasons in
-  `pipeline/data/dropped.txt`).
+- **Hygiene** (`pipeline/quality.py`, reasons in `pipeline/data/dropped.txt`):
+  a journal is dropped when its papers both miss its own count-weighted
+  topic mix and share no single field (junk such as an astronomy
+  colloquium full of social-science papers), not merely when they disagree
+  with OpenAlex's top label, which is wrong for many old or broad journals
+  (it files The Lancet under Engineering). Records with neither an ISSN nor
+  a publisher (PMC, "Default journal", AGU abstracts, encyclopedias) go
+  too. The coherence floor (0.85) sits under the lowest real journal
+  (Cureus, 0.858; `data/coherence.tsv` lists all).
+
+**Measured (2026-09-29, 18,911 journals, 54,211 centres).** Held-out
+papers (5,344; each journal's newest, never indexed), the real journal's
+rank:
+
+| Configuration | top 1 | top 5 | top 10 |
+|---|---|---|---|
+| One averaged vector per journal (v1) | 12.8% | 29.5% | 39.4% |
+| Multi-centre | 12.3% | 28.8% | 38.7% |
+| Fitted (emb 1, topic 0.02, ref 0.05), on the unseen half | 13.1% | 29.0% | 39.3% |
+| Papers with a resolved reference list (351): no references | 11.7% | 25.9% | 38.5% |
+| Same papers, references at 0.03 | 15.4% | 38.7% | 48.4% |
+
+On 18,911 journals, content alone finds the real one in the top 10 for
+about 4 papers in 10; the paper's own reference list adds about 10 points,
+and the top 10 is mostly the right field either way (field of the top
+result right 59%). Real PDFs: IJBNPA #1, J Clin Sleep Med #2; a heart
+failure paper in JACC ranks heart failure journals and the journals it
+cites most (Int J Cardiol, J Card Fail) above JACC.
 
 ## Why only some journals get a real URL
 

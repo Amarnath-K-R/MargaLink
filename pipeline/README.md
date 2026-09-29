@@ -33,6 +33,7 @@ uv run --env-file .env fetch_topics.py    # all ~4,500 OpenAlex topics — a min
 uv run --env-file .env fetch_works.py     # the 200 newest papers/journal with topics — ~6 h, 4 paced workers; resumable
 uv run --env-file .env enrich_doaj.py     # DOAJ: fee, licence, review process (only journals already in DOAJ)
 uv run --env-file .env enrich_nlm.py      # NLM Catalog: MEDLINE indexing (only biomedical-adjacent fields)
+uv run fetch_nlm_abbrevs.py               # NLM journal abbreviations ("J Am Coll Cardiol"), one ~9 MB file
 uv run build_index.py                     # held-out split, centres, topics, quality pass → web/public/index/* (~7 h at ~110 papers/s; vectors cached)
 uv run --env-file .env fetch_heldout_refs.py  # resolves 500 held-out papers' references, for the reference signal's evaluation
 cd ../web && node scripts/eval_match.ts --refs --fit --write-manifest   # measures, fits and publishes the ranking
@@ -87,5 +88,6 @@ uv run ruff check .
 | `fetch_works.py` | up to 200 papers/journal (the expensive step) |
 | `enrich_doaj.py` | DOAJ enrichment |
 | `enrich_nlm.py` | MEDLINE/NLM enrichment |
+| `fetch_nlm_abbrevs.py` | NLM's journal abbreviations, added to journal names for reference matching |
 | `build_index.py` | joins everything, embeds, writes the production index |
 | `selfcheck.py` | runs all of the above's `_self_check()` in one pass |

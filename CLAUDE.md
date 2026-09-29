@@ -108,6 +108,7 @@ uv run --env-file .env fetch_sources.py
 uv run --env-file .env fetch_works.py
 uv run --env-file .env enrich_doaj.py
 uv run --env-file .env enrich_nlm.py
+uv run fetch_nlm_abbrevs.py
 uv run build_index.py
 ```
 

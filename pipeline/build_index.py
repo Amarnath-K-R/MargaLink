@@ -41,6 +41,7 @@ from enrichment import (
     is_placeholder_source,
     load_doaj,
     load_nlm,
+    load_nlm_abbrevs,
     load_sources,
 )
 from kmeans import cluster_journal
@@ -208,7 +209,8 @@ def main() -> None:
     sources = load_sources()
     wpath = works_path()
     splits = load_splits(wpath)
-    doaj, nlm = load_doaj(), load_nlm()
+    doaj, nlm, abbrevs = load_doaj(), load_nlm(), load_nlm_abbrevs()
+    print(f"NLM abbreviations for {len(abbrevs)} ISSNs (fetch_nlm_abbrevs.py)", flush=True)
     topics = list(safe_iter_jsonl(DATA_DIR / "topics.jsonl"))
     topic_name = {t["id"]: t["name"] for t in topics}
     topic_field = {t["id"]: t["field"] for t in topics}
@@ -243,7 +245,7 @@ def main() -> None:
         paper_topics = [p.get("topics") or [] for p in papers]
         coh = coherence(vecs, centres, labels)
         cohs.append((coh, sources[sid]["display_name"], sid))
-        entry = build_meta_entry(sid, sources[sid]["display_name"], sources, doaj, nlm)
+        entry = build_meta_entry(sid, sources[sid]["display_name"], sources, doaj, nlm, abbrevs)
         # Placeholders are dropped here, after embedding, not from `ids`: the
         # embedding cache is keyed on `ids`, and re-embedding takes a day.
         reason = "not a journal (no ISSN and no publisher)" if is_placeholder_source(sources[sid]) else is_suspect(coh, field_fit(sources[sid].get("topics") or [], paper_topics, topic_field))
