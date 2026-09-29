@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { BarChart3, BookOpen, CircleHelp, FileCheck2, House, PenLine, ScanSearch, ShieldCheck } from "lucide-react";
 import AccountButton from "./AccountButton";
+import BetaTag from "./BetaTag";
 
 // The shared header for every non-homepage route: a sticky clay tray (the
 // landing, Home — the dashboard — the five tools with the current one
@@ -67,6 +68,7 @@ export default function PageHeader({
               M
             </span>
             <span className="hidden font-serif text-[1.05rem] font-medium tracking-[-0.01em] md:inline">MargaLink</span>
+            <BetaTag />
           </Link>
           <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5 overflow-x-auto">
             <Link href="/home" aria-current={page === "home" ? "page" : undefined} className="clay-ghost shrink-0 text-xs max-sm:px-1">

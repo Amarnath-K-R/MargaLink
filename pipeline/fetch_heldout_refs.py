@@ -12,6 +12,7 @@ Output: data/heldout_refs.json  {"W123": {"https://openalex.org/S456": 3, …}, 
 
 import json
 import time
+import urllib.error
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -41,7 +42,12 @@ def count_sources(works: list[dict]) -> Counter:
 
 
 def resolve(work_id: str) -> dict:
-    refs = get(f"{BASE}/works/{work_id}?select=referenced_works").get("referenced_works") or []
+    try:
+        refs = get(f"{BASE}/works/{work_id}?select=referenced_works").get("referenced_works") or []
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise
+        return {"work": work_id, "refs": 0, "counts": {}}  # deleted or merged since the build
     time.sleep(REQUEST_DELAY_S)
     counts: Counter = Counter()
     for batch in chunks([r.rsplit("/", 1)[-1] for r in refs], BATCH):
@@ -78,6 +84,18 @@ def _self_check() -> None:
         {"primary_location": {"source": {"id": "S2"}}},
     ]
     assert count_sources(works) == Counter({"S1": 2, "S2": 1})
+    # a held-out work OpenAlex has since deleted or merged (404) resolves to no references, not a crash
+    global get
+    real = get
+
+    def gone(url: str) -> dict:
+        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+
+    get = gone
+    try:
+        assert resolve("W1") == {"work": "W1", "refs": 0, "counts": {}}
+    finally:
+        get = real
     print("fetch_heldout_refs self-check: OK")
 
 

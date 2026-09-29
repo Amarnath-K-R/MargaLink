@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import AccountButton from "@/components/AccountButton";
+import BetaTag from "@/components/BetaTag";
 
 // No scroll-progress props — unlike every other homepage section, the
 // header's own appearance never changes with scroll. Its one way in is the
@@ -12,6 +13,7 @@ export default function SiteHeader() {
       <button className="brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Back to top">
         <span className="brand-mark">M</span>
         <span>MargaLink</span>
+        <BetaTag />
       </button>
       <div className="header-meta">
         <span className="mono header-note">PRIVATE BY DEFAULT</span>
