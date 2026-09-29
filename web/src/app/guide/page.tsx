@@ -52,11 +52,11 @@ export default function GuidePage() {
           tint={TINT.start}
           icon={icon(Compass)}
           art={<PrivacyArt />}
-          lead="Home, five tools, this guide and the privacy notes share one tray at the top of every page. Almost everything the tools do happens in your browser, on your device."
+          lead="Home, five tools, this guide and your M coins share one tray at the top of every page. Almost everything the tools do happens in your browser, on your device."
         >
           <Shot
             name="tray"
-            alt="The tray at the top of every page: the MargaLink mark, the five tools, Guide, Privacy and your M coins"
+            alt="The tray at the top of every page: the MargaLink mark, the five tools, Guide and your M coins"
             notes={[
               <>
                 <strong>The MargaLink mark</strong>: back to the landing page.
@@ -78,11 +78,9 @@ export default function GuidePage() {
                 <strong>Guide</strong>: this page.
               </>,
               <>
-                <strong>Privacy</strong>: the rules below, in full, with a diagram.
-              </>,
-              <>
                 <strong>Your M coins</strong>, once you&apos;re signed in: the balance, and a click to your account. Signed out, it says{" "}
-                <em>Sign in</em>; only the AI review and Ask Claude need an account.
+                <em>Sign in</em>; only the AI review and Ask Claude need an account. Privacy, the terms and the other site links are at the
+                bottom of your dashboard.
               </>,
             ]}
           />

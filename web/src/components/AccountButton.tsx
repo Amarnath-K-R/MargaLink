@@ -40,11 +40,10 @@ export default function AccountButton({ variant = "tray" }: { variant?: "tray" |
       <Link
         href="/account"
         aria-label={`${account.balance} M coins. Your account`}
-        className={variant === "landing" ? "header-coins" : "clay-ghost shrink-0 gap-1.5 pl-1.5 text-xs font-medium tabular-nums max-sm:px-1"}
+        className={variant === "landing" ? "header-coins" : "clay-chip h-9 shrink-0 gap-1.5 pl-1.5 pr-3 text-xs font-medium tabular-nums"}
       >
         <Coin />
-        {/* On a phone the coin alone (the number is in the label), so the five tools still fit. */}
-        <span className={variant === "landing" ? "" : "max-sm:hidden"}>{account.balance}</span>
+        <span>{account.balance}</span>
       </Link>
     );
   }

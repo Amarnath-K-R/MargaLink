@@ -1,14 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BarChart3, BookOpen, CircleHelp, FileCheck2, House, PenLine, ScanSearch, ShieldCheck } from "lucide-react";
+import { BarChart3, BookOpen, CircleHelp, FileCheck2, House, PenLine, ScanSearch } from "lucide-react";
 import AccountButton from "./AccountButton";
 import BetaTag from "./BetaTag";
 import { LogoMark, Wordmark } from "./Logo";
 
 // The shared header for every non-homepage route: a sticky clay tray (the
 // landing, Home — the dashboard — the five tools with the current one
-// pressed in, the guide, privacy, and the account: Sign in, or the M coin
-// balance) that is the same
+// pressed in, the guide, and the account: Sign in, or the M coin balance;
+// Privacy and the other site links are in the dashboard's footer) that is the same
 // width on every page, so moving between tools feels like one app; then the
 // page's h1 with its tool's bead, and an optional subtitle. The h1 keeps
 // three content-width tiers, matched to what each route renders; each page
@@ -90,10 +90,6 @@ export default function PageHeader({
           <Link href="/guide" aria-current={page === "guide" ? "page" : undefined} className="clay-ghost shrink-0 px-1.5 text-xs text-ink-soft sm:px-3">
             <CircleHelp size={15} strokeWidth={1.9} className="sm:hidden" />
             <span className="sr-only sm:not-sr-only">Guide</span>
-          </Link>
-          <Link href="/privacy" aria-current={page === "privacy" ? "page" : undefined} className="clay-ghost shrink-0 px-1.5 text-xs text-ink-soft sm:px-3">
-            <ShieldCheck size={15} strokeWidth={1.9} className="sm:hidden" />
-            <span className="sr-only sm:not-sr-only">Privacy</span>
           </Link>
           <AccountButton />
         </nav>
