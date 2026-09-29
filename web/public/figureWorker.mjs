@@ -25,6 +25,27 @@ import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyod
 
 let pyodidePromise = null;
 
+// This worker's CSP (public/_headers) allows only the Pyodide CDN, so its
+// own-origin assets are fetched by the page (figureRunner.ts answerAsset,
+// which serves /figurelib.py and /fonts/*.ttf and nothing else).
+const assetWaiters = new Map();
+function getAsset(path) {
+  return new Promise((resolve, reject) => {
+    const waiting = assetWaiters.get(path) ?? [];
+    waiting.push({ resolve, reject });
+    assetWaiters.set(path, waiting);
+    if (waiting.length === 1) self.postMessage({ type: "asset-request", id: 0, path });
+  });
+}
+function onAsset(msg) {
+  const waiting = assetWaiters.get(msg.path) ?? [];
+  assetWaiters.delete(msg.path);
+  for (const w of waiting) {
+    if (msg.ok) w.resolve(msg.data);
+    else w.reject(new Error(`Couldn't load ${msg.path}.`));
+  }
+}
+
 // Marks a failure as "couldn't load" (network, CDN) rather than a render bug.
 function asLoadError(err) {
   const e = err instanceof Error ? err : new Error(String(err));
@@ -45,9 +66,7 @@ function getPyodide(report) {
       // Explicit list, not loadPackagesFromImports() — deterministic, and
       // SciPy (+14 MB) stays out until a figure actually asks for a test.
       await pyodide.loadPackage(["pandas", "matplotlib", "pillow"]);
-      const res = await fetch("/figurelib.py");
-      if (!res.ok) throw new Error(`Couldn't load the figure renderer (HTTP ${res.status}).`);
-      pyodide.FS.writeFile("/home/pyodide/figurelib.py", await res.text());
+      pyodide.FS.writeFile("/home/pyodide/figurelib.py", new TextDecoder().decode(await getAsset("/figurelib.py")));
       pyodide.runPython("import json, figurelib");
       return pyodide;
     })().catch(asLoadError);
@@ -81,9 +100,7 @@ async function fetchFonts(pyodide, missing, report) {
   report("loading-fonts");
   pyodide.FS.mkdirTree("/fonts");
   for (const file of missing) {
-    const res = await fetch(`/fonts/${file}`);
-    if (!res.ok) throw new Error(`Couldn't load the font ${file} (HTTP ${res.status}).`);
-    pyodide.FS.writeFile(`/fonts/${file}`, new Uint8Array(await res.arrayBuffer()));
+    pyodide.FS.writeFile(`/fonts/${file}`, await getAsset(`/fonts/${file}`));
   }
   pyodide.globals.set("__font_paths__", JSON.stringify(missing.map((f) => `/fonts/${f}`)));
   pyodide.runPython("figurelib.register_fonts(json.loads(__font_paths__))");
@@ -216,6 +233,7 @@ const jobs = [];
 let running = false;
 self.onmessage = (event) => {
   const msg = event.data;
+  if (msg.type === "asset") return onAsset(msg);
   if (msg.type === "render" && msg.preview) {
     for (let i = jobs.length - 1; i >= 0; i--) {
       if (jobs[i].type === "render" && jobs[i].preview) {

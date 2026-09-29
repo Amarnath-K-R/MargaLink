@@ -1,8 +1,25 @@
 # No page is ever framed by another site (clickjacking a Buy, a consent or
 # the delete button). The workspace's own PDF frame is a blob:, unaffected.
+#
+# The Content-Security-Policy is also the privacy promise, enforced by the
+# browser: pages may talk only to our own origin and the public hosts the
+# tools need (the model from Hugging Face, the ONNX runtime and Pyodide from
+# jsDelivr, the TeX engine from our R2 bucket, Paddle's checkout, Cloudflare
+# Turnstile), so neither a bug nor a compromised third-party script can send
+# a paper anywhere else. 'unsafe-inline' scripts: the static export's own
+# inline bootstrap. A new external host needs adding here, or it's blocked.
 /*
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
-  Content-Security-Policy: frame-ancestors 'none'
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(self "https://buy.paddle.com" "https://sandbox-buy.paddle.com"), usb=(), serial=(), bluetooth=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://cdn.paddle.com https://challenges.cloudflare.com https://pub-fef44153e53d45fbaf08ca670aa565e3.r2.dev; connect-src 'self' blob: https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co https://pub-fef44153e53d45fbaf08ca670aa565e3.r2.dev https://*.paddle.com https://challenges.cloudflare.com; worker-src 'self' blob: https://cdn.jsdelivr.net; frame-src 'self' blob: https://*.paddle.com https://challenges.cloudflare.com; img-src 'self' data: blob: https://*.paddle.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+
+# The figure worker runs user-directed code (a "custom tweak") in Pyodide.
+# Its own policy (browsers enforce both, so this narrows the one above)
+# lets it reach the Pyodide CDN and nothing else: not even our API, so code
+# that got past its sandbox still couldn't act with the user's session. Its
+# own-origin assets come through the page (figureRunner.ts answerAsset).
+/figureWorker.mjs
+  Content-Security-Policy: default-src 'none'; script-src https://cdn.jsdelivr.net 'wasm-unsafe-eval'; connect-src https://cdn.jsdelivr.net

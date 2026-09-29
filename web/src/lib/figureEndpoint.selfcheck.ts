@@ -11,20 +11,9 @@ import type { Dataset } from "./spreadsheet.ts";
 import { testD1 } from "./testD1.ts";
 import { createSession, signInUser } from "./auth.ts";
 import { balance, credit } from "./ledger.ts";
+import { DAILY, capKeys, leftToday } from "./dailyCaps.ts";
 
-const kv = new Map<string, string>();
-let kvDown = false;
-const env = {
-  DB: testD1(),
-  ANTHROPIC_API_KEY: "k",
-  FIGURES_KV: {
-    get: async (k: string) => kv.get(k) ?? null,
-    put: async (k: string, v: string) => {
-      if (kvDown) throw new Error("KV unavailable");
-      kv.set(k, v);
-    },
-  },
-};
+const env = { DB: testD1(), ANTHROPIC_API_KEY: "k" };
 const user = await signInUser(env.DB, { email: "ann@x.org" }, Date.now());
 let cookie = `__Host-ml_session=${await createSession(env.DB, user.id, Date.now())}`;
 let toolJson = "";
@@ -91,13 +80,12 @@ assert.ok(JSON.stringify(upstreamBody).includes("PROBLEM WITH THE CURRENT SPEC")
 
 assert.equal((await call({ ...buildFigurePayload(ds, null, "x", { sendLevels: false, mode: "spec" }), rows: [[1]] })).status, 400);
 assert.equal((await call(buildFigurePayload(ds, null, "   ", { sendLevels: false, mode: "spec" }))).status, 400);
-assert.deepEqual([...kv.values()], ["7"], "every call that reached Claude was counted, rejected-input calls weren't");
+assert.deepEqual(await leftToday(env.DB, "figure", user.id, Date.now()), { all: DAILY.figure.all - 7, user: DAILY.figure.user - 7 }, "every call that reached Claude was counted, rejected-input calls weren't");
 // seven calls reached Claude, three of them came back unusable (422): 7 charged, 3 refunded
 assert.equal(await balance(env.DB, user.id), 16);
 const refunds = await env.DB.prepare("SELECT COUNT(*) AS n FROM coin_ledger WHERE kind = 'figure_refund'").first<{ n: number }>();
 assert.equal(refunds?.n, 3);
-// the daily counter failing to save is an under-count, not a failure, and never keeps a coin without an answer
-kvDown = true;
+// an answer is charged once; no answer, no charge
 toolJson = JSON.stringify({ spec, summary: "ok" });
 const before = await balance(env.DB, user.id);
 r = await call(ask);
@@ -107,5 +95,14 @@ toolJson = "{not json";
 r = await call(ask);
 assert.notEqual(r.status, 200);
 assert.equal(await balance(env.DB, user.id), before - 1, "no answer, no charge");
-kvDown = false;
+
+// each account's daily limit: refused before anything is charged or sent
+const mine = capKeys("figure", user.id, Date.now()).user;
+await env.DB.prepare("UPDATE rate_limits SET count = ? WHERE key = ?").bind(DAILY.figure.user, mine).run();
+const b2 = await balance(env.DB, user.id);
+toolJson = JSON.stringify({ spec, summary: "ok" });
+r = await call(ask);
+assert.equal(r.status, 429);
+assert.match(r.text, /this account/i);
+assert.equal(await balance(env.DB, user.id), b2, "nothing charged");
 console.log("figureEndpoint.selfcheck: OK");

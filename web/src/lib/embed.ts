@@ -4,6 +4,13 @@
 // leaves this tab. See match.ts: only the resulting numbers get used locally.
 import { loadManifest } from "./manifest.ts";
 
+// Hugging Face commit per model id (manifest.json names the model). A new
+// model needs its commit added here: `curl -s https://huggingface.co/api/models/<id>`
+// gives it as "sha".
+const MODEL_REVISIONS: Record<string, string> = {
+  "Xenova/gte-small": "5927d1727bb12db490052a1b33265ad78058de08",
+};
+
 type FeatureExtractionPipeline = (
   text: string,
   options: { pooling: "mean"; normalize: true }
@@ -29,10 +36,11 @@ async function getPipeline(): Promise<FeatureExtractionPipeline> {
       env.backends.onnx.wasm!.wasmPaths =
         "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.0-dev.20260914-8d85527a0/dist/";
       const manifest = await loadManifest();
-      return (await pipeline(
-        "feature-extraction",
-        manifest.model_id
-      )) as unknown as FeatureExtractionPipeline;
+      return (await pipeline("feature-extraction", manifest.model_id, {
+        // Pinned to the exact commit the index was built against, so a change
+        // pushed to the model's repository can't swap what runs on a paper.
+        revision: MODEL_REVISIONS[manifest.model_id] ?? "main",
+      })) as unknown as FeatureExtractionPipeline;
     })();
     // A Promise is truthy whether it resolves or rejects — without this, a
     // transient failure (e.g. the model download drops) permanently wedges

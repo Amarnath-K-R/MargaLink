@@ -8,10 +8,30 @@ export function zipFiles(entries: ZipEntry[]): Uint8Array {
   return zipSync(Object.fromEntries(entries.map((e) => [e.path, [e.data, { level: 6 }]])));
 }
 
-export function unzipFiles(bytes: Uint8Array): ZipEntry[] {
-  return Object.entries(unzipSync(bytes))
+// A LaTeX project with its figures fits well inside these; a zip bomb (a
+// few KB that inflate to gigabytes) or thousands of files doesn't, and is
+// refused from the sizes its directory declares, before anything is inflated.
+const MAX_FILES = 2000;
+const MAX_BYTES = 300_000_000;
+
+export function unzipFiles(bytes: Uint8Array, { maxFiles = MAX_FILES, maxBytes = MAX_BYTES } = {}): ZipEntry[] {
+  let files = 0;
+  let total = 0;
+  const out = unzipSync(bytes, {
+    filter: (f) => {
+      files++;
+      total += f.originalSize;
+      if (files > maxFiles) throw new Error(`This zip has too many files (over ${maxFiles}).`);
+      if (total > maxBytes) throw new Error(`This zip is too large once unpacked (over ${Math.round(maxBytes / 1e6)} MB).`);
+      return true;
+    },
+  });
+  const entries = Object.entries(out)
     .filter(([path]) => !path.endsWith("/"))
     .map(([path, data]) => ({ path, data }));
+  // The directory's sizes are the zip's own claim; the real ones are checked too.
+  if (entries.reduce((n, e) => n + e.data.length, 0) > maxBytes) throw new Error(`This zip is too large once unpacked (over ${Math.round(maxBytes / 1e6)} MB).`);
+  return entries;
 }
 
 // Templates and exports usually arrive as one folder ("elsarticle/main.tex"):

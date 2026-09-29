@@ -65,8 +65,9 @@ export function describeRenderError(code: string, d: Record<string, unknown>): s
 
 type Outgoing = { type: "warmup"; scipy: boolean; fonts: boolean } | ({ type: "render"; preview: boolean } & RenderRequest);
 type Incoming = {
-  type: "started" | "progress" | "ready" | "result" | "error";
+  type: "started" | "progress" | "ready" | "result" | "error" | "asset-request";
   id: number;
+  path?: string;
   stage?: ProgressStage;
   images?: RenderResult["images"];
   meta?: RenderMeta;
@@ -96,11 +97,29 @@ export function __setWorkerFactory(f: () => Worker): void {
   createWorker = f;
 }
 
+// The worker has no network of its own (public/_headers gives it a CSP that
+// allows only the Pyodide CDN), so even code that slipped past its sandbox
+// couldn't reach /api/ with the user's session. Its two kinds of own-origin
+// assets come through here instead, and nothing else it asks for.
+const WORKER_ASSET = /^\/(?:figurelib\.py|fonts\/[\w-]+\.ttf)$/;
+async function answerAsset(w: Worker, path: string): Promise<void> {
+  if (!WORKER_ASSET.test(path)) return w.postMessage({ type: "asset", path, ok: false });
+  try {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = new Uint8Array(await res.arrayBuffer());
+    w.postMessage({ type: "asset", path, ok: true, data }, [data.buffer]);
+  } catch {
+    w.postMessage({ type: "asset", path, ok: false });
+  }
+}
+
 function getWorker(): Worker {
   if (worker) return worker;
   const w = createWorker();
   w.onmessage = (e: MessageEvent<Incoming>) => {
     const m = e.data;
+    if (m.type === "asset-request") return void answerAsset(w, m.path ?? "");
     const p = pending.get(m.id);
     if (!p) return;
     if (m.type === "started") {

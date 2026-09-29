@@ -182,4 +182,31 @@ for (const snippet of [
   assert.notEqual(isCodeSafeToRun(snippet), null, `"${snippet}" should be rejected`);
 }
 
+// the worker has no network of its own (its CSP allows only the Pyodide CDN): it asks the page for
+// its two kinds of assets, and the page fetches only those, never anything else it's asked for
+{
+  const fetched: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (u: string) => {
+    fetched.push(u);
+    return new Response(u.endsWith(".py") ? "print(1)" : new Uint8Array([1, 2, 3]));
+  }) as typeof fetch;
+  const pendingRender = renderFigure(REQ).catch(() => null); // never answered here; its eventual timeout is expected
+  await flush();
+  const w = FakeWorker.all.at(-1)!;
+  for (const path of ["/figurelib.py", "/fonts/LiberationSans-Regular.ttf", "/api/account", "/fonts/../api/me", "https://evil.test/x"]) {
+    w.reply({ type: "asset-request", id: 0, path });
+  }
+  await flush();
+  await flush();
+  const answers = w.inbox.filter((m) => m.type === "asset") as unknown as { path: string; ok: boolean; data?: Uint8Array }[];
+  assert.deepEqual(fetched, ["/figurelib.py", "/fonts/LiberationSans-Regular.ttf"]);
+  // (refusals answer at once, fetches when they finish: compared by path, not order)
+  assert.deepEqual(Object.fromEntries(answers.map((a) => [a.path, a.ok])), { "/figurelib.py": true, "/fonts/LiberationSans-Regular.ttf": true, "/api/account": false, "/fonts/../api/me": false, "https://evil.test/x": false });
+  assert.deepEqual([...answers.find((a) => a.path.endsWith(".ttf"))!.data!], [1, 2, 3]);
+  globalThis.fetch = realFetch;
+  __setWorkerFactory(() => new FakeWorker() as unknown as Worker); // settles the pending render
+  await pendingRender;
+}
+
 console.log("figureRunner.selfcheck: OK");

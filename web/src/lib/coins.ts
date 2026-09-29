@@ -120,7 +120,10 @@ export function canonicalEmail(email: string): string {
   return `${gmail ? bare.replaceAll(".", "") : bare}@${gmail ? "gmail.com" : domain}`;
 }
 
-export const isEmail = (s: string) => s.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+// Printable ASCII only (no invisible or look-alike characters), a domain of
+// non-empty labels with no trailing dot and a letters-only TLD: the odd forms
+// that would otherwise make a second address out of one.
+export const isEmail = (s: string) => s.length <= 254 && /^[\x21-\x3f\x41-\x7e]+@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/.test(s);
 
 const LABELS: Record<LedgerKind, string> = {
   welcome: "Welcome bonus",

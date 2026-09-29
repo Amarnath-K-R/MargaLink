@@ -124,7 +124,7 @@ try {
 
   // more than the balance: 402 with the price and balance, nothing taken
   const big = await page.evaluate(async (journalId) => {
-    const chunks = Array.from({ length: 200 }, (_, i) => ({ id: `s${i + 1}`, chars: 24000 }));
+    const chunks = Array.from({ length: 60 }, (_, i) => ({ id: `s${i + 1}`, chars: 24000 })); // the most sections a review may have (MAX_REVIEW_CHUNKS)
     const r = await fetch("/api/review/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tier: "thorough", journalId, chunks }) });
     return { status: r.status, body: await r.json() };
   }, JOURNAL_ID);

@@ -22,10 +22,9 @@ import { getSession, randomToken, type AccountEnv } from "../../src/lib/auth.ts"
 import { FIGURE_PRICE } from "../../src/lib/coins.ts";
 import { balance, credit, debit } from "../../src/lib/ledger.ts";
 import type { FigurePayload } from "../../src/lib/figureSchema.ts";
+import { DAILY, countUse, leftToday } from "../../src/lib/dailyCaps.ts";
 
-type Env = AccountEnv & { ANTHROPIC_API_KEY: string; FIGURES_KV: KVNamespace };
-
-const DAILY_CAP = 200;
+type Env = AccountEnv & { ANTHROPIC_API_KEY: string };
 // Pinned, and not one of Anthropic's "Covered Models" (Mythos class), which have their own
 // retention rules: moving to one means changing the privacy notice first.
 const MODEL = "claude-sonnet-5";
@@ -58,23 +57,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const now = Date.now();
   const s = await getSession(env.DB, request, now);
   if (!s) return text("Sign in to ask Claude.", 401);
-  // Global daily cap, checked before charging and counted before the
-  // upstream call (a failed call still costs). Same benign check-then-put
-  // race as api/review.ts.
-  const kvKey = `figure-count:${new Date(now).toISOString().slice(0, 10)}`;
-  const used = parseInt((await env.FIGURES_KV.get(kvKey)) ?? "0", 10);
-  if (used >= DAILY_CAP) return text("Ask Claude is fully booked for today. Try again tomorrow; nothing was charged.", 429);
+  // Daily limits (dailyCaps.ts: the service's and this account's), checked
+  // before charging and counted before the upstream call (a failed call
+  // still costs, and is refunded, so the account's limit is what bounds it).
+  const left = await leftToday(env.DB, "figure", s.userId, now);
+  if (left.all <= 0) return text("Ask Claude is fully booked for today. Try again tomorrow; nothing was charged.", 429);
+  if (left.user <= 0) return text(`This account has reached today's limit of ${DAILY.figure.user} Ask Claude requests. It resets at midnight UTC; nothing was charged.`, 429);
   const ref = randomToken(12);
   if (!(await debit(env.DB, s.userId, FIGURE_PRICE, "figure", ref, now))) return Response.json({ coins: FIGURE_PRICE, balance: await balance(env.DB, s.userId) }, { status: 402 });
   // From here the coin comes back unless an answer goes out, whatever happens
   // (the Worker itself being stopped midway is the one case this can't cover).
   let answer: unknown = null;
   try {
-    try {
-      await env.FIGURES_KV.put(kvKey, String(used + 1), { expirationTtl: 60 * 60 * 24 * 2 });
-    } catch {
-      // an under-count, not a failure (as in api/review.ts)
-    }
+    await countUse(env.DB, "figure", s.userId, now);
     const res = await askClaude(body, problem, env.ANTHROPIC_API_KEY);
     if (res.status !== 200) return res;
     answer = await res.json();

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { findJournalRules, REQUIRED_STATEMENT_LABELS } from "@/lib/journalRules";
-import { shortId } from "@/lib/journalUrl";
+import { shortId, webLink } from "@/lib/journalUrl";
 import { loadMeta, type JournalMeta } from "@/lib/match";
 import { loadTopicNames } from "@/lib/topics";
 import { templateForJournal, type Template } from "@/lib/templateCatalog";
@@ -83,10 +83,10 @@ export default function JournalWindow({
             ) : (
               <p className="mt-1 text-ink-soft">
                 No hand-verified rules for this journal yet.
-                {journal?.homepage_url && (
+                {webLink(journal?.homepage_url) && (
                   <>
                     {" "}
-                    <a href={journal.homepage_url} target="_blank" rel="noopener noreferrer nofollow" className="text-accent hover:underline">
+                    <a href={webLink(journal?.homepage_url)!} target="_blank" rel="noopener noreferrer nofollow" className="text-accent hover:underline">
                       Its website
                     </a>{" "}
                     has its author instructions.

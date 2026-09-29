@@ -11,7 +11,7 @@
 import { ReviewCapacityError } from "./review.ts";
 import { NotEnoughCoinsError, SignInRequiredError, reviewPrice } from "./coins.ts";
 import { TIER_PLAN } from "./reviewPrompt.ts";
-import { MAX_ABSTRACT_CHARS, MAX_LEDGER, MAX_NOTES, MAX_PAPER_SECTIONS, MAX_STATS_FINDINGS } from "./reviewPasses.ts";
+import { MAX_ABSTRACT_CHARS, MAX_LEDGER, MAX_NOTES, MAX_PAPER_SECTIONS, MAX_STATS_FINDINGS, billedChars } from "./reviewPasses.ts";
 import { buildPaperMap, chunkSections, splitIntoSections } from "./reviewSections.ts";
 import type {
   Chunk,
@@ -116,7 +116,8 @@ function planState(text: string, hints: HeadingHint[], outline?: RunReviewOption
 export function quoteReview(opts: Pick<RunReviewOptions, "text" | "hints" | "outline" | "tier">): { coins: number; chars: number; sections: number } {
   const { run } = planChunks(planState(opts.text, opts.hints ?? [], opts.outline).chunks, opts.tier);
   const chars = run.reduce((n, c) => n + c.text.length, 0);
-  return { coins: reviewPrice(opts.tier, chars), chars, sections: run.length };
+  // Priced as review/start.ts charges it: each section at least MIN_BILLED_SECTION_CHARS.
+  return { coins: reviewPrice(opts.tier, run.reduce((n, c) => n + billedChars(c.text.length), 0)), chars, sections: run.length };
 }
 
 // Builds the wire ledger and an id → citation map in document order. Ids are

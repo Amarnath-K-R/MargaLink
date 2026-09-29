@@ -1,4 +1,5 @@
 import type { JournalMeta } from "@/lib/match";
+import { webLink } from "@/lib/journalUrl";
 
 // The journal detail fields — shared between the static /journal/[id] page
 // (for the top ~2,000 by output volume, see pipeline/build_index.py's
@@ -49,9 +50,9 @@ export default function JournalDetail({ journal, topicNames }: { journal: Journa
       </dl>
 
       <div className="mt-6 flex flex-wrap gap-2">
-        {journal.homepage_url && (
+        {webLink(journal.homepage_url) && (
           <a
-            href={journal.homepage_url}
+            href={webLink(journal.homepage_url)!}
             target="_blank"
             rel="noopener noreferrer nofollow"
             className="clay-chip"
@@ -59,9 +60,9 @@ export default function JournalDetail({ journal, topicNames }: { journal: Journa
             Visit the journal&apos;s official page
           </a>
         )}
-        {journal.review_url && (
+        {webLink(journal.review_url) && (
           <a
-            href={journal.review_url}
+            href={webLink(journal.review_url)!}
             target="_blank"
             rel="noopener noreferrer nofollow"
             className="clay-chip"

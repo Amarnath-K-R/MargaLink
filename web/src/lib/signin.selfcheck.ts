@@ -12,7 +12,7 @@ import { onRequestGet as googleCallback } from "../../functions/api/auth/google/
 import { onRequestPost as logout } from "../../functions/api/auth/logout.ts";
 import { onRequestGet as me } from "../../functions/api/me.ts";
 
-const env = { DB: testD1(), HASH_SECRET: "test-key", GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "sec", GOOGLE_REDIRECT_URI: "https://m.test/api/auth/google/callback", RESEND_API_KEY: "re", EMAIL_FROM: "MargaLink <signin@m.test>" };
+const env = { DB: testD1(), HASH_SECRET: "test-key", GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "sec", GOOGLE_REDIRECT_URI: "https://m.test/api/auth/google/callback", RESEND_API_KEY: "re", EMAIL_FROM: "MargaLink <signin@m.test>", TURNSTILE_SECRET: "ts-secret" };
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
 const run = (h: unknown, request: Request, e: object = env) => (h as Handler)({ request, env: e as typeof env });
 const post = (path: string, body: unknown, cookie = "", ip = "203.0.113.1") =>
@@ -42,12 +42,12 @@ globalThis.fetch = (async (url: string, init?: RequestInit) => {
 }) as typeof fetch;
 
 // --- email link
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "nope" }))).status, 400);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "nope" }))).status, 400);
 // no link without the two boxes ticked (18 or older; the terms and privacy notice)
-const r0 = await run(emailRequest, post("/api/auth/email/request", { email: "ann@example.org" }));
+const r0 = await run(emailRequest, post("/api/auth/email/request", { turnstile: "ts-token", email: "ann@example.org" }));
 assert.equal(r0.status, 400);
 assert.match(await r0.text(), /Tick both boxes/);
-let r = await run(emailRequest, post("/api/auth/email/request", { agree: true, email: " Ann@Example.org ", next: "//evil.com" }));
+let r = await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: " Ann@Example.org ", next: "//evil.com" }));
 assert.equal(r.status, 200);
 assert.deepEqual(sent[0].to, ["ann@example.org"]);
 assert.ok(!sent[0].text.includes("—"), "no em dashes in the email");
@@ -82,57 +82,77 @@ r = await run(emailVerify, post("/api/auth/email/verify", { token: "planted-toke
 assert.equal(((await r.json()) as { next: string }).next, "/home");
 
 // rate limits: three per address per 15 minutes from one network...
-for (let i = 0; i < 2; i++) assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "ann@example.org" }))).status, 200);
-r = await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "ann@example.org" }));
+for (let i = 0; i < 2; i++) assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "ann@example.org" }))).status, 200);
+r = await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "ann@example.org" }));
 assert.equal(r.status, 429);
 assert.match(await r.text(), /15 minutes/);
 // ...but a stranger's requests from their network don't lock the owner out of theirs
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "ann@example.org" }, "", "198.51.100.200"))).status, 200, "another network still gets a link");
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "ann@example.org" }, "", "198.51.100.200"))).status, 200, "another network still gets a link");
 // the day's limit per network says "tomorrow", not "15 minutes"
 await env.DB.prepare("UPDATE rate_limits SET expires_at = 0 WHERE key LIKE 'mail15:%'").run();
 const { fingerprint, networkKey } = await import("./auth.ts");
 const annFp = await fingerprint("test-key", "ann@example.org");
 const annNet = await networkKey("test-key", new Request("https://m.test/", { headers: { "cf-connecting-ip": "203.0.113.1" } }), Date.now());
 await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 10, ?) ON CONFLICT(key) DO UPDATE SET count = 10").bind(`mailday:${annFp}:${annNet}`, Date.now() + 3_600_000).run();
-r = await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "ann@example.org" }));
+r = await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "ann@example.org" }));
 assert.equal(r.status, 429);
 assert.match(await r.text(), /tomorrow/);
-// and an address has a ceiling across all networks (30 a day), against spam
-await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 30, ?) ON CONFLICT(key) DO UPDATE SET count = 30").bind(`mailall:${annFp}`, Date.now() + 3_600_000).run();
-r = await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "ann@example.org" }, "", "192.0.2.77"));
+// and an address has a ceiling across all networks (10 a day), against filling someone's inbox
+await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 10, ?) ON CONFLICT(key) DO UPDATE SET count = 10").bind(`mailall:${annFp}`, Date.now() + 3_600_000).run();
+r = await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "ann@example.org" }, "", "192.0.2.77"));
 assert.equal(r.status, 429);
 assert.match(await r.text(), /tomorrow/);
 // not set up, and the localhost dev log
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "b@x.org" }), { ...env, RESEND_API_KEY: undefined })).status, 503);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "b@x.org" }), { ...env, RESEND_API_KEY: undefined })).status, 503);
 const logged: string[] = [];
 const log = console.log;
 console.log = (s: string) => void logged.push(s);
-r = await run(emailRequest, new Request("http://localhost:8788/api/auth/email/request", { method: "POST", body: JSON.stringify({ agree: true, email: "dev@x.org" }) }), { ...env, RESEND_API_KEY: undefined, DEV_EMAIL_LOG: "1" });
+r = await run(emailRequest, new Request("http://localhost:8788/api/auth/email/request", { method: "POST", body: JSON.stringify({ agree: true, turnstile: "ts-token", email: "dev@x.org" }) }), { ...env, RESEND_API_KEY: undefined, DEV_EMAIL_LOG: "1" });
 console.log = log;
 assert.equal(r.status, 200);
 assert.match(logged.join(""), /http:\/\/localhost:8788\/signin\/verify#t=[\w-]+$/);
 
 // new addresses: five a day per network (an IPv6 /64 counts as one)
-for (let i = 1; i <= 5; i++) assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: `new${i}@x.org` }, "", `2001:db8:5:6::${i}`))).status, 200, `new ${i}`);
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "new6@x.org" }, "", "2001:db8:5:6:ffff::1"))).status, 429, "same /64");
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "new6@x.org" }, "", "2001:db8:5:7::1"))).status, 200, "another network");
+for (let i = 1; i <= 5; i++) assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: `new${i}@x.org` }, "", `2001:db8:5:6::${i}`))).status, 200, `new ${i}`);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "new6@x.org" }, "", "2001:db8:5:6:ffff::1"))).status, 429, "same /64");
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "new6@x.org" }, "", "2001:db8:5:7::1"))).status, 200, "another network");
 // the day's budget for new addresses spent: people with an account still get their link
 await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES ('mail-new', 90, ?) ON CONFLICT(key) DO UPDATE SET count = 90").bind(Date.now() + 3_600_000).run();
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "new7@x.org" }, "", "198.51.100.7"))).status, 503);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "new7@x.org" }, "", "198.51.100.7"))).status, 503);
 const { signInUser } = await import("./auth.ts");
 await signInUser(env.DB, { email: "old@x.org" }, Date.now());
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "old@x.org" }, "", "198.51.100.7"))).status, 200);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "old@x.org" }, "", "198.51.100.7"))).status, 200);
 await env.DB.prepare("DELETE FROM rate_limits WHERE key = 'mail-new'").run();
+// all emails, new or known, stay under the sending service's daily quota
+await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES ('mail-all', 95, ?) ON CONFLICT(key) DO UPDATE SET count = 95").bind(Date.now() + 3_600_000).run();
+r = await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "old@x.org" }, "", "198.51.100.8"));
+assert.equal(r.status, 503);
+assert.match(await r.text(), /busy today/);
+await env.DB.prepare("DELETE FROM rate_limits WHERE key = 'mail-all'").run();
+// a network over its hourly limit is refused before anything is written for the address
+const { fingerprint: fp2, networkKey: nk2 } = await import("./auth.ts");
+const busyNet = await nk2("test-key", new Request("https://m.test/", { headers: { "cf-connecting-ip": "198.51.100.9" } }), Date.now());
+await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 10, ?)").bind(`mailip:${busyNet}`, Date.now() + 3_600_000).run();
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "fresh@x.org" }, "", "198.51.100.9"))).status, 429);
+const freshFp = await fp2("test-key", "fresh@x.org");
+assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM rate_limits WHERE instr(key, ?) > 0").bind(freshFp).first<{ n: number }>())?.n, 0, "no rows for the address");
+// one domain can't mint endless new accounts (a catch-all domain), though a big webmail provider can
+for (let i = 1; i <= 30; i++) assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: `u${i}@catchall.test` }, "", `192.0.2.${100 + i}`))).status, 200, `catch-all ${i}`);
+r = await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "u31@catchall.test" }, "", "192.0.2.200"));
+assert.equal(r.status, 429);
+assert.match(await r.text(), /this email domain/);
+for (let i = 1; i <= 31; i++) assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: `g${i}@gmail.com` }, "", `198.18.${i}.1`))).status, 200, `gmail ${i}`);
 // deployed without a fingerprint key: fail closed
 const keyless = { ...env, HASH_SECRET: undefined };
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "k@x.org" }), keyless)).status, 503);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "k@x.org" }), keyless)).status, 503);
 assert.equal((await run(emailVerify, post("/api/auth/email/verify", { token: "x".repeat(43) }), keyless)).status, 503);
-// with Turnstile configured, a request needs a passing token
-const guarded = { ...env, TURNSTILE_SECRET: "ts-secret" };
+// Turnstile: a request needs a passing token, and a deployment without it has no email sign-in (fail closed)
+const guarded = env;
 assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "t1@x.org" }, "", "192.0.2.9"), guarded)).status, 400);
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "t1@x.org", turnstile: "ts-token" }, "", "192.0.2.9"), guarded)).status, 200);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "t1@x.org" }, "", "192.0.2.9"), guarded)).status, 200);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "t0@x.org" }, "", "192.0.2.9"), { ...env, TURNSTILE_SECRET: undefined })).status, 503);
 human = false;
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, email: "t2@x.org", turnstile: "ts-token" }, "", "192.0.2.9"), guarded)).status, 400);
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "t2@x.org" }, "", "192.0.2.9"), guarded)).status, 400);
 human = true;
 
 // --- Google

@@ -7,7 +7,9 @@ import type { ImageFormat } from "@/lib/figureRunner";
 const FORMATS: { value: ImageFormat; label: string; mime: string }[] = [
   { value: "png", label: "PNG", mime: "image/png" },
   { value: "tiff", label: "TIFF", mime: "image/tiff" },
-  { value: "svg", label: "SVG", mime: "image/svg+xml" },
+  // Download-only: an SVG blob opened in a tab would run in our origin, and
+  // SVG can carry script. The file keeps its .svg name, so it opens as an image elsewhere.
+  { value: "svg", label: "SVG", mime: "application/octet-stream" },
   { value: "pdf", label: "PDF", mime: "application/pdf" },
 ];
 

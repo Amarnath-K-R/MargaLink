@@ -52,6 +52,9 @@ assert.equal(canonicalEmail("A.n.N+x@GoogleMail.com"), "ann@gmail.com");
 assert.equal(canonicalEmail("a.nn+news@example.org"), "a.nn@example.org", "dots only matter at Gmail");
 assert.ok(isEmail("a@b.co"));
 for (const bad of ["", "a@b", "a b@c.d", "@c.d", "a@@c.d", `${"a".repeat(250)}@b.co`]) assert.ok(!isEmail(bad), bad);
+// odd forms that would make a second address out of one: a trailing dot, invisible characters, empty labels
+for (const bad of ["ab@gmail.com.", "a\u200bb@gmail.com", "ab@gmail..com", "ab@.gmail.com", "ab\u00a0@x.org", "ab@x.o"]) assert.ok(!isEmail(bad), JSON.stringify(bad));
+for (const good of ["ann.lee+tag@gmail.com", "o'brien@uni.ac.uk", "x_y-z@sub.domain.org"]) assert.ok(isEmail(good), good);
 
 // every ledger kind has a label, and none uses an em dash
 for (const k of ["welcome", "pack", "pro_grant", "pro_expire", "pro_reversal", "review", "review_refund", "figure", "figure_refund", "reversal", "reinstated", "admin"] as LedgerKind[]) {

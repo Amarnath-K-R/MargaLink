@@ -10,9 +10,10 @@ import { getSession, randomToken, readJson, sha256Hex, text, type AccountEnv } f
 import { reviewPrice, REVIEW_TICKET_TTL_MS } from "../../../src/lib/coins.ts";
 import { balance, debitStatement, sweepTickets } from "../../../src/lib/ledger.ts";
 import { findJournalRules } from "../../../src/lib/journalRules.ts";
-import { DAILY_PASS_CAP, parseStartRequest, passBudget } from "../../../src/lib/reviewPasses.ts";
+import { billedChars, parseStartRequest, passBudget } from "../../../src/lib/reviewPasses.ts";
+import { DAILY, leftToday } from "../../../src/lib/dailyCaps.ts";
 
-type Env = AccountEnv & { REVIEWS_KV: KVNamespace };
+type Env = AccountEnv;
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const now = Date.now();
@@ -22,13 +23,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (typeof req === "string") return text(req, 400);
   if (!findJournalRules(req.journalId)) return text("No pilot rules for this journal", 400);
 
-  // Don't take coins for a review today's capacity can't finish.
+  // Don't take coins for a review today's capacity (the service's, or this account's) can't finish.
   const budget = passBudget(req.chunks.length);
-  const used = parseInt((await env.REVIEWS_KV.get(`review-pass-count:${new Date(now).toISOString().slice(0, 10)}`)) ?? "0", 10);
-  if (used + req.chunks.length + 1 > DAILY_PASS_CAP) return text("Reviews are fully booked for today. Try again tomorrow; nothing was charged.", 429);
+  const cap = await leftToday(env.DB, "reviewPass", s.userId, now);
+  if (cap.all < req.chunks.length + 1) return text("Reviews are fully booked for today. Try again tomorrow; nothing was charged.", 429);
+  if (cap.user < req.chunks.length + 1) {
+    return text(`This account has reached today's limit of ${DAILY.reviewPass.user} review passes. It resets at midnight UTC; nothing was charged.`, 429);
+  }
 
   await sweepTickets(env.DB, now);
-  const coins = reviewPrice(req.tier, req.chunks.reduce((n, c) => n + c.chars, 0));
+  // Each section billed as at least MIN_BILLED_SECTION_CHARS; the ticket keeps the billed lengths (what refunds weigh).
+  const chunks = req.chunks.map((c) => ({ id: c.id, chars: billedChars(c.chars) }));
+  const coins = reviewPrice(req.tier, chunks.reduce((n, c) => n + c.chars, 0));
   const ticket = randomToken();
   const idHash = await sha256Hex(ticket); // the ticket itself is only ever in the browser
   const [, created] = await env.DB.batch([
@@ -36,7 +42,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     env.DB.prepare(
       `INSERT INTO review_tickets (id_hash, user_id, tier, coins, chunks, extract_left, synth_left, created_at, expires_at)
        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE EXISTS (SELECT 1 FROM coin_ledger WHERE kind = 'review' AND ref = ?1)`,
-    ).bind(idHash, s.userId, req.tier, coins, JSON.stringify(Object.fromEntries(req.chunks.map((c) => [c.id, c.chars]))), budget.extract, budget.synthesize, now, now + REVIEW_TICKET_TTL_MS),
+    ).bind(idHash, s.userId, req.tier, coins, JSON.stringify(Object.fromEntries(chunks.map((c) => [c.id, c.chars]))), budget.extract, budget.synthesize, now, now + REVIEW_TICKET_TTL_MS),
   ]);
   const left = await balance(env.DB, s.userId);
   if (created.meta.changes !== 1) return Response.json({ coins, balance: left }, { status: 402 });

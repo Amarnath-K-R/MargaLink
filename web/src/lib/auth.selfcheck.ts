@@ -109,6 +109,15 @@ assert.equal(ok.status, 200);
 assert.equal(ok.headers.get("cache-control"), "no-store");
 assert.equal((await mw({ request: post("/api/pay/webhook"), next })).status, 200);
 assert.equal((await mw({ request: new Request("https://m.test/api/me"), next })).status, 200);
+// every API answer: not cacheable, and not to be sniffed as another type; refusals too
+assert.equal(ok.headers.get("x-content-type-options"), "nosniff");
+const refused = await mw({ request: post("/api/review", "https://evil.test"), next });
+assert.equal(refused.headers.get("cache-control"), "no-store");
+assert.equal(refused.headers.get("x-content-type-options"), "nosniff");
+// an old deployment's own URL (abc123.margalink.pages.dev) can't reach the live database: only the site's own address can
+const oldDeploy = await mw({ request: new Request("https://5ca1ac99.margalink.pages.dev/api/me"), next });
+assert.equal(oldDeploy.status, 403);
+assert.equal((await mw({ request: new Request("https://margalink.pages.dev/api/me"), next })).status, 200);
 
 // housekeeping: any API request (at most once a minute) clears what has expired
 const hk = testD1();

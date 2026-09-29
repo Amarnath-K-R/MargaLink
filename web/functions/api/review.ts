@@ -12,24 +12,25 @@
 // against, is in ../../../docs/ARCHITECTURE.md under "The AI review" — read
 // that before changing a prompt, a cap, or the grounding.
 import { findJournalRules } from "../../src/lib/journalRules.ts";
-import { DAILY_PASS_CAP, parsePassRequest, passCallConfig, validateSynthesisOutput } from "../../src/lib/reviewPasses.ts";
+import { parsePassRequest, passCallConfig, validateSynthesisOutput } from "../../src/lib/reviewPasses.ts";
+import { DAILY, countUse, leftToday } from "../../src/lib/dailyCaps.ts";
 import { groundExtractOutput } from "../../src/lib/reviewGrounding.ts";
 import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/anthropicStream.ts";
 import { getSession, type AccountEnv } from "../../src/lib/auth.ts";
 import { claimReviewPass, markDelivered, markSynthesized } from "../../src/lib/ledger.ts";
 
-type Env = AccountEnv & { ANTHROPIC_API_KEY: string; REVIEWS_KV: KVNamespace };
+type Env = AccountEnv & { ANTHROPIC_API_KEY: string };
 
 // Pinned, and not one of Anthropic's "Covered Models" (Mythos class), which have their own
 // retention rules: moving to one means changing the privacy notice first.
 const MODEL = "claude-sonnet-5";
 // Every pass is paid for: it must carry the ticket review/start.ts issued
 // (X-Review-Ticket), which binds the tier, the sections and their lengths,
-// and a pass budget. DAILY_PASS_CAP (reviewPasses.ts) still bounds the whole
-// service: honest clients average ~$0.03/pass (measured), a tampered one
-// sending maximal thorough synthesis bodies up to ~$0.5/pass, within what
-// its ticket allows. Counted BEFORE the upstream call, so failures and
-// retries can't spend money uncounted.
+// and a pass budget. The daily limits (dailyCaps.ts: the service's and each
+// account's) still bound the spend: honest clients average ~$0.03/pass
+// (measured), a tampered one sending maximal thorough synthesis bodies up to
+// ~$0.5/pass, within what its ticket allows. Counted BEFORE the upstream
+// call, so failures and retries can't spend money uncounted.
 // A synthesize body carries up to 1,000 ledger entries (~500 KB); an extract
 // body one ≤24k-char chunk. Anything larger can't be a legitimate pass.
 const MAX_BODY_BYTES = 1_000_000;
@@ -41,10 +42,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (Number(request.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) {
     return new Response("Request body too large", { status: 413 });
   }
+  // Signed in before the body is even read, and the read itself capped
+  // (content-length can be absent), so strangers can't make us parse megabytes.
+  const session = await getSession(env.DB, request, Date.now());
+  if (!session) return new Response("Sign in to get a review.", { status: 401 });
+  const raw = await request.text();
+  if (raw.length > MAX_BODY_BYTES) return new Response("Request body too large", { status: 413 });
 
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(raw);
   } catch {
     return new Response("Invalid JSON body", { status: 400 });
   }
@@ -54,12 +61,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const rules = req.pass === "synthesize" ? findJournalRules(req.journalId) : undefined;
   if (req.pass === "synthesize" && !rules) return new Response("No pilot rules for this journal", { status: 404 });
 
-  const session = await getSession(env.DB, request, Date.now());
-  if (!session) return new Response("Sign in to get a review.", { status: 401 });
   // Capacity first, so a pass refused for it doesn't spend one of the ticket's.
-  const kvKey = `review-pass-count:${new Date().toISOString().slice(0, 10)}`;
-  const usedToday = parseInt((await env.REVIEWS_KV.get(kvKey)) ?? "0", 10);
-  if (usedToday >= DAILY_PASS_CAP) return new Response("Reviews are fully booked for today. Try again tomorrow.", { status: 429 });
+  const left = await leftToday(env.DB, "reviewPass", session.userId, Date.now());
+  if (left.all <= 0) return new Response("Reviews are fully booked for today. Try again tomorrow.", { status: 429 });
+  if (left.user <= 0) return new Response(`This account has reached today's limit of ${DAILY.reviewPass.user} review passes. It resets at midnight UTC.`, { status: 429 });
   const ticket = request.headers.get("x-review-ticket") ?? "";
   const refused = await claimReviewPass(
     env.DB,
@@ -70,14 +75,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   );
   if (refused) return new Response(refused.message, { status: refused.status });
 
-  // KV allows one write per second per key and the client runs 3 passes
-  // concurrently — a lost increment under-counts slightly; acceptable for a
-  // pilot cap (same check-then-put race the figure endpoint accepts).
-  try {
-    await env.REVIEWS_KV.put(kvKey, String(usedToday + 1), { expirationTtl: 60 * 60 * 24 * 2 });
-  } catch {
-    // under-count, not a failure
-  }
+  // Counted exactly (one atomic upsert each); concurrent passes can overshoot
+  // a limit by at most the few that were already past the check.
+  await countUse(env.DB, "reviewPass", session.userId, Date.now());
 
   const { prompt, tool, maxTokens, effort } = passCallConfig(req, rules);
   let toolInput: unknown;

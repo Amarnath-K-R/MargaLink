@@ -26,4 +26,13 @@ assert.deepEqual(flattenSingleRoot([{ path: "main.tex", data: enc("x") }]).map((
 // macOS zips add __MACOSX/ noise: dropped, and they don't count as a second root
 assert.deepEqual(flattenSingleRoot([...nested, { path: "__MACOSX/paper/._main.tex", data: enc("x") }]).map((e) => e.path).sort(), entries.map((e) => e.path).sort());
 
+// a zip bomb, or one with endless files, is refused before it's inflated
+const zeros = zipFiles([{ path: "big.bin", data: new Uint8Array(3_000_000) }]);
+assert.ok(zeros.length < 10_000, "zeros compress to almost nothing");
+assert.throws(() => unzipFiles(zeros, { maxBytes: 2_000_000 }), /too large/);
+assert.equal(unzipFiles(zeros, { maxBytes: 4_000_000 }).length, 1);
+const many = zipFiles(Array.from({ length: 30 }, (_, i) => ({ path: `f${i}.tex`, data: enc("x") })));
+assert.throws(() => unzipFiles(many, { maxFiles: 20 }), /too many files/);
+assert.equal(unzipFiles(many).length, 30, "the defaults allow a normal project");
+
 console.log("zip.selfcheck: OK");

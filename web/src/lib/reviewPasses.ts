@@ -132,7 +132,13 @@ function parseSynthesize(body: Loose): SynthesizeRequest | string {
 // review/start.ts before anything is charged, and counted per pass by
 // review.ts before each upstream call.
 export const DAILY_PASS_CAP = 1500;
-export const MAX_REVIEW_CHUNKS = 250;
+// A real paper is under ~30 sections (a 400k-char thorough review is ~27
+// passes); 60 leaves room without letting one review buy hundreds of calls.
+export const MAX_REVIEW_CHUNKS = 60;
+// Each section is billed as at least this many characters, so splitting a
+// review into many tiny sections (each a Claude call) costs what it uses.
+export const MIN_BILLED_SECTION_CHARS = 2000;
+export const billedChars = (chars: number) => Math.max(chars, MIN_BILLED_SECTION_CHARS);
 
 /** The passes a paid review may make: each section's tries (TRIES_PER_SECTION in ledger.ts) and four syntheses. */
 export const passBudget = (chunks: number) => ({ extract: 4 * chunks, synthesize: 4 });

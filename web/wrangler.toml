@@ -2,17 +2,6 @@ name = "margalink"
 pages_build_output_dir = "out"
 compatibility_date = "2026-09-18"
 
-# Real production KV namespace for functions/api/review.ts's daily cap.
-# Not secret — just a namespace id, safe to commit.
-[[kv_namespaces]]
-binding = "REVIEWS_KV"
-id = "8378b6ae716e4ba18cf06f4fe7a605ba"
-
-# Same, for functions/api/figure.ts's daily cap.
-[[kv_namespaces]]
-binding = "FIGURES_KV"
-id = "331dc785a2dc4f93912f8e8cd95b00c5"
-
 # Accounts, sign-in and the M coin ledger (migrations/). Created 2026-09-29
 # with `wrangler d1 create margalink --location apac` (and
 # `margalink-preview`): the privacy notice says the main copy is in Asia
@@ -25,15 +14,9 @@ database_id = "127c5108-f396-483d-a629-3bf7cbad5d9a"
 migrations_dir = "migrations"
 
 # Preview deployments get their own database, so a preview never touches
-# real accounts or coins. Bindings aren't inherited, so the KV ones repeat.
+# real accounts or coins (nor, since the AI features' daily limits are
+# counted in D1, production's limits). Bindings aren't inherited.
 [env.preview]
-[[env.preview.kv_namespaces]]
-binding = "REVIEWS_KV"
-id = "8378b6ae716e4ba18cf06f4fe7a605ba"
-
-[[env.preview.kv_namespaces]]
-binding = "FIGURES_KV"
-id = "331dc785a2dc4f93912f8e8cd95b00c5"
 
 [[env.preview.d1_databases]]
 binding = "DB"

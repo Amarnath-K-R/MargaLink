@@ -18,3 +18,11 @@ export function journalHref(openAlexId: string): string {
 export function isPrerendered(journal: { prerendered?: boolean }): boolean {
   return journal.prerendered !== false;
 }
+
+// A journal's website and policy links come from OpenAlex and DOAJ, third
+// parties: only an http(s) address is rendered as a link, never another
+// scheme (React blocks javascript: today; this doesn't rely on it).
+export function webLink(url: string | null | undefined): string | null {
+  const u = (url ?? "").trim();
+  return /^https?:\/\/[^/\s]/i.test(u) ? u : null;
+}

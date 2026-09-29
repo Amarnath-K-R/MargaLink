@@ -4,9 +4,11 @@
 // account, as a JSON file. POST /api/account {delete: "<their address>"}:
 // deletes the account and everything tied to it (foreign keys cascade);
 // only the welcome fingerprint in welcome_claims stays (no address in it),
-// for 12 months (housekeeping deletes it then).
+// for 12 months once no account holds it (housekeeping deletes it then),
+// and the sign-in counters keyed by the address, until they expire within a
+// day (deleting an account mustn't reset its limits).
 // Pro is cancelled at Paddle first, so a deleted account is never charged.
-import { fingerprint, getSession, hashSecret, readJson, sessionCookies, text, withCookies, type AccountEnv } from "../../src/lib/auth.ts";
+import { getSession, readJson, sessionCookies, text, withCookies, type AccountEnv } from "../../src/lib/auth.ts";
 import { cancelSubscription, type PaddleApiEnv } from "../../src/lib/paddle.ts";
 import { normalEmail } from "../../src/lib/coins.ts";
 import { balance, history, releaseWelcomeStatement } from "../../src/lib/ledger.ts";
@@ -74,15 +76,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   for (const sub of live) {
     if (!(await cancelSubscription(env, sub.id))) return text("We couldn't cancel your Pro subscription, so nothing was deleted. Try again in a minute.", 502);
   }
-  // The account cascades; what's keyed by its address (sign-in links, their counters) goes too.
-  const secret = hashSecret(env, request);
-  const fp = secret ? await fingerprint(secret, s.email) : null;
+  // The welcome fingerprint's release reads the account's row, so it runs first; then the account cascades,
+  // and its unused sign-in links go too.
   await env.DB.batch([
+    releaseWelcomeStatement(env.DB, s.userId, Date.now()),
     env.DB.prepare("DELETE FROM users WHERE id = ?").bind(s.userId),
     env.DB.prepare("DELETE FROM magic_links WHERE email = ?").bind(s.email),
-    // the address's counters: mail15:<fp>:<network>, mailday:<fp>:<network>, mailall:<fp>
-    ...(fp ? [env.DB.prepare("DELETE FROM rate_limits WHERE instr(key, ?) > 0").bind(`:${fp}`)] : []),
-    ...(secret ? [await releaseWelcomeStatement(env.DB, s.email, Date.now(), secret)] : []),
   ]);
   return withCookies(Response.json({ ok: true }), sessionCookies(null));
 };

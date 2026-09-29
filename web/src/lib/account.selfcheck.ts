@@ -63,6 +63,24 @@ assert.ok(claim && claim.at !== null && claim.at >= now, "the welcome fingerprin
 const again = await signInUser(env.DB, { email: "ann+2@example.org" }, now + 5);
 assert.equal(await grantWelcome(env.DB, again.id, again.email, now + 5, "key"), false);
 assert.equal((await env.DB.prepare("SELECT released_at AS at FROM welcome_claims").first<{ at: number | null }>())?.at, null);
-assert.deepEqual((await env.DB.prepare("SELECT key FROM rate_limits").all<{ key: string }>()).results.map((r) => r.key), ["mail-new"], "only the site-wide counter stays");
+assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM rate_limits").first<{ n: number }>())?.n, 4, "sign-in counters stay until they expire (within a day): deleting an account doesn't reset its limits");
 assert.equal((await get()).status, 401, "signed out");
+// two accounts can share one welcome fingerprint (Gmail ignores dots): deleting one doesn't start the other's 12 months
+const { onRequestPost: del2 } = await import("../../functions/api/account.ts");
+const a1 = await signInUser(env.DB, { email: "ann.lee@gmail.com" }, now);
+const a2 = await signInUser(env.DB, { email: "annlee@gmail.com" }, now);
+assert.equal(await grantWelcome(env.DB, a1.id, a1.email, now, "key"), true);
+assert.equal(await grantWelcome(env.DB, a2.id, a2.email, now, "key"), false, "one bonus per person");
+const hash = (await env.DB.prepare("SELECT welcome_hash AS h FROM users WHERE id = ?").bind(a1.id).first<{ h: string }>())!.h;
+const releasedAt = async () => (await env.DB.prepare("SELECT released_at AS at FROM welcome_claims WHERE email_hash = ?").bind(hash).first<{ at: number | null }>())?.at;
+const deleteAs = async (u: { id: string; email: string }, e: object = env) =>
+  (del2 as unknown as Handler)({
+    request: new Request("https://m.test/api/account", { method: "POST", body: JSON.stringify({ delete: u.email }), headers: { cookie: `__Host-ml_session=${await createSession(env.DB, u.id, now)}` } }),
+    env: e as typeof env,
+  });
+assert.equal((await deleteAs(a1)).status, 200);
+assert.equal(await releasedAt(), null, "the other account still holds it");
+// ...and the last one releases it, even deployed without the fingerprint key (the account remembers its own)
+assert.equal((await deleteAs(a2, { DB: env.DB })).status, 200);
+assert.ok(((await releasedAt()) ?? 0) >= now, "released when the last account using it goes");
 console.log("account.selfcheck: OK");

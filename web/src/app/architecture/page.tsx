@@ -92,9 +92,9 @@ export default function ArchitecturePage() {
                 name: "2 · Nothing from a paper is stored on a server",
                 what: (
                   <>
-                    Both AI Functions keep nothing from a request: they validate, charge, call Claude, gate the answer and return it. Server state is a
-                    daily counter per feature in KV ({code("review-pass-count:<date>")}, {code("figure-count:<date>")}) and, in D1, accounts, the coin
-                    ledger and a running review&apos;s ticket (section ids and lengths). Writing projects live in the browser&apos;s Origin Private File
+                    Both AI Functions keep nothing from a request: they validate, charge, call Claude, gate the answer and return it. Server state, all in D1, is
+                    the daily limits per feature (for the service and for each account, {code("dailyCaps.ts")}), accounts, the coin ledger and a running
+                    review&apos;s ticket (section ids and lengths). Writing projects live in the browser&apos;s Origin Private File
                     System ({code("projectStore.ts")}).
                   </>
                 ),

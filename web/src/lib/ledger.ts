@@ -45,6 +45,7 @@ export async function grantWelcome(db: D1Database, userId: string, email: string
       )
       .bind(userId, WELCOME_COINS, now, hash),
     db.prepare("INSERT INTO welcome_claims (email_hash, created_at) VALUES (?, ?) ON CONFLICT DO UPDATE SET released_at = NULL").bind(hash, now),
+    db.prepare("UPDATE users SET welcome_hash = ? WHERE id = ?").bind(hash, userId),
   ]);
   return paid.meta.changes === 1;
 }
@@ -84,19 +85,29 @@ export async function sweepTickets(db: D1Database, now: number) {
 
 const PAYMENT_EVENT_DAYS = 90;
 
+// How long a deleted account's welcome fingerprint is kept (the privacy page says 12 months).
+export const WELCOME_RELEASE_DAYS = 365;
+
+/**
+ * On account deletion (run before the account's row goes): the welcome
+ * fingerprint it holds starts its 12 months, unless another account holds
+ * it too. Needs no key: the account remembers its own fingerprint.
+ */
+export const releaseWelcomeStatement = (db: D1Database, userId: string, now: number) =>
+  db
+    .prepare(
+      `UPDATE welcome_claims SET released_at = ?1
+       WHERE email_hash = (SELECT welcome_hash FROM users WHERE id = ?2)
+         AND NOT EXISTS (SELECT 1 FROM users WHERE welcome_hash = welcome_claims.email_hash AND id != ?2)`,
+    )
+    .bind(now, userId);
+
 /**
  * Clears what has expired: review tickets (refunding what they didn't
  * deliver), sign-in links (which hold an address), sessions and rate
  * counters. There's no scheduler on Pages, so any API request runs this, at
  * most once a minute (functions/api/_middleware.ts).
  */
-// How long a deleted account's welcome fingerprint is kept (the privacy page says 12 months).
-export const WELCOME_RELEASE_DAYS = 365;
-
-/** On account deletion: the welcome fingerprint's 12 months start now. */
-export const releaseWelcomeStatement = async (db: D1Database, email: string, now: number, secret: string) =>
-  db.prepare("UPDATE welcome_claims SET released_at = ? WHERE email_hash = ?").bind(now, await fingerprint(secret, canonicalEmail(email)));
-
 export async function housekeeping(db: D1Database, now: number) {
   await sweepTickets(db, now);
   await db.batch([

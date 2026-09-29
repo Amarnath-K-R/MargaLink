@@ -10,13 +10,17 @@ import { createSession, signInUser } from "./auth.ts";
 import { balance, claimReviewPass, credit, sweepTickets } from "./ledger.ts";
 import { sha256Hex } from "./auth.ts";
 import { reviewPrice, REVIEW_TICKET_TTL_MS } from "./coins.ts";
-import { DAILY_PASS_CAP } from "./reviewPasses.ts";
+import { DAILY_PASS_CAP, MAX_REVIEW_CHUNKS, MIN_BILLED_SECTION_CHARS } from "./reviewPasses.ts";
+import { DAILY, capKeys } from "./dailyCaps.ts";
 import { JOURNAL_RULES } from "./journalRules.ts";
 import { onRequestPost as start } from "../../functions/api/review/start.ts";
 import { onRequestPost as review } from "../../functions/api/review.ts";
 
-const kv = new Map<string, string>();
-const env = { DB: testD1(), ANTHROPIC_API_KEY: "k", REVIEWS_KV: { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v) } };
+const env = { DB: testD1(), ANTHROPIC_API_KEY: "k" };
+// Sets today's count of a daily limit (dailyCaps.ts), as if that many had been used.
+const setUsed = (key: string, n: number) =>
+  env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET count = ?2").bind(key, n, Date.now() + 86_400_000).run();
+const usedOf = async (key: string) => (await env.DB.prepare("SELECT count FROM rate_limits WHERE key = ?").bind(key).first<number>("count")) ?? 0;
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
 let upstreamCalls = 0;
 let upstreamDown = false;
@@ -103,12 +107,12 @@ assert.equal(upstreamCalls, callsBefore, "and it never reached Claude");
 
 // --- a pass refused by today's capacity doesn't use up the ticket
 const left = async (ticket: string) => (await env.DB.prepare("SELECT extract_left AS n FROM review_tickets WHERE id_hash = ?").bind(await sha256Hex(ticket)).first<{ n: number }>())?.n;
-const dayKey = `review-pass-count:${new Date().toISOString().slice(0, 10)}`;
-const usedBefore = kv.get(dayKey);
-kv.set(dayKey, String(DAILY_PASS_CAP));
+const dayKey = capKeys("reviewPass", ann.id, Date.now()).all;
+const usedBefore = await usedOf(dayKey);
+await setUsed(dayKey, DAILY_PASS_CAP);
 r = await begin(annCookie); // (refused too: nothing charged)
 assert.equal(r.status, 429);
-kv.set(dayKey, usedBefore ?? "0");
+await setUsed(dayKey, usedBefore);
 
 // --- a finished run keeps its coins; an unfinished one gets back the share it didn't deliver, once
 assert.equal((await synthesize(t1.ticket)).status, 200);
@@ -116,10 +120,10 @@ r = await begin(annCookie);
 const t2 = (await r.json()) as { ticket: string; balance: number };
 assert.equal(t2.balance, 12);
 const t2left = await left(t2.ticket);
-kv.set(dayKey, String(DAILY_PASS_CAP));
+await setUsed(dayKey, DAILY_PASS_CAP);
 assert.equal((await extract(t2.ticket)).status, 429);
 assert.equal(await left(t2.ticket), t2left, "a capacity refusal spends no pass");
-kv.set(dayKey, usedBefore ?? "0");
+await setUsed(dayKey, usedBefore);
 assert.equal((await extract(t2.ticket)).status, 200);
 assert.equal((await extract(t2.ticket)).status, 409, "the same section isn't sent twice");
 r = await begin(annCookie);
@@ -145,10 +149,15 @@ assert.match((await claimReviewPass(env.DB, t4.ticket, ann.id, { pass: "synthesi
 
 // --- the audit's attack: one big section and many one-character ones buy almost nothing
 await credit(env.DB, ann.id, 20, "admin", "seed3", now);
-const decoys = [{ id: "s1", chars: 24_000 }, ...Array.from({ length: 249 }, (_, i) => ({ id: `s${i + 2}`, chars: 1 }))];
+const tooMany = Array.from({ length: MAX_REVIEW_CHUNKS + 1 }, (_, i) => ({ id: `s${i + 1}`, chars: 100 }));
+assert.equal((await begin(annCookie, { chunks: tooMany })).status, 400, "no more sections than a real paper has");
+const decoys = [{ id: "s1", chars: 24_000 }, ...Array.from({ length: MAX_REVIEW_CHUNKS - 1 }, (_, i) => ({ id: `s${i + 2}`, chars: 1 }))];
 r = await begin(annCookie, { chunks: decoys });
 const t5 = (await r.json()) as { ticket: string; coins: number; balance: number };
-assert.equal(t5.coins, 4);
+// each tiny section is billed as MIN_BILLED_SECTION_CHARS: 24k + 59 x 2k = 142k characters, a quick review's 8 coins
+assert.equal(MIN_BILLED_SECTION_CHARS, 2000);
+assert.equal(t5.coins, reviewPrice("quick", 24_000 + (MAX_REVIEW_CHUNKS - 1) * MIN_BILLED_SECTION_CHARS));
+assert.equal(t5.coins, 8);
 const big = "x".repeat(24_000);
 const calls0 = upstreamCalls;
 assert.equal((await extract(t5.ticket, "s1", big)).status, 200);
@@ -158,11 +167,32 @@ assert.equal((await synthesize(t5.ticket)).status, 409, "and cross-checked once"
 assert.equal(upstreamCalls - calls0, 2, "two calls for what was paid, not hundreds");
 await sweepTickets(env.DB, Date.now() + REVIEW_TICKET_TTL_MS + 1000);
 const t5refund = await env.DB.prepare("SELECT delta FROM coin_ledger WHERE kind = 'review_refund' AND ref = ?").bind(await sha256Hex(t5.ticket)).first<number>("delta");
-assert.equal(t5refund, 1, "the 249 decoys, a thousandth of the length, round up to a single coin back");
+// refunded at what they were billed: 8 * (118k * 60) / (142k * 61) = 6.5, so 7 back
+assert.equal(t5refund, 7, "the undelivered decoys come back at the size they were billed");
 
 // --- the global daily cap is checked before anything is charged
 const before = await balance(env.DB, ann.id);
-kv.set(dayKey, String(DAILY_PASS_CAP - 2));
+await setUsed(dayKey, DAILY_PASS_CAP - 2);
 assert.equal((await begin(annCookie)).status, 429);
 assert.equal(await balance(env.DB, ann.id), before);
+await setUsed(dayKey, 0);
+
+// --- and so is each account's own daily limit: one account can't use up everyone's day
+const annKey = capKeys("reviewPass", ann.id, Date.now()).user;
+await setUsed(annKey, DAILY.reviewPass.user - 2);
+r = await begin(annCookie);
+assert.equal(r.status, 429);
+assert.match(await r.text(), /this account/i);
+assert.equal(await balance(env.DB, ann.id), before, "nothing charged");
+await setUsed(annKey, 0);
+r = await begin(annCookie);
+const t6 = (await r.json()) as { ticket: string };
+await setUsed(annKey, DAILY.reviewPass.user);
+const t6left = await left(t6.ticket);
+assert.equal((await extract(t6.ticket)).status, 429, "a pass over the account's limit is refused");
+assert.equal(await left(t6.ticket), t6left, "and spends none of the ticket");
+await setUsed(annKey, 0);
+const u0 = await usedOf(annKey);
+assert.equal((await extract(t6.ticket)).status, 200);
+assert.equal(await usedOf(annKey), u0 + 1, "each pass that reaches Claude counts against the account");
 console.log("reviewTicket.selfcheck: OK");
