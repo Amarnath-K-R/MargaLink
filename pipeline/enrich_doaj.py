@@ -22,12 +22,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from openalex import safe_iter_jsonl
+from openalex import HEADERS, safe_iter_jsonl
 
 SOURCES_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 OUT_PATH = Path(__file__).parent / "data" / "doaj.jsonl"
 REQUEST_DELAY_S = 0.55  # ~1.8 req/s, safely under DOAJ's 2 req/s
-HEADERS = {"User-Agent": "MargaLink-Pipeline (mailto:amarnathcseamrita@gmail.com)"}
 
 
 def _get(url: str, attempts: int = 12) -> dict:

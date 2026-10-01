@@ -1,10 +1,10 @@
 "use client";
 
-import type { MatchApi } from "@/app/match/_components/useMatch.ts";
-import MatchFilters from "@/app/match/_components/MatchFilters.tsx";
-import MatchResults from "@/app/match/_components/MatchResults.tsx";
-import ProcessingTrace from "@/app/match/_components/ProcessingTrace.tsx";
-import WhatWeRead from "@/app/match/_components/WhatWeRead.tsx";
+import type { MatchApi } from "@/app/match/_components/useMatch";
+import MatchFilters from "@/app/match/_components/MatchFilters";
+import MatchResults from "@/app/match/_components/MatchResults";
+import ProcessingTrace from "@/app/match/_components/ProcessingTrace";
+import WhatWeRead from "@/app/match/_components/WhatWeRead";
 import CompileFirst from "./CompileFirst.tsx";
 
 // The Match window: the compiled PDF against the journal index, on this

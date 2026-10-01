@@ -9,6 +9,12 @@ const SCRATCH = process.env.SMOKE_OUT ?? new URL("../../.smoke/", import.meta.ur
 mkdirSync(SCRATCH, { recursive: true });
 const FIXTURE = new URL("../fixtures/test-paper.pdf", import.meta.url).pathname;
 
+let failed = false;
+function check(label, ok) {
+  console.log(`${ok ? "ok  " : "FAIL"} ${label}`);
+  if (!ok) failed = true;
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage();
 const consoleErrors = [];
@@ -37,8 +43,10 @@ await firstLink.click();
 
 await page.waitForSelector("text=Article processing fee");
 const bodyText = await page.innerText("body");
-console.log("journal page shows the same name:", bodyText.includes(linkText));
-console.log("has browse-journals link back:", bodyText.includes("Browse journals"));
-
-console.log("console errors:", consoleErrors.length ? consoleErrors.join("\n") : "(none)");
+check(`the journal page names the clicked journal (${linkText})`, bodyText.includes(linkText));
+check("it links back to the journal browser", (await page.locator('a[href="/journals"]').count()) > 0);
+check("it offers to start a paper for this journal", (await page.locator(`a[href^="/write?journal="]`).count()) === 1);
+check(`no console errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
 await browser.close();
+console.log(failed ? "FAIL" : "PASS");
+process.exit(failed ? 1 : 0);

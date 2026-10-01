@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { errorMessage } from "@/lib/errorMessage";
 import ErrorText from "@/components/ui/ErrorText";
-import FigureStudio from "@/app/figures/_components/FigureStudio.tsx";
-import { readRecipe, type Recipe } from "@/app/figures/_components/RecipeImportExport.tsx";
-import type { FiguresApi } from "@/app/figures/_components/useFigures.ts";
+import FigureStudio from "@/app/figures/_components/FigureStudio";
+import { readRecipe, type Recipe } from "@/app/figures/_components/RecipeImportExport";
+import type { FiguresApi } from "@/app/figures/_components/useFigures";
 
 // The Figures window: the whole figure studio (over the same useFigures as
 // /figures), with "Insert into paper" in place of "Add to a paper": the

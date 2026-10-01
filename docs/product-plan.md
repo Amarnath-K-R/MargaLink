@@ -9,7 +9,7 @@ Prepared on 18 September 2026. Scope: all research fields. Builder: one person, 
 > income, and risk sections (§1, §2, §4.1–4.3, §5, §6, §7, §9–13) still
 > describe the real product accurately. Only the *architecture* went
 > stale as the system got built — three places are marked `> **Superseded:**`
-> inline below. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how
+> inline below. See [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) for how
 > the system actually works today.
 
 ## 1. Product in one paragraph

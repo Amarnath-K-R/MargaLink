@@ -6,9 +6,9 @@ import type { Citation } from "@/lib/review/reviewTypes";
 import { findQuoteInTex } from "@/lib/write/texSource";
 import ErrorText from "@/components/ui/ErrorText";
 import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
-import JournalPicker from "@/app/review/_components/JournalPicker.tsx";
-import ReviewRunner from "@/app/review/_components/ReviewRunner.tsx";
-import type { ReviewApi } from "@/app/review/_components/useReview.ts";
+import JournalPicker from "@/app/review/_components/JournalPicker";
+import ReviewRunner from "@/app/review/_components/ReviewRunner";
+import type { ReviewApi } from "@/app/review/_components/useReview";
 import CompileFirst from "./CompileFirst.tsx";
 
 // The Review window: the compiled PDF, against the project's target journal

@@ -63,6 +63,7 @@ cd MargaLink/web
 npm install
 npm run fetch-index   # the journal index, from the deployed site (~40 MB)
 npm run dev           # http://localhost:3000
+npx playwright install chromium   # once, for the smokes and the e2e test
 ```
 
 `npm run dev` serves every page; the tools that need a server (the AI
@@ -86,8 +87,9 @@ cd web/figurelib && uv run selfcheck.py && uv run ruff check . ../public/figurel
 cd pipeline && uv run selfcheck.py && uv run ruff check .
 ```
 
-CI (`.github/workflows/check.yml`) runs all but `smoke` and the build on
-every push and pull request; those two need the journal index.
+CI (`.github/workflows/check.yml`) runs `npm run check` and the figurelib
+and pipeline checks on every push and pull request; the smokes, the build
+and `e2e_accounts` need the journal index and a browser, so run them locally.
 
 ## Working on it
 
@@ -101,12 +103,17 @@ every push and pull request; those two need the journal index.
 ## Deploying
 
 Maintainers only. The site is deployed by direct upload to Cloudflare Pages
-(not from git):
+(not from git), from an account signed in with `npx wrangler login`:
 
 ```bash
 cd web
 npx wrangler d1 migrations apply margalink --remote   # when there's a new migration
 npm run deploy
 ```
+
+The TeX engine lives in the R2 bucket `margalink-assets`
+(`scripts/ops/publish_busytex.sh` uploads a release); the origins allowed to
+fetch it are in `scripts/ops/r2/cors.json`, applied with
+`npx wrangler r2 bucket cors set margalink-assets --file scripts/ops/r2/cors.json`.
 
 Secrets live in the Cloudflare Pages dashboard; `CLAUDE.md` lists them.

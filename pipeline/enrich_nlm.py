@@ -23,12 +23,11 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from openalex import safe_iter_jsonl
+from openalex import HEADERS, safe_iter_jsonl
 
 SOURCES_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 OUT_PATH = Path(__file__).parent / "data" / "nlm.jsonl"
 REQUEST_DELAY_S = 0.4  # ~2.5 req/s, safely under NCBI's 3 req/s (no key)
-HEADERS = {"User-Agent": "MargaLink-Pipeline (mailto:amarnathcseamrita@gmail.com)"}
 
 # Fields where MEDLINE indexing is plausible — everything else is essentially
 # always count:0, not worth the request. ponytail: a field-name allowlist is

@@ -63,7 +63,7 @@ the two AI features cost M coins, so they need an account; nothing else
 does, and a signed-out visitor makes no account request (`useAccount.ts`
 asks `/api/me` only when the `ml_in` hint cookie exists). The account
 Functions (`functions/api/_middleware.ts`, `me.ts`, `account.ts`,
-`auth/*`, `review/start.ts`, and later `pay/*`) keep an email address,
+`auth/*`, `review/start.ts`, `pay/*`) keep an email address,
 Google's account id, hashed sessions and an append-only coin ledger in D1
 (`migrations/`, SQL in `src/lib/accounts/ledger.ts`, prices in `src/lib/accounts/coins.ts`).
 None of them ever receives paper content: `review/start.ts` takes section
@@ -103,17 +103,10 @@ deployed one; the pipeline (below) rebuilds it from source. With the
 Functions and a local D1: copy `web/.dev.vars.example` to `.dev.vars`, then
 `npm run dev:full` (port 8788).
 
-Pipeline, in order (see `pipeline/README.md` for the full explanation —
-`fetch_works.py` alone takes hours and is resumable):
-```bash
-cd pipeline && uv sync
-uv run --env-file .env fetch_sources.py
-uv run --env-file .env fetch_works.py
-uv run --env-file .env enrich_doaj.py
-uv run --env-file .env enrich_nlm.py
-uv run fetch_nlm_abbrevs.py
-uv run build_index.py
-```
+Pipeline: `cd pipeline && uv sync && cp .env.example .env`, then the run
+order in `pipeline/README.md` (fetch, enrich, build, then
+`eval_match.ts --fit --write-manifest`, which publishes the ranking;
+`fetch_works.py` alone takes hours and is resumable).
 
 Deploy: `cd web && npm run deploy` (builds, strips the oversized WASM file
 Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
@@ -136,7 +129,7 @@ Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
 | `NEXT_PUBLIC_CONTACT_EMAIL` | `web/`, build-time | The address the privacy page and the terms give for questions and complaints. Set before accounts open. |
 | `NEXT_PUBLIC_OPERATOR` | `web/`, build-time | The sole proprietor's full legal name, as the privacy notice, the terms and `/contact` give it (also the grievance officer). Set before accounts open. |
 | `NEXT_PUBLIC_POSTAL_ADDRESS`, `NEXT_PUBLIC_SUPPORT_PHONE` | `web/`, build-time | The postal address and buyer-support phone number on `/contact`, the privacy notice and the terms (Paddle's seller policy and India's rules ask for both). Set before accounts open. |
-| `NEXT_PUBLIC_SITE_URL` | `web/`, build-time | Absolute URL for `sitemap.ts`/`robots.ts`/OG tags. Unset in dev; no domain registered yet (see `docs/product-plan.md` §13). |
+| `NEXT_PUBLIC_SITE_URL` | `web/`, build-time | Absolute URL for `sitemap.ts`/`robots.ts`/OG tags. Unset in dev; no domain registered yet. |
 
 ## Working here
 
@@ -162,5 +155,6 @@ cd web && npm run build && node scripts/e2e/e2e_accounts.mjs   # the account Fun
 cd web/figurelib && uv run selfcheck.py && uv run ruff check . ../public/figurelib.py
 cd pipeline && uv run selfcheck.py && uv run ruff check .
 ```
-`.github/workflows/check.yml` runs all but `smoke` (which needs a live dev
-server) on every push.
+`.github/workflows/check.yml` runs `npm run check` and the figurelib and
+pipeline checks on every push; not the smokes, the build or `e2e_accounts`
+(those need the journal index and a browser).

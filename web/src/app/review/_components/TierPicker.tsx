@@ -1,9 +1,6 @@
 import type { ReviewTier } from "@/lib/review/reviewTypes";
 
-// Review-picker labels, a different audience than the homepage's
-// reviewTiersData (_landing/demoData.ts) — one describes a real choice being
-// made here, the other is marketing copy. They'll legitimately drift;
-// that's not a bug to fix.
+// The review's tier choices, as the picker shows them.
 export const TIER_OPTIONS: { value: ReviewTier; label: string; description: string }[] = [
   { value: "quick", label: "Quick", description: "The 2-3 most significant issues, fast." },
   { value: "standard", label: "Standard", description: "Balanced coverage of the main sections." },

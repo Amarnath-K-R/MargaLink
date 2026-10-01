@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import type { JournalRules } from "@/lib/journals/journalRules";
 import ErrorText from "@/components/ui/ErrorText";
 import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
-import FormatCheckPanel from "@/components/checks/FormatCheckPanel.tsx";
+import FormatCheckPanel from "@/components/checks/FormatCheckPanel";
 import CompileFirst from "./CompileFirst.tsx";
 import type { ChecksApi } from "./useChecks.ts";
 

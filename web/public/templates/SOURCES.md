@@ -12,5 +12,5 @@
 
 The LaTeX Project Public License 1.3 permits redistribution of unmodified
 files; the classes above are unmodified. Refresh them with
-`bash web/scripts/fetch_templates.sh`. Other publishers' templates are not
+`bash web/scripts/ops/fetch_templates.sh`. Other publishers' templates are not
 redistributed here; the catalogue links to their pages.

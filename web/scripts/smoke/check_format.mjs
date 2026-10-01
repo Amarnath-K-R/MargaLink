@@ -9,6 +9,12 @@ const SCRATCH = process.env.SMOKE_OUT ?? new URL("../../.smoke/", import.meta.ur
 mkdirSync(SCRATCH, { recursive: true });
 const FIXTURE = new URL("../fixtures/test-paper.pdf", import.meta.url).pathname;
 
+let failed = false;
+function check(label, ok) {
+  console.log(`${ok ? "ok  " : "FAIL"} ${label}`);
+  if (!ok) failed = true;
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage();
 const consoleErrors = [];
@@ -29,7 +35,16 @@ const [fc] = await Promise.all([
 await fc.setFiles(`${FIXTURE}`);
 await page.waitForSelector("text=Format check", { timeout: 30000 });
 
-const bodyText = await page.innerText("body");
-console.log(bodyText.slice(bodyText.indexOf("Format check")));
-console.log("console errors:", consoleErrors.length ? consoleErrors.join("\n") : "(none)");
+// What the fixture paper contains (scripts/fixtures/test-paper.pdf).
+const panel = await page.innerText("body").then((t) => t.slice(t.indexOf("Format check")));
+const field = (label) => panel.split(`${label}\n`)[1]?.split("\n")[0] ?? "";
+check(`word count is counted (${field("Word count")})`, Number(field("Word count").replace(/,/g, "")) > 100);
+check(`the abstract is found (${field("Abstract")})`, /^Found, \d+ words/.test(field("Abstract")));
+for (const s of ["Ethics statement", "Funding statement", "Conflicts of interest", "Data availability statement"]) check(`${s}: detected`, field(s) === "Detected");
+check(`references counted (${field("References (approximate)")})`, Number(field("References (approximate)")) >= 3);
+check(`figures referenced (${field("Figures referenced")})`, Number(field("Figures referenced")) >= 2);
+check(`tables referenced (${field("Tables referenced")})`, Number(field("Tables referenced")) >= 1);
+check(`no console errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
 await browser.close();
+console.log(failed ? "FAIL" : "PASS");
+process.exit(failed ? 1 : 0);

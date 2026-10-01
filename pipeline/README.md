@@ -16,14 +16,13 @@ cd pipeline
 uv sync
 ```
 
-Create `.env` with:
-
-```
-OPENALEX_API_KEY=...
+```bash
+cp .env.example .env   # every command below passes --env-file .env, so it must exist
 ```
 
-Free, from [openalex.org](https://openalex.org) — raises OpenAlex's rate
-limit. `fetch_sources.py`/`fetch_works.py` work without one, just slower.
+`OPENALEX_API_KEY` (free, from [openalex.org](https://openalex.org)) raises
+OpenAlex's rate limit; the fetchers work without it, just slower.
+`OPENALEX_MAILTO` is your contact address for the APIs' polite pools.
 
 ## Run order
 
@@ -42,9 +41,6 @@ cd ../web && node scripts/eval/eval_match.ts --refs --fit --write-manifest   # m
 Model choice: `uv run bakeoff.py` compares the candidate models in
 `embedding.py` on a 3,000-journal sample (~1 h each); switch `MODEL_NAME`
 only for ≥ 5 points of top-10 accuracy, then rebuild.
-
-```
-```
 
 `build_index.py` is safe to re-run at any point while `fetch_works.py` is
 still filling in `works.jsonl` — it just builds from whatever's there so
@@ -67,9 +63,9 @@ fetched data, multi-GB at full scale (`works.jsonl` alone is ~4GB),
 regeneratable from the commands above. `web/public/index/*` is gitignored
 too, for the same reason: it's pipeline output, not source.
 
-This means **a fresh clone of this repo cannot run `npm run build`, `/match`,
-`/journals`, or `/journal/[id]` until the pipeline has been run at least
-once** — see the root README's quickstart.
+A fresh clone doesn't need to run the pipeline to work on the app:
+`cd web && npm run fetch-index` downloads the deployed index. Run the
+pipeline when the index itself has to change.
 
 ## Verification
 
@@ -89,5 +85,11 @@ uv run ruff check .
 | `enrich_doaj.py` | DOAJ enrichment |
 | `enrich_nlm.py` | MEDLINE/NLM enrichment |
 | `fetch_nlm_abbrevs.py` | NLM's journal abbreviations, added to journal names for reference matching |
+| `fetch_topics.py` | all OpenAlex topics (names and fields) |
+| `embedding.py` | the one embedding model (name, prefix, batching), shared by the build and the bake-off |
+| `kmeans.py` | the per-journal centres (k-means over a journal's papers) |
+| `quality.py` | the quality pass: coherence floor, field fit, placeholder sources |
 | `build_index.py` | joins everything, embeds, writes the production index |
+| `fetch_heldout_refs.py` | resolves held-out papers' references, for evaluating the reference signal |
+| `bakeoff.py` | compares candidate embedding models |
 | `selfcheck.py` | runs all of the above's `_self_check()` in one pass |

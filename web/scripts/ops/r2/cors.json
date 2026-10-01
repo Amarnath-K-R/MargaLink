@@ -2,7 +2,7 @@
   "rules": [
     {
       "allowed": {
-        "origins": ["https://margalink.pages.dev", "https://*.margalink.pages.dev", "http://localhost:3000"],
+        "origins": ["https://margalink.pages.dev", "https://*.margalink.pages.dev", "http://localhost:3000", "http://localhost:8788"],
         "methods": ["GET", "HEAD"],
         "headers": ["*"]
       },

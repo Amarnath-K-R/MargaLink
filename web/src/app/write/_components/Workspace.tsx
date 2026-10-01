@@ -10,7 +10,7 @@ import type { TexDiagnostic } from "@/lib/write/texLog";
 import { findJournalRules } from "@/lib/journals/journalRules";
 import type { Template } from "@/lib/write/templateCatalog";
 import { bibEntries, paperFiles, texOutline, citeSnippet, figureSnippet, nextFigurePath, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/write/texSource";
-import type { Recipe } from "@/app/figures/_components/RecipeImportExport.tsx";
+import type { Recipe } from "@/app/figures/_components/RecipeImportExport";
 import type { NetworkCall } from "@/app/write/_components/useNetworkTrace";
 import Dialog from "@/components/ui/Dialog";
 import ErrorText from "@/components/ui/ErrorText";
@@ -27,9 +27,9 @@ import Outline from "./Outline.tsx";
 import Shortcuts from "./Shortcuts.tsx";
 import CommandPalette, { type Command } from "./CommandPalette.tsx";
 import { useChecks } from "./useChecks.ts";
-import { useMatch } from "@/app/match/_components/useMatch.ts";
-import { useReview } from "@/app/review/_components/useReview.ts";
-import { useFigures } from "@/app/figures/_components/useFigures.ts";
+import { useMatch } from "@/app/match/_components/useMatch";
+import { useReview } from "@/app/review/_components/useReview";
+import { useFigures } from "@/app/figures/_components/useFigures";
 import { downloadBytes, safeName } from "./download.ts";
 
 // Each window's body loads only when it opens, so the tools' code (pdf.js,

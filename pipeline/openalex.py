@@ -13,7 +13,10 @@ import urllib.request
 from pathlib import Path
 
 BASE = "https://api.openalex.org"
-HEADERS = {"User-Agent": "MargaLink-Pipeline (mailto:amarnathcseamrita@gmail.com)"}
+# OPENALEX_MAILTO (in .env): the contact address OpenAlex, DOAJ and NCBI ask
+# polite clients to send; each developer sets their own.
+_MAILTO = os.environ.get("OPENALEX_MAILTO")
+HEADERS = {"User-Agent": f"MargaLink-Pipeline (mailto:{_MAILTO})" if _MAILTO else "MargaLink-Pipeline"}
 API_KEY = os.environ.get("OPENALEX_API_KEY")
 
 

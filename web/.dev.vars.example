@@ -15,9 +15,17 @@ GOOGLE_REDIRECT_URI=http://localhost:8788/api/auth/google/callback
 RESEND_API_KEY=
 EMAIL_FROM=
 
+# Required when deployed, optional here (localhost uses a fixed dev key and
+# skips the Turnstile check).
+# HASH_SECRET=
+# TURNSTILE_SECRET=
+
 # Payments (Paddle sandbox).
 PADDLE_ENV=sandbox
 PADDLE_CLIENT_TOKEN=
 PADDLE_API_KEY=
 PADDLE_WEBHOOK_SECRET=
 PADDLE_PRICE_IDS=
+
+# Build-time values (NEXT_PUBLIC_*: the contact details, the Turnstile site
+# key, the site URL) go in web/.env.local instead, which Next reads.

@@ -573,14 +573,16 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `clay.css` | The clay theme the tool pages and the workspace share, in the components layer (so a Tailwind utility on the same element wins): `.clay` (raised slab), `.clay-well` (pressed in), `.sheet` (paper), `.clay-btn` / `.clay-primary` / `.clay-ghost` / `.clay-key` / `.clay-chip`, `.clay-input` / `.clay-field` / `.clay-select`, `.clay-card` (a choice; `aria-pressed`/`aria-checked`/`data-selected` press it in), `.bead`, `.grip`, `.desk`, `.clay-window` (dialogs). Warm shadows only, one light from the top left; the `--away` colour stays reserved for what leaves the device. |
 | `opengraph-image.tsx` | OG image, rendered with `satori` — can't resolve CSS custom properties, so `lib/site.ts`'s `BRAND` colors are duplicated here as literal hex, deliberately. |
 | `robots.ts`, `sitemap.ts` | SEO. |
-| `home/page.tsx`, `home/updates.ts` | The dashboard ("Home" in the tray; the landing page's Dashboard button leads here): two ways in — the workspace and the guide — and, further down, What's new, read from `updates.ts` (newest first; to announce something, add an entry at the top). |
-| `guide/page.tsx`, `guide/shots.json` | The user guide: every tool and option on screenshots of the real UI, with numbered markers whose positions `scripts/docs/guide_shots.mjs` measures and writes to `shots.json` (the images are in `public/guide/`). Re-run the script after a screen changes. |
+| `home/page.tsx`, `home/updates.ts`, `home/_components/AccountStrip.tsx`, `home/_components/NewsRail.tsx` | The dashboard ("Home" in the tray; the landing page's Dashboard button leads here): two ways in — the workspace and the guide — and, further down, What's new, read from `updates.ts` (newest first; to announce something, add an entry at the top). |
+| `guide/page.tsx`, `guide/shots.json`, `guide/_components/ResetSiteData.tsx` | The user guide: every tool and option on screenshots of the real UI, with numbered markers whose positions `scripts/docs/guide_shots.mjs` measures and writes to `shots.json` (the images are in `public/guide/`). Re-run the script after a screen changes. |
 | `architecture/page.tsx` | The developers' and reviewers' tour: the system diagram, the privacy rules in code, each tool's pipeline, the design system, tests, deploying, a review checklist. This file stays the source; the page distills it. |
 | `privacy/page.tsx` | Static prose + the privacy-flow SVG diagram, and the itemised account notice (`#accounts`). |
-| `signin/page.tsx`, `signin/SignInView.tsx`, `signin/verify/` | Sign in (Google popup or email link); where Google's popup lands and closes; the email link's confirm step. |
-| `account/page.tsx`, `account/AccountView.tsx` | The balance and coin history, Pro, sign out (here or everywhere), download my data, delete. |
-| `pricing/page.tsx`, `pricing/Packs.tsx` | What's free, the price table, the packs and Pro; the checkout (Paddle.js on Buy) and the wait for the webhook's coins. |
+| `signin/page.tsx`, `signin/_components/SignInView.tsx`, `signin/verify/` (`_components/VerifyView.tsx`) | Sign in (Google popup or email link); where Google's popup lands and closes; the email link's confirm step. |
+| `account/page.tsx`, `account/_components/AccountView.tsx` | The balance and coin history, Pro, sign out (here or everywhere), download my data, delete. |
+| `pricing/page.tsx`, `pricing/_components/Packs.tsx` | What's free, the price table, the packs and Pro; the checkout (Paddle.js on Buy) and the wait for the webhook's coins. |
 | `terms/page.tsx`, `refunds/page.tsx` | The terms (M coins as prepaid usage credits) and the refund policy. |
+| `contact/page.tsx` | Who runs the site and how to reach them (the operator details come from `NEXT_PUBLIC_*`). |
+| `team/page.tsx`, `team/team.ts` | The team page; the people are listed in `team.ts`. |
 | `journal/[id]/page.tsx` | Static-generated per-journal page (`generateStaticParams` from `getPrerenderedJournals()`). |
 | `journals/page.tsx`, `journals/layout.tsx` | Browse/search/filter the full journal index. |
 | `match/page.tsx` | JSX over `useMatch()`: the input, the steps run on the device, the results. |
@@ -588,7 +590,6 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `match/_components/MatchFilters.tsx` | The 5 filter controls + `FEE_PRESETS`/`SPEED_PRESETS`. |
 | `match/_components/MatchResults.tsx` | The results list with fit badges, built on the shared `JournalResultTitle`/`JournalResultChips`. On `/match` rows link on to `/review` and `/write?journal=`; inside the workspace `onReview`/`onSetTarget`/`expandOnly` keep everything on the page. |
 | `match/_components/PaperInput.tsx`, `WhatWeRead.tsx`, `WhyThisJournal.tsx` | File-or-paste entry; what the matcher read (with a paste correction); the per-result reasons. |
-| `match/_components/FormatCheckPanel.tsx` | The 9-row structural-check `<dl>`. |
 | `match/_components/ProcessingTrace.tsx` | The live "On this device" step log + error text. |
 | `match/layout.tsx` | Route metadata shim. |
 | `review/page.tsx` | JSX over `useReview()`: upload, journal pick, structural check, then `ReviewRunner`. |
@@ -596,6 +597,7 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `review/_components/JournalPicker.tsx` | The hand-verified-journal grid (`showMatchLink` off inside the workspace). |
 | `review/_components/TierPicker.tsx` | The quick/standard/thorough grid; owns `TIER_OPTIONS`. |
 | `review/_components/OutlineEditor.tsx` | The detected outline before consent: per-section type, merge, add heading, "Don't send". |
+| `review/_components/ReviewResultPanel.tsx` | The review's result: comments section by section, the numbers check. |
 | `review/layout.tsx` | Route metadata shim. |
 | `figures/page.tsx` | Header, `FigureStudio` over `useFigures()`, and "Add to a paper" in the export bar's slot. |
 | `figures/_components/useFigures.ts`, `FigureStudio.tsx` | The studio's state (upload → data prep → spec, the debounced render loop, recipes, export) as a hook, and its body as a component — shared with the workspace's Figures window. |
@@ -612,7 +614,7 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `write/_components/EditorFormatBar.tsx`, `latexCompletions.ts`, `Outline.tsx` | The formatting bar over the source (wrap or insert; Cite/Ref/Figure lists, a table-size grid); the suggestions inside `\cite{`, `\ref{`, `\begin{` and after `\`; the Outline tab. |
 | `write/_components/MatchWindow.tsx`, `ReviewWindow.tsx`, `FiguresWindow.tsx`, `ChecksWindow.tsx`, `JournalWindow.tsx`, `useChecks.ts` | The windows' bodies (dynamic imports) over the shared hooks; `useChecks` runs the format and rules checks over the PDF text. |
 | `write/_components/LatexEditor.tsx`, `FileTree.tsx`, `PdfPane.tsx`, `Diagnostics.tsx`, `TemplatePicker.tsx`, `StorageBanner.tsx`, `download.ts` | The workspace's pieces. `LatexEditor`'s handle: goto (mid-screen), insert, wrap, insertBlock, comment, focus. |
-| `write/_components/NetworkTrace.tsx` | `useNetworkTrace()` — patches `fetch` for the page's lifetime; `/write` uses it to count requests that carried a body (the status line's "sent"). The on-page request list it once fed was removed on 2026-09-27. |
+| `write/_components/useNetworkTrace.ts` | `useNetworkTrace()` — patches `fetch` for the page's lifetime; `/write` uses it to count requests that carried a body (the status line's "sent"). The on-page request list it once fed was removed on 2026-09-27. |
 | `write/layout.tsx` | Route metadata shim. |
 
 **`src/app/_landing/`** — homepage-only, a Next "private folder" (excluded
@@ -622,36 +624,40 @@ from routing; nothing outside `app/page.tsx` imports from it).
 |---|---|
 | `home.css` | The ~87% of the old single `globals.css` that's homepage-only. |
 | `useScrollProgress.ts` | The one rAF-throttled scroll listener: hero progress, the closing section's progress (the landing crossfades into it), overall page progress for the 3D paper, and the reduced-motion query. |
-| `motion.ts` | `localProgress`, `stagger`, `motionStyle`, `countUp`, `decodeText` — the homepage's own animation-math kit (builds on `lib/easing.ts`'s `between`). |
+| `motion.ts`, `easing.ts` | The homepage's animation maths: `localProgress`, `stagger`, `motionStyle`, over `clamp01`, `smooth`, `between`, `lerp`. |
 | `SiteHeader.tsx`, `HeroSection.tsx`, `FinalSection.tsx`, `TypedPaper.tsx`, `ToolsOverlay.tsx` | The homepage is two screens: the landing (`HeroSection` — the wordmark with the Link cutout, "Find your path.", over the clay desk) and the closing call to action (`FinalSection`), which the landing crossfades into; its right column holds the desk's self-writing 3D paper (on phones, `TypedPaper`, the same manuscript as an HTML page). The middle sections (workflow, journals, matching, review, privacy) were removed on 2026-09-26. The fixed header's one link is Dashboard (`/home`); the finale's tool buttons were removed on 2026-09-28 (the closing section's Explore our tools still opens `ToolsOverlay`). |
 | `IntroSequence.tsx` | The first-visit intro: a transparent layer over the landing (the question, then the landing's own wordmark builds, then the desk settles) — timing, dismissal, `sessionStorage` memory. |
 | `ClayDesk.tsx` | Thin shell over `three/clayDesk.ts`: the landing's desk. It plays the intro (held floating while `.intro-overlay` is up, then settling), and on scroll morphs: every object leaves the frame, the paper stack rises, faces the camera and settles right, then writes itself in place — its top sheet is a canvas texture laid out as the manuscript (`three/paperText.ts`), placeholder bars replaced by text as it types. `_landing/TypedPaper.tsx` is the phone version. |
 
 **`src/components/`**: shared across routes, one folder per concern.
 A component used by a single route lives in that route's `_components/`
-instead (or `_landing/` for the homepage).
+instead (or `_landing/` for the homepage). Two deliberate exceptions: the
+consent notices (`review/ReviewConsent.tsx`, `figures/FigureConsent.tsx`)
+stay here because `CLAUDE.md` names them as the only doors to the AI
+features, and `ui/` holds generic primitives even when one route uses them.
 
 | File | What |
 |---|---|
-| `layout/PageHeader.tsx` | Every non-homepage route's header: a skip link, then a sticky clay tray (the landing, Home, the five tools with the current one pressed in, Guide, Privacy) the same width on every page, then the h1 with its tool's bead; 3 content-width tiers for the h1. |
+| `layout/PageHeader.tsx` | Every non-homepage route's header: a skip link, then a sticky clay tray (the landing, Home, the five tools with the current one pressed in, Guide, the account button) the same width on every page, then the h1 with its tool's bead; 3 content-width tiers for the h1. |
 | `layout/SiteFooter.tsx` | The site footer on Home and the team page: links, legal pages, copyright. |
 | `layout/Logo.tsx` | `LogoMark` (the M drawn as one route ending at the ochre dot) and `Wordmark` (its i carries the same dot). |
 | `layout/BetaTag.tsx` | The Beta tag beside the logo in both headers. |
 | `layout/ContactDetails.tsx` | The operator, contact address, postal address and phone (from `NEXT_PUBLIC_*`), as the legal pages give them. |
+| `layout/LegalSection.tsx` | A titled section of the legal pages. |
 | `ui/Step.tsx` | A numbered step of a tool page on a clay slab (Review, Figures). |
 | `ui/Dialog.tsx` | The modal window primitive on the native `<dialog>` (`showModal()`: focus trap, Escape, top layer, focus restore), used by the writing workspace's windows and palette. |
 | `ui/ErrorText.tsx` | The one `role="alert"` error paragraph. |
 | `ui/PaperDropzone.tsx` | The file drop zone. Optional `accept`/`title`/`hint`/`ariaLabel` props (defaulting to its PDF/DOCX copy) let `/figures` reuse it for CSV/XLSX. |
+| `ui/NewTabLink.tsx` | A link that opens in a new tab (terms and privacy from a checkout or the sign-in form). |
 | `account/AccountButton.tsx` | The M coin bead and balance in the tray and the landing header, or Sign in. |
 | `account/useAccount.ts` | The account store (`useSyncExternalStore`): asks `/api/me` only when the `ml_in` hint cookie exists, revalidates on focus. |
 | `account/SignInPanel.tsx` | Continue with Google (popup) or an email link, with the sign-up checkboxes. |
-| `account/ResetSiteData.tsx` | Clears everything this site keeps in the browser (the guide's Reset site data). |
 | `journals/JournalResultRow.tsx` | `JournalResultTitle` (prerendered-link-vs-expand-button) + `JournalResultChips` (metadata chips), shared by `/journals` and `/match`. |
 | `journals/JournalDetail.tsx` | A journal's details: fees, open access, indexing, speed, its rules when hand-verified. |
 | `checks/RulesCheckPanel.tsx` | A paper checked against one journal's hand-verified rules (match, review, the workspace's Checks window). |
 | `checks/CheckRow.tsx` | One pass/warn/fail row, shared with the structural check. |
+| `checks/FormatCheckPanel.tsx` | The 9-row structural check (match, and the workspace's Checks window). |
 | `review/ReviewConsent.tsx` | The review's consent notice: exactly what is sent, the price, the explicit-consent box. |
-| `review/ReviewResultPanel.tsx` | The review's result: comments section by section, the numbers check. |
 | `figures/FigureConsent.tsx` | Ask Claude's consent notice. A deliberately separate sibling of `ReviewConsent.tsx`, not a shared generalization: see `CLAUDE.md`'s exceptions paragraph for why each notice stays independently readable. |
 | `docs/Doc.tsx`, `docs/Art.tsx`, `docs/Diagrams.tsx` | The documentation pages' blocks (contents list, sections, screenshots with markers, option tables, asides), their clay illustrations (inline SVG) and diagrams. |
 
@@ -665,6 +671,7 @@ in code, sharing one canvas setup.
 | `book.ts` | The open clay book: board, page blocks, two static page faces and two turning leaves whose vertices are laid along a bending curve each frame (corner lifts first, lands last; front/back textures, the back mirrored). `setProgress(hp, still)` turns them by the book's pinned scroll; `still` (reduced motion) snaps. |
 | `bookPages.ts` | Draws one book page on a canvas: heading pages (tool, heading with the teal cutout, one line) and simple illustrations (review, write, figures). |
 | `bookSpreads.ts` | The book's content — one spread per tool — and its scroll timing (tilt, turns, pin), shared by the 3D book and the page's caption so they always agree. |
+| `paperText.ts` | The closing page's manuscript text, shared by the 3D page that writes itself and its phone version (`TypedPaper.tsx`). |
 
 **`src/lib/`**: framework-agnostic logic, one folder per feature (see
 "`lib/` conventions" below). Each `*.selfcheck.ts` sits beside the file it
@@ -747,6 +754,7 @@ checks.
 | `coins.ts` | The prices (`reviewPrice`, `FIGURE_PRICE`, packs, Pro), `proCoinsLeft`, `dueProGrants`, email canonicalisation, ledger labels, and the two errors the client throws. Shared by client and server. |
 | `auth.ts`, `safeNext.ts` | Server: sessions and cookies, Google claims and PKCE, account linking, rate limits, the Origin check; `safeNext` is shared with the sign-in pages. |
 | `ledger.ts` | Server: the coin ledger's SQL: balance, debit, credit, welcome, the ticket sweep and pass claims, Pro grants, history. |
+| `dailyCaps.ts` | The AI features' daily limits (service-wide and per account), counted in D1's `rate_limits`. |
 | `paddle.ts` | Server: the webhook signature, price ids, what each event does to the ledger, and the portal and cancel calls. |
 | `paddleCheckout.ts` | Client: Paddle.js loaded on demand, the checkout, the customer portal. |
 | `testD1.ts` | Selfchecks only: D1's API over `node:sqlite` with every migration applied. |
@@ -762,8 +770,9 @@ checks.
 | File | What |
 |---|---|
 | `site.ts` | Site-wide metadata (`SITE_TITLE`, `SITE_DESCRIPTION`, `BRAND` colors) — single source for `layout.tsx`, `opengraph-image.tsx`, `sitemap.ts`, `robots.ts`. |
-| `easing.ts` | `clamp01`, `smooth`, `between`, `lerp` — the one shared animation-math kit (was reimplemented 3× before Phase 5). |
 | `errorMessage.ts` | `errorMessage(err, fallback?)` — the one shared `instanceof Error` normalization. |
+
+**`src/types/n8ao.d.ts`**: type declarations for the ambient-occlusion pass the landing's desk uses.
 
 **`functions/`** — Cloudflare Pages Functions; every file here is routed
 as an endpoint, so shared logic lives in `src/lib/` instead (imported via
@@ -771,7 +780,7 @@ relative paths) and only genuinely server-specific code stays here.
 
 | File | What |
 |---|---|
-| `api/review.ts` | One of the two server-side files in the project: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the daily pass limits (`dailyCaps.ts`: 1,500 a day in all, 150 per account), one `callAnthropicTool`, grounding/validation. |
+| `api/review.ts` | One of the two AI Functions: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the daily pass limits (`dailyCaps.ts`: 1,500 a day in all, 150 per account), one `callAnthropicTool`, grounding/validation. |
 | `api/_middleware.ts` | The Origin check on every non-GET (not the Paddle webhook) and `Cache-Control: no-store`. |
 | `api/me.ts`, `api/account.ts` | Who's signed in, the balance, Pro, Paddle's public config; the account page's data, the export, deletion. |
 | `api/auth/google/*`, `api/auth/email/*`, `api/auth/logout.ts` | Signing in and out. |
@@ -783,7 +792,7 @@ relative paths) and only genuinely server-specific code stays here.
 
 - **One folder per feature** (`paper/`, `match/`, `journals/`, `checks/`,
   `review/`, `figures/`, `write/`, `accounts/`, `ai/`), with only the
-  genuinely shared helpers (`easing.ts`, `errorMessage.ts`, `site.ts`) at
+  genuinely shared helpers (`errorMessage.ts`, `site.ts`) at
   the root. Files keep their full names (`reviewPrompt.ts`, not
   `review/prompt.ts`) so a name means the same thing in a search, a stack
   trace and these docs. Cross-feature imports are fine and expected
@@ -792,13 +801,13 @@ relative paths) and only genuinely server-specific code stays here.
 - **camelCase filenames** (`journalUrl.ts`, not `journal-url.ts`) —
   consistent with `components/`'s PascalCase, one casing convention for
   the whole `src/` tree.
-- **Import extensions**: a relative lib-to-lib import carries `.ts`
-  (`from "./easing.ts"`); a `@/`-alias import doesn't
-  (`from "@/lib/easing"`). This isn't stylistic — Node's native TS
-  execution (used by every `*.selfcheck.ts`, see `package.json`'s `test`
-  script) needs the real relative path with its extension; the bundler
-  only resolves the `@/` alias, and errors just as reliably on a stray
-  `.ts` extension there.
+- **Import extensions**: a relative import inside `lib/` carries `.ts`
+  (`from "./zip.ts"`), because Node's native TS execution (every
+  `*.selfcheck.ts`, see `package.json`'s `test` script) needs the real path
+  with its extension and knows nothing of the `@/` alias. A `@/`-alias
+  import, which only the bundler sees, leaves the extension off
+  (`from "@/lib/write/zip"`); that half is a convention, kept for
+  consistency (`tsconfig.json` would accept either).
 - **`functions/` may only import `src/lib/` modules that are pure or
   isomorphic** — no `window`, `localStorage`, or `fs`. See "The invariant
   that keeps `src/lib/` and `functions/` from duplicating types" above.

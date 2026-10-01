@@ -365,6 +365,7 @@ export default function ArchitecturePage() {
               { name: "check_figures · check_figure_sandbox", what: "A messy spreadsheet read right, templates, editors, recipes, a mocked Ask Claude; tweaks that try every way out fail with zero requests." },
               { name: "check_write", what: "Compile, diagnostics, backups, files, the hub windows (a mocked review, the figure window), the formatting bar, suggestions, the outline, views, a failed engine download." },
               { name: "check_keyboard · check_intro · check_homepage", what: "The dropzone by keyboard; the first-visit intro; the homepage." },
+              { name: "check_docs", what: "The guide and this page: every screenshot exists, every marker sits on its image, no broken anchors." },
             ]}
           />
         </DocSection>
@@ -375,9 +376,9 @@ export default function ArchitecturePage() {
             <p>
               Builds the static export, removes one oversized WASM file Next copies in (the ONNX runtime is loaded from a CDN instead; Pages rejects files
               over 25 MB), then {code("wrangler pages deploy")}. The AI Functions need {code("ANTHROPIC_API_KEY")} (the Pages dashboard, or{" "}
-              {code("web/.dev.vars")} locally) and KV namespaces for the daily counters; the account Functions need the D1 databases in{" "}
+              {code("web/.dev.vars")} locally); their daily limits are counted in D1, like everything the account Functions keep: the D1 databases in{" "}
               {code("wrangler.toml")}, their migrations applied, and the Google, Resend and Paddle secrets listed in {code("CLAUDE.md")}. The index must be
-              built first ({code("pipeline/README.md")}); the TeX engine is published separately to R2 ({code("scripts/ops/publish_busytex.sh")}).
+              in place first ({code("npm run fetch-index")}, or the pipeline); the TeX engine is published separately to R2 ({code("scripts/ops/publish_busytex.sh")}).
             </p>
           </DocPart>
         </DocSection>
