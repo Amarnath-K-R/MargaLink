@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bold, Hash, Heading, Image as ImageIcon, Italic, List, ListOrdered, Percent, Quote, Sigma, Superscript, Table } from "lucide-react";
-import { tableSnippet } from "@/lib/texSource";
+import { tableSnippet } from "@/lib/write/texSource";
 
 // The formatting bar over the source: the LaTeX a writer reaches for most,
 // one click away. Buttons wrap the selection (or insert a placeholder and

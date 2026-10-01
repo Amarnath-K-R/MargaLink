@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import PageHeader from "@/components/PageHeader";
-import { ContactEmail, OperatorDetails, operatorName } from "@/components/ContactDetails";
-import { PRO, WELCOME_COINS } from "@/lib/coins";
+import PageHeader from "@/components/layout/PageHeader";
+import { ContactEmail, OperatorDetails, operatorName } from "@/components/layout/ContactDetails";
+import { PRO, WELCOME_COINS } from "@/lib/accounts/coins";
 import { PADDLE_RESELLER } from "@/lib/site";
 
 export const metadata: Metadata = {

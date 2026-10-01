@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import PaperDropzone from "@/components/PaperDropzone";
+import PaperDropzone from "@/components/ui/PaperDropzone";
 
 // Two ways in: a file (read in this tab), or the title and abstract pasted —
 // the lighter path for a phone or a paper that isn't a PDF/DOCX yet.

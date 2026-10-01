@@ -10,8 +10,8 @@
 // address: an old deployment's bugs don't outlive their fix. And, at most
 // once a minute, it clears expired rows after answering (housekeeping in
 // ledger.ts), since Pages has no scheduler.
-import { sameOrigin } from "../../src/lib/auth.ts";
-import { housekeeping } from "../../src/lib/ledger.ts";
+import { sameOrigin } from "../../src/lib/accounts/auth.ts";
+import { housekeeping } from "../../src/lib/accounts/ledger.ts";
 
 const HOUSEKEEPING_EVERY_MS = 60 * 1000;
 let lastHousekeeping = 0;

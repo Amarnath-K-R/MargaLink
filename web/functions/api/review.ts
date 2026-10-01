@@ -11,13 +11,13 @@
 // requests. Why it's built this way, and what each gate below defends
 // against, is in ../../../docs/ARCHITECTURE.md under "The AI review" — read
 // that before changing a prompt, a cap, or the grounding.
-import { findJournalRules } from "../../src/lib/journalRules.ts";
-import { parsePassRequest, passCallConfig, validateSynthesisOutput } from "../../src/lib/reviewPasses.ts";
-import { DAILY, countUse, leftToday } from "../../src/lib/dailyCaps.ts";
-import { groundExtractOutput } from "../../src/lib/reviewGrounding.ts";
-import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/anthropicStream.ts";
-import { getSession, type AccountEnv } from "../../src/lib/auth.ts";
-import { claimReviewPass, markDelivered, markSynthesized } from "../../src/lib/ledger.ts";
+import { findJournalRules } from "../../src/lib/journals/journalRules.ts";
+import { parsePassRequest, passCallConfig, validateSynthesisOutput } from "../../src/lib/review/reviewPasses.ts";
+import { DAILY, countUse, leftToday } from "../../src/lib/accounts/dailyCaps.ts";
+import { groundExtractOutput } from "../../src/lib/review/reviewGrounding.ts";
+import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/ai/anthropicStream.ts";
+import { getSession, type AccountEnv } from "../../src/lib/accounts/auth.ts";
+import { claimReviewPass, markDelivered, markSynthesized } from "../../src/lib/accounts/ledger.ts";
 
 type Env = AccountEnv & { ANTHROPIC_API_KEY: string };
 

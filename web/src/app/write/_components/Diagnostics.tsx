@@ -1,6 +1,6 @@
 "use client";
 
-import type { TexDiagnostic } from "@/lib/texLog";
+import type { TexDiagnostic } from "@/lib/write/texLog";
 
 // What the compiler reported, newest compile only: errors first, each a link
 // to its file and line. The full log stays behind a disclosure.

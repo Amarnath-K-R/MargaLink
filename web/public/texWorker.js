@@ -2,7 +2,7 @@
 // engine is BusyTeX (MIT; TeX Live compiled to WebAssembly), unmodified, loaded
 // from our R2 bucket; its pipeline script is classic (importScripts), so this
 // is a classic worker. Plain JS on purpose: not bundled, not typechecked — the
-// typed side is src/lib/texRunner.ts, the only thing that talks to this file.
+// typed side is src/lib/write/texRunner.ts, the only thing that talks to this file.
 // The project's files arrive by postMessage and never leave the worker.
 //
 // Protocol (every message carries the caller's id):

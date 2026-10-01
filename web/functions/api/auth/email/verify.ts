@@ -4,8 +4,8 @@
 // proves the inbox, which is the email verification. With {token, peek:
 // true} it only says which address the link is for, so the page can ask
 // "Sign in as …?" truthfully before anything is spent.
-import { createSession, hashSecret, readJson, safeNext, sessionCookies, sha256Hex, signInUser, text, withCookies, type AccountEnv } from "../../../../src/lib/auth.ts";
-import { grantWelcome } from "../../../../src/lib/ledger.ts";
+import { createSession, hashSecret, readJson, safeNext, sessionCookies, sha256Hex, signInUser, text, withCookies, type AccountEnv } from "../../../../src/lib/accounts/auth.ts";
+import { grantWelcome } from "../../../../src/lib/accounts/ledger.ts";
 
 export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env }) => {
   const now = Date.now();

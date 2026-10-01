@@ -2,8 +2,8 @@
 // POST /api/pay/portal: a link to Paddle's customer portal, where Pro is
 // managed or cancelled and receipts live. The link is signed by Paddle for
 // this customer and opened in a new tab.
-import { getSession, text, type AccountEnv } from "../../../src/lib/auth.ts";
-import { portalUrl, type PaddleApiEnv } from "../../../src/lib/paddle.ts";
+import { getSession, text, type AccountEnv } from "../../../src/lib/accounts/auth.ts";
+import { portalUrl, type PaddleApiEnv } from "../../../src/lib/accounts/paddle.ts";
 
 export const onRequestPost: PagesFunction<AccountEnv & PaddleApiEnv> = async ({ request, env }) => {
   const s = await getSession(env.DB, request, Date.now());

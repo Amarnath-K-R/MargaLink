@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import ErrorText from "@/components/ErrorText";
-import PageHeader from "@/components/PageHeader";
-import PaperDropzone from "@/components/PaperDropzone";
-import Step from "@/components/Step";
+import ErrorText from "@/components/ui/ErrorText";
+import PageHeader from "@/components/layout/PageHeader";
+import PaperDropzone from "@/components/ui/PaperDropzone";
+import Step from "@/components/ui/Step";
 import { Check } from "lucide-react";
-import RulesCheckPanel from "@/components/RulesCheckPanel";
+import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
 import JournalPicker from "./_components/JournalPicker.tsx";
 import ReviewRunner from "./_components/ReviewRunner.tsx";
 import { useReview } from "./_components/useReview.ts";

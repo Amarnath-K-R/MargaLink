@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { errorMessage } from "@/lib/errorMessage";
-import ErrorText from "@/components/ErrorText";
+import ErrorText from "@/components/ui/ErrorText";
 import FigureStudio from "@/app/figures/_components/FigureStudio.tsx";
 import { readRecipe, type Recipe } from "@/app/figures/_components/RecipeImportExport.tsx";
 import type { FiguresApi } from "@/app/figures/_components/useFigures.ts";

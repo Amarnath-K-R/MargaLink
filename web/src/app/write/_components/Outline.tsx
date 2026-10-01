@@ -1,6 +1,6 @@
 "use client";
 
-import type { OutlineItem } from "@/lib/texSource";
+import type { OutlineItem } from "@/lib/write/texSource";
 
 // The paper's headings in reading order (the main file, then what it
 // \inputs), indented by level relative to the top level used; a click opens

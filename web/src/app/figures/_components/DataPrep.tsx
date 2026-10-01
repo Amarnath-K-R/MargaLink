@@ -1,6 +1,6 @@
 "use client";
 
-import { DTYPES, type Dataset, type Dtype, type PrepOptions, type Workbook } from "@/lib/spreadsheet";
+import { DTYPES, type Dataset, type Dtype, type PrepOptions, type Workbook } from "@/lib/figures/spreadsheet";
 
 const input = "clay-field";
 const THOUSANDS: { value: PrepOptions["thousands"]; label: string }[] = [

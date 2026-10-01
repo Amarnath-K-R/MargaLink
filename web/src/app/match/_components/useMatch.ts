@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { extractFromFile } from "@/lib/extract";
-import { embed } from "@/lib/embed";
-import { loadManifest, type IndexManifest } from "@/lib/manifest";
-import { matchJournals, getAvailableFields, estimatePaperTopics, loadNameIndex, type MatchResult, type MatchInput, type JournalFilters } from "@/lib/match";
-import { buildQuery, queryFromPasted, type PaperQuery } from "@/lib/matchQuery";
-import { countCitedJournals } from "@/lib/references";
-import { loadTopicNames } from "@/lib/topics";
-import type { TopicEstimate } from "@/lib/rank";
-import { checkFormat, type FormatCheckResult } from "@/lib/formatCheck";
-import { findJournalRules } from "@/lib/journalRules";
-import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
+import { extractFromFile } from "@/lib/paper/extract";
+import { embed } from "@/lib/match/embed";
+import { loadManifest, type IndexManifest } from "@/lib/match/manifest";
+import { matchJournals, getAvailableFields, estimatePaperTopics, loadNameIndex, type MatchResult, type MatchInput, type JournalFilters } from "@/lib/match/match";
+import { buildQuery, queryFromPasted, type PaperQuery } from "@/lib/match/matchQuery";
+import { countCitedJournals } from "@/lib/paper/references";
+import { loadTopicNames } from "@/lib/match/topics";
+import type { TopicEstimate } from "@/lib/match/rank";
+import { checkFormat, type FormatCheckResult } from "@/lib/checks/formatCheck";
+import { findJournalRules } from "@/lib/journals/journalRules";
+import { checkRules, type RulesCheckResult } from "@/lib/checks/rulesCheck";
 import { errorMessage } from "@/lib/errorMessage";
 
 export type MatchStage = "idle" | "reading" | "embedding" | "matching" | "done" | "error";

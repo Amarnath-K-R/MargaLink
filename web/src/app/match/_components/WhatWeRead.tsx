@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { PaperQuery } from "@/lib/matchQuery";
-import type { TopicEstimate } from "@/lib/rank";
+import type { PaperQuery } from "@/lib/match/matchQuery";
+import type { TopicEstimate } from "@/lib/match/rank";
 
 // What the matcher actually read — shown so a bad read is visible, with the
 // paste box as the fix. All of it stays in this tab.

@@ -5,7 +5,7 @@
 // notice); without it, back to the sign-in page to tick them. The state, the PKCE
 // verifier and where to return go in a 10-minute HttpOnly cookie that only
 // the callback reads.
-import { b64url, OAUTH_COOKIE, pkce, randomToken, redirect, safeNext, type AccountEnv } from "../../../../src/lib/auth.ts";
+import { b64url, OAUTH_COOKIE, pkce, randomToken, redirect, safeNext, type AccountEnv } from "../../../../src/lib/accounts/auth.ts";
 
 export const onRequestGet: PagesFunction<AccountEnv> = async ({ request, env }) => {
   const url = new URL(request.url);

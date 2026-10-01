@@ -1,11 +1,11 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import PageHeader from "@/components/PageHeader";
+import PageHeader from "@/components/layout/PageHeader";
 import { Aside, DocBody, OptionTable, type TocItem } from "@/components/docs/Doc";
 import { PADDLE_RESELLER } from "@/lib/site";
-import { ContactEmail as Contact, OperatorDetails } from "@/components/ContactDetails";
-import { FIGURE_PRICE, WELCOME_COINS } from "@/lib/coins";
+import { ContactEmail as Contact, OperatorDetails } from "@/components/layout/ContactDetails";
+import { FIGURE_PRICE, WELCOME_COINS } from "@/lib/accounts/coins";
 
 export const metadata: Metadata = {
   title: "How privacy works | MargaLink",

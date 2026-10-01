@@ -4,8 +4,8 @@
 // secret and the PKCE verifier) for an id_token, check its claims, and sign
 // the account in. A popup lands on /signin?done=1, which closes itself; the
 // page that opened it notices on focus.
-import { checkIdClaims, createSession, hashSecret, jwtPayload, OAUTH_COOKIE, readCookie, redirect, safeNext, sessionCookies, signInUser, type AccountEnv } from "../../../../src/lib/auth.ts";
-import { grantWelcome } from "../../../../src/lib/ledger.ts";
+import { checkIdClaims, createSession, hashSecret, jwtPayload, OAUTH_COOKIE, readCookie, redirect, safeNext, sessionCookies, signInUser, type AccountEnv } from "../../../../src/lib/accounts/auth.ts";
+import { grantWelcome } from "../../../../src/lib/accounts/ledger.ts";
 
 const decodeNext = (s: string) => {
   try {

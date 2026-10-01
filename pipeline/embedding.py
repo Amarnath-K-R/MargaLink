@@ -4,7 +4,7 @@ must all come from the same model — so everything reads it from here, and
 build_index.py writes BROWSER_MODEL_ID and QUERY_PREFIX into the manifest.
 
 Changed only by bakeoff.py's result, within the small-model cap (384-dim,
-~33 MB in the browser): see docs/superpowers/specs/2026-09-24-matching-v2-design.md.
+~33 MB in the browser): see docs/specs/2026-09-24-matching-v2-design.md.
 """
 
 from pathlib import Path

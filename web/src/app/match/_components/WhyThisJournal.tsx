@@ -1,4 +1,4 @@
-import type { RankedJournal } from "@/lib/rank";
+import type { RankedJournal } from "@/lib/match/rank";
 
 // The reasons behind one result: the topics your paper shares with the
 // journal's recent papers, how often you cite it, and which of its clusters

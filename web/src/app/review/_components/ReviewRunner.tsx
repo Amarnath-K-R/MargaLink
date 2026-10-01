@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { NO_EDITS } from "@/lib/reviewSections";
-import { WELCOME_COINS } from "@/lib/coins";
-import { Coin } from "@/components/AccountButton";
-import SignInPanel from "@/components/SignInPanel";
-import { useAccount } from "@/components/useAccount";
-import type { Citation, SectionKind } from "@/lib/reviewTypes";
-import ErrorText from "@/components/ErrorText";
-import ReviewConsent from "@/components/ReviewConsent";
-import ReviewResultPanel from "@/components/ReviewResultPanel";
+import { NO_EDITS } from "@/lib/review/reviewSections";
+import { WELCOME_COINS } from "@/lib/accounts/coins";
+import { Coin } from "@/components/account/AccountButton";
+import SignInPanel from "@/components/account/SignInPanel";
+import { useAccount } from "@/components/account/useAccount";
+import type { Citation, SectionKind } from "@/lib/review/reviewTypes";
+import ErrorText from "@/components/ui/ErrorText";
+import ReviewConsent from "@/components/review/ReviewConsent";
+import ReviewResultPanel from "@/components/review/ReviewResultPanel";
 import TierPicker from "./TierPicker.tsx";
 import OutlineEditor from "./OutlineEditor.tsx";
 import type { ReviewApi } from "./useReview.ts";

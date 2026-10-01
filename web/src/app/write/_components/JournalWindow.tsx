@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { findJournalRules, REQUIRED_STATEMENT_LABELS } from "@/lib/journalRules";
-import { shortId, webLink } from "@/lib/journalUrl";
-import { loadMeta, type JournalMeta } from "@/lib/match";
-import { loadTopicNames } from "@/lib/topics";
-import { templateForJournal, type Template } from "@/lib/templateCatalog";
+import { findJournalRules, REQUIRED_STATEMENT_LABELS } from "@/lib/journals/journalRules";
+import { shortId, webLink } from "@/lib/journals/journalUrl";
+import { loadMeta, type JournalMeta } from "@/lib/match/match";
+import { loadTopicNames } from "@/lib/match/topics";
+import { templateForJournal, type Template } from "@/lib/write/templateCatalog";
 import { errorMessage } from "@/lib/errorMessage";
-import ErrorText from "@/components/ErrorText";
-import JournalDetail from "@/components/JournalDetail";
+import ErrorText from "@/components/ui/ErrorText";
+import JournalDetail from "@/components/journals/JournalDetail";
 import type { Journal } from "../page.tsx";
 
 const SHOWN = 20;

@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { loadMeta, getAvailableFields, type JournalMeta } from "@/lib/match";
-import { loadTopicNames } from "@/lib/topics";
-import { JournalResultTitle, JournalResultChips } from "@/components/JournalResultRow";
-import JournalDetail from "@/components/JournalDetail";
-import PageHeader from "@/components/PageHeader";
+import { loadMeta, getAvailableFields, type JournalMeta } from "@/lib/match/match";
+import { loadTopicNames } from "@/lib/match/topics";
+import { JournalResultTitle, JournalResultChips } from "@/components/journals/JournalResultRow";
+import JournalDetail from "@/components/journals/JournalDetail";
+import PageHeader from "@/components/layout/PageHeader";
 import { Search } from "lucide-react";
 
 const DISPLAY_CAP = 100;

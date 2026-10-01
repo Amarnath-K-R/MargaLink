@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { shortId } from "@/lib/journalUrl";
-import type { Citation } from "@/lib/reviewTypes";
-import { findQuoteInTex } from "@/lib/texSource";
-import ErrorText from "@/components/ErrorText";
-import RulesCheckPanel from "@/components/RulesCheckPanel";
+import { shortId } from "@/lib/journals/journalUrl";
+import type { Citation } from "@/lib/review/reviewTypes";
+import { findQuoteInTex } from "@/lib/write/texSource";
+import ErrorText from "@/components/ui/ErrorText";
+import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
 import JournalPicker from "@/app/review/_components/JournalPicker.tsx";
 import ReviewRunner from "@/app/review/_components/ReviewRunner.tsx";
 import type { ReviewApi } from "@/app/review/_components/useReview.ts";

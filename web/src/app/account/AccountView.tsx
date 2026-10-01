@@ -3,13 +3,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Download } from "lucide-react";
-import { Coin } from "@/components/AccountButton";
-import SignInPanel from "@/components/SignInPanel";
+import { Coin } from "@/components/account/AccountButton";
+import SignInPanel from "@/components/account/SignInPanel";
 import { ProStatus } from "../pricing/Packs";
-import { PRO } from "@/lib/coins";
-import { openPortal } from "@/lib/paddleCheckout";
-import { refreshAccount, signOut, useAccount } from "@/components/useAccount";
-import type { LedgerKind } from "@/lib/coins";
+import { PRO } from "@/lib/accounts/coins";
+import { openPortal } from "@/lib/accounts/paddleCheckout";
+import { refreshAccount, signOut, useAccount } from "@/components/account/useAccount";
+import type { LedgerKind } from "@/lib/accounts/coins";
 
 type Details = { email: string; balance: number; google: boolean; since?: number; noticeVersion?: number; history: { kind: LedgerKind; label: string; delta: number; at: number }[] };
 const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });

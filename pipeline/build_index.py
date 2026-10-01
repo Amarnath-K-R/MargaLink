@@ -15,7 +15,7 @@ Usage:
 Writes web/public/index/{manifest.json, index.bin, meta.json, topics.bin, topics.json}
 and pipeline/data/{heldout.bin, heldout.json, heldout_sample.json, drift_sample.json, dropped.txt, coherence.tsv}.
 
-manifest.ranking stays null here: web/scripts/eval_match.ts fits and writes it,
+manifest.ranking stays null here: web/scripts/eval/eval_match.ts fits and writes it,
 so a rebuild can never publish stale accuracy.
 """
 
@@ -137,7 +137,7 @@ def centre_labels(labels: np.ndarray, paper_topics: list[list[str]], k: int, top
 
 
 def int8_top10(query: np.ndarray, centres: np.ndarray, spans: list[tuple[int, int]]) -> list[int]:
-    """The exact integer ranking web/src/lib/rank.ts computes for embedding-only
+    """The exact integer ranking web/src/lib/match/rank.ts computes for embedding-only
     weights: best centre per journal by int8 dot, score desc, journal index asc."""
     dots = centres.astype(np.int32) @ query.astype(np.int32)
     best = [int(dots[s : s + c].max()) for s, c in spans]

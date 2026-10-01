@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { prepareDataset, readWorkbook, suggestPrepOptions, type Dataset, type PrepOptions, type Workbook } from "@/lib/spreadsheet";
-import { cancelPreviews, exportFigure, renderFigure, warmUp, FigureRenderError, type ImageFormat, type RenderRequest } from "@/lib/figureRunner";
-import { LIMITS, checkSpecAgainstColumns, validateFigureSpec, type FigureSpec, type Panel } from "@/lib/figureSpec";
-import { bindTemplate, loadTemplates, type Template } from "@/lib/figureTemplates";
+import { prepareDataset, readWorkbook, suggestPrepOptions, type Dataset, type PrepOptions, type Workbook } from "@/lib/figures/spreadsheet";
+import { cancelPreviews, exportFigure, renderFigure, warmUp, FigureRenderError, type ImageFormat, type RenderRequest } from "@/lib/figures/figureRunner";
+import { LIMITS, checkSpecAgainstColumns, validateFigureSpec, type FigureSpec, type Panel } from "@/lib/figures/figureSpec";
+import { bindTemplate, loadTemplates, type Template } from "@/lib/figures/figureTemplates";
 import { errorMessage } from "@/lib/errorMessage";
-import type { ClaudeResult } from "@/lib/figure";
+import type { ClaudeResult } from "@/lib/figures/figure";
 import type { PreviewState } from "./FigurePreview";
 import type { Recipe } from "./RecipeImportExport";
 

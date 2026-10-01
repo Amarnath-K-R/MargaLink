@@ -1,5 +1,5 @@
 """Spec-building helpers shared by selfcheck.py and render_gallery.py. They
-mirror web/src/lib/figureSpec.ts's defaultPanel()/DEFAULT_SPEC shape exactly,
+mirror web/src/lib/figures/figureSpec.ts's defaultPanel()/DEFAULT_SPEC shape exactly,
 so a spec built here validates on the TypeScript side too."""
 
 import sys

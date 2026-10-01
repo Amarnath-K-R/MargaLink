@@ -5,9 +5,9 @@
 // no request at all. Also where lazy housekeeping happens: unfinished
 // reviews past their two hours are refunded, Pro's monthly coins are
 // granted when due, and the session is extended.
-import { getSession, hashSecret, HINT_COOKIE, readCookie, rollSession, sessionCookies, withCookies, type AccountEnv } from "../../src/lib/auth.ts";
-import { checkoutSig } from "../../src/lib/paddle.ts";
-import { balance, grantDuePro, sweepTickets } from "../../src/lib/ledger.ts";
+import { getSession, hashSecret, HINT_COOKIE, readCookie, rollSession, sessionCookies, withCookies, type AccountEnv } from "../../src/lib/accounts/auth.ts";
+import { checkoutSig } from "../../src/lib/accounts/paddle.ts";
+import { balance, grantDuePro, sweepTickets } from "../../src/lib/accounts/ledger.ts";
 
 type Env = AccountEnv & { PADDLE_ENV?: string; PADDLE_CLIENT_TOKEN?: string; PADDLE_PRICE_IDS?: string };
 

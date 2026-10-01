@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import ErrorText from "@/components/ErrorText";
-import FigureConsent from "@/components/FigureConsent";
-import SignInPanel from "@/components/SignInPanel";
-import { refreshAccount, setBalance, useAccount } from "@/components/useAccount";
-import { FIGURE_PRICE, NotEnoughCoinsError, SignInRequiredError, WELCOME_COINS } from "@/lib/coins";
-import { askClaude, figureConsentGiven, recordFigureConsent, type ClaudeResult } from "@/lib/figure";
-import { REQUEST_MAX_CHARS, buildFigurePayload, levelsToSend, type FigureMode } from "@/lib/figureSchema";
-import type { FigureSpec } from "@/lib/figureSpec";
-import type { Dataset } from "@/lib/spreadsheet";
+import ErrorText from "@/components/ui/ErrorText";
+import FigureConsent from "@/components/figures/FigureConsent";
+import SignInPanel from "@/components/account/SignInPanel";
+import { refreshAccount, setBalance, useAccount } from "@/components/account/useAccount";
+import { FIGURE_PRICE, NotEnoughCoinsError, SignInRequiredError, WELCOME_COINS } from "@/lib/accounts/coins";
+import { askClaude, figureConsentGiven, recordFigureConsent, type ClaudeResult } from "@/lib/figures/figure";
+import { REQUEST_MAX_CHARS, buildFigurePayload, levelsToSend, type FigureMode } from "@/lib/figures/figureSchema";
+import type { FigureSpec } from "@/lib/figures/figureSpec";
+import type { Dataset } from "@/lib/figures/spreadsheet";
 
 // "Describe it" → Claude returns a figure description (or a code tweak),
 // drawn locally like everything else. The exact request is shown before

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import PageHeader from "@/components/PageHeader";
-import SiteFooter from "@/components/SiteFooter";
+import PageHeader from "@/components/layout/PageHeader";
+import SiteFooter from "@/components/layout/SiteFooter";
 import { TEAM, type Member } from "./team";
 
 export const metadata: Metadata = {

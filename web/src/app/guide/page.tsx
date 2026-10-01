@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BarChart3, BookOpen, Coins, Compass, FileCheck2, LifeBuoy, PenLine, ScanSearch } from "lucide-react";
-import PageHeader from "@/components/PageHeader";
-import ResetSiteData from "@/components/ResetSiteData";
+import PageHeader from "@/components/layout/PageHeader";
+import ResetSiteData from "@/components/account/ResetSiteData";
 import { Aside, DocBody, DocPart, DocSection, Keys, OptionTable, Shot, type TocItem } from "@/components/docs/Doc";
 import { FiguresArt, JournalsArt, MatchArt, PrivacyArt, ReviewArt, WriteArt } from "@/components/docs/Art";
 

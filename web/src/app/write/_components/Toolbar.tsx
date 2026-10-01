@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { BarChart3, BookOpen, ChevronDown, Code, Columns2, FileCheck2, FileText, ListChecks, Loader2, PanelLeft, Play, ScanSearch } from "lucide-react";
-import type { ProjectMeta } from "@/lib/projectStore";
-import { LogoMark } from "@/components/Logo";
+import type { ProjectMeta } from "@/lib/write/projectStore";
+import { LogoMark } from "@/components/layout/Logo";
 
 export type Tool = "match" | "review" | "figures" | "checks" | "journal" | "palette" | "shortcuts";
 export type View = "source" | "split" | "pdf";

@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ProjectStore, type ProjectMeta } from "@/lib/projectStore";
-import { figureSnippet, nextFigurePath } from "@/lib/texSource";
-import ErrorText from "@/components/ErrorText";
+import { ProjectStore, type ProjectMeta } from "@/lib/write/projectStore";
+import { figureSnippet, nextFigurePath } from "@/lib/write/texSource";
+import ErrorText from "@/components/ui/ErrorText";
 
 // Puts the figure (as a 300 dpi PDF) into one of this browser's /write
 // projects, under figures/, and copies the LaTeX that includes it. Nothing

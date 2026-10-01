@@ -1,6 +1,6 @@
 """figurelib — MargaLink's figure renderer.
 
-Renders a FigureSpec (see web/src/lib/figureSpec.ts; this module reads the same
+Renders a FigureSpec (see web/src/lib/figures/figureSpec.ts; this module reads the same
 JSON, camelCase keys and all) against a pandas DataFrame, deterministically.
 The browser runs this exact file inside Pyodide (public/figureWorker.mjs); the
 CPython selfcheck in web/figurelib/ imports it unchanged. It never touches the

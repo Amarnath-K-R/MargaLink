@@ -1,0 +1,197 @@
+// Runnable check for formatCheck.ts's heuristics against realistic sample
+// text — not part of the app bundle. Run directly:
+//   node src/lib/checks/formatCheck.selfcheck.ts
+import { checkFormat, extractAbstract } from "./formatCheck.ts";
+import assert from "node:assert/strict";
+
+const SAMPLE_PAPER = `
+Deep Learning for Crop Disease Detection
+
+John Smith, Jane Doe
+
+Abstract
+
+This paper presents a convolutional neural network approach to detecting
+crop diseases from leaf images. We evaluate our method on a large dataset
+of rice and wheat leaf photographs collected across three growing seasons
+and show substantial improvements over prior baselines in both accuracy
+and inference latency on low-power devices commonly available to farmers.
+
+Keywords: deep learning, agriculture, plant disease
+
+1. Introduction
+
+Crop diseases cause significant yield losses worldwide as shown in Figure 1
+and Figure 2. Early detection remains a major challenge for smallholder
+farmers, see Table 1 for a summary of existing approaches. Figure 1 shows
+the overall pipeline.
+
+2. Methods
+
+We collected images as described in Table 1 and Table 2.
+
+3. Results
+
+Our model outperforms baselines (see Figure 3).
+
+Ethics statement
+
+This study did not involve human or animal subjects and did not require
+institutional review board approval.
+
+Funding
+
+This work was supported by a grant from the National Science Foundation.
+
+Conflicts of interest
+
+The authors declare no competing interests.
+
+Data availability statement
+
+The data supporting this study are available from the corresponding author
+upon reasonable request.
+
+References
+
+[1] Smith, J. et al. Deep learning basics. Journal of AI, 2020.
+[2] Doe, J. et al. Agricultural imaging. Journal of Ag Tech, 2019.
+[3] Lee, K. Crop disease review. Plant Science, 2021.
+`;
+
+const result = checkFormat(SAMPLE_PAPER);
+
+assert(result.wordCount > 100, `expected a substantial word count, got ${result.wordCount}`);
+assert(result.abstract.found, "abstract should be found");
+assert(
+  result.abstract.wordCount !== null && result.abstract.wordCount > 20 && result.abstract.wordCount < 100,
+  `abstract word count should be reasonable, got ${result.abstract.wordCount}`
+);
+assert(!result.abstract.structured, "this abstract has no Background:/Methods: sub-headings");
+assert(result.requiredSections.ethics, "ethics statement should be detected");
+assert(result.requiredSections.funding, "funding statement should be detected");
+assert(result.requiredSections.conflictsOfInterest, "COI statement should be detected");
+assert(result.requiredSections.dataAvailability, "data availability statement should be detected");
+assert(result.referenceCount === 3, `expected 3 numbered references, got ${result.referenceCount}`);
+assert(result.figureCount === 3, `expected figures 1,2,3 (unique), got ${result.figureCount}`);
+assert(result.tableCount === 2, `expected tables 1,2 (unique), got ${result.tableCount}`);
+
+// Structured abstract
+const STRUCTURED = `
+Abstract
+
+Background: Crop diseases are common. Methods: We used a CNN. Results: It
+worked well. Conclusions: Deep learning helps.
+
+Introduction
+
+Text here.
+`;
+const structuredResult = checkFormat(STRUCTURED);
+assert(structuredResult.abstract.found, "structured abstract should still be found");
+assert(structuredResult.abstract.structured, "should detect Background:/Methods:/Results: as structured");
+
+// Structured abstract with its subheadings on their own lines (a real PDF layout):
+// "Background" opening the abstract is not the end of it.
+const STRUCTURED_LINES = `Abstract
+
+Background
+
+Heart failure readmissions are common and costly across health systems worldwide.
+
+Methods
+
+We pooled 40 cohorts.
+
+Results
+
+Rates varied fourfold.
+
+Keywords: heart failure; readmission
+
+1. Introduction
+
+Text here.`;
+const sl = extractAbstract(STRUCTURED_LINES);
+assert(sl !== null && sl.text.includes("Rates varied fourfold") && !sl.text.includes("Keywords"), `structured own-line abstract kept whole, got: ${sl?.text}`);
+assert(extractAbstract("Summary\n\nThe Lancet calls its abstract a summary, and it runs for a while here.\n\nIntroduction\n\nBody.")?.text.startsWith("The Lancet"), "a Summary heading starts the abstract");
+assert(extractAbstract("Title\nAbstract: Inline abstract text that starts on the heading line and continues.\n\nIntroduction\n\nBody.")?.text.startsWith("Inline abstract"), "inline 'Abstract:' starts the abstract");
+
+// Negative case: a bare-bones text with none of these sections
+const MINIMAL = "Just a short note with no abstract, no references, nothing structured.";
+const minimalResult = checkFormat(MINIMAL);
+assert(!minimalResult.abstract.found, "no abstract heading present, should not be found");
+assert(!minimalResult.requiredSections.ethics, "no ethics statement, should be false");
+assert(!minimalResult.requiredSections.funding, "no funding statement, should be false");
+assert(minimalResult.referenceCount === null, "no references section, should be null not 0");
+assert(minimalResult.figureCount === 0, "no figures mentioned");
+
+// "abstract art" mentioned deep in the document (e.g. in a reference title)
+// should not be picked up as an Abstract *heading* this far from the start
+const FALSE_POSITIVE_CHECK = "x ".repeat(4000) + "\nAbstract\n\nA note about abstract art in this reference.";
+const fpResult = checkFormat(FALSE_POSITIVE_CHECK);
+assert(!fpResult.abstract.found, "an 'Abstract' heading past the 6000-char head window should not match");
+
+// Plural figure/table references ("Figures 1 and 2") — the singular-only
+// pattern silently dropped every number in a plural list.
+const PLURAL_REFS = `
+Abstract
+
+Short abstract text here for the paper.
+
+Introduction
+
+Figures 1 and 2 show the setup. Tables 1, 2 and 3 summarize the results.
+`;
+const pluralResult = checkFormat(PLURAL_REFS);
+assert(pluralResult.figureCount === 2, `expected figures 1,2 from a plural reference, got ${pluralResult.figureCount}`);
+assert(pluralResult.tableCount === 3, `expected tables 1,2,3 from a plural reference, got ${pluralResult.tableCount}`);
+
+// IEEE-style numbered/capitalized heading ("I. INTRODUCTION") — previously
+// only bare "introduction"/"1. introduction" was recognized as an abstract
+// end-boundary, so this style fell through to the wider flat-window fallback.
+const IEEE_STYLE = `
+Abstract
+
+This is the abstract for an IEEE-style paper with a numbered heading.
+
+I. INTRODUCTION
+
+Body text starts here.
+`;
+const ieeeResult = checkFormat(IEEE_STYLE);
+assert(ieeeResult.abstract.found, "IEEE-style abstract should be found");
+assert(
+  ieeeResult.abstract.wordCount !== null && ieeeResult.abstract.wordCount < 20,
+  `should stop at 'I. INTRODUCTION', not run past it, got ${ieeeResult.abstract.wordCount} words`
+);
+
+// Numbered References heading ("5. References") — a common Word-numbered-
+// section style that a bare "references"-only match misses entirely, found
+// via a real user upload (a 13k-word review whose references went entirely
+// undetected despite clearly having a reference list).
+const NUMBERED_REFS_HEADING = `
+Abstract
+
+Short abstract text here.
+
+1. Introduction
+
+Body.
+
+5. References
+
+[1] Smith, J. Deep learning basics. Journal of AI, 2020.
+[2] Doe, J. Agricultural imaging. Journal of Ag Tech, 2019.
+`;
+const numberedRefsResult = checkFormat(NUMBERED_REFS_HEADING);
+assert(
+  numberedRefsResult.referenceCount === 2,
+  `expected 2 references under a numbered "5. References" heading, got ${numberedRefsResult.referenceCount}`
+);
+
+// Same numbered-heading gap on the Funding detector ("4. Funding")
+const NUMBERED_FUNDING = "Abstract\n\nShort abstract.\n\n4. Funding\n\nNo external funding was received.";
+assert(checkFormat(NUMBERED_FUNDING).requiredSections.funding, "numbered '4. Funding' heading should be detected");
+
+console.log("formatCheck.selfcheck: OK");

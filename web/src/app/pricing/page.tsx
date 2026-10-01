@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BarChart3, BookOpen, PenLine, ScanSearch } from "lucide-react";
-import PageHeader from "@/components/PageHeader";
-import { Coin } from "@/components/AccountButton";
-import { FIGURE_PRICE, WELCOME_COINS, reviewPrice } from "@/lib/coins";
-import { REVIEW_TIERS } from "@/lib/reviewTypes";
+import PageHeader from "@/components/layout/PageHeader";
+import { Coin } from "@/components/account/AccountButton";
+import { FIGURE_PRICE, WELCOME_COINS, reviewPrice } from "@/lib/accounts/coins";
+import { REVIEW_TIERS } from "@/lib/review/reviewTypes";
 import { Packs, ProPlans } from "./Packs";
 import { PADDLE_RESELLER } from "@/lib/site";
 

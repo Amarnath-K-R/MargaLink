@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { refreshAccount } from "@/components/useAccount";
+import { refreshAccount } from "@/components/account/useAccount";
 
 // Where the emailed link lands: /signin/verify#t=<token>. The token is in
 // the #fragment, which browsers never send to a server, and nothing is spent

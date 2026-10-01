@@ -1,10 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { LIMITS, validateFigureSpec } from "@/lib/figureSpec";
-import PaperDropzone from "@/components/PaperDropzone";
-import ErrorText from "@/components/ErrorText";
-import Step from "@/components/Step";
+import { LIMITS, validateFigureSpec } from "@/lib/figures/figureSpec";
+import PaperDropzone from "@/components/ui/PaperDropzone";
+import ErrorText from "@/components/ui/ErrorText";
+import Step from "@/components/ui/Step";
 import { Check } from "lucide-react";
 import DataPrep from "./DataPrep";
 import Gallery from "./Gallery";

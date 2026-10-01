@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import PageHeader from "@/components/PageHeader";
+import PageHeader from "@/components/layout/PageHeader";
 import MatchFilters from "./_components/MatchFilters.tsx";
 import MatchResults from "./_components/MatchResults.tsx";
 import FormatCheckPanel from "./_components/FormatCheckPanel.tsx";

@@ -1,6 +1,6 @@
 // Renders figures against real data, entirely inside this worker — never on
 // the main thread, never on a server. Plain JS on purpose: this file is not
-// bundled or typechecked. All typed logic lives in src/lib/figureRunner.ts,
+// bundled or typechecked. All typed logic lives in src/lib/figures/figureRunner.ts,
 // the only thing that talks to this file, over postMessage. The drawing
 // itself is public/figurelib.py (the same file the CPython selfcheck in
 // web/figurelib/ tests); this file only loads it and passes messages.
@@ -11,7 +11,7 @@
 // (Pyodide) into the static export. Pyodide is ~30MB; Cloudflare Pages
 // rejects any single file over 25MB. Living in public/, the static export
 // copies this file verbatim and the bundler never looks inside it — the
-// same reason src/lib/embed.ts CDN-loads onnxruntime-web instead of
+// same reason src/lib/match/embed.ts CDN-loads onnxruntime-web instead of
 // letting the bundler discover it.
 //
 // Protocol (every message carries the caller's id):

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ProjectMeta } from "@/lib/projectStore";
+import type { ProjectMeta } from "@/lib/write/projectStore";
 
 // The line under the editor: the compile's status (the only content of the
 // element the smoke reads), what the last compile found, how long the paper

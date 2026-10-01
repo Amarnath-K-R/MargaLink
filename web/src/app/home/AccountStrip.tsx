@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { WELCOME_COINS } from "@/lib/coins";
-import { Coin } from "@/components/AccountButton";
-import { useAccount } from "@/components/useAccount";
+import { WELCOME_COINS } from "@/lib/accounts/coins";
+import { Coin } from "@/components/account/AccountButton";
+import { useAccount } from "@/components/account/useAccount";
 
 // Home's account line, beside the heading: the balance and the way to the
 // account page, or an invitation to sign in (only the AI features need it).

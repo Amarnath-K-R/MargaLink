@@ -8,10 +8,10 @@
 // and the sign-in counters keyed by the address, until they expire within a
 // day (deleting an account mustn't reset its limits).
 // Pro is cancelled at Paddle first, so a deleted account is never charged.
-import { getSession, readJson, sessionCookies, text, withCookies, type AccountEnv } from "../../src/lib/auth.ts";
-import { cancelSubscription, type PaddleApiEnv } from "../../src/lib/paddle.ts";
-import { normalEmail } from "../../src/lib/coins.ts";
-import { balance, history, releaseWelcomeStatement } from "../../src/lib/ledger.ts";
+import { getSession, readJson, sessionCookies, text, withCookies, type AccountEnv } from "../../src/lib/accounts/auth.ts";
+import { cancelSubscription, type PaddleApiEnv } from "../../src/lib/accounts/paddle.ts";
+import { normalEmail } from "../../src/lib/accounts/coins.ts";
+import { balance, history, releaseWelcomeStatement } from "../../src/lib/accounts/ledger.ts";
 
 type Env = AccountEnv & PaddleApiEnv;
 

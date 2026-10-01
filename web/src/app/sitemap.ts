@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
-import { getAllJournals } from "@/lib/journalsServer";
-import { journalHref } from "@/lib/journalUrl";
+import { getAllJournals } from "@/lib/journals/journalsServer";
+import { journalHref } from "@/lib/journals/journalUrl";
 import { SITE_URL } from "@/lib/site";
 
 // Required for static export — the built-in sitemap convention still needs

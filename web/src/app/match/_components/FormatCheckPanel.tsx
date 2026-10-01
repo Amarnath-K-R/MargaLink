@@ -1,5 +1,5 @@
-import type { FormatCheckResult } from "@/lib/formatCheck";
-import CheckRow from "@/components/CheckRow";
+import type { FormatCheckResult } from "@/lib/checks/formatCheck";
+import CheckRow from "@/components/checks/CheckRow";
 
 export default function FormatCheckPanel({ result }: { result: FormatCheckResult }) {
   return (

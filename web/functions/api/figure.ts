@@ -5,7 +5,7 @@
 // disclosed, opt-in exception, not a quiet expansion of what leaves the
 // device.
 //
-// What arrives (built only by src/lib/figureSchema.ts): column names and
+// What arrives (built only by src/lib/figures/figureSchema.ts): column names and
 // types, the row count, the user's request, the current figure description
 // with typed text blanked and group references as "#n", and — only if the
 // user opted in — the labels of small categorical columns. Never a cell
@@ -14,15 +14,15 @@
 // is stored; each request costs 1 M coin (signed in), refunded if the
 // answer isn't usable.
 // See docs/ARCHITECTURE.md, "The figure generator", before changing this.
-import { checkLabels, checkSpecAgainstColumns, validateFigureSpec } from "../../src/lib/figureSpec.ts";
-import { isValidFigurePayload } from "../../src/lib/figureSchema.ts";
-import { HOOK_SYSTEM_PROMPT, HOOK_TOOL, SPEC_SYSTEM_PROMPT, SPEC_TOOL, buildFigurePrompt, isCodeSafeToRun } from "../../src/lib/figurePrompt.ts";
-import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/anthropicStream.ts";
-import { getSession, randomToken, type AccountEnv } from "../../src/lib/auth.ts";
-import { FIGURE_PRICE } from "../../src/lib/coins.ts";
-import { balance, credit, debit } from "../../src/lib/ledger.ts";
-import type { FigurePayload } from "../../src/lib/figureSchema.ts";
-import { DAILY, countUse, leftToday } from "../../src/lib/dailyCaps.ts";
+import { checkLabels, checkSpecAgainstColumns, validateFigureSpec } from "../../src/lib/figures/figureSpec.ts";
+import { isValidFigurePayload } from "../../src/lib/figures/figureSchema.ts";
+import { HOOK_SYSTEM_PROMPT, HOOK_TOOL, SPEC_SYSTEM_PROMPT, SPEC_TOOL, buildFigurePrompt, isCodeSafeToRun } from "../../src/lib/figures/figurePrompt.ts";
+import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/ai/anthropicStream.ts";
+import { getSession, randomToken, type AccountEnv } from "../../src/lib/accounts/auth.ts";
+import { FIGURE_PRICE } from "../../src/lib/accounts/coins.ts";
+import { balance, credit, debit } from "../../src/lib/accounts/ledger.ts";
+import type { FigurePayload } from "../../src/lib/figures/figureSchema.ts";
+import { DAILY, countUse, leftToday } from "../../src/lib/accounts/dailyCaps.ts";
 
 type Env = AccountEnv & { ANTHROPIC_API_KEY: string };
 // Pinned, and not one of Anthropic's "Covered Models" (Mythos class), which have their own

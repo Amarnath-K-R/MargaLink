@@ -21,8 +21,8 @@
 // fail closed, as without HASH_SECRET. `agree: true` is the sign-in form's
 // two boxes (18 or older; the terms and the privacy notice): no link, so no
 // account, without them.
-import { fingerprint, hashSecret, networkKey, randomToken, rateLimit, readJson, safeNext, sha256Hex, text, type AccountEnv } from "../../../../src/lib/auth.ts";
-import { isEmail, normalEmail } from "../../../../src/lib/coins.ts";
+import { fingerprint, hashSecret, networkKey, randomToken, rateLimit, readJson, safeNext, sha256Hex, text, type AccountEnv } from "../../../../src/lib/accounts/auth.ts";
+import { isEmail, normalEmail } from "../../../../src/lib/accounts/coins.ts";
 
 const LINK_TTL_MS = 15 * 60 * 1000;
 // Providers big enough to police their own sign-ups; everyone else's domain has a daily limit on new accounts.

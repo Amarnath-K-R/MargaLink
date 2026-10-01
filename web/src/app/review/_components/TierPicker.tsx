@@ -1,7 +1,7 @@
-import type { ReviewTier } from "@/lib/reviewTypes";
+import type { ReviewTier } from "@/lib/review/reviewTypes";
 
 // Review-picker labels, a different audience than the homepage's
-// reviewTiersData (_home/demoData.ts) — one describes a real choice being
+// reviewTiersData (_landing/demoData.ts) — one describes a real choice being
 // made here, the other is marketing copy. They'll legitimately drift;
 // that's not a bug to fix.
 export const TIER_OPTIONS: { value: ReviewTier; label: string; description: string }[] = [

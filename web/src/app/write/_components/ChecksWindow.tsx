@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import type { JournalRules } from "@/lib/journalRules";
-import ErrorText from "@/components/ErrorText";
-import RulesCheckPanel from "@/components/RulesCheckPanel";
+import type { JournalRules } from "@/lib/journals/journalRules";
+import ErrorText from "@/components/ui/ErrorText";
+import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
 import FormatCheckPanel from "@/app/match/_components/FormatCheckPanel.tsx";
 import CompileFirst from "./CompileFirst.tsx";
 import type { ChecksApi } from "./useChecks.ts";

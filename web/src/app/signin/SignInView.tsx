@@ -4,9 +4,9 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowRight } from "lucide-react";
-import SignInPanel from "@/components/SignInPanel";
-import { useAccount } from "@/components/useAccount";
-import { safeNext } from "@/lib/safeNext";
+import SignInPanel from "@/components/account/SignInPanel";
+import { useAccount } from "@/components/account/useAccount";
+import { safeNext } from "@/lib/accounts/safeNext";
 
 // Also where Google's popup lands (?done=1): it closes itself, and the page
 // that opened it picks up the sign-in on focus. Errors from the Google

@@ -2,10 +2,10 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Coin } from "@/components/AccountButton";
-import { currentAccount, refreshAccount, useAccount } from "@/components/useAccount";
-import { PACKS, PRO, reviewPrice } from "@/lib/coins";
-import { openCheckout, openPortal } from "@/lib/paddleCheckout";
+import { Coin } from "@/components/account/AccountButton";
+import { currentAccount, refreshAccount, useAccount } from "@/components/account/useAccount";
+import { PACKS, PRO, reviewPrice } from "@/lib/accounts/coins";
+import { openCheckout, openPortal } from "@/lib/accounts/paddleCheckout";
 
 // What can be bought, by its key in PADDLE_PRICE_IDS.
 type Key = (typeof PACKS)[number]["id"] | "PRO_MONTH" | "PRO_YEAR";

@@ -1,25 +1,27 @@
-# MargaLink — web app
+# MargaLink web app
 
-Next.js (App Router, static export) frontend for MargaLink, a privacy-first
-journal finder. See the repo root's `CLAUDE.md` and `journal-finder-plan.md`
-for the product plan and the three privacy rules every change must respect.
-
-## Getting started
+The Next.js app (App Router, static export) and the Cloudflare Pages
+Functions behind its account and AI features. The repo root's `README.md`
+covers setup, checks and the workflow; `CLAUDE.md` has the privacy rules
+every change must respect; `docs/ARCHITECTURE.md` has a one-line-per-file
+map of this folder.
 
 ```bash
 npm install
-npm run dev
+npm run fetch-index   # the journal index (gitignored) from the deployed site
+npm run dev           # http://localhost:3000
+npm run dev:full      # with the Functions and a local D1, on :8788 (copy .dev.vars.example to .dev.vars first)
+npm run check         # typecheck + lint + selfchecks
+npm run smoke         # Playwright checks against the dev server
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
-`npm run build` produces the static export in `out/`. `scripts/drive_app.mjs`
-is a manual Playwright smoke driver — `node scripts/drive_app.mjs` against a
-running dev server exercises the match flow end to end and screenshots the
-result.
-
-## Deploy
-
-Static export, deployed to Cloudflare Pages (`wrangler.toml`) — the app has
-no backend except `functions/api/review.ts`, a single Cloudflare Pages
-Function holding the Anthropic API key server-side for the opt-in AI review.
+| Folder | What |
+|---|---|
+| `src/app/` | Routes. Tool pieces in each route's `_components/`; the homepage in `_landing/`. |
+| `src/components/` | Shared UI: `layout/`, `ui/`, `account/`, `journals/`, `checks/`, `review/`, `figures/`, `docs/`. |
+| `src/lib/` | Logic by feature: `paper/`, `match/`, `journals/`, `checks/`, `review/`, `figures/`, `write/`, `accounts/`, `ai/`. |
+| `functions/api/` | The Pages Functions (AI, accounts, sign-in, payments). |
+| `migrations/` | The D1 schema. |
+| `public/` | Workers, `figurelib.py`, templates, fonts, the guide's screenshots; `index/` is generated. |
+| `scripts/` | `smoke/`, `e2e/`, `eval/`, `docs/`, `ops/`, `fixtures/`. |
+| `figurelib/` | The CPython checks for `public/figurelib.py`. |

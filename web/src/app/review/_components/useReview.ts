@@ -1,15 +1,15 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { extractFromFile } from "@/lib/extract";
-import { findJournalRules } from "@/lib/journalRules";
-import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
-import { MAX_REVIEW_CHARS, prepareForReview } from "@/lib/review";
-import { ReviewEndedError, ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "@/lib/reviewOrchestrator";
-import { NotEnoughCoinsError, SignInRequiredError } from "@/lib/coins";
-import { refreshAccount, setBalance } from "@/components/useAccount";
-import { NO_EDITS, buildOutline, chunkSections, type OutlineEdits } from "@/lib/reviewSections";
-import type { HeadingHint, ReviewProgress, ReviewResult, ReviewTier } from "@/lib/reviewTypes";
+import { extractFromFile } from "@/lib/paper/extract";
+import { findJournalRules } from "@/lib/journals/journalRules";
+import { checkRules, type RulesCheckResult } from "@/lib/checks/rulesCheck";
+import { MAX_REVIEW_CHARS, prepareForReview } from "@/lib/review/review";
+import { ReviewEndedError, ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "@/lib/review/reviewOrchestrator";
+import { NotEnoughCoinsError, SignInRequiredError } from "@/lib/accounts/coins";
+import { refreshAccount, setBalance } from "@/components/account/useAccount";
+import { NO_EDITS, buildOutline, chunkSections, type OutlineEdits } from "@/lib/review/reviewSections";
+import type { HeadingHint, ReviewProgress, ReviewResult, ReviewTier } from "@/lib/review/reviewTypes";
 import { errorMessage } from "@/lib/errorMessage";
 
 const TOO_LONG = "This paper is over 400,000 characters of text. Split off supplementary material and try again.";

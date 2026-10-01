@@ -1,6 +1,6 @@
 // Single source of truth for site-wide metadata — used by layout.tsx (page
 // title/description/OG tags), opengraph-image.tsx, sitemap.ts, and robots.ts.
-// No domain is registered yet (see journal-finder-plan.md §13) — set
+// No domain is registered yet (see docs/product-plan.md §13) — set
 // NEXT_PUBLIC_SITE_URL once one is.
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://example-placeholder.margalink.invalid";
 

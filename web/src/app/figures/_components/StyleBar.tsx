@@ -1,6 +1,6 @@
 "use client";
 
-import { LIMITS, PALETTES, SIZE_PRESETS, STYLE_PRESETS, type FigureSpec } from "@/lib/figureSpec";
+import { LIMITS, PALETTES, SIZE_PRESETS, STYLE_PRESETS, type FigureSpec } from "@/lib/figures/figureSpec";
 
 const field = "clay-field";
 const label = "flex flex-col gap-1 text-xs text-ink-soft";

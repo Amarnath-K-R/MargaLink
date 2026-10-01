@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BarChart3, Boxes, ClipboardCheck, Coins, FileCheck2, FlaskConical, FolderTree, Palette, PenLine, Rocket, ScanSearch, ShieldCheck } from "lucide-react";
-import PageHeader from "@/components/PageHeader";
+import PageHeader from "@/components/layout/PageHeader";
 import { Aside, DocBody, DocPart, DocSection, OptionTable, type TocItem } from "@/components/docs/Doc";
 import { Steps, Swatches, SystemDiagram } from "@/components/docs/Diagrams";
 
@@ -142,7 +142,7 @@ export default function ArchitecturePage() {
               Built offline: 1–4 centre embeddings per journal (k-means over its recent papers, so a broad journal is several clusters), metadata, a
               recent-topic profile, alternate names, and the topic table. Shipped as int8 rather than float (about 1 point of accuracy for a quarter of
               the size); every file stays under Cloudflare&apos;s 25 MB cap. Journals whose papers don&apos;t cohere are dropped at build time, with
-              reasons. {code("web/scripts/eval_match.ts")} runs the same {code("rank.ts")} over each journal&apos;s newest (never indexed) papers, fits
+              reasons. {code("web/scripts/eval/eval_match.ts")} runs the same {code("rank.ts")} over each journal&apos;s newest (never indexed) papers, fits
               the weights and the fit scale, and writes both, with the measured accuracy, into the manifest.
             </p>
             <p>
@@ -220,7 +220,7 @@ export default function ArchitecturePage() {
             <p>
               The engine (about 30 MB of WASM) and its data packs (about 110 MB basic) are too big for Pages&apos; per-file cap, so they live on a public R2
               bucket under a release-dated prefix, every object immutable. Packs are cached by the engine&apos;s own loader in IndexedDB.{" "}
-              {code("scripts/publish_busytex.sh")} uploads an allowlist with pinned sizes and a total cap; the bucket&apos;s CORS allows only our origins.
+              {code("scripts/ops/publish_busytex.sh")} uploads an allowlist with pinned sizes and a total cap; the bucket&apos;s CORS allows only our origins.
             </p>
           </DocPart>
         </DocSection>
@@ -251,7 +251,7 @@ export default function ArchitecturePage() {
                 what: (
                   <>
                     Append-only; the balance is SUM(delta). A debit is one conditional INSERT, so two can&apos;t spend the last coins, and UNIQUE(kind, ref)
-                    makes every credit, debit and refund idempotent. SQL lives in {code("lib/ledger.ts")}, prices in {code("lib/coins.ts")}.
+                    makes every credit, debit and refund idempotent. SQL lives in {code("lib/accounts/ledger.ts")}, prices in {code("lib/accounts/coins.ts")}.
                   </>
                 ),
               },
@@ -318,27 +318,27 @@ export default function ArchitecturePage() {
           <Aside title="Rules of thumb">
             <p>
               Shadows are warm (rgba(58, 44, 28, …)) and fall from one light at the top left. Things you read are sheets; things you touch are clay. The
-              away colour is spent only on what would leave the device. The homepage keeps its own stylesheet ({code("_home/home.css")}) and 3D clay desk.
+              away colour is spent only on what would leave the device. The homepage keeps its own stylesheet ({code("_landing/home.css")}) and 3D clay desk.
             </p>
           </Aside>
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
-        <DocSection id="code" title="Where things live" icon={icon(FolderTree)} lead="Routes own their pages and pieces; shared logic is flat in lib/; the server code is in functions/.">
+        <DocSection id="code" title="Where things live" icon={icon(FolderTree)} lead="Routes own their pages and pieces; shared logic sits in lib/, one folder per feature; the server code is in functions/.">
           <OptionTable
             rows={[
-              { name: "web/src/app/", what: "Routes. Each tool's page is JSX over a hook in its _components/ (useMatch, useReview, useFigures) that the workspace reuses. The homepage lives in _home/." },
-              { name: "web/src/components/", what: "Shared pieces: PageHeader (the tray), Step, Dialog, the consent notices, result panels, docs/ (these pages' blocks), three/ (the homepage's 3D scenes)." },
-              { name: "web/src/lib/", what: "Framework-agnostic logic, deliberately flat: match*/rank/topics/references, review*, figure*, tex*, projectStore, spreadsheet, journalRules. A relative lib import carries .ts (Node runs the selfchecks natively)." },
+              { name: "web/src/app/", what: "Routes. Each tool's page is JSX over a hook in its _components/ (useMatch, useReview, useFigures) that the workspace reuses. The homepage, its intro and its 3D scenes live in _landing/." },
+              { name: "web/src/components/", what: "Shared pieces by concern: layout/ (the tray, footer, logo), ui/ (Dialog, Step, the drop zone), account/, journals/, checks/, review/ and figures/ (the consent notices, result panels), docs/ (these pages' blocks)." },
+              { name: "web/src/lib/", what: "Framework-agnostic logic by feature: paper/, match/, journals/, checks/, review/, figures/, write/, accounts/, ai/. Each selfcheck sits beside its file; a relative lib import carries .ts (Node runs the selfchecks natively)." },
               { name: "web/functions/api/", what: "review.ts and figure.ts (the AI features), and the account, sign-in and payment Functions. They may import from src/lib/ only modules that are pure or isomorphic (no window, localStorage or fs)." },
               { name: "web/migrations/", what: "The D1 schema: accounts and the coin ledger, payments, subscriptions. Applied with wrangler d1 migrations apply; the selfchecks apply them to node:sqlite." },
               { name: "web/public/", what: "The index, templates, the figure gallery, the TeX and figure workers, figurelib.py, fonts, the guide's screenshots." },
               { name: "pipeline/", what: "The offline Python (uv) pipeline: fetch from OpenAlex, enrich from DOAJ and NLM, k-means centres, quality filters, build the index." },
-              { name: "web/scripts/", what: "The Playwright smokes (check_*.mjs), the ranker's evaluation (eval_match.ts), the guide's screenshots (guide_shots.mjs)." },
+              { name: "web/scripts/", what: "smoke/ (the Playwright checks), e2e/ (the account Functions on a local D1), eval/ (the ranker's evaluation), docs/ (the guide's screenshots), ops/ (the index download, the TeX engine upload)." },
             ]}
           />
           <p className="text-sm text-ink-soft">
-            Start with {code("CLAUDE.md")} (the three rules), then {code("src/lib/rank.ts")}, then {code("docs/ARCHITECTURE.md")}&apos;s folder map, one
+            Start with {code("CLAUDE.md")} (the three rules), then {code("src/lib/match/rank.ts")}, then {code("docs/ARCHITECTURE.md")}&apos;s folder map, one
             line per file.
           </p>
         </DocSection>
@@ -355,7 +355,7 @@ export default function ArchitecturePage() {
             ]}
           />
           <OptionTable
-            title="The smokes (web/scripts/check_*.mjs)"
+            title="The smokes (web/scripts/smoke/check_*.mjs)"
             rows={[
               { name: "check_match", what: "What is read from a real PDF, topics, fit badges, a why panel, the correction and paste paths, and not one request with a body." },
               { name: "check_filters · check_format", what: "Filters really re-rank; the format check on a multi-page PDF." },
@@ -377,7 +377,7 @@ export default function ArchitecturePage() {
               over 25 MB), then {code("wrangler pages deploy")}. The AI Functions need {code("ANTHROPIC_API_KEY")} (the Pages dashboard, or{" "}
               {code("web/.dev.vars")} locally) and KV namespaces for the daily counters; the account Functions need the D1 databases in{" "}
               {code("wrangler.toml")}, their migrations applied, and the Google, Resend and Paddle secrets listed in {code("CLAUDE.md")}. The index must be
-              built first ({code("pipeline/README.md")}); the TeX engine is published separately to R2 ({code("scripts/publish_busytex.sh")}).
+              built first ({code("pipeline/README.md")}); the TeX engine is published separately to R2 ({code("scripts/ops/publish_busytex.sh")}).
             </p>
           </DocPart>
         </DocSection>

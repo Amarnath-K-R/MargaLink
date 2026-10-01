@@ -36,7 +36,7 @@ uv run --env-file .env enrich_nlm.py      # NLM Catalog: MEDLINE indexing (only 
 uv run fetch_nlm_abbrevs.py               # NLM journal abbreviations ("J Am Coll Cardiol"), one ~9 MB file
 uv run build_index.py                     # held-out split, centres, topics, quality pass → web/public/index/* (~7 h at ~110 papers/s; vectors cached)
 uv run --env-file .env fetch_heldout_refs.py  # resolves 500 held-out papers' references, for the reference signal's evaluation
-cd ../web && node scripts/eval_match.ts --refs --fit --write-manifest   # measures, fits and publishes the ranking
+cd ../web && node scripts/eval/eval_match.ts --refs --fit --write-manifest   # measures, fits and publishes the ranking
 ```
 
 Model choice: `uv run bakeoff.py` compares the candidate models in

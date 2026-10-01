@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import PageHeader from "@/components/PageHeader";
-import { ContactEmail } from "@/components/ContactDetails";
+import PageHeader from "@/components/layout/PageHeader";
+import { ContactEmail } from "@/components/layout/ContactDetails";
 import { PADDLE_RESELLER } from "@/lib/site";
 
 const UPDATED = "Last updated 28 September 2026";
