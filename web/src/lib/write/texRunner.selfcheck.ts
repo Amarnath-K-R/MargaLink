@@ -3,7 +3,7 @@
 //   node src/lib/write/texRunner.selfcheck.ts
 import assert from "node:assert/strict";
 import { mock } from "node:test";
-import { COMPILE_TIMEOUT_MS, TexCompileError, __resetAllPacks, __setTexWorkerFactory, compileProject, type CompileRequest } from "./texRunner.ts";
+import { COMPILE_TIMEOUT_MS, TexCompileError, __resetAllPacks, __setTexWorkerFactory, compileProject, stopTex, type CompileRequest } from "./texRunner.ts";
 
 type Msg = { type: string; id: number; [k: string]: unknown };
 class FakeWorker {
@@ -223,4 +223,22 @@ __setTexWorkerFactory(() => new FakeWorker() as unknown as Worker);
 }
 
 mock.timers.reset();
+// 12. Stop: a compile stuck before TeX starts (a stalled download has no deadline) can be stopped; the engine is freed and the next compile starts a fresh one
+{
+  const p = compileProject(REQ);
+  await flush();
+  const w = FakeWorker.all.at(-1)!;
+  w.reply({ type: "progress", id: w.last().id, stage: "loading-engine" });
+  await flush();
+  stopTex();
+  await assert.rejects(p, (e: unknown) => e instanceof TexCompileError && e.code === "cancelled");
+  assert.ok(w.terminated, "the worker and its memory are released");
+  const q = compileProject(REQ);
+  await flush();
+  const fresh = FakeWorker.all.at(-1)!;
+  assert.notEqual(fresh, w);
+  fresh.reply({ type: "result", id: fresh.last().id, pdf: PDF, exitCode: 0, log: "", texLog: "" });
+  assert.deepEqual((await q)?.pdf, PDF);
+}
+
 console.log("texRunner.selfcheck: OK");

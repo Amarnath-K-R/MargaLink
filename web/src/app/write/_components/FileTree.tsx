@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useRef, useState } from "react";
-import { BookMarked, Braces, File, FileText, Folder, Image as ImageIcon, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { BookMarked, Braces, File, FileText, Folder, Image as ImageIcon, Pencil, Plus, Star, Trash2, Upload } from "lucide-react";
 
 const isText = (p: string) => /\.(tex|bib|cls|sty|bst|txt|md|def|cfg)$/i.test(p);
 
@@ -27,15 +27,17 @@ export default function FileTree({
   onUpload,
   onRename,
   onDelete,
+  onSetMain,
 }: {
   files: string[];
   active: string;
   main: string;
   onOpen: (path: string) => void;
   onCreate: (path: string) => void;
-  onUpload: (files: FileList) => void;
+  onUpload: (files: File[]) => void;
   onRename: (from: string, to: string) => void;
   onDelete: (path: string) => void;
+  onSetMain: (path: string) => void; // what compiles: any .tex file can be the main one
 }) {
   const upload = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export default function FileTree({
       onDrop={(e) => {
         e.preventDefault();
         setDropping(false);
-        if (e.dataTransfer.files.length) onUpload(e.dataTransfer.files);
+        if (e.dataTransfer.files.length) onUpload(Array.from(e.dataTransfer.files));
       }}
       className={`-m-1 flex min-h-0 flex-1 flex-col rounded-2xl p-1 text-sm transition-shadow ${dropping ? "bg-accent-soft/60 shadow-[inset_0_0_0_2px_rgba(44,95,111,.5)]" : ""}`}
     >
@@ -120,6 +122,17 @@ export default function FileTree({
                 >
                   <Pencil size={12} strokeWidth={2} />
                 </button>
+                {f !== main && /\.tex$/i.test(f) && (
+                  <button
+                    type="button"
+                    aria-label={`Make ${f} the main file`}
+                    title="Make this the main file (the one that compiles)"
+                    onClick={() => onSetMain(f)}
+                    className="rounded-md p-1 text-ink-soft opacity-0 hover:text-accent focus:opacity-100 group-hover:opacity-100"
+                  >
+                    <Star size={12} strokeWidth={2} />
+                  </button>
+                )}
                 {f !== main && (
                   <button
                     type="button"
@@ -170,7 +183,8 @@ export default function FileTree({
           aria-label="Upload files to this project"
           className="hidden"
           onChange={(e) => {
-            if (e.target.files?.length) onUpload(e.target.files);
+            // A copy: clearing the input (so the same file can be picked again) empties its live FileList.
+            if (e.target.files?.length) onUpload(Array.from(e.target.files));
             e.target.value = "";
           }}
         />

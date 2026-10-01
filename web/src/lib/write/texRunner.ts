@@ -18,6 +18,7 @@ const MESSAGES = {
   timeout: "TeX ran for more than 90 seconds and was stopped. It's usually a macro that loops. Check your latest edit, then compile again.",
   load_failed: "The TeX engine couldn't load. Check your connection and try again.",
   worker_failed: "The TeX engine stopped unexpectedly. Compile again to restart it.",
+  cancelled: "The compile was stopped.",
 } as const;
 
 export class TexCompileError extends Error {
@@ -82,6 +83,15 @@ function reset(reason: Error): void {
     p.reject(reason);
   }
   pending.clear();
+}
+
+/**
+ * Stops the compile in progress, and frees the engine (its WASM memory and
+ * every loaded data pack): Stop on a download that stalled, and leaving /write.
+ * The next compile starts a fresh worker.
+ */
+export function stopTex(): void {
+  reset(new TexCompileError("cancelled"));
 }
 
 // A run that loops is stopped with its worker; compiles queued behind it are

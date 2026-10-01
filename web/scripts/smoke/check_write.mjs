@@ -193,6 +193,41 @@ await page.click("button:has-text('Compile')");
 await compiled();
 check("renaming the main file keeps the project compiling", (await pdfBytes()) > 10_000);
 
+// --- an upload over the file that's open shows the new version, and the old text isn't saved back over it ---
+const source = page.locator('[data-testid="latex-editor"] .cm-content');
+await newFile("extra.bib");
+await page.waitForSelector('[data-testid="file-tree"] button[title="extra.bib"]');
+await source.click();
+await page.keyboard.type("@misc{old,}");
+await page.waitForTimeout(1500); // saved
+await page.setInputFiles('input[aria-label="Upload files to this project"]', { name: "extra.bib", mimeType: "text/plain", buffer: Buffer.from("@misc{fresh,}\n") });
+await page.waitForFunction(() => document.querySelector('[data-testid="latex-editor"] .cm-content')?.textContent?.includes("fresh"), null, { timeout: 10000 });
+await page.waitForTimeout(1500); // past another autosave
+check("an upload over the open file shows the new version, and keeps it", !(await source.innerText()).includes("old"));
+
+// --- any .tex file can be made the main one ---
+await tree.getByRole("button", { name: "Make paper.tex the main file" }).waitFor({ state: "detached" }).catch(() => {});
+await newFile("draft.tex");
+await page.waitForSelector('[data-testid="file-tree"] button[title="draft.tex"]');
+await tree.getByRole("button", { name: "Make draft.tex the main file" }).click();
+await page.waitForFunction(() => document.querySelector('[data-testid="file-tree"] button[title="draft.tex"]')?.textContent?.includes("★"));
+check("Set as main moves the star", !(await tree.locator('button[title="paper.tex"]').innerText()).includes("★"));
+await tree.getByRole("button", { name: "Make paper.tex the main file" }).click();
+await page.waitForFunction(() => document.querySelector('[data-testid="file-tree"] button[title="paper.tex"]')?.textContent?.includes("★"));
+await tree.locator('button[title="paper.tex"]').click(); // back to the main file for what follows
+await page.waitForFunction(() => document.querySelector('section[aria-label="Source"] .font-mono')?.textContent === "paper.tex");
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+
+// --- the same project in a second tab opens read-only, so a stale copy can't save over this one ---
+const second = await page.context().newPage();
+await second.goto(page.url());
+await second.waitForSelector("text=open in another tab", { timeout: 15000 });
+const before2 = await second.locator('[data-testid="latex-editor"] .cm-content').innerText();
+await second.click('[data-testid="latex-editor"] .cm-content');
+await second.keyboard.type("stale words");
+check("a second tab on the same project is read-only", (await second.locator('[data-testid="latex-editor"] .cm-content').innerText()) === before2);
+await second.close();
+
 // --- Ctrl+S pressed repeatedly: one compile, and Compile stays disabled while TeX runs ---
 await page.evaluate(() => {
   window.__enabledWhileRunning = false;

@@ -3,8 +3,8 @@
 import dynamic from "next/dynamic";
 import { BarChart3, Command as CommandIcon, FileText, Quote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { autosaver, type ProjectMeta, type ProjectStore } from "@/lib/write/projectStore";
-import { compileProject, TexCompileError, type TexStage } from "@/lib/write/texRunner";
+import { NotUtf8Error, autosaver, type ProjectMeta, type ProjectStore } from "@/lib/write/projectStore";
+import { compileProject, stopTex, TexCompileError, type TexStage } from "@/lib/write/texRunner";
 import { packsFor } from "@/lib/write/texEngine";
 import type { TexDiagnostic } from "@/lib/write/texLog";
 import { findJournalRules } from "@/lib/journals/journalRules";
@@ -107,6 +107,15 @@ const WINDOWS: { tool: Exclude<Tool, "palette" | "shortcuts">; title: string; si
 // starting a paid review or signing out doesn't);
 // `onCreateFromTemplate` starts a new project (the Journal window offers
 // the target's template that way — this project is never rewritten).
+// Does a .tex file include this image by its bare name (\includegraphics{fig1} or {fig1.png})?
+function includedByBareName(name: string, sources: Record<string, string>): boolean {
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\\\includegraphics(?:\\[[^\\]]*\\])?\\{(?:${esc(name)}|${esc(name.replace(/\.[^.]+$/, ""))})\\}`);
+  return Object.entries(sources).some(([p, t]) => p.endsWith(".tex") && re.test(t));
+}
+
+const LOCKED_OUT = "This project is open in another tab, so it can't be changed here. Close it there, then reload this tab to edit here.";
+
 export default function Workspace({
   store,
   project,
@@ -115,6 +124,7 @@ export default function Workspace({
   onClose,
   onMeta,
   onCreateFromTemplate,
+  pageError,
 }: {
   store: ProjectStore;
   project: ProjectMeta;
@@ -123,11 +133,19 @@ export default function Workspace({
   onClose: () => void;
   onMeta: (m: ProjectMeta) => void;
   onCreateFromTemplate: (t: Template, journal: Journal) => void;
+  pageError?: string | null; // the page's own failure (starting a new paper from the Journal window), shown here
 }) {
   const [files, setFiles] = useState<string[]>([]);
   const [active, setActive] = useState(project.main);
-  // The open file's text as loaded; the editor mounts once it's here.
-  const [doc, setDoc] = useState<{ path: string; text: string } | null>(null);
+  // The open file's text as loaded; the editor mounts once it's here. `rev`
+  // remounts it when the file changes under it (an upload); `readOnly` says
+  // why it can't be edited here (a file that isn't UTF-8).
+  const [doc, setDoc] = useState<{ path: string; text: string; rev: number; readOnly?: string } | null>(null);
+  const revRef = useRef(0);
+  // One tab edits a project at a time (a Web Lock per project): another tab
+  // opens it read-only, so a stale copy can't save over newer work.
+  const [lockedOut, setLockedOut] = useState(false);
+  const mayWrite = useRef<Promise<boolean>>(Promise.resolve(true));
   const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
   const [diagnostics, setDiagnostics] = useState<TexDiagnostic[]>([]);
   const [log, setLog] = useState("");
@@ -154,6 +172,10 @@ export default function Workspace({
   const [sources, setSources] = useState<Record<string, string>>({});
   const [words, setWords] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
+  const dirtyRef = useRef(false);
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
   const [split, setSplit] = useState(() => {
     try {
       const v = Number(localStorage.getItem(SPLIT_KEY));
@@ -172,6 +194,7 @@ export default function Workspace({
   const dragging = useRef(false);
   const write = useCallback(
     async (id: string, path: string, t: string) => {
+      if (!(await mayWrite.current)) return; // read-only here: another tab has the project
       const seq = editSeq.current;
       await store.write(id, path, t);
       setSources((s) => ({ ...s, [path]: t }));
@@ -187,10 +210,11 @@ export default function Workspace({
     [write],
   );
   // File operations report what went wrong instead of failing silently.
-  const guarded = (fn: () => Promise<void>) => async () => {
+  const guarded = <A extends unknown[]>(fn: (...args: A) => Promise<void>) => async (...args: A) => {
     setError(null);
+    if (!(await mayWrite.current)) return setError(LOCKED_OUT);
     try {
-      await fn();
+      await fn(...args);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -198,8 +222,9 @@ export default function Workspace({
 
   const loadSources = useCallback(
     async (paths: string[]) => {
-      const texts = await Promise.all(paths.filter((p) => TEXT.test(p)).map(async (p) => [p, await store.readText(project.id, p)] as const));
-      setSources(Object.fromEntries(texts));
+      // A file that isn't UTF-8 is left out of the outline and suggestions, not a failure.
+      const texts = await Promise.all(paths.filter((p) => TEXT.test(p)).map(async (p) => [p, await store.readText(project.id, p).catch(() => null)] as const));
+      setSources(Object.fromEntries(texts.filter((t): t is [string, string] => t[1] !== null)));
     },
     [store, project.id],
   );
@@ -210,11 +235,21 @@ export default function Workspace({
   }, [store, project.id, loadSources]);
 
   const open = useCallback(
-    async (path: string) => {
+    async (path: string, reload = false) => {
       await saver().flush().catch(() => {}); // a failed save stays pending and is shown; switching still works
       wantedRef.current = path;
       setActive(path);
-      const loaded = TEXT.test(path) ? { path, text: await store.readText(project.id, path) } : null;
+      if (reload) revRef.current++;
+      const rev = revRef.current;
+      const loaded = !TEXT.test(path)
+        ? null
+        : await store.readText(project.id, path).then(
+            (text) => ({ path, text, rev }),
+            async (err) => {
+              if (!(err instanceof NotUtf8Error)) throw err;
+              return { path, text: new TextDecoder().decode(await store.read(project.id, path)), rev, readOnly: err.message };
+            },
+          );
       if (wantedRef.current === path) {
         setDoc(loaded);
         setWords(loaded && /\.tex$/i.test(path) ? texWordCount(loaded.text) : null);
@@ -228,10 +263,32 @@ export default function Workspace({
       setFiles(paths);
       void loadSources(paths).catch(() => {});
     }, () => {});
-    void store.readText(project.id, project.main).then((text) => {
-      setDoc({ path: project.main, text });
-      setWords(texWordCount(text));
-    });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- open() awaits a flush before it sets anything
+    void open(project.main).catch((err) =>
+      setError(`${project.main} couldn't be opened (${err instanceof Error ? err.message : String(err)}). Open another file, or make one the main file in the file list.`),
+    );
+    // This mount's own release (not a shared ref: a remount must not release this one's lock, or leave it held).
+    let releaseLock = () => {};
+    if ("locks" in navigator) {
+      const held = new Promise<void>((r) => (releaseLock = r));
+      mayWrite.current = new Promise<boolean>((decide) => {
+        // Waits briefly rather than giving up at once: a remount (or a reload) releases its lock a moment later.
+        navigator.locks
+          .request(`margalink-project-${project.id}`, { signal: AbortSignal.timeout(1500) }, () => {
+            decide(true);
+            return held;
+          })
+          .catch(() => {
+            decide(false);
+            setLockedOut(true);
+          });
+      });
+    }
+    // Unsaved edits: the browser asks before the tab closes (a save started on pagehide may not finish).
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (dirtyRef.current) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
     void store.lastPdf(project.id).then((pdf) => pdf && setPdfBytes(pdf));
     // A figure added from the figure studio shows up when the page regains focus.
     const onFocus = () => void refresh().catch(() => {});
@@ -245,7 +302,8 @@ export default function Workspace({
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pagehide", onHide);
       document.removeEventListener("visibilitychange", onVisibility);
-      void saver().flush().catch(() => {});
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      void saver().flush().catch(() => {}).finally(releaseLock);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per project
   }, [project.id]);
@@ -281,10 +339,10 @@ export default function Workspace({
   const review = useReview();
   const studio = useFigures();
   const rules = project.journalId ? findJournalRules(project.journalId) : undefined;
-  const setTarget = async (j: Journal | null) => {
+  const setTarget = guarded(async (j: Journal | null) => {
     await store.setMeta(project.id, { journalId: j?.id ?? null, journalName: j?.display_name ?? null });
     onMeta(await store.meta(project.id));
-  };
+  });
   // From a match result: the Review window, loaded with this PDF against that
   // journal — unless a review is running, which changing the journal would
   // abort (and it's paid for): then just show it.
@@ -338,8 +396,9 @@ export default function Workspace({
       }
       setFirstRun(false);
     } catch (err) {
-      setStatus(null);
-      setError(err instanceof TexCompileError ? err.message : String(err));
+      const stopped = err instanceof TexCompileError && err.code === "cancelled";
+      setStatus(stopped ? err.message : null);
+      if (!stopped) setError(err instanceof TexCompileError ? err.message : String(err));
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -370,14 +429,26 @@ export default function Workspace({
   const figures = files.filter((f) => f.startsWith("figures/") && IMAGE.test(f));
   const texOpen = doc?.path === active && /\.tex$/i.test(active);
 
-  const setEngine = async (engine: ProjectMeta["engine"]) => {
+  const setEngine = guarded(async (engine: ProjectMeta["engine"]) => {
     await store.setMeta(project.id, { engine });
     onMeta(await store.meta(project.id));
-  };
-  const rename = async (name: string) => {
+  });
+  const rename = guarded(async (name: string) => {
     await store.setMeta(project.id, { name });
     onMeta(await store.meta(project.id));
-  };
+  });
+  const setMain = guarded(async (path: string) => {
+    await store.setMeta(project.id, { main: path });
+    onMeta(await store.meta(project.id));
+  });
+  // Leaving the project while a paid review runs stops it; ask first.
+  const { reviewLoading, cancel: cancelReview } = review;
+  const confirmLeave = useCallback(() => {
+    if (!reviewLoading) return true;
+    if (!window.confirm("A review is still running. Leaving this project stops it: the sections it already reviewed stay paid, and the rest is refunded automatically. Leave anyway?")) return false;
+    cancelReview();
+    return true;
+  }, [reviewLoading, cancelReview]);
 
   const backup = async () => downloadBytes(`${safeName(project.name)}.zip`, await store.exportZip(project.id), "application/zip");
 
@@ -452,9 +523,9 @@ export default function Workspace({
       { id: "files", label: filesPanel === "open" ? "Hide the files" : "Show the files", run: () => setFilesPanel(filesPanel === "open" ? "closed" : "open") },
       { id: "auto", label: auto === "on" ? "Turn auto-compile off" : "Turn auto-compile on", run: () => setAuto(auto === "on" ? "off" : "on") },
       { id: "shortcuts", label: "Keyboard shortcuts", run: () => setTool("shortcuts") },
-      { id: "projects", label: "All projects", run: onClose },
+      { id: "projects", label: "All projects", run: () => void (confirmLeave() && onClose()) },
     ],
-    [compile, busy, insert, texOpen, figures, backup, pdfBytes, project.name, project.engine, setEngine, onClose, view, setView, filesPanel, setFilesPanel, auto, setAuto],
+    [compile, busy, insert, texOpen, figures, backup, pdfBytes, project.name, project.engine, setEngine, onClose, confirmLeave, view, setView, filesPanel, setFilesPanel, auto, setAuto],
   );
 
   const journalLabel = project.journalName ?? (project.journalId ? "Target journal" : "No target journal");
@@ -531,6 +602,7 @@ export default function Workspace({
             currentTemplateId={project.templateId}
             onChange={(j) => void setTarget(j)}
             onNewFromTemplate={(tmpl, j) => {
+              if (!confirmLeave()) return;
               setTool(null);
               onCreateFromTemplate(tmpl, j);
             }}
@@ -547,7 +619,11 @@ export default function Workspace({
     <div data-testid="workspace" className="desk fixed inset-0 flex flex-col gap-3 p-3">
       <Toolbar
         project={project}
-        onBack={onClose}
+        onBack={() => void (confirmLeave() && onClose())}
+        onHome={(e) => {
+          if (!confirmLeave()) e.preventDefault();
+        }}
+        onStop={stopTex}
         onRename={(name) => void rename(name)}
         journalLabel={journalLabel}
         onTool={setTool}
@@ -584,7 +660,8 @@ export default function Workspace({
               files={files}
               active={active}
               main={project.main}
-              onOpen={(p) => void open(p)}
+              onOpen={(p) => void open(p).catch((err) => setError(`${p} couldn't be opened: ${err instanceof Error ? err.message : String(err)}`))}
+              onSetMain={(p) => void setMain(p)}
               onCreate={(p) =>
                 void guarded(async () => {
                   if (await store.exists(project.id, p)) throw new Error(`${p} already exists.`);
@@ -595,12 +672,17 @@ export default function Workspace({
               }
               onUpload={(list) =>
                 void guarded(async () => {
-                  // an upload with an existing name replaces that file: a new version of a figure
+                  await saver().flush(); // an edit still pending must not land on top of the upload
+                  // An upload with an existing name replaces that file (a new version of a figure).
+                  // Images go to figures/, unless the paper already includes them by their bare name.
+                  const written: string[] = [];
                   for (const f of Array.from(list)) {
-                    const path = IMAGE.test(f.name) ? `figures/${f.name}` : f.name;
+                    const path = IMAGE.test(f.name) && !includedByBareName(f.name, sources) ? `figures/${f.name}` : f.name;
                     await store.write(project.id, path, new Uint8Array(await f.arrayBuffer()));
+                    written.push(path);
                   }
                   await refresh();
+                  if (written.includes(active)) await open(active, true); // the editor shows the new version
                 })()
               }
               onRename={(from, to) =>
@@ -655,8 +737,10 @@ export default function Workspace({
                 <span className="hidden lg:inline">A figure&apos;s recipe: its settings, never its data.</span>
                 <button
                   type="button"
-                  onClick={() => {
-                    setPendingRecipe(doc.text);
+                  onClick={async () => {
+                    // The recipe as it is now, hand edits included, not as it was first opened.
+                    await saver().flush().catch(() => {});
+                    setPendingRecipe(await store.readText(project.id, active).catch(() => doc.text));
                     setTool("figures");
                   }}
                   className="clay-btn h-7 px-2.5 text-xs text-accent"
@@ -670,10 +754,26 @@ export default function Workspace({
             {!TEXT.test(active) ? (
               <p className="p-6 text-sm text-ink-soft">{active} isn&apos;t a text file; it&apos;s used by your paper as it is.</p>
             ) : doc?.path === active ? (
-              <LatexEditor key={doc.path} text={doc.text} marks={marks} onChange={(t) => onEdit(doc.path, t)} onSave={() => void compile()} handleRef={editor} completions={completionData} />
+              <>
+                {(doc.readOnly || lockedOut) && (
+                  <p role="status" className="clay-well m-3 px-3 py-2 text-xs text-ink-soft">
+                    {lockedOut ? LOCKED_OUT : doc.readOnly}
+                  </p>
+                )}
+                <LatexEditor
+                  key={`${doc.path}:${doc.rev}:${lockedOut || doc.readOnly ? "ro" : "rw"}`}
+                  text={doc.text}
+                  readOnly={lockedOut || !!doc.readOnly}
+                  marks={marks}
+                  onChange={(t) => onEdit(doc.path, t)}
+                  onSave={() => void compile()}
+                  handleRef={editor}
+                  completions={completionData}
+                />
+              </>
             ) : null}
           </div>
-          {error && <ErrorText>{error}</ErrorText>}
+          {(error ?? pageError) && <ErrorText>{error ?? pageError}</ErrorText>}
           {diagnostics.length > 0 && (
             <div className="clay max-h-[32%] shrink-0 overflow-auto rounded-2xl px-4 py-3">
               <Diagnostics items={diagnostics} log={log} onOpen={(file, line) => void goto(file ?? project.main, line)} />

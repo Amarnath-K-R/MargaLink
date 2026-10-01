@@ -58,6 +58,7 @@ export type LineMark = { line: number; message: string; severity: "error" | "war
 // editor (and its own undo history).
 export default function LatexEditor({
   text,
+  readOnly = false,
   marks,
   onChange,
   onSave,
@@ -65,6 +66,7 @@ export default function LatexEditor({
   completions,
 }: {
   text: string;
+  readOnly?: boolean; // shown, selectable and copyable, not editable (set at mount: the editor is keyed on it)
   marks: LineMark[];
   onChange: (text: string) => void;
   onSave: () => void;
@@ -84,6 +86,7 @@ export default function LatexEditor({
     const suggest = latexCompletions(() => cbRef.current.completions);
     return [
       basicSetup,
+      EditorState.readOnly.of(readOnly),
       StreamLanguage.define(stex),
       lintGutter(),
       EditorState.languageData.of(() => [{ autocomplete: suggest }]),

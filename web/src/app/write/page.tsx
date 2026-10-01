@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ProjectStore, type ProjectMeta } from "@/lib/write/projectStore";
+import { stopTex } from "@/lib/write/texRunner";
 import { loadTexTemplates, starterProject, templateForJournal, type Template } from "@/lib/write/templateCatalog";
 import { loadMeta } from "@/lib/match/match";
 import { errorMessage } from "@/lib/errorMessage";
@@ -33,6 +34,9 @@ export default function WritePage() {
   const [busy, setBusy] = useState(false);
   const upload = useRef<HTMLInputElement>(null);
   const { calls } = useNetworkTrace();
+
+  // Leaving /write frees the TeX engine (its memory and data packs) for the next page.
+  useEffect(() => () => stopTex(), []);
 
   const refresh = useCallback(async (s: ProjectStore) => {
     try {
@@ -104,8 +108,8 @@ export default function WritePage() {
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
         const meta = /\.tex$/i.test(file.name)
-          ? await store.importTex(file.name.replace(/\.tex$/i, ""), bytes, journal?.id ?? null)
-          : await store.importZip(file.name.replace(/\.zip$/i, ""), bytes, journal?.id ?? null);
+          ? await store.importTex(file.name.replace(/\.tex$/i, ""), bytes, journal?.id ?? null, journal?.display_name ?? null)
+          : await store.importZip(file.name.replace(/\.zip$/i, ""), bytes, journal?.id ?? null, journal?.display_name ?? null);
         await refresh(store);
         setOpenProject(meta);
       } catch (err) {
@@ -129,6 +133,7 @@ export default function WritePage() {
         calls={calls}
         templates={templates}
         onCreateFromTemplate={(t, j) => void create(t, j)}
+        pageError={error}
         onMeta={setOpenProject}
         onClose={() => {
           setOpenProject(null);
@@ -169,7 +174,15 @@ export default function WritePage() {
                   <span className="mt-auto flex gap-2 pt-1 text-xs">
                     <button
                       type="button"
-                      onClick={async () => store && downloadBytes(`${safeName(p.name)}.zip`, await store.exportZip(p.id), "application/zip")}
+                      onClick={async () => {
+                        if (!store) return;
+                        setError(null);
+                        try {
+                          downloadBytes(`${safeName(p.name)}.zip`, await store.exportZip(p.id), "application/zip");
+                        } catch (err) {
+                          setError(`The backup couldn't be made: ${errorMessage(err)}`);
+                        }
+                      }}
                       className="clay-chip"
                     >
                       Download backup
@@ -178,7 +191,12 @@ export default function WritePage() {
                       type="button"
                       onClick={async () => {
                         if (!store || !window.confirm(`Delete "${p.name}" from this browser? This can't be undone.`)) return;
-                        await store.remove(p.id);
+                        setError(null);
+                        try {
+                          await store.remove(p.id);
+                        } catch (err) {
+                          setError(`"${p.name}" couldn't be deleted: ${errorMessage(err)}`);
+                        }
                         void refresh(store);
                       }}
                       className="clay-chip bg-transparent text-ink-soft hover:bg-[#ebe8df]"

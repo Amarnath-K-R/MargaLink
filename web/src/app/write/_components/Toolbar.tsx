@@ -30,6 +30,8 @@ const VIEWS: { id: View; label: string; Icon: typeof Code }[] = [
 export default function Toolbar({
   project,
   onBack,
+  onHome,
+  onStop,
   onRename,
   journalLabel,
   onTool,
@@ -42,6 +44,8 @@ export default function Toolbar({
 }: {
   project: ProjectMeta;
   onBack: () => void;
+  onHome: (e: React.MouseEvent) => void; // may cancel leaving (a review still running)
+  onStop: () => void; // stops the compile in progress
   onRename: (name: string) => void;
   journalLabel: string;
   onTool: (tool: Tool) => void;
@@ -62,6 +66,7 @@ export default function Toolbar({
     <header className="clay flex flex-wrap items-center gap-x-2 gap-y-2 px-2.5 py-2 text-sm xl:flex-nowrap">
       <Link
         href="/"
+        onClick={onHome}
         aria-label="MargaLink home"
         className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px]"
       >
@@ -143,6 +148,11 @@ export default function Toolbar({
           {busy ? <Loader2 size={14} strokeWidth={2.2} className="animate-spin" /> : <Play size={13} strokeWidth={2.4} className="fill-current" />}
           {busy ? "Compiling…" : "Compile"}
         </button>
+        {busy && (
+          <button type="button" onClick={onStop} title="Stop compiling" className="clay-btn text-xs text-ink-soft">
+            Stop
+          </button>
+        )}
         <button type="button" onClick={() => onTool("palette")} aria-label="Commands" title="Commands (⌘K)" className="clay-key">
           ⌘K
         </button>

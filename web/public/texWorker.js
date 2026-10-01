@@ -14,7 +14,7 @@ let pipeline = null;
 let ready = null;
 let current = null; // the id being worked on, for errors raised outside a promise
 const TEXT = /\.(tex|bib|cls|sty|bst|def|cfg|clo|ltx|txt|bbx|cbx|lbx|dtx|ins)$/i;
-const decoder = new TextDecoder();
+const utf8 = new TextDecoder("utf-8", { fatal: true });
 
 function report(stage, detail) {
   if (current !== null) self.postMessage({ type: "progress", id: current, stage, detail });
@@ -85,7 +85,18 @@ async function compile(msg) {
   } catch (err) {
     return { type: "error", id: msg.id, code: "load_failed", detail: String((err && err.message) || err) };
   }
-  const files = msg.files.map((f) => ({ path: f.path, contents: TEXT.test(f.path) ? decoder.decode(f.data) : f.data }));
+  // Text as a string: the pipeline reads it to find packages and \bibliography.
+  // A file that isn't UTF-8 (a Latin-1 source with \usepackage[latin1]{inputenc})
+  // goes as its bytes instead, written verbatim: decoding it would rewrite its
+  // accented letters.
+  const asText = (data) => {
+    try {
+      return utf8.decode(data);
+    } catch {
+      return data;
+    }
+  };
+  const files = msg.files.map((f) => ({ path: f.path, contents: TEXT.test(f.path) ? asText(f.data) : f.data }));
   const packs = msg.all.map((f) => `${msg.base}/${f}`);
   // "silent": the release's "info" mode adds --debug to bibtex8, which then fails and
   // corrupts the next pdflatex call. The .log files are written either way.

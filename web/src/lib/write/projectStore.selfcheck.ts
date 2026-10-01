@@ -2,7 +2,7 @@
 // browser's Origin Private File System. Run directly:
 //   node src/lib/write/projectStore.selfcheck.ts
 import assert from "node:assert/strict";
-import { ProjectStore, autosaver, findMainTex, type DirHandle, type FileHandle } from "./projectStore.ts";
+import { NotUtf8Error, ProjectStore, autosaver, findMainTex, type DirHandle, type FileHandle } from "./projectStore.ts";
 import { zipFiles } from "./zip.ts";
 
 // --- a minimal OPFS fake: directories of files holding bytes ---
@@ -220,6 +220,56 @@ await assert.rejects(store.meta(copy.id));
   release();
   await f;
   assert.deepEqual(done, ["typed"]);
+}
+
+// 6h. a failed save isn't dropped when another file is edited before the next try
+{
+  let fail = true;
+  const disk: Record<string, string> = {};
+  const save = autosaver(
+    async (_id, path, text) => {
+      if (fail) throw new Error("QuotaExceededError");
+      disk[path] = text;
+    },
+    1000,
+    () => 1,
+    () => {},
+    () => {},
+  );
+  save("p", "a.tex", "A-edit");
+  await save.flush().catch(() => {});
+  save("p", "b.tex", "B-edit"); // switching files retries a.tex at once, and it fails again
+  await new Promise((r) => setTimeout(r, 0));
+  await save.flush().catch(() => {});
+  fail = false;
+  await save.flush();
+  assert.deepEqual(disk, { "a.tex": "A-edit", "b.tex": "B-edit" }, "both edits are written once the disk has room");
+}
+
+// 6i. a backup carries the project's settings: its main file, engine, journal and template
+{
+  const m = await store.create(
+    { name: "Two", main: "paper.tex", engine: "xetex", journalId: "https://openalex.org/S9", journalName: "J Nine", templateId: "elsarticle" },
+    [{ path: "cover-letter.tex", data: enc(MAIN) }, { path: "paper.tex", data: enc(MAIN) }],
+  );
+  const back = await store.importZip("Two again", await store.exportZip(m.id));
+  assert.equal(back.main, "paper.tex", "not the cover letter, which sorts first");
+  assert.deepEqual([back.engine, back.journalId, back.journalName, back.templateId], ["xetex", "https://openalex.org/S9", "J Nine", "elsarticle"]);
+  assert.ok(!(await store.files(back.id)).includes("project.json"), "the settings aren't one of the project's files");
+  const tex = await store.importTex("One", enc(MAIN), "https://openalex.org/S2", "J Two");
+  assert.equal(tex.journalName, "J Two", "an import keeps the journal's name, not just its id");
+  for (const id of [m.id, back.id, tex.id]) await store.remove(id);
+}
+
+// 6j. a file that isn't UTF-8 isn't read as text: editing it as UTF-8 would replace its accented letters for good
+{
+  const m = await store.create({ name: "Latin", main: "main.tex", engine: "pdftex", journalId: null, templateId: null }, [
+    { path: "main.tex", data: enc(MAIN) },
+    { path: "refs.bib", data: new Uint8Array([0x63, 0x61, 0x66, 0xe9]) }, // "café" in Latin-1
+  ]);
+  await assert.rejects(store.readText(m.id, "refs.bib"), NotUtf8Error);
+  assert.equal(await store.readText(m.id, "main.tex"), MAIN);
+  await store.remove(m.id);
 }
 
 // 6g. overlapping metadata updates (an autosave's timestamp bump and an engine switch) don't undo each other

@@ -27,6 +27,7 @@ export default function Dialog({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const pressedOnBackdrop = useRef(false);
   useEffect(() => {
     const el = ref.current;
     if (!open || !el) return;
@@ -48,7 +49,10 @@ export default function Dialog({
         e.preventDefault(); // Escape: close through onClose so the caller's state follows
         onClose();
       }}
-      onClick={(e) => e.target === e.currentTarget && onClose()} // the backdrop: only the <dialog> itself is under the pointer there
+      // The backdrop: only the <dialog> itself is under the pointer there. A drag that
+      // starts inside (a slider, a text selection) and ends out there isn't a click on it.
+      onPointerDown={(e) => (pressedOnBackdrop.current = e.target === e.currentTarget)}
+      onClick={(e) => e.target === e.currentTarget && pressedOnBackdrop.current && onClose()}
       className={`clay-window m-auto max-h-none max-w-none p-0 text-ink ${SIZES[size]}`}
     >
       <div className="flex h-full max-h-[inherit] flex-col">

@@ -53,6 +53,16 @@ export function findMainTex(entries: { path: string; text: string | null }[]): s
   return entries.find((e) => e.path.endsWith(".tex") && e.text && /\\documentclass/.test(e.text))?.path ?? null;
 }
 
+/** A file that isn't UTF-8 (a Latin-1 .bib, say): shown read-only rather than edited, which would replace its accented letters for good. */
+export class NotUtf8Error extends Error {
+  override name = "NotUtf8Error";
+  readonly path: string;
+  constructor(path: string) {
+    super(`${path} isn't UTF-8 text, so it's shown read-only (editing it here would replace its accented letters). Edit it elsewhere, or convert it to UTF-8.`);
+    this.path = path;
+  }
+}
+
 export class ProjectStore {
   private readonly root: DirHandle;
   private readonly now: () => string;
@@ -156,7 +166,12 @@ export class ProjectStore {
   }
 
   async readText(id: string, path: string): Promise<string> {
-    return (await (await this.fileHandle(id, path, false)).getFile()).text();
+    const bytes = new Uint8Array(await (await (await this.fileHandle(id, path, false)).getFile()).arrayBuffer());
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      throw new NotUtf8Error(path);
+    }
   }
 
   async write(id: string, path: string, data: Uint8Array | string): Promise<void> {
@@ -200,29 +215,60 @@ export class ProjectStore {
     }
   }
 
+  // With the project's settings (main file, engine, journal, template), which importZip honours.
   async exportZip(id: string): Promise<Uint8Array> {
     const paths = await this.files(id);
-    return zipFiles(await Promise.all(paths.map(async (path) => ({ path, data: await this.read(id, path) }))));
+    const files = await Promise.all(paths.map(async (path) => ({ path, data: await this.read(id, path) })));
+    return zipFiles([...files, { path: META, data: new TextEncoder().encode(JSON.stringify(await this.meta(id))) }]);
   }
 
   // A backup, a publisher's template or an Overleaf export: one top-level
-  // folder is flattened, and the main file is the one with \documentclass.
-  async importZip(name: string, bytes: Uint8Array, journalId: string | null = null): Promise<ProjectMeta> {
-    const entries = flattenSingleRoot(unzipFiles(bytes)).filter((e) => e.path !== META && !e.path.startsWith(`${HIDDEN}/`));
+  // folder is flattened. A MargaLink backup brings its settings; otherwise the
+  // main file is the one with \documentclass, and fontspec means XeTeX.
+  async importZip(name: string, bytes: Uint8Array, journalId: string | null = null, journalName: string | null = null): Promise<ProjectMeta> {
+    const all = flattenSingleRoot(unzipFiles(bytes));
+    const entries = all.filter((e) => e.path !== META && !e.path.startsWith(`${HIDDEN}/`));
     const decoder = new TextDecoder();
-    const main = findMainTex(entries.map((e) => ({ path: e.path, text: TEXT_EXT.test(e.path) ? decoder.decode(e.data) : null })));
+    const saved = backupSettings(all.find((e) => e.path === META)?.data);
+    const main =
+      saved.main && entries.some((e) => e.path === saved.main) ? saved.main : findMainTex(entries.map((e) => ({ path: e.path, text: TEXT_EXT.test(e.path) ? decoder.decode(e.data) : null })));
     if (!main) throw new Error("That zip has no .tex file with a \\documentclass line, so there's nothing to compile.");
-    const engine = entries.some((e) => FONTSPEC.test(TEXT_EXT.test(e.path) ? decoder.decode(e.data) : "")) ? "xetex" : "pdftex";
-    return this.create({ name, main, engine, journalId, templateId: null }, entries);
+    const engine = saved.engine ?? (entries.some((e) => FONTSPEC.test(TEXT_EXT.test(e.path) ? decoder.decode(e.data) : "")) ? "xetex" : "pdftex");
+    return this.create(
+      { name, main, engine, journalId: journalId ?? saved.journalId ?? null, journalName: journalId ? journalName : (saved.journalName ?? null), templateId: saved.templateId ?? null, ...(saved.packs ? { packs: saved.packs } : {}) },
+      entries,
+    );
   }
 
   // A single .tex file. It becomes main.tex whatever it was called (a name
   // TeX compiles safely); its figures and .bib can be added after.
-  async importTex(name: string, bytes: Uint8Array, journalId: string | null = null): Promise<ProjectMeta> {
+  async importTex(name: string, bytes: Uint8Array, journalId: string | null = null, journalName: string | null = null): Promise<ProjectMeta> {
     const text = new TextDecoder().decode(bytes);
     if (!/\\documentclass/.test(text)) throw new Error("That .tex file has no \\documentclass line, so it can't compile on its own. To bring a whole project, import its .zip.");
-    return this.create({ name, main: "main.tex", engine: FONTSPEC.test(text) ? "xetex" : "pdftex", journalId, templateId: null }, [{ path: "main.tex", data: bytes }]);
+    return this.create({ name, main: "main.tex", engine: FONTSPEC.test(text) ? "xetex" : "pdftex", journalId, journalName, templateId: null }, [{ path: "main.tex", data: bytes }]);
   }
+}
+
+// The settings a MargaLink backup carries (its project.json), each checked:
+// a zip is untrusted input, so anything malformed is simply not used.
+function backupSettings(data: Uint8Array | undefined): Partial<Pick<ProjectMeta, "main" | "engine" | "journalId" | "journalName" | "templateId" | "packs">> {
+  if (!data) return {};
+  let m: Record<string, unknown>;
+  try {
+    m = JSON.parse(new TextDecoder().decode(data));
+  } catch {
+    return {};
+  }
+  if (!m || typeof m !== "object") return {};
+  const str = (v: unknown) => (typeof v === "string" && v.length <= 500 ? v : undefined);
+  return {
+    main: str(m.main),
+    engine: m.engine === "pdftex" || m.engine === "xetex" ? m.engine : undefined,
+    journalId: str(m.journalId),
+    journalName: str(m.journalName),
+    templateId: str(m.templateId),
+    packs: Array.isArray(m.packs) && m.packs.every((p) => typeof p === "string") ? (m.packs as string[]) : undefined,
+  };
 }
 
 // Debounced saving: the editor calls save() on every change; the store is
@@ -235,31 +281,42 @@ export function autosaver(
   clearTimer: (t: unknown) => void = (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
   onError: (err: unknown) => void = () => {},
 ) {
-  let pending: { id: string; path: string; text: string } | null = null;
+  // One entry per file, so a save that failed for one file is still pending
+  // after edits to another.
+  const pending = new Map<string, { id: string; path: string; text: string }>();
+  const key = (id: string, path: string) => `${id}\u0000${path}`;
   let timer: unknown = null;
   // Writes run one at a time, in order; flush() waits for the one in flight,
   // so nothing (a delete, a compile) can run underneath a save.
   let chain: Promise<void> = Promise.resolve();
   const run = () => {
-    const p = pending;
-    pending = null;
+    const batch = [...pending.values()];
+    pending.clear();
     timer = null;
-    if (!p) return chain;
+    if (!batch.length) return chain;
     const next = chain.then(async () => {
-      try {
-        await write(p.id, p.path, p.text);
-      } catch (err) {
-        pending ??= p; // keep it for the next try, unless newer text has replaced it
-        onError(err);
-        throw err;
+      let failure: unknown = null;
+      for (const p of batch) {
+        try {
+          await write(p.id, p.path, p.text);
+        } catch (err) {
+          // kept for the next try, unless newer text for that file has replaced it
+          if (!pending.has(key(p.id, p.path))) pending.set(key(p.id, p.path), p);
+          failure ??= err;
+        }
+      }
+      if (failure !== null) {
+        onError(failure);
+        throw failure;
       }
     });
     chain = next.catch(() => {});
     return next;
   };
   const save = (id: string, path: string, text: string) => {
-    if (pending && (pending.id !== id || pending.path !== path)) void run().catch(() => {}); // a different file: save the previous one now (errors go to onError)
-    pending = { id, path, text };
+    const k = key(id, path);
+    if ([...pending.keys()].some((other) => other !== k)) void run().catch(() => {}); // a different file: save the others now (errors go to onError)
+    pending.set(k, { id, path, text });
     if (timer !== null) clearTimer(timer);
     timer = setTimer(() => void run().catch(() => {}), delay);
   };
