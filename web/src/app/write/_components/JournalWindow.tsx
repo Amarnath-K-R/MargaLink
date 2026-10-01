@@ -122,7 +122,7 @@ export default function JournalWindow({
                 ) : (
                   "get it from the publisher"
                 )}
-                , then Import a .zip from the project list.
+                , then Import a .zip or .tex from the project list.
               </p>
             )}
           </section>

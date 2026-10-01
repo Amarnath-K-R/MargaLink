@@ -107,6 +107,24 @@ assert.equal(findMainTex([{ path: "a.tex", text: "\\documentclass{x}" }, { path:
 assert.equal(findMainTex([{ path: "notes.tex", text: "no class" }, { path: "paper.tex", text: "\\documentclass{x}" }]), "paper.tex");
 assert.equal(findMainTex([{ path: "a.sty", text: null }]), null);
 
+// 5b. a single .tex file becomes a project's main.tex (whatever it was called); one without \documentclass is refused
+{
+  const one = await store.importTex("My paper (final)", enc(MAIN), "https://openalex.org/S2");
+  assert.deepEqual(await store.files(one.id), ["main.tex"]);
+  assert.equal(one.main, "main.tex");
+  assert.equal(one.name, "My paper (final)");
+  assert.equal(one.engine, "pdftex");
+  assert.equal(one.journalId, "https://openalex.org/S2");
+  assert.equal(await store.readText(one.id, "main.tex"), MAIN);
+  const xe = await store.importTex("Fonts", enc("\\documentclass{article}\n\\usepackage{fontspec}\n"));
+  assert.equal(xe.engine, "xetex", "fontspec picks XeTeX, as for a zip");
+  const before = (await store.list()).length;
+  await assert.rejects(store.importTex("Chapter", enc("\\section{Intro}\n")), /documentclass/);
+  assert.equal((await store.list()).length, before, "a refused file leaves no project behind");
+  await store.remove(one.id);
+  await store.remove(xe.id);
+}
+
 // 6. remove deletes the project and only it
 await store.remove(copy.id);
 assert.deepEqual((await store.list()).map((m) => m.id).sort(), [p.id, imported.id].sort());

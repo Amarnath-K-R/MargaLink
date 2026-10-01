@@ -36,6 +36,7 @@ const META = "project.json";
 const HIDDEN = ".margalink";
 const ROOT = "margalink-write";
 const TEXT_EXT = /\.(tex|bib|cls|sty|bst|def|cfg|txt|md)$/i;
+const FONTSPEC = /\\usepackage(\[[^\]]*\])?\{fontspec\}/; // needs XeTeX
 
 const parts = (path: string) => path.split("/").filter(Boolean);
 
@@ -211,8 +212,16 @@ export class ProjectStore {
     const decoder = new TextDecoder();
     const main = findMainTex(entries.map((e) => ({ path: e.path, text: TEXT_EXT.test(e.path) ? decoder.decode(e.data) : null })));
     if (!main) throw new Error("That zip has no .tex file with a \\documentclass line, so there's nothing to compile.");
-    const engine = entries.some((e) => /\\usepackage(\[[^\]]*\])?\{fontspec\}/.test(TEXT_EXT.test(e.path) ? decoder.decode(e.data) : "")) ? "xetex" : "pdftex";
+    const engine = entries.some((e) => FONTSPEC.test(TEXT_EXT.test(e.path) ? decoder.decode(e.data) : "")) ? "xetex" : "pdftex";
     return this.create({ name, main, engine, journalId, templateId: null }, entries);
+  }
+
+  // A single .tex file. It becomes main.tex whatever it was called (a name
+  // TeX compiles safely); its figures and .bib can be added after.
+  async importTex(name: string, bytes: Uint8Array, journalId: string | null = null): Promise<ProjectMeta> {
+    const text = new TextDecoder().decode(bytes);
+    if (!/\\documentclass/.test(text)) throw new Error("That .tex file has no \\documentclass line, so it can't compile on its own. To bring a whole project, import its .zip.");
+    return this.create({ name, main: "main.tex", engine: FONTSPEC.test(text) ? "xetex" : "pdftex", journalId, templateId: null }, [{ path: "main.tex", data: bytes }]);
   }
 }
 

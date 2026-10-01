@@ -95,13 +95,17 @@ export default function WritePage() {
     [store, journal, refresh],
   );
 
-  const importZip = useCallback(
+  // A .zip (a template, an Overleaf download, a backup) or a single .tex file.
+  const importUpload = useCallback(
     async (file: File) => {
       if (!store) return;
       setBusy(true);
       setError(null);
       try {
-        const meta = await store.importZip(file.name.replace(/\.zip$/i, ""), new Uint8Array(await file.arrayBuffer()), journal?.id ?? null);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const meta = /\.tex$/i.test(file.name)
+          ? await store.importTex(file.name.replace(/\.tex$/i, ""), bytes, journal?.id ?? null)
+          : await store.importZip(file.name.replace(/\.zip$/i, ""), bytes, journal?.id ?? null);
         await refresh(store);
         setOpenProject(meta);
       } catch (err) {
@@ -200,20 +204,20 @@ export default function WritePage() {
           <p className="mt-6 flex flex-wrap items-center gap-3 border-t border-line/70 pt-5 text-sm">
             <button type="button" onClick={() => upload.current?.click()} disabled={!store} className="clay-btn">
               <Upload size={14} strokeWidth={2} />
-              Import a .zip
+              Import a .zip or .tex
             </button>
-            <span className="text-ink-soft">A publisher&apos;s template, an Overleaf download, or a MargaLink backup.</span>
+            <span className="text-ink-soft">A publisher&apos;s template, an Overleaf download, a MargaLink backup, or a single .tex file.</span>
           </p>
           <input
             ref={upload}
             type="file"
-            accept=".zip,application/zip"
-            aria-label="Import a zip"
+            accept=".zip,application/zip,.tex"
+            aria-label="Import a .zip or .tex file"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
               e.target.value = "";
-              if (f) void importZip(f);
+              if (f) void importUpload(f);
             }}
           />
         </section>

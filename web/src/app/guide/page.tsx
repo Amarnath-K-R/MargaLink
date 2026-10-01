@@ -634,7 +634,7 @@ export default function GuidePage() {
                 <strong>Other publishers</strong>: they share templates only on their own sites: download the zip there, then import it.
               </>,
               <>
-                <strong>Import a .zip</strong>: a publisher&apos;s template, an Overleaf download, or a MargaLink backup.
+                <strong>Import a .zip or .tex</strong>: a publisher&apos;s template, an Overleaf download, a MargaLink backup, or a single .tex file (it becomes main.tex; add its figures and .bib after).
               </>,
             ]}
             caption="Coming from a journal's page or a match result, the matching template is suggested and pressed in."
@@ -923,7 +923,7 @@ export default function GuidePage() {
               ["\"Couldn't find that passage in the source\"", "Jump to source searches your LaTeX for words the reviewer quoted from the PDF; heavy markup or maths can hide them. The quote is still right."],
               ["My review stopped", "Resume review picks up where it stopped. A section that failed can be retried alone; it doesn't use another review."],
               ["A match looks wrong", "Check What we read. If the title or abstract wasn't found, paste them and match again."],
-              ["Moving to another computer", "Download backup on the project, then Import a .zip on the other computer."],
+              ["Moving to another computer", "Download backup on the project, then Import a .zip or .tex on the other computer."],
               ["Where's my project?", "In this browser, on this device. Another browser or a private window doesn't see it."],
             ].map(([q, a]) => (
               <div key={q} className="clay p-5">
