@@ -157,14 +157,25 @@ export async function claimReviewPass(
   if (!ticket || ticket.length > 100) return refuse(403, "This review has no ticket. Start it again from the review page.");
   const idHash = await sha256Hex(ticket);
   const t = await db
-    .prepare("SELECT tier, chunks, synthesized FROM review_tickets WHERE id_hash = ? AND user_id = ? AND expires_at > ?")
+    .prepare(
+      `SELECT tier, chunks, synthesized, synth_basis, synth_left, (SELECT COUNT(*) FROM review_deliveries WHERE ticket = id_hash) AS delivered
+       FROM review_tickets WHERE id_hash = ? AND user_id = ? AND expires_at > ?`,
+    )
     .bind(idHash, userId, now + CLAIM_MARGIN_MS)
-    .first<{ tier: string; chunks: string; synthesized: number }>();
+    .first<{ tier: string; chunks: string; synthesized: number; synth_basis: number; synth_left: number; delivered: number }>();
   if (!t) return refuse(403, "This review's ticket has expired. Start a new review; what the old one didn't finish is refunded automatically.");
   if (t.tier !== want.tier) return refuse(403, "This pass doesn't match the review that was paid for.");
   if (want.pass === "synthesize") {
-    if (t.synthesized) return refuse(409, "This review was already cross-checked.");
-    const r = await db.prepare("UPDATE review_tickets SET synth_left = synth_left - 1 WHERE id_hash = ? AND synth_left > 0 AND synthesized = 0 AND expires_at > ?").bind(idHash, now + CLAIM_MARGIN_MS).run();
+    // Only over sections that came back, and again only once more have (a Retry fixed one).
+    if (t.delivered === 0) return refuse(409, "No section of this review has come back yet, so there's nothing to cross-check.");
+    if (t.delivered <= t.synth_basis) return refuse(409, "This review was already cross-checked.");
+    const r = await db
+      .prepare(
+        `UPDATE review_tickets SET synth_left = synth_left - 1
+         WHERE id_hash = ?1 AND synth_left > 0 AND expires_at > ?2 AND (SELECT COUNT(*) FROM review_deliveries WHERE ticket = ?1) > synth_basis`,
+      )
+      .bind(idHash, now + CLAIM_MARGIN_MS)
+      .run();
     return r.meta.changes === 1 ? null : refuse(409, "The cross-check has no tries left; its share of the coins comes back automatically.");
   }
   const id = want.chunkId ?? "";
@@ -181,9 +192,15 @@ export async function claimReviewPass(
   return r.meta.changes === 1 ? null : refuse(409, "This section has no tries left; its share of the coins comes back automatically.");
 }
 
-/** A review whose synthesis came back: it's finished, so its coins are kept. */
-export async function markSynthesized(db: D1Database, ticket: string) {
-  await db.prepare("UPDATE review_tickets SET synthesized = 1 WHERE id_hash = ?").bind(await sha256Hex(ticket)).run();
+/** A review whose synthesis came back: it's finished, so its coins are kept. `basis`: the sections it covered. */
+export async function markSynthesized(db: D1Database, ticket: string, basis: number) {
+  await db.prepare("UPDATE review_tickets SET synthesized = 1, synth_basis = MAX(synth_basis, ?2) WHERE id_hash = ?1").bind(await sha256Hex(ticket), basis).run();
+}
+
+/** The sections of a paid review that came back (their chunk ids). */
+export async function deliveredChunks(db: D1Database, ticket: string): Promise<Set<string>> {
+  const rows = await db.prepare("SELECT chunk_id FROM review_deliveries WHERE ticket = ?").bind(await sha256Hex(ticket)).all<{ chunk_id: string }>();
+  return new Set(rows.results.map((r) => r.chunk_id));
 }
 
 /** What a Pro billing period is worth: a month's or a year's coins, times the share of its payment not refunded. */

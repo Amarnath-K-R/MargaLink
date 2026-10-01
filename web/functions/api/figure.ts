@@ -22,7 +22,7 @@ import { getSession, randomToken, text, type AccountEnv } from "../../src/lib/ac
 import { FIGURE_PRICE } from "../../src/lib/accounts/coins.ts";
 import { balance, credit, debit } from "../../src/lib/accounts/ledger.ts";
 import type { FigurePayload } from "../../src/lib/figures/figureSchema.ts";
-import { DAILY, countUse, leftToday } from "../../src/lib/accounts/dailyCaps.ts";
+import { DAILY, reserveUse } from "../../src/lib/accounts/dailyCaps.ts";
 
 type Env = AccountEnv & { ANTHROPIC_API_KEY: string };
 // Pinned, and not one of Anthropic's "Covered Models" (Mythos class), which have their own
@@ -37,6 +37,10 @@ const UPSTREAM_TIMEOUT_MS = 60_000;
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (Number(request.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) return text("Request body too large", 413);
+  // Signed in before the body is even read, so strangers can't make us parse it.
+  const now = Date.now();
+  const s = await getSession(env.DB, request, now);
+  if (!s) return text("Sign in to ask Claude.", 401);
 
   // content-length can be absent (chunked); the read itself is capped too.
   const raw = await request.text();
@@ -53,28 +57,27 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const problem = body.spec ? checkSpecAgainstColumns(body.columns, body.spec) : null;
   if (!body.request.trim()) return text("Describe the figure you want first.", 400);
 
-  const now = Date.now();
-  const s = await getSession(env.DB, request, now);
-  if (!s) return text("Sign in to ask Claude.", 401);
-  // Daily limits (dailyCaps.ts: the service's and this account's), checked
-  // before charging and counted before the upstream call (a failed call
-  // still costs, and is refunded, so the account's limit is what bounds it).
-  const left = await leftToday(env.DB, "figure", s.userId, now);
-  if (left.all <= 0) return text("Ask Claude is fully booked for today. Try again tomorrow; nothing was charged.", 429);
-  if (left.user <= 0) return text(`This account has reached today's limit of ${DAILY.figure.user} Ask Claude requests. It resets at midnight UTC; nothing was charged.`, 429);
+  // Daily limits (dailyCaps.ts), reserved before charging and before the
+  // upstream call (a failed call still costs us, and is refunded to the user,
+  // so the account's limit is what bounds it).
+  const held = await reserveUse(env.DB, "figure", s.userId, now);
+  if (!held.ok && held.full === "user") return text(`This account has reached today's limit of ${DAILY.figure.user} Ask Claude requests. It resets at midnight UTC; nothing was charged.`, 429);
+  if (!held.ok) return text("Ask Claude is fully booked for today. Try again tomorrow; nothing was charged.", 429);
   const ref = randomToken(12);
-  if (!(await debit(env.DB, s.userId, FIGURE_PRICE, "figure", ref, now))) return Response.json({ coins: FIGURE_PRICE, balance: await balance(env.DB, s.userId) }, { status: 402 });
+  if (!(await debit(env.DB, s.userId, FIGURE_PRICE, "figure", ref, now))) {
+    await held.release();
+    return Response.json({ coins: FIGURE_PRICE, balance: await balance(env.DB, s.userId) }, { status: 402 });
+  }
   // From here the coin comes back unless an answer goes out, whatever happens
   // (the Worker itself being stopped midway is the one case this can't cover).
   let answer: unknown = null;
   try {
-    await countUse(env.DB, "figure", s.userId, now);
     const res = await askClaude(body, problem, env.ANTHROPIC_API_KEY);
     if (res.status !== 200) return res;
     answer = await res.json();
     return Response.json({ ...(answer as object), balance: await balance(env.DB, s.userId) });
   } catch (err) {
-    console.error(`figure request failed: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`figure request failed: ${err instanceof Error ? err.name : "unknown"}`);
     return text("The figure request failed. Try again in a moment.", 502);
   } finally {
     if (answer === null) await credit(env.DB, s.userId, FIGURE_PRICE, "figure_refund", ref, Date.now());
@@ -106,8 +109,8 @@ async function askClaude(body: FigurePayload, problem: string | null, apiKey: st
     if (err instanceof TruncatedOutputError) return text("The figure description came back cut short. Try asking for fewer panels.", 422);
     if (err instanceof Error && err.name === "TimeoutError") return text("Upstream figure request timed out", 504);
     const status = err instanceof UpstreamError ? err.status : 502;
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`figure upstream failure ${status}: ${message}`);
+    // The name and status only: a message can quote the model's output, which quotes the user's data.
+    console.error(`figure upstream failure ${status}: ${err instanceof Error ? err.name : "unknown"}`);
     return text(`Upstream figure request failed (${status})`, 502);
   }
   if (!toolInput || typeof toolInput !== "object") return text(`Figure model did not return structured output (stop_reason: ${stopReason ?? "unknown"})`, 502);

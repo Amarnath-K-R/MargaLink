@@ -5,14 +5,12 @@
 // split, despite being the one thing standing between a model hallucinating
 // a quote and that quote reaching the client. See docs/ARCHITECTURE.md's
 // "The AI review: what it defends against, and why."
-import { MAX_DESCRIPTION_CHARS, MAX_MEASURE_CHARS, MAX_QUOTE_CHARS, MAX_UNIT_CHARS, MAX_VALUES } from "./reviewPasses.ts";
+import { MAX_DESCRIPTION_CHARS, MAX_MEASURE_CHARS, MAX_NOTES_PER_CHUNK, MAX_QUOTE_CHARS, MAX_STATS_PER_CHUNK, MAX_UNIT_CHARS, MAX_VALUES } from "./reviewPasses.ts";
 import type { ExtractResponse } from "./reviewTypes.ts";
 
-// Per-chunk ceilings on what one extract pass may contribute. Everything is
-// also clamped to the synthesis request's field caps (reviewPasses.ts), so a
-// grounded-but-oversized item can never make the final step fail with a 400.
-const MAX_STATS_PER_CHUNK = 20;
-const MAX_NOTES_PER_CHUNK = 5;
+// Everything an extract pass returns is clamped to the synthesis request's
+// caps (reviewPasses.ts, per chunk and per field), so a grounded-but-oversized
+// item can never make the final step fail with a 400.
 
 // Applied once client-side before sectioning (review.ts's prepareForReview)
 // AND again at match time here \u2014 idempotent, so both sides agree, and

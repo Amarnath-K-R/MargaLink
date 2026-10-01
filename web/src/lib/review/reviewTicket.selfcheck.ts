@@ -7,10 +7,11 @@
 import assert from "node:assert/strict";
 import { testD1 } from "../accounts/testD1.ts";
 import { createSession, signInUser } from "../accounts/auth.ts";
-import { balance, claimReviewPass, credit, sweepTickets } from "../accounts/ledger.ts";
+import { balance, claimReviewPass, credit, markDelivered, sweepTickets } from "../accounts/ledger.ts";
 import { sha256Hex } from "../accounts/auth.ts";
 import { reviewPrice, REVIEW_TICKET_TTL_MS } from "../accounts/coins.ts";
 import { DAILY_PASS_CAP, MAX_REVIEW_CHUNKS, MIN_BILLED_SECTION_CHARS } from "./reviewPasses.ts";
+import { TIER_PLAN } from "./reviewPrompt.ts";
 import { DAILY, capKeys } from "../accounts/dailyCaps.ts";
 import { JOURNAL_RULES } from "../journals/journalRules.ts";
 import { onRequestPost as start } from "../../../functions/api/review/start.ts";
@@ -57,8 +58,8 @@ const chunks = [{ id: "s1", chars: 20_000 }, { id: "s2-p1", chars: 24_000 }, { i
 const begin = (cookie: string, body: object = {}) => post(start, "/api/review/start", { tier: "quick", journalId, chunks, ...body }, cookie);
 const extract = (ticket: string | undefined, id = "s1", text = "x".repeat(100), tier = "quick", cookie = annCookie) =>
   post(review, "/api/review", { pass: "extract", tier, claimsCap: 4, chunk: { id, title: "Intro", kind: "introduction", part: 1, parts: 1, text } }, cookie, ticket);
-const synthesize = (ticket: string) =>
-  post(review, "/api/review", { pass: "synthesize", journalId, tier: "quick", paperMap: { title: null, totalWords: 10, sections: [] }, abstractText: null, ledger: [], statsFindings: [], notes: [] }, annCookie, ticket);
+const synthesize = (ticket: string, body: object = {}) =>
+  post(review, "/api/review", { pass: "synthesize", journalId, tier: "quick", paperMap: { title: null, totalWords: 10, sections: [] }, abstractText: null, ledger: [], statsFindings: [], notes: [], ...body }, annCookie, ticket);
 
 // --- starting: signed in, valid, affordable
 assert.equal((await begin("")).status, 401);
@@ -144,6 +145,7 @@ assert.equal((await extract(t2.ticket)).status, 403, "an expired ticket is gone"
 r = await begin(annCookie);
 const t4 = (await r.json()) as { ticket: string };
 const expires = (await env.DB.prepare("SELECT expires_at AS e FROM review_tickets WHERE id_hash = ?").bind(await sha256Hex(t4.ticket)).first<{ e: number }>())!.e;
+await markDelivered(env.DB, t4.ticket, "s1"); // (a cross-check needs a section that came back)
 assert.equal(await claimReviewPass(env.DB, t4.ticket, ann.id, { pass: "synthesize", tier: "quick" }, expires - 6 * 60_000), null);
 assert.match((await claimReviewPass(env.DB, t4.ticket, ann.id, { pass: "synthesize", tier: "quick" }, expires - 4 * 60_000))?.message ?? "", /expired/);
 
@@ -195,4 +197,31 @@ await setUsed(annKey, 0);
 const u0 = await usedOf(annKey);
 assert.equal((await extract(t6.ticket)).status, 200);
 assert.equal(await usedOf(annKey), u0 + 1, "each pass that reaches Claude counts against the account");
+
+// --- a cross-check needs a section that came back, and cites only sections that did (the free-synthesis attack)
+await credit(env.DB, ann.id, 20, "admin", "seed4", now);
+r = await begin(annCookie);
+const t7 = (await r.json()) as { ticket: string };
+const calls7 = upstreamCalls;
+r = await synthesize(t7.ticket);
+assert.equal(r.status, 409, "nothing to cross-check before a section has come back");
+assert.equal(upstreamCalls, calls7, "and it never reached Claude");
+assert.equal((await extract(t7.ticket, "s1")).status, 200);
+const entry = (id: string) => ({ id, section: "Intro", quote: "a quote from the paper", measure: "n", values: [{ value: 1, unit: null }] });
+r = await synthesize(t7.ticket, { ledger: [entry("s2-p1-c1")] });
+assert.equal(r.status, 400, "no entries from a section that didn't come back");
+r = await synthesize(t7.ticket, { ledger: Array.from({ length: TIER_PLAN.quick.claimsCap + 1 }, (_, i) => entry(`s1-c${i + 1}`)) });
+assert.equal(r.status, 400, "no more entries per section than its extract pass could return");
+r = await synthesize(t7.ticket, { notes: Array.from({ length: 6 }, (_, i) => ({ id: `s1-n${i + 1}`, section: "Intro", description: "d" })) });
+assert.equal(r.status, 400, "nor more notes");
+const calls7b = upstreamCalls;
+assert.equal((await synthesize(t7.ticket, { ledger: [entry("s1-c1")] })).status, 200);
+assert.equal(upstreamCalls, calls7b + 1, "the refused cross-checks never reached Claude");
+
+// --- Retry after a finished cross-check: a section that came back since is cross-checked again, once
+assert.equal((await synthesize(t7.ticket)).status, 409, "nothing new since the last cross-check");
+assert.equal((await extract(t7.ticket, "s2-p1")).status, 200);
+r = await synthesize(t7.ticket, { ledger: [entry("s1-c1"), entry("s2-p1-c1")] });
+assert.equal(r.status, 200, "the retried section is cross-checked with the rest");
+assert.equal((await synthesize(t7.ticket)).status, 409, "and not again without another");
 console.log("reviewTicket.selfcheck: OK");

@@ -173,17 +173,18 @@ await page.fill("#outline-add-heading", "A heading that is not in this paper");
 await page.getByRole("button", { name: "Add heading" }).click();
 check("an unknown typed heading is reported", await page.locator("text=Couldn't find").isVisible());
 
-// Editing the outline mid-run discards that run: no "Resume" that would
-// replay the old outline (which could include a section just excluded).
+// Mid-run, the outline and the tier are locked: changing either would throw
+// away a run that's already paid for. The run goes on to its result.
 slow = true;
 await getReview().click();
 await page.getByLabel(/I agree to send this text to Anthropic/).check();
 await page.click("text=Send it and review");
 await page.waitForSelector('[data-testid="review-progress"]');
-await rows.first().locator("select").selectOption("excluded");
-await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
-await page.waitForTimeout(300);
-check("an outline edit mid-run offers no stale resume", !(await page.getByRole("button", { name: /Resume review|Retry failed sections/ }).isVisible().catch(() => false)));
+check("the outline is locked while a review runs", await rows.first().locator("select").isDisabled());
+check("and so is the tier", (await page.locator("fieldset[disabled] button").count()) > 0);
+await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 30000 });
+check("the run finishes with its result", await page.locator('[data-testid="review-summary"]').isVisible());
+check("and the outline unlocks", await rows.first().locator("select").isEnabled());
 slow = false;
 
 // Signed out mid-run (a session that expired): the run stops, and resuming it later isn't charged again.

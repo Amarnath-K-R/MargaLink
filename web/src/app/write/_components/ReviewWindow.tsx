@@ -89,7 +89,9 @@ export default function ReviewWindow({
                     : "Pick the journal to review against."}
                 </p>
               )}
-              <JournalPicker selectedJournalId={r.selectedJournalId} onSelect={r.selectJournal} showMatchLink={false} />
+              <fieldset disabled={r.reviewLoading} className="m-0 min-w-0 border-0 p-0">
+                <JournalPicker selectedJournalId={r.selectedJournalId} onSelect={r.selectJournal} showMatchLink={false} />
+              </fieldset>
             </>
           )}
         </section>

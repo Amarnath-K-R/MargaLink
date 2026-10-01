@@ -49,7 +49,9 @@ export default function ReviewPage() {
 
         {r.paperText && (
           <Step n={2} tint={TINT} title="Choose a journal">
-            <JournalPicker selectedJournalId={r.selectedJournalId} onSelect={r.selectJournal} />
+            <fieldset disabled={r.reviewLoading} className="m-0 min-w-0 border-0 p-0">
+              <JournalPicker selectedJournalId={r.selectedJournalId} onSelect={r.selectJournal} />
+            </fieldset>
             {r.selectedRules && r.rulesResult && (
               <div className="mt-8">
                 <h3 className="font-serif text-lg font-medium">Structural check</h3>

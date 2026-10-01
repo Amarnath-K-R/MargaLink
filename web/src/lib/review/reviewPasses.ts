@@ -57,6 +57,33 @@ function keysExactly(o: Loose, keys: string[], where: string): string | null {
   return null;
 }
 
+// Per-chunk ceilings on what one extract pass may contribute (claims: the
+// tier's claimsCap), enforced on the way out (reviewGrounding.ts) and again
+// on what a cross-check may cite (synthesisOutsideDelivered).
+export const MAX_STATS_PER_CHUNK = 20;
+export const MAX_NOTES_PER_CHUNK = 5;
+
+/**
+ * A cross-check may cite only sections of its ticket that came back, and no
+ * more from each than one extract pass could have returned; otherwise a
+ * tampered client could send a near-megabyte ledger that no paid pass
+ * produced. Returns the 400 message, or null.
+ */
+export function synthesisOutsideDelivered(req: SynthesizeRequest, delivered: Set<string>): string | null {
+  const caps = { c: TIER_PLAN[req.tier].claimsCap, st: MAX_STATS_PER_CHUNK, n: MAX_NOTES_PER_CHUNK };
+  const seen = new Map<string, number>();
+  for (const { id } of [...req.ledger, ...req.statsFindings, ...req.notes]) {
+    const m = /^(.+)-(c|st|n)\d+$/.exec(id)!; // ITEM_ID already matched in parsing
+    const [chunk, kind] = [m[1], m[2] as keyof typeof caps];
+    if (!delivered.has(chunk)) return `${id} cites a section of this review that hasn't come back`;
+    const key = `${chunk}-${kind}`;
+    const n = (seen.get(key) ?? 0) + 1;
+    if (n > caps[kind]) return `more items from ${chunk} than its section pass could return`;
+    seen.set(key, n);
+  }
+  return null;
+}
+
 function parseExtract(body: Loose): ExtractRequest | string {
   const keyErr = keysExactly(body, ["pass", "tier", "claimsCap", "chunk"], "request");
   if (keyErr) return keyErr;

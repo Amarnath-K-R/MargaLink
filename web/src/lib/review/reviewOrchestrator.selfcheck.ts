@@ -372,4 +372,31 @@ const base = { text: PAPER, journalId: "j", tier: "standard" as const, endpoint:
   assert.ok(extracts().some((e) => e.chunk.title === "2. Methods"), "quick now reviews the section the user marked as Results");
 }
 
+// R-F1. Retry after a finished cross-check: the earlier one stays on screen while the run goes on, and is
+// kept if the new one fails; the new one runs only over sections that came back since; a refused ticket or a
+// lapsed sign-in during the cross-check ends the run as itself, not as a cross-check to retry forever
+{
+  stub((req, attempt) => (req.pass === "extract" && req.chunk.id === "s2" ? text("boom", 502) : happy(req, attempt, null)));
+  const first = await runReview(base);
+  assert.ok(first.result.journalFit !== null && first.result.coverage.failed.length === 1);
+  const shown: (SynthesizeResponse["journalFit"] | null)[] = [];
+  stub((req, attempt) => (req.pass === "synthesize" ? text("This review was already cross-checked.", 409) : happy(req, attempt, null)));
+  const err = await runReview({ ...base, onProgress: (p) => shown.push(p.partial.journalFit) }, first.state).catch((e: unknown) => e);
+  assert.ok(shown.length > 0 && shown.every((f) => f !== null), "progress keeps showing the earlier cross-check");
+  assert.ok(err instanceof ReviewSynthesisError);
+  assert.deepEqual(err.partial.journalFit, first.result.journalFit, "a failed cross-check keeps the earlier one");
+  assert.equal(err.partial.coverage.failed.length, 0, "the retried section is in");
+  stub(happy);
+  const second = await runReview(base, err.state);
+  assert.deepEqual(calls.map((c) => c.pass), ["synthesize"], "the cross-check runs again for the section it hasn't seen");
+  stub(happy);
+  const third = await runReview(base, second.state);
+  assert.equal(calls.length, 0, "nothing new since: nothing is sent");
+  assert.deepEqual(third.result.journalFit, second.result.journalFit);
+  stub((req, attempt) => (req.pass === "synthesize" ? text("This review's ticket has expired.", 403) : happy(req, attempt, null)));
+  await assert.rejects(runReview(base), ReviewEndedError);
+  stub((req, attempt) => (req.pass === "synthesize" ? text("Sign in to get a review.", 401) : happy(req, attempt, null)));
+  await assert.rejects(runReview(base), SignInRequiredError);
+}
+
 console.log("reviewOrchestrator.selfcheck: OK");

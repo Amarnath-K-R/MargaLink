@@ -80,7 +80,7 @@ assert.ok(JSON.stringify(upstreamBody).includes("PROBLEM WITH THE CURRENT SPEC")
 
 assert.equal((await call({ ...buildFigurePayload(ds, null, "x", { sendLevels: false, mode: "spec" }), rows: [[1]] })).status, 400);
 assert.equal((await call(buildFigurePayload(ds, null, "   ", { sendLevels: false, mode: "spec" }))).status, 400);
-assert.deepEqual(await leftToday(env.DB, "figure", user.id, Date.now()), { all: DAILY.figure.all - 7, user: DAILY.figure.user - 7 }, "every call that reached Claude was counted, rejected-input calls weren't");
+assert.deepEqual(await leftToday(env.DB, "figure", user.id, Date.now()), { all: DAILY.figure.free - 7, user: DAILY.figure.user - 7 }, "every call that reached Claude was counted (this account bought no coins, so the free share applies), rejected-input calls weren't");
 // seven calls reached Claude, three of them came back unusable (422): 7 charged, 3 refunded
 assert.equal(await balance(env.DB, user.id), 16);
 const refunds = await env.DB.prepare("SELECT COUNT(*) AS n FROM coin_ledger WHERE kind = 'figure_refund'").first<{ n: number }>();

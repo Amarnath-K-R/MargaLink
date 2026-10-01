@@ -5,13 +5,16 @@
 // timeout trips. Isomorphic (fetch/ReadableStream/TextDecoder only) so the
 // selfcheck can drive it with a stubbed fetch, and functions/ can import it.
 export class UpstreamError extends Error {
+  override name = "UpstreamError";
   status: number;
   constructor(status: number, message: string) {
     super(message);
     this.status = status;
   }
 }
-export class TruncatedOutputError extends Error {}
+export class TruncatedOutputError extends Error {
+  override name = "TruncatedOutputError";
+}
 
 type SseEvent = {
   type?: string;

@@ -56,6 +56,11 @@ export type ReviewState = {
   failed: Record<string, string>;
   excluded: { id: string; title: string }[];
   ticket: string | null; // from /api/review/start; a resume reuses it, so a review is paid for once
+  // The last cross-check that came back, and how many sections it covered:
+  // a resume shows it while it runs, keeps it if a new one fails, and runs a
+  // new one only once more sections have come back (the server refuses otherwise).
+  synth: SynthesizeResponse | null;
+  synthCovers: number;
 };
 export type ReviewRun = { result: ReviewResult; state: ReviewState };
 export class ReviewSynthesisError extends Error {
@@ -109,6 +114,8 @@ function planState(text: string, hints: HeadingHint[], outline?: RunReviewOption
     failed: {},
     excluded: (outline?.excluded ?? []).map((s) => ({ id: s.id, title: s.title })),
     ticket: null,
+    synth: null,
+    synthCovers: 0,
   };
 }
 
@@ -266,7 +273,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
   if (opts.signal?.aborted) onOuterAbort();
   opts.signal?.addEventListener("abort", onOuterAbort, { once: true });
   const emit = (phase: ReviewProgress["phase"], current: string | null) =>
-    opts.onProgress?.({ phase, done, total: run.length, current, partial: assemble(state, run, skipped, null) });
+    opts.onProgress?.({ phase, done, total: run.length, current, partial: assemble(state, run, skipped, state.synth) });
 
   const runExtract = async (chunk: Chunk) => {
     const fullCap = TIER_PLAN[opts.tier].claimsCap;
@@ -322,6 +329,10 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
     if (failure) throw failure.reason;
     if (controller.signal.aborted) throw abortError(opts.signal ?? controller.signal);
 
+    // Nothing came back since the last cross-check: it still stands, and there's nothing to send.
+    const covered = Object.keys(state.extracted).length;
+    if (state.synth && covered === state.synthCovers) return { result: assemble(state, run, skipped, state.synth), state };
+
     const { ledger, statsFindings, notes } = buildLedger(state);
     emit("synthesize", `Cross-checking ${ledger.length} claims`);
     // Clamped to the server's caps (reviewPasses.ts) so a very long paper
@@ -350,12 +361,20 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
         if (i === 0) await sleep(delays[0] ?? 0, controller.signal);
       }
     } catch (err) {
-      // Every extract pass is already paid for: any synthesis-phase failure
-      // except a cancel keeps the state so the user can retry just this step.
+      // Every extract pass is already paid for: a synthesis-phase failure keeps
+      // the state so the user can retry just this step. Not a cancel, a ticket
+      // that can't be used or a lapsed sign-in: each ends the run as itself
+      // (retrying the cross-check would only fail the same way).
       if (err instanceof Error && err.name === "AbortError") throw err;
+      if (err instanceof ReviewEndedError || err instanceof SignInRequiredError) throw err;
       reason = err instanceof Error ? err.message : String(err);
     }
-    if (!synth) throw new ReviewSynthesisError(`The cross-check didn't finish (${reason}).`, assemble(state, run, skipped, null), state);
+    if (!synth) {
+      const message = state.synth ? `The cross-check didn't run again (${reason}); the earlier one is shown.` : `The cross-check didn't finish (${reason}).`;
+      throw new ReviewSynthesisError(message, assemble(state, run, skipped, state.synth), state);
+    }
+    state.synth = synth;
+    state.synthCovers = covered;
     return { result: assemble(state, run, skipped, synth), state };
   } finally {
     opts.signal?.removeEventListener("abort", onOuterAbort);
