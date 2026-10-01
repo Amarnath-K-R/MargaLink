@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ErrorText from "@/components/ui/ErrorText";
 import FigureConsent from "@/components/figures/FigureConsent";
 import SignInPanel from "@/components/account/SignInPanel";
@@ -36,13 +36,23 @@ export default function Describe({
   const labels = levelsToSend(dataset);
   const payload = buildFigurePayload(dataset, spec, request, { sendLevels, mode: "spec" });
 
+  // Remounted for a new file (FigureStudio keys it): an answer for the old one is dropped, not applied.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
   async function run(mode: FigureMode) {
     setBusy(mode);
     setError(null);
     setSummary(null);
     try {
       const r = await askClaude(dataset, spec, request, { sendLevels, mode });
-      if (r.balance !== null) setBalance(r.balance);
+      if (r.balance !== null) setBalance(r.balance); // the coin was spent either way
+      if (!alive.current) return;
       setSummary(r.summary || null);
       onResult(r);
     } catch (err) {

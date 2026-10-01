@@ -8,11 +8,13 @@ import { DEFAULT_SPEC } from "./figureSpec.ts";
 import {
   FigureRenderError,
   PREVIEW_TIMEOUT_MS,
+  WARMUP_STALL_MS,
   __setWorkerFactory,
   cancelPreviews,
   exportFigure,
   isCodeSafeToRun,
   renderFigure,
+  warmUp,
   type RenderRequest,
 } from "./figureRunner.ts";
 
@@ -24,12 +26,15 @@ class FakeWorker {
   inbox: Msg[] = [];
   terminated = false;
   holdQueue = false; // true: renders sit in the worker's queue (no "started")
+  static silentWarmup = false; // true: the next workers never answer a warm-up (a stalled download)
+  onerror: (() => void) | null = null;
+  silent = FakeWorker.silentWarmup;
   constructor() {
     FakeWorker.all.push(this);
   }
   postMessage(m: Msg) {
     this.inbox.push(m);
-    if (m.type === "warmup") this.reply({ type: "ready", id: m.id });
+    if (m.type === "warmup" && !this.silent) this.reply({ type: "ready", id: m.id });
     if (m.type === "render" && !this.holdQueue) this.reply({ type: "started", id: m.id });
   }
   terminate() {
@@ -50,8 +55,11 @@ mock.timers.enable({ apis: ["setTimeout"] });
 __setWorkerFactory(() => new FakeWorker() as unknown as Worker);
 
 // 1. overlapping previews: the older one resolves null even if it finishes last
+// (on a loaded engine; while it's loading, a superseded preview isn't even sent)
 {
+  await warmUp();
   const first = renderFigure(REQ);
+  await flush(); // sent: a preview superseded before it's sent never is
   const second = renderFigure(REQ);
   await flush();
   const w = FakeWorker.all.at(-1)!;
@@ -91,6 +99,36 @@ __setWorkerFactory(() => new FakeWorker() as unknown as Worker);
   assert.notEqual(fresh, hung);
   fresh.reply({ type: "result", id: fresh.renders()[0].id, images: { tiff: "T" }, meta: META, hookWarning: null });
   assert.equal((await next).images.tiff, "T");
+}
+
+// 3b. a worker that can't load (jsDelivr blocked) or a warm-up that stalls ends in "couldn't load", not an endless spinner
+{
+  const p = renderFigure(REQ);
+  await flush();
+  FakeWorker.all.at(-1)!.onerror?.();
+  const err = await p.then(() => null, (e: unknown) => e);
+  assert.ok(err instanceof FigureRenderError && err.code === "load_failed", String(err));
+  FakeWorker.silentWarmup = true;
+  const q = renderFigure(REQ);
+  await flush();
+  mock.timers.tick(WARMUP_STALL_MS + 1);
+  const err2 = await q.then(() => null, (e: unknown) => e);
+  assert.ok(err2 instanceof FigureRenderError && err2.code === "load_failed", String(err2));
+  FakeWorker.silentWarmup = false;
+}
+
+// 3c. a preview asked for while the engine was still loading is dropped by cancelPreviews (a new upload)
+{
+  FakeWorker.silentWarmup = true;
+  const p = renderFigure(REQ);
+  await flush();
+  FakeWorker.silentWarmup = false;
+  const w = FakeWorker.all.at(-1)!;
+  cancelPreviews();
+  w.reply({ type: "ready", id: w.inbox[0].id });
+  await flush();
+  for (const r of w.renders()) w.reply({ type: "result", id: r.id, images: { png: "OLD" }, meta: META, hookWarning: null });
+  assert.equal(await p, null, "the old file's figure never lands over the new upload");
 }
 
 // 4. loading SciPy extends the deadline instead of killing the render
@@ -151,6 +189,7 @@ const BENIGN = `def customize(fig, axes, df):
 `;
 assert.equal(isCodeSafeToRun(BENIGN), null, "an ordinary customize() passes");
 assert.equal(isCodeSafeToRun("import matplotlib.ticker as mticker\nfrom numpy import linspace\n" + BENIGN), null, "plotting-stack imports pass");
+assert.equal(isCodeSafeToRun("import matplotlib.pyplot as plt\nfrom matplotlib.patches import Rectangle\nimport numpy as np\nimport math\n" + BENIGN), null, "the plotting modules a tweak needs pass");
 for (const snippet of [
   "import os",
   "from os import path",
@@ -178,6 +217,15 @@ for (const snippet of [
   "df.to_csv('x')",
   "pd.read_csv('https://x')",
   "np.__class__",
+  // the security review's escape: attribute access by a built string, through modules the plotting stack carries
+  "from matplotlib.cbook import operator",
+  "from matplotlib import cbook",
+  "import matplotlib.cbook",
+  "g = operator.attrgetter",
+  "x = matplotlib.cbook.sys",
+  "f = getattr",
+  "df.query('a > 1')",
+  "pd.eval('1 + 1')",
 ]) {
   assert.notEqual(isCodeSafeToRun(snippet), null, `"${snippet}" should be rejected`);
 }

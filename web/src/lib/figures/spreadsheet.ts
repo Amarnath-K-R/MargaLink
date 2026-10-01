@@ -31,7 +31,10 @@ export type Dataset = {
   coerced: Record<string, number>;
 };
 
-export type Workbook = { fileName: string; sheets: { name: string; rows: string[][] }[] };
+// A CSV's single sheet keeps its text and the delimiter it was read with, so another can be chosen.
+export type Workbook = { fileName: string; sheets: { name: string; rows: string[][]; text?: string; delimiter?: Delimiter }[] };
+export type Delimiter = "," | ";" | "\t";
+export const DELIMITERS: Delimiter[] = [",", ";", "\t"];
 
 export const DEFAULT_NA_TOKENS = ["NA", "N/A", "NaN", "nan", "NULL", "null", "#N/A", "-", "."];
 export type PrepOptions = {
@@ -40,6 +43,8 @@ export type PrepOptions = {
   naTokens: string[];
   decimal: "." | ",";
   thousands: "" | "," | "." | " " | "'";
+  delimiter?: Delimiter; // a CSV's column separator, when not the one it was read with
+  dayFirst?: boolean; // 01/03/2024 is 1 March (true) or 3 January
   typeOverrides: Record<string, Dtype>;
   reshape: { idColumns: string[]; valueColumns: string[]; varName: string; valueName: string } | null;
 };
@@ -54,7 +59,9 @@ export async function readWorkbook(file: File): Promise<Workbook> {
   }
   const name = file.name.toLowerCase();
   if (name.endsWith(".csv") || name.endsWith(".tsv") || name.endsWith(".txt")) {
-    return { fileName: file.name, sheets: [{ name: file.name, rows: readCsvText(decodeText(await file.arrayBuffer())) }] };
+    const text = decodeText(await file.arrayBuffer());
+    const delimiter: Delimiter = name.endsWith(".tsv") ? "\t" : sniffDelimiter(text.split("\n", 20).join("\n"));
+    return { fileName: file.name, sheets: [{ name: file.name, rows: parseCsv(text, delimiter), text, delimiter }] };
   }
   if (name.endsWith(".xlsx")) {
     let sheets: { sheet: string; data: unknown[][] }[];
@@ -69,9 +76,13 @@ export async function readWorkbook(file: File): Promise<Workbook> {
   throw new Error("Unsupported file type. Upload a .csv, .tsv or .xlsx.");
 }
 
-// UTF-8 when the bytes are valid UTF-8 (BOM stripped), else Windows-1252 —
-// what Excel on Windows writes for "CSV" and what turns "µ" into "�" otherwise.
+// UTF-16 when it starts with a UTF-16 BOM (Excel's "Unicode Text"), UTF-8
+// when the bytes are valid UTF-8 (BOM stripped), else Windows-1252: what
+// Excel on Windows writes for "CSV" and what turns "µ" into "�" otherwise.
 export function decodeText(bytes: ArrayBuffer): string {
+  const head = new Uint8Array(bytes, 0, Math.min(2, bytes.byteLength));
+  if (head[0] === 0xff && head[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
+  if (head[0] === 0xfe && head[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -110,7 +121,9 @@ export function suggestPrepOptions(workbook: Workbook, sheet = 0): PrepOptions {
   const group = decimal === "," ? "." : ",";
   const grouped = new RegExp(`^[-+]?\\d{1,3}(\\${group}\\d{3})+(\\${decimal}\\d+)?$`);
   const thousands = cells.some((c) => grouped.test(c)) ? group : "";
-  return { sheet, headerRow, naTokens: DEFAULT_NA_TOKENS, decimal, thousands, typeOverrides: {}, reshape: null };
+  // Days come first when a d/m/y date has 13 or more in the first place; month-first otherwise (the user can switch).
+  const dayFirst = cells.some((c) => Number(NUMERIC_DMY.exec(c)?.[1]) > 12);
+  return { sheet, headerRow, naTokens: DEFAULT_NA_TOKENS, decimal, thousands, dayFirst, typeOverrides: {}, reshape: null };
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -159,7 +172,9 @@ export function reshapeWideToLong(headers: string[], rows: string[][], r: NonNul
 export function prepareDataset(workbook: Workbook, opts: PrepOptions): Dataset {
   const sheet = workbook.sheets[opts.sheet];
   if (!sheet) throw new Error("That sheet doesn't exist in this file.");
-  const body = sheet.rows.slice(opts.headerRow).filter((r) => r.some((c) => c.trim() !== ""));
+  if (opts.thousands && opts.thousands === opts.decimal) throw new Error("The decimal mark and the thousands separator can't be the same. Pick a different one for either.");
+  const source = opts.delimiter && sheet.text !== undefined && opts.delimiter !== sheet.delimiter ? parseCsv(sheet.text, opts.delimiter) : sheet.rows;
+  const body = source.slice(opts.headerRow).filter((r) => r.some((c) => c.trim() !== ""));
   if (body.length < 2) throw new Error("There are no rows under the header row.");
   const na = new Set(opts.naTokens.map((t) => t.trim()));
   let headers = normalizeHeaders(body[0]);
@@ -178,7 +193,7 @@ export function prepareDataset(workbook: Workbook, opts: PrepOptions): Dataset {
 
   const columns: ColumnSchema[] = headers.map((name, i) => ({
     name,
-    dtype: opts.typeOverrides[name] ?? inferDtype(rows.map((r) => r[i]), opts.decimal, opts.thousands),
+    dtype: opts.typeOverrides[name] ?? inferDtype(rows.map((r) => r[i]), opts.decimal, opts.thousands, opts.dayFirst),
   }));
   const levels: Dataset["levels"] = {};
   const coerced: Dataset["coerced"] = {};
@@ -196,6 +211,9 @@ export function prepareDataset(workbook: Workbook, opts: PrepOptions): Dataset {
       const seen = new Set<string>();
       for (const r of rows) if (r[i] !== "" && seen.size <= MAX_LEVELS) seen.add(r[i]);
       levels[name] = seen.size > MAX_LEVELS ? null : [...seen];
+    } else {
+      // d/m/y and m/d/y become ISO dates, so the renderer can't read them the other way round
+      for (const r of rows) r[i] = isoDate(r[i], !!opts.dayFirst) ?? r[i];
     }
   });
   return {
@@ -216,17 +234,19 @@ function cellToString(v: unknown): string {
   return String(v);
 }
 
-// Best-effort sniff over the header line only — counts each delimiter
-// candidate's raw occurrences and picks the most common, ties favoring
-// comma. Not quote-aware (a delimiter char inside a quoted header would
-// throw this off); good enough for a sniff, not a parse.
-function sniffDelimiter(firstLine: string): string {
-  let best = ",";
-  let bestCount = -1;
-  for (const d of [",", ";", "\t"]) {
-    const count = firstLine.split(d).length - 1;
-    if (count > bestCount) {
-      bestCount = count;
+// The delimiter that splits the most lines of the sample into the same
+// number of fields (more than one): a semicolon file with decimal commas has
+// more commas than semicolons, but only ";" splits its rows alike. Ties go to
+// comma. Quote-aware, through the reader itself.
+function sniffDelimiter(sample: string): Delimiter {
+  let best: Delimiter = ",";
+  let bestScore = -1;
+  for (const d of DELIMITERS) {
+    const counts = new Map<number, number>();
+    for (const row of parseCsv(sample, d)) if (row.length > 1) counts.set(row.length, (counts.get(row.length) ?? 0) + 1);
+    const score = Math.max(0, ...counts.values());
+    if (score > bestScore) {
+      bestScore = score;
       best = d;
     }
   }
@@ -301,14 +321,15 @@ export function toCsv(rows: string[][]): string {
     .join("\r\n");
 }
 
+// Blank headers become column_N and repeats get _2, _3…, never a name already taken.
 function normalizeHeaders(raw: string[]): string[] {
-  const seen = new Map<string, number>();
+  const used = new Set<string>();
   return raw.map((h, i) => {
-    const trimmed = (h ?? "").trim();
-    const name = trimmed || `column_${i + 1}`;
-    const count = seen.get(name) ?? 0;
-    seen.set(name, count + 1);
-    return count === 0 ? name : `${name}_${count + 1}`;
+    const base = (h ?? "").trim() || `column_${i + 1}`;
+    let name = base;
+    for (let n = 2; used.has(name); n++) name = `${base}_${n}`;
+    used.add(name);
+    return name;
   });
 }
 
@@ -316,14 +337,27 @@ function normalizeHeaders(raw: string[]): string[] {
 // so a value must also look like one: ISO, d/m/y-style, or with a month name.
 const DATE_SHAPE = /^(\d{4}[-/]\d{1,2}[-/]\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{1,2}[ -][A-Za-z]{3,9}[ -]\d{2,4}|[A-Za-z]{3,9}\.? \d{1,2},? \d{4})$/;
 
-export function inferDtype(values: string[], decimal: "." | "," = ".", thousands = ""): Dtype {
+// d/m/y or m/d/y (which one is the dayFirst option), as a real calendar date in ISO form, or null.
+const NUMERIC_DMY = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$/;
+export function isoDate(raw: string, dayFirst: boolean): string | null {
+  const m = NUMERIC_DMY.exec(raw.trim());
+  if (!m) return null;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  const [day, month] = dayFirst ? [a, b] : [b, a];
+  const year = m[3].length === 2 ? 2000 + Number(m[3]) - (Number(m[3]) >= 69 ? 100 : 0) : Number(m[3]);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+export function inferDtype(values: string[], decimal: "." | "," = ".", thousands = "", dayFirst = false): Dtype {
   const nonEmpty = values.map((v) => v.trim()).filter((v) => v !== "");
   if (nonEmpty.length === 0) return "categorical";
 
   const numericCount = nonEmpty.filter((v) => parseNumber(v, decimal, thousands) !== null).length;
   if (numericCount / nonEmpty.length >= 0.9) return "numeric";
 
-  const dateCount = nonEmpty.filter((v) => DATE_SHAPE.test(v) && !Number.isNaN(Date.parse(v))).length;
+  const dateCount = nonEmpty.filter((v) => (NUMERIC_DMY.test(v) ? isoDate(v, dayFirst) !== null : DATE_SHAPE.test(v) && !Number.isNaN(Date.parse(v)))).length;
   if (dateCount / nonEmpty.length >= 0.9) return "date";
 
   return "categorical";

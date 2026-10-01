@@ -175,4 +175,35 @@ assert.deepEqual(spacer.columns.map((c) => c.name), ["a", "b"], "unnamed empty c
 assert.equal(spacer.rowCount, 2);
 assert.throws(() => prepareDataset(wb([["a"]]), base), /no rows under the header/);
 
+// --- review fixes ---
+// a semicolon file with decimal commas (a European Excel export): commas outnumber semicolons, but only ";" splits every row alike
+const euro = "weight;height;bmi\n72,5;180,2;20,4\n80,1;175,0;26,2\n65,3;168,9;22,9\n";
+assert.equal(sniffDelimiter(euro), ";", "the delimiter that splits rows consistently wins, not the most frequent character");
+assert.deepEqual(readCsvText(euro)[1], ["72,5", "180,2", "20,4"]);
+// a tab file whose text cells hold commas
+const tsv = "id\tnote\tscore\n1\tfine, thanks\t3\n2\tok, then, yes\t4\n";
+assert.equal(sniffDelimiter(tsv), "\t");
+// the delimiter can be chosen: a CSV sheet keeps its text, and prep re-reads it
+const sniffed: Workbook = { fileName: "d.csv", sheets: [{ name: "d.csv", rows: readCsvText("a,b\n1;2,3\n"), text: "a,b\n1;2,3\n" }] };
+assert.deepEqual(prepareDataset(sniffed, { ...base, delimiter: ";" }).columns.map((c) => c.name), ["a,b"], "a chosen delimiter re-reads the file");
+
+// day-first dates are read day-first, consistently, and handed on as ISO dates
+const monthly = wb([["when", "n"], ["01/03/2024", "1"], ["01/04/2024", "2"], ["13/04/2024", "3"]]);
+assert.equal(suggestPrepOptions(monthly).dayFirst, true, "a 13 in the first place means day-first");
+const dfirst = prepareDataset(monthly, { ...base, dayFirst: true });
+assert.equal(dfirst.columns[0].dtype, "date", "13/04/2024 is a date when days come first");
+assert.ok(dfirst.csv.includes("2024-03-01") && dfirst.csv.includes("2024-04-13"), dfirst.csv);
+const mfirst = prepareDataset(wb([["when"], ["01/03/2024"], ["02/03/2024"]]), { ...base, dayFirst: false });
+assert.ok(mfirst.csv.includes("2024-01-03") && mfirst.csv.includes("2024-02-03"), mfirst.csv);
+assert.equal(suggestPrepOptions(wb([["when"], ["03/13/2024"], ["03/14/2024"]])).dayFirst, false, "a 13 in the second place means month-first");
+
+// duplicate and generated headers never collide
+const hs = normalizeHeaders(["a", "a", "a_2", "", "column_4"]);
+assert.equal(new Set(hs).size, hs.length, hs.join(","));
+// the same mark can't be both the decimal mark and the thousands separator ("1,5" isn't 15)
+assert.throws(() => prepareDataset(wb([["x"], ["1,5"], ["2,5"]]), { ...base, decimal: ",", thousands: "," }), /decimal mark and the thousands separator/);
+// Excel's "Unicode Text" export is UTF-16 with a BOM
+const utf16 = new Uint8Array([0xff, 0xfe, ...[..."a\tb\n1\t2"].flatMap((c) => [c.charCodeAt(0), 0])]);
+assert.equal(decodeText(utf16.buffer), "a\tb\n1\t2");
+
 console.log("spreadsheet.selfcheck: OK");

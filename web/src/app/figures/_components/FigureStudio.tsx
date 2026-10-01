@@ -50,7 +50,7 @@ export default function FigureStudio({ figures: f, exportExtra }: { figures: Fig
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           <div className="min-w-0 space-y-6">
             <Step n={3} tint={TINT} title="Describe it to Claude…">
-              <Describe dataset={f.dataset} spec={f.spec && typeof validateFigureSpec(f.spec) !== "string" ? f.spec : null} onResult={f.onClaude} />
+              <Describe key={f.uploadId} dataset={f.dataset} spec={f.spec && typeof validateFigureSpec(f.spec) !== "string" ? f.spec : null} onResult={f.onClaude} />
             </Step>
             <section className="clay p-6 sm:p-8">
               <h2 className="mb-5 font-serif text-xl font-medium tracking-[-0.01em]">…or start from a template</h2>

@@ -13,7 +13,7 @@ assert.ok(SPEC_SYSTEM_PROMPT.includes("Never invent a label"));
 assert.ok(SPEC_SYSTEM_PROMPT.includes("return the full spec"));
 assert.ok(SPEC_SYSTEM_PROMPT.includes("untrusted"), "the request is untrusted");
 assert.ok(SPEC_SYSTEM_PROMPT.includes('as "" unless'), "text fields stay empty so local text survives");
-for (const banned of ["os", "subprocess", "socket", "open()", "savefig", "Import only from matplotlib, numpy, pandas or math", "double underscore"]) {
+for (const banned of ["os", "subprocess", "socket", "open, input", "savefig", "only these modules: matplotlib.pyplot", "double underscore", "operator, attrgetter"]) {
   assert.ok(HOOK_SYSTEM_PROMPT.includes(banned), `hook prompt forbids ${banned}`);
 }
 assert.ok(HOOK_SYSTEM_PROMPT.includes("def customize(fig, axes, df):"));

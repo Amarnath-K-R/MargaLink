@@ -119,7 +119,8 @@ async function fetchFonts(pyodide, missing, report) {
 // script-src limited to self + the Pyodide CDN path) is the upgrade if these
 // JS-level locks ever prove thin.
 let networkLocked = false;
-const NETWORK_APIS = ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "importScripts", "Worker", "SharedWorker", "WebTransport", "BroadcastChannel", "caches"];
+// The network, and the site's own storage (IndexedDB; the private file system /write keeps projects in, below).
+const NETWORK_APIS = ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "importScripts", "Worker", "SharedWorker", "WebTransport", "BroadcastChannel", "caches", "indexedDB"];
 async function lockNetwork(pyodide, report) {
   if (networkLocked) return;
   await ensureScipy(pyodide, report);
@@ -135,6 +136,15 @@ async function lockNetwork(pyodide, report) {
         Object.defineProperty(scope, name, { value: deny, writable: false, configurable: false });
       } catch {
         // already non-configurable on this scope — the own stub on `self` still shadows it
+      }
+    }
+  }
+  if (self.StorageManager) {
+    for (const name of ["getDirectory", "persist", "estimate"]) {
+      try {
+        Object.defineProperty(StorageManager.prototype, name, { value: deny, writable: false, configurable: false });
+      } catch {
+        // already locked
       }
     }
   }

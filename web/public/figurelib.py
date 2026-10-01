@@ -1146,7 +1146,7 @@ def apply_hook(fig, axes, df: pd.DataFrame, code: str) -> str | None:
         customize = namespace.get("customize")
         if not callable(customize):
             return "The custom tweak doesn't define customize(fig, axes, df), so it was skipped."
-        customize(fig, list(axes), df)
+        customize(fig, list(axes), df.copy())  # its own copy: the worker caches df for every later render
     except Exception as exc:  # noqa: BLE001 — any failure in user/Claude code becomes a warning
         return f"The custom tweak failed ({type(exc).__name__}), so the figure is shown without it."
     return None

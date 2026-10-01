@@ -1,6 +1,6 @@
 "use client";
 
-import { DTYPES, type Dataset, type Dtype, type PrepOptions, type Workbook } from "@/lib/figures/spreadsheet";
+import { DTYPES, type Dataset, type Delimiter, type Dtype, type PrepOptions, type Workbook } from "@/lib/figures/spreadsheet";
 
 const input = "clay-field";
 const THOUSANDS: { value: PrepOptions["thousands"]; label: string }[] = [
@@ -9,6 +9,11 @@ const THOUSANDS: { value: PrepOptions["thousands"]; label: string }[] = [
   { value: ".", label: "Dot (1.234)" },
   { value: " ", label: "Space (1 234)" },
   { value: "'", label: "Apostrophe (1'234)" },
+];
+const SEPARATORS: { value: Delimiter; label: string }[] = [
+  { value: ",", label: "Comma" },
+  { value: ";", label: "Semicolon" },
+  { value: "\t", label: "Tab" },
 ];
 
 // How the file is read: sheet, header row, missing-value markers, number
@@ -29,6 +34,7 @@ export default function DataPrep({
   sourceColumns: string[];
 }) {
   const set = (patch: Partial<PrepOptions>) => onChange({ ...options, ...patch });
+  const sheet = workbook.sheets[options.sheet];
   const reshape = options.reshape;
   const setOverride = (name: string, dtype: string) => {
     const next = { ...options.typeOverrides };
@@ -66,6 +72,23 @@ export default function DataPrep({
             </select>
           </label>
         )}
+        {sheet?.text !== undefined && (
+          <label className="flex flex-col gap-1 text-sm text-ink-soft">
+            Columns separated by
+            <select
+              className={input}
+              aria-label="Column separator"
+              value={options.delimiter ?? sheet.delimiter ?? ","}
+              onChange={(e) => set({ delimiter: e.target.value as Delimiter, headerRow: 0, typeOverrides: {}, reshape: null })}
+            >
+              {SEPARATORS.map((d) => (
+                <option key={d.label} value={d.value}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex flex-col gap-1 text-sm text-ink-soft">
           Header is on row
           <input
@@ -79,7 +102,16 @@ export default function DataPrep({
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-soft">
           Decimal mark
-          <select className={input} aria-label="Decimal mark" value={options.decimal} onChange={(e) => set({ decimal: e.target.value as PrepOptions["decimal"] })}>
+          <select
+            className={input}
+            aria-label="Decimal mark"
+            value={options.decimal}
+            onChange={(e) => {
+              // One mark can't be both: a thousands separator equal to the new decimal mark moves to the other one.
+              const decimal = e.target.value as PrepOptions["decimal"];
+              set({ decimal, thousands: options.thousands === decimal ? (decimal === "," ? "." : ",") : options.thousands });
+            }}
+          >
             <option value=".">Dot (1.5)</option>
             <option value=",">Comma (1,5)</option>
           </select>
@@ -88,10 +120,17 @@ export default function DataPrep({
           Thousands separator
           <select className={input} aria-label="Thousands separator" value={options.thousands} onChange={(e) => set({ thousands: e.target.value as PrepOptions["thousands"] })}>
             {THOUSANDS.map((t) => (
-              <option key={t.label} value={t.value}>
+              <option key={t.label} value={t.value} disabled={t.value === options.decimal}>
                 {t.label}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink-soft">
+          Dates written
+          <select className={input} aria-label="Date order" value={options.dayFirst ? "day" : "month"} onChange={(e) => set({ dayFirst: e.target.value === "day" })}>
+            <option value="day">Day first (31/12/2024)</option>
+            <option value="month">Month first (12/31/2024)</option>
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-soft">

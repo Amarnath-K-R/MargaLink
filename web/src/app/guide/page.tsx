@@ -435,13 +435,19 @@ export default function GuidePage() {
             alt="Step 2: how the spreadsheet was read: header row, number formats, missing values, column types and a preview"
             notes={[
               <>
+                <strong>Columns separated by</strong> (CSV files): comma, semicolon or tab, guessed from how the rows split.
+              </>,
+              <>
                 <strong>Header is on row</strong>: guessed past any title or note lines above the table.
               </>,
               <>
                 <strong>Decimal mark</strong>: dot (1.5) or comma (1,5).
               </>,
               <>
-                <strong>Thousands separator</strong>: none, comma, dot, space or apostrophe.
+                <strong>Thousands separator</strong>: none, comma, dot, space or apostrophe (never the same as the decimal mark).
+              </>,
+              <>
+                <strong>Dates written</strong>: day first (31/12/2024) or month first (12/31/2024); guessed when a date gives it away.
               </>,
               <>
                 <strong>Missing-value markers</strong>: what counts as an empty cell (NA, N/A, NULL, #N/A, -…).

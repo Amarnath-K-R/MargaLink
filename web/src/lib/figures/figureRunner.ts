@@ -11,6 +11,9 @@ export const EXPORT_TIMEOUT_MS = 45_000;
 // A render that has to fetch SciPy or fonts first gets this long instead —
 // and so does the wait in the worker's queue, before a job has started.
 export const LOAD_TIMEOUT_MS = 90_000;
+// The engine's first load (~30 MB from the CDN) has no deadline, only a stall
+// limit: this long without word from the worker means it isn't coming.
+export const WARMUP_STALL_MS = 240_000;
 
 export type ImageFormat = "png" | "tiff" | "svg" | "pdf";
 export type ProgressStage = "loading-runtime" | "loading-packages" | "loading-scipy" | "loading-fonts" | "rendering" | "exporting";
@@ -82,11 +85,12 @@ type Pending = {
   onProgress?: (s: ProgressStage) => void;
   timer?: ReturnType<typeof setTimeout>;
   timeoutMs: number | null; // armed when the worker starts the job, not when it's queued
+  stallCode: "timeout" | "load_failed"; // what a missed deadline means: a runaway render, or an engine that didn't load
 };
 
 let worker: Worker | null = null;
 let seq = 0;
-let latestPreview = 0;
+let previewEpoch = 0; // bumped by every preview and by cancelPreviews(); a preview from an older one is stale
 let readyPromise: Promise<void> | null = null;
 const pending = new Map<number, Pending>();
 
@@ -128,7 +132,8 @@ function getWorker(): Worker {
     }
     if (m.type === "progress") {
       p.onProgress?.(m.stage!);
-      if (m.stage === "loading-scipy" || m.stage === "loading-fonts") rearm(m.id, LOAD_TIMEOUT_MS);
+      if (p.stallCode === "load_failed") rearm(m.id, WARMUP_STALL_MS); // a loading engine that reports is still loading
+      else if (m.stage === "loading-scipy" || m.stage === "loading-fonts") rearm(m.id, LOAD_TIMEOUT_MS);
       return;
     }
     pending.delete(m.id);
@@ -136,6 +141,8 @@ function getWorker(): Worker {
     if (m.type === "error") p.reject(new FigureRenderError(m.code ?? "render_failed", m.detail ?? {}, m.traceback ?? ""));
     else p.resolve(m);
   };
+  // The script itself failed (jsDelivr blocked by a network or an ad blocker): say so, don't spin.
+  w.onerror = () => resetWorker(new FigureRenderError("load_failed", {}, ""));
   worker = w;
   return w;
 }
@@ -158,25 +165,25 @@ function rearm(id: number, ms: number): void {
   const p = pending.get(id);
   if (!p) return;
   clearTimeout(p.timer);
-  p.timer = setTimeout(() => resetWorker(new FigureRenderError("timeout", {}, "")), ms);
+  p.timer = setTimeout(() => resetWorker(new FigureRenderError(p.stallCode, {}, "")), ms);
 }
 
-function send(msg: Outgoing, timeoutMs: number | null, onProgress?: (s: ProgressStage) => void): { id: number; done: Promise<Incoming> } {
+function send(msg: Outgoing, timeoutMs: number | null, onProgress?: (s: ProgressStage) => void, stallCode: Pending["stallCode"] = "timeout"): { id: number; done: Promise<Incoming> } {
   const w = getWorker();
   const id = ++seq;
-  const done = new Promise<Incoming>((resolve, reject) => pending.set(id, { resolve, reject, onProgress, timeoutMs }));
-  if (timeoutMs !== null) rearm(id, LOAD_TIMEOUT_MS); // queue wait; the real deadline starts on "started"
+  const done = new Promise<Incoming>((resolve, reject) => pending.set(id, { resolve, reject, onProgress, timeoutMs, stallCode }));
+  if (timeoutMs !== null) rearm(id, Math.max(LOAD_TIMEOUT_MS, timeoutMs)); // queue wait; a render's real deadline starts on "started"
   w.postMessage({ ...msg, id });
   return { id, done };
 }
 
 // Start loading Pyodide early (on file parse), so it's usually ready by the
 // time the first figure is asked for. Idempotent while one is in flight or
-// has succeeded; scipy/fonts ask for those extras too. No timeout — a slow
-// first download isn't a runaway render.
+// has succeeded; scipy/fonts ask for those extras too. No deadline (a slow
+// first download isn't a runaway render), only the stall limit.
 export function warmUp(opts: { scipy?: boolean; fonts?: boolean } = {}, onProgress?: (stage: ProgressStage) => void): Promise<void> {
   if (!readyPromise || opts.scipy || opts.fonts) {
-    const ready = send({ type: "warmup", scipy: !!opts.scipy, fonts: !!opts.fonts }, null, onProgress).done.then(() => undefined);
+    const ready = send({ type: "warmup", scipy: !!opts.scipy, fonts: !!opts.fonts }, WARMUP_STALL_MS, onProgress, "load_failed").done.then(() => undefined);
     // A failed warm-up shouldn't wedge every later call — start clean next time.
     ready.catch(() => resetWorker(new Error("warm-up failed")));
     readyPromise = ready;
@@ -185,15 +192,17 @@ export function warmUp(opts: { scipy?: boolean; fonts?: boolean } = {}, onProgre
 }
 
 async function renderOnce(req: RenderRequest, timeoutMs: number, onProgress?: (s: ProgressStage) => void, preview = false): Promise<RenderResult | null> {
-  await warmUp({}, onProgress);
-  const { id, done } = send({ type: "render", ...req, preview }, timeoutMs, onProgress);
-  if (preview) latestPreview = id;
+  // Taken before waiting for the engine, so a cancel during its first load counts too.
+  const epoch = preview ? ++previewEpoch : 0;
+  const stale = () => preview && epoch !== previewEpoch;
   try {
-    const m = await done;
-    if (preview && id !== latestPreview) return null;
+    await warmUp({}, onProgress);
+    if (stale()) return null;
+    const m = await send({ type: "render", ...req, preview }, timeoutMs, onProgress).done;
+    if (stale()) return null;
     return { images: m.images ?? {}, meta: m.meta!, hookWarning: m.hookWarning ?? null };
   } catch (err) {
-    if (preview && id !== latestPreview) return null;
+    if (stale()) return null;
     throw err;
   }
 }
@@ -202,7 +211,7 @@ async function renderOnce(req: RenderRequest, timeoutMs: number, onProgress?: (s
 // preview is cleared or the figure became invalid, so a late result can't
 // reappear over it.
 export function cancelPreviews(): void {
-  latestPreview = 0;
+  previewEpoch++;
 }
 
 // Live preview. Resolves null when a newer preview was requested meanwhile

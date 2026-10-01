@@ -176,7 +176,7 @@ if (want("figures")) {
   await page.waitForSelector('[data-testid="preview-table"]', { timeout: 20_000 });
   await tidy();
   const step = (t) => `main section.clay:has(h2:text("${t}"))`;
-  await shot("figures-prep", [step("Check how it was read")], [page.getByLabel("Header row"), page.getByLabel("Decimal mark"), page.getByLabel("Thousands separator"), page.getByLabel("Missing-value markers"), `${step("Check how it was read")} summary`, 'select[aria-label^="Type of"]', '[data-testid="preview-table"] tbody']);
+  await shot("figures-prep", [step("Check how it was read")], [page.getByLabel("Column separator"), page.getByLabel("Header row"), page.getByLabel("Decimal mark"), page.getByLabel("Thousands separator"), page.getByLabel("Date order"), page.getByLabel("Missing-value markers"), `${step("Check how it was read")} summary`, 'select[aria-label^="Type of"]', '[data-testid="preview-table"] tbody']);
   await page.click('[data-template="box"]');
   await page.waitForSelector('[data-testid="figure-image"]', { timeout: 180_000 });
   await page.waitForFunction(() => document.querySelector('[data-testid="figure-preview"]')?.getAttribute("data-busy") === "false", null, { timeout: 120_000 });

