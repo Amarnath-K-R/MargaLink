@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { between } from "@/lib/easing";
+import { between } from "@/app/_landing/easing";
 import { useScrollProgress } from "./_landing/useScrollProgress.ts";
 import SiteHeader from "./_landing/SiteHeader.tsx";
 import ToolsOverlay from "./_landing/ToolsOverlay.tsx";

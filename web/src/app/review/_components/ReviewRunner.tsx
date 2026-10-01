@@ -9,7 +9,7 @@ import { useAccount } from "@/components/account/useAccount";
 import type { Citation, SectionKind } from "@/lib/review/reviewTypes";
 import ErrorText from "@/components/ui/ErrorText";
 import ReviewConsent from "@/components/review/ReviewConsent";
-import ReviewResultPanel from "@/components/review/ReviewResultPanel";
+import ReviewResultPanel from "@/app/review/_components/ReviewResultPanel";
 import TierPicker from "./TierPicker.tsx";
 import OutlineEditor from "./OutlineEditor.tsx";
 import type { ReviewApi } from "./useReview.ts";

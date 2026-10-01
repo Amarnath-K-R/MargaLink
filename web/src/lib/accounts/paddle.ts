@@ -4,14 +4,13 @@
 // into ledger changes. Paddle is the merchant of record: it takes the
 // payment and the tax; we only ever see references and amounts.
 import { PACKS, PRO, type PackId } from "./coins.ts";
-import { fingerprint } from "./auth.ts";
+import { fingerprint, hex } from "./auth.ts";
 
 /** What /api/me gives the signed-in buyer to pass in custom_data: proof the checkout was theirs. */
 export const checkoutSig = (secret: string, userId: string) => fingerprint(secret, `checkout:${userId}`);
 
 const MAX_SKEW_S = 300;
 
-const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 const sameText = (a: string, b: string) => a.length === b.length && [...a].reduce((d, c, i) => d | (c.charCodeAt(0) ^ b.charCodeAt(i)), 0) === 0;
 
 /**

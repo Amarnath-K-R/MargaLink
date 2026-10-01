@@ -49,7 +49,7 @@ export function groundExtractOutput(output: unknown, chunkText: string, claimsCa
     throw new Error("malformed extract output");
   }
   const source = normalize(chunkText);
-  const grounded = (q: unknown): q is string => typeof q === "string" && normalize(q).length >= 8 && source.includes(normalize(q));
+  const grounded = (q: unknown): q is string => typeof q === "string" && quoteAppearsInSource(q, source, true);
 
   const claims: ExtractResponse["claims"] = [];
   for (const c of output.claims) {
@@ -79,8 +79,9 @@ export function groundExtractOutput(output: unknown, chunkText: string, claimsCa
 // quote is verbatim. Fuzzy on whitespace/case only; the substance must
 // actually appear in the source, or the finding is dropped before it ever
 // reaches the client, not just flagged as suspicious.
-export function quoteAppearsInSource(quote: string, source: string): boolean {
+// `normalized`: the source is already normalize()d (once per chunk, not per quote).
+export function quoteAppearsInSource(quote: string, source: string, normalized = false): boolean {
   const q = normalize(quote);
   if (q.length < 8) return false; // too short to be a meaningful citation
-  return normalize(source).includes(q);
+  return (normalized ? source : normalize(source)).includes(q);
 }

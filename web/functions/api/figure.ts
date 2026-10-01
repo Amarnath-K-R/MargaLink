@@ -18,7 +18,7 @@ import { checkLabels, checkSpecAgainstColumns, validateFigureSpec } from "../../
 import { isValidFigurePayload } from "../../src/lib/figures/figureSchema.ts";
 import { HOOK_SYSTEM_PROMPT, HOOK_TOOL, SPEC_SYSTEM_PROMPT, SPEC_TOOL, buildFigurePrompt, isCodeSafeToRun } from "../../src/lib/figures/figurePrompt.ts";
 import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/ai/anthropicStream.ts";
-import { getSession, randomToken, type AccountEnv } from "../../src/lib/accounts/auth.ts";
+import { getSession, randomToken, text, type AccountEnv } from "../../src/lib/accounts/auth.ts";
 import { FIGURE_PRICE } from "../../src/lib/accounts/coins.ts";
 import { balance, credit, debit } from "../../src/lib/accounts/ledger.ts";
 import type { FigurePayload } from "../../src/lib/figures/figureSchema.ts";
@@ -34,7 +34,6 @@ const MODEL = "claude-sonnet-5";
 const MAX_BODY_BYTES = 200_000;
 const UPSTREAM_TIMEOUT_MS = 60_000;
 
-const text = (body: string, status: number) => new Response(body, { status });
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (Number(request.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) return text("Request body too large", 413);

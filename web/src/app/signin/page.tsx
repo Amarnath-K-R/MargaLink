@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import PageHeader from "@/components/layout/PageHeader";
-import SignInView from "./SignInView";
+import SignInView from "./_components/SignInView";
 
 export const metadata: Metadata = {
   title: "Sign in | MargaLink",

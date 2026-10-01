@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { prepareDataset, readWorkbook, suggestPrepOptions, type Dataset, type PrepOptions, type Workbook } from "@/lib/figures/spreadsheet";
 import { cancelPreviews, exportFigure, renderFigure, warmUp, FigureRenderError, type ImageFormat, type RenderRequest } from "@/lib/figures/figureRunner";
 import { LIMITS, checkSpecAgainstColumns, validateFigureSpec, type FigureSpec, type Panel } from "@/lib/figures/figureSpec";
-import { bindTemplate, loadTemplates, type Template } from "@/lib/figures/figureTemplates";
+import { bindTemplate, loadFigureTemplates, type Template } from "@/lib/figures/figureTemplates";
 import { errorMessage } from "@/lib/errorMessage";
 import type { ClaudeResult } from "@/lib/figures/figure";
 import type { PreviewState } from "./FigurePreview";
@@ -48,7 +48,7 @@ export function useFigures() {
   const [hookApproved, setHookApproved] = useState(false);
 
   useEffect(() => {
-    loadTemplates().then(setTemplates, (err) => setUploadError(errorMessage(err)));
+    loadFigureTemplates().then(setTemplates, (err) => setUploadError(errorMessage(err)));
   }, []);
 
   const { dataset, error: prepError } = useMemo(() => prepare(workbook, prep), [workbook, prep]);

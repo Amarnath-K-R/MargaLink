@@ -11,7 +11,7 @@ import { findJournalRules } from "@/lib/journals/journalRules";
 import type { Template } from "@/lib/write/templateCatalog";
 import { bibEntries, paperFiles, texOutline, citeSnippet, figureSnippet, nextFigurePath, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/write/texSource";
 import type { Recipe } from "@/app/figures/_components/RecipeImportExport.tsx";
-import type { NetworkCall } from "@/app/write/_components/NetworkTrace";
+import type { NetworkCall } from "@/app/write/_components/useNetworkTrace";
 import Dialog from "@/components/ui/Dialog";
 import ErrorText from "@/components/ui/ErrorText";
 import type { Journal } from "../page.tsx";

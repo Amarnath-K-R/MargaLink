@@ -6,6 +6,7 @@ import { Coin } from "@/components/account/AccountButton";
 import { currentAccount, refreshAccount, useAccount } from "@/components/account/useAccount";
 import { PACKS, PRO, reviewPrice } from "@/lib/accounts/coins";
 import { openCheckout, openPortal } from "@/lib/accounts/paddleCheckout";
+import NewTabLink from "@/components/ui/NewTabLink";
 
 // What can be bought, by its key in PADDLE_PRICE_IDS.
 type Key = (typeof PACKS)[number]["id"] | "PRO_MONTH" | "PRO_YEAR";
@@ -56,11 +57,6 @@ function useCheckout() {
   return { account, status, buy, busy, agreed, setAgreed };
 }
 
-const NewTab = ({ href, children }: { href: string; children: ReactNode }) => (
-  <a href={href} target="_blank" rel="noopener" className="text-accent hover:underline">
-    {children}
-  </a>
-);
 
 function AgreeBox({ c, pro = false }: { c: ReturnType<typeof useCheckout>; pro?: boolean }) {
   if (c.account.status !== "in") return null;
@@ -68,7 +64,7 @@ function AgreeBox({ c, pro = false }: { c: ReturnType<typeof useCheckout>; pro?:
     <label className="mt-4 flex items-start gap-2 text-sm text-ink-soft">
       <input type="checkbox" checked={c.agreed} onChange={(e) => c.setAgreed(e.target.checked)} className="mt-1 accent-[var(--accent)]" />
       <span>
-        I agree to the <NewTab href="/terms">terms</NewTab> and the <NewTab href="/refunds">refund policy</NewTab>
+        I agree to the <NewTabLink href="/terms">terms</NewTabLink> and the <NewTabLink href="/refunds">refund policy</NewTabLink>
         {pro ? ", and I understand Pro renews automatically at the price shown until I cancel it." : "."}
       </span>
     </label>

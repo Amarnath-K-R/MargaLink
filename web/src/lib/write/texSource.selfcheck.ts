@@ -1,7 +1,7 @@
 // Runnable check for texSource.ts: the LaTeX-source helpers the workspace's
 // toolbar, status bar and review window use. Run: node src/lib/write/texSource.selfcheck.ts
 import assert from "node:assert/strict";
-import { bibEntries, bibKeys, figureSnippet, tableSnippet, findQuoteInTex, nextFigurePath, paperFiles, texInputs, texLabels, texOutline, texWordCount } from "./texSource.ts";
+import { bibEntries, figureSnippet, tableSnippet, findQuoteInTex, nextFigurePath, paperFiles, texInputs, texLabels, texOutline, texWordCount } from "./texSource.ts";
 
 // 1. word count: comments, the preamble, commands and citations don't count; brace contents do
 {
@@ -28,8 +28,8 @@ Some \\textbf{bold words} appear here \\cite{rao2024}.
 @string{jn = "Journal"}
 @preamble{"x"}
 @misc{k1, note = {again}}`;
-  assert.deepEqual(bibKeys(bib), ["k1", "k2"]);
-  assert.deepEqual(bibKeys(""), []);
+  assert.deepEqual(bibEntries(bib).map((e) => e.key), ["k1", "k2"]);
+  assert.deepEqual(bibEntries(""), []);
 }
 
 // 3. labels: unique, not from comments

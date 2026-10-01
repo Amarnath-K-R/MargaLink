@@ -5,8 +5,8 @@ import { ArrowDown, ArrowRight, House } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import SiteFooter from "@/components/layout/SiteFooter";
 import { GuideArt, WriteArt } from "@/components/docs/Art";
-import NewsRail from "./NewsRail.tsx";
-import AccountStrip from "./AccountStrip.tsx";
+import NewsRail from "./_components/NewsRail.tsx";
+import AccountStrip from "./_components/AccountStrip.tsx";
 import { UPDATES } from "./updates.ts";
 
 export const metadata: Metadata = {

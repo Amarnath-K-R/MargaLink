@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/layout/PageHeader";
-import AccountView from "./AccountView";
+import AccountView from "./_components/AccountView";
 
 export const metadata: Metadata = {
   title: "Your account | MargaLink",

@@ -27,11 +27,6 @@ export function texWordCount(tex: string): number {
   return body.split(/\s+/).filter((w) => /[A-Za-z0-9]/.test(w)).length;
 }
 
-// The citation keys defined in a .bib file, in order, without duplicates.
-export function bibKeys(bib: string): string[] {
-  return bibEntries(bib).map((e) => e.key);
-}
-
 // A .bib file's entries — key and title — for the editor's suggestions.
 // @comment, @string and @preamble aren't entries; a repeated key counts once.
 export function bibEntries(bib: string): { key: string; title: string | null }[] {

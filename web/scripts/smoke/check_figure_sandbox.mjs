@@ -30,6 +30,12 @@ const hooks = [
 ];
 const out = await page.evaluate(async ({ hooks, csv, scsv, d1, d2, spec, km }) => {
   const w = new Worker("/figureWorker.mjs", { type: "module" });
+  // The page's side of the worker's asset relay (figureRunner.ts answerAsset): its CSP keeps it off our origin.
+  w.addEventListener("message", async (e) => {
+    if (e.data.type !== "asset-request") return;
+    const data = new Uint8Array(await (await fetch(e.data.path)).arrayBuffer());
+    w.postMessage({ type: "asset", path: e.data.path, ok: true, data });
+  });
   let id = 0;
   const call = (msg) => new Promise((res) => { const h = (e) => { if (e.data.id !== msg.id || e.data.type === "progress" || e.data.type === "started") return; w.removeEventListener("message", h); res(e.data); }; w.addEventListener("message", h); w.postMessage(msg); });
   const res = [];

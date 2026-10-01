@@ -726,7 +726,7 @@ checks.
 | `figurePrompt.ts` | The spec and hook system prompts, `SPEC_TOOL`/`HOOK_TOOL`, `buildFigurePrompt()`, `isCodeSafeToRun()` — imported by `functions/api/figure.ts`. |
 | `figure.ts` | Client: `askClaude()` (re-checks everything returned, passes on the new balance), session-scoped consent. |
 | `figureRunner.ts` | The worker lifecycle: `warmUp()`, `renderFigure()` (stale previews dropped), `exportFigure()`, `FigureRenderError`. Talks to `public/figureWorker.mjs`, which runs `public/figurelib.py`. |
-| `figureTemplates.ts` | `loadTemplates()`, `bindTemplate()` (remaps a template's roles to the user's columns by type). |
+| `figureTemplates.ts` | `loadFigureTemplates()`, `bindTemplate()` (remaps a template's roles to the user's columns by type). |
 
 *`src/lib/write/`*: the LaTeX workspace (projects, the TeX engine, source helpers).
 
@@ -737,7 +737,7 @@ checks.
 | `texLog.ts` | `parseTexLog()` — errors, warnings and missing packages with file and line. |
 | `projectStore.ts` | `/write` projects in the Origin Private File System (`ProjectMeta` carries the target journal's id and name); `autosaver()`; zip export/import. |
 | `texSource.ts` | Pure LaTeX-source helpers for the workspace: a rough word count, `.bib` keys and entries, labels, the outline, `\input`s and the paper's files, `findQuoteInTex`, the figure and table snippets, the next free figure path. |
-| `templateCatalog.ts` | `loadTemplates()`, `templateForJournal()`, `starterProject()`. |
+| `templateCatalog.ts` | `loadTexTemplates()`, `templateForJournal()`, `starterProject()`. |
 | `zip.ts` | `zipFiles()`, `unzipFiles()`, `flattenSingleRoot()` over fflate. |
 
 *`src/lib/accounts/`*: accounts, M coins and payments (mostly server-side).

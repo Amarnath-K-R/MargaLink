@@ -5,7 +5,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import { Coin } from "@/components/account/AccountButton";
 import { FIGURE_PRICE, WELCOME_COINS, reviewPrice } from "@/lib/accounts/coins";
 import { REVIEW_TIERS } from "@/lib/review/reviewTypes";
-import { Packs, ProPlans } from "./Packs";
+import { Packs, ProPlans } from "./_components/Packs";
 import { PADDLE_RESELLER } from "@/lib/site";
 
 export const metadata: Metadata = {

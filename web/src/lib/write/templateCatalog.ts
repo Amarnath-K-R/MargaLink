@@ -20,7 +20,7 @@ export type Template = {
   note: string;
 };
 
-export async function loadTemplates(fetchImpl: typeof fetch = fetch): Promise<Template[]> {
+export async function loadTexTemplates(fetchImpl: typeof fetch = fetch): Promise<Template[]> {
   const res = await fetchImpl("/templates/templates.json");
   if (!res.ok) throw new Error("Couldn't load the template list.");
   return (await res.json()) as Template[];

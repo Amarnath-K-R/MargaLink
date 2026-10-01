@@ -5,6 +5,7 @@ import { Mail } from "lucide-react";
 import { WELCOME_COINS } from "@/lib/accounts/coins";
 import { CONTACT_EMAIL } from "@/lib/site";
 import { signInWithGoogle } from "./useAccount";
+import NewTabLink from "@/components/ui/NewTabLink";
 
 // Sign in without leaving the page: Google in a popup, or a one-time link
 // by email (it opens in a new tab). Either way this tab notices on focus, so
@@ -87,7 +88,7 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
         account). Never anything from your papers. Download or delete it all on your account page at any time; deleting withdraws your consent.
         Questions or complaints: {CONTACT_EMAIL ? <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">{CONTACT_EMAIL}</a> : "the address on the privacy page"}, or
         the Data Protection Board of India.{" "}
-        <NewTab href="/privacy#accounts">What an account stores</NewTab>
+        <NewTabLink href="/privacy#accounts">What an account stores</NewTabLink>
       </p>
       <div className="mt-3 space-y-1.5 text-sm">
         <label htmlFor={`${id}-adult`} className="flex items-start gap-2">
@@ -97,7 +98,7 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
         <label htmlFor={`${id}-terms`} className="flex items-start gap-2">
           <input id={`${id}-terms`} type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1 accent-[var(--accent)]" />
           <span>
-            I agree to the <NewTab href="/terms">terms</NewTab> and have read the <NewTab href="/privacy">privacy notice</NewTab>.
+            I agree to the <NewTabLink href="/terms">terms</NewTabLink> and have read the <NewTabLink href="/privacy">privacy notice</NewTabLink>.
           </span>
         </label>
       </div>
@@ -147,11 +148,6 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
   );
 }
 
-const NewTab = ({ href, children }: { href: string; children: ReactNode }) => (
-  <a href={href} target="_blank" rel="noopener" className="text-accent hover:underline">
-    {children}
-  </a>
-);
 
 type TurnstileJs = { render: (el: HTMLElement, o: Record<string, unknown>) => string; remove: (id: string) => void };
 let turnstileLoading: Promise<TurnstileJs> | null = null;

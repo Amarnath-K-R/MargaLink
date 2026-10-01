@@ -4,10 +4,10 @@ import Link from "next/link";
 import { Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ProjectStore, type ProjectMeta } from "@/lib/write/projectStore";
-import { loadTemplates, starterProject, templateForJournal, type Template } from "@/lib/write/templateCatalog";
+import { loadTexTemplates, starterProject, templateForJournal, type Template } from "@/lib/write/templateCatalog";
 import { loadMeta } from "@/lib/match/match";
 import { errorMessage } from "@/lib/errorMessage";
-import { useNetworkTrace } from "@/app/write/_components/NetworkTrace";
+import { useNetworkTrace } from "@/app/write/_components/useNetworkTrace";
 import PageHeader from "@/components/layout/PageHeader";
 import ErrorText from "@/components/ui/ErrorText";
 import TemplatePicker from "./_components/TemplatePicker.tsx";
@@ -54,7 +54,7 @@ export default function WritePage() {
       },
       (err) => setError(errorMessage(err)),
     );
-    loadTemplates().then(setTemplates, (err) => setError(errorMessage(err)));
+    loadTexTemplates().then(setTemplates, (err) => setError(errorMessage(err)));
     // ?journal=<OpenAlex id> (from a match result or a journal page) preselects its template.
     const id = params.get("journal");
     if (id) {

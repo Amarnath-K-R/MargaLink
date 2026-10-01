@@ -4,12 +4,8 @@
 // arithmetic reconciliation, untrusted-text defence) apply at every tier —
 // "quick" means less coverage, never less care about fabrication. See
 // docs/ARCHITECTURE.md's "The AI review" before changing any of this.
-import { REQUIRED_STATEMENT_LABELS, type RequiredStatementKey, type JournalRules } from "../journals/journalRules.ts";
+import type { JournalRules } from "../journals/journalRules.ts";
 import type { ExtractRequest, ReviewTier, SectionKind, SynthesizeRequest } from "./reviewTypes.ts";
-
-export function requiredStatementsList(rules: JournalRules): string {
-  return rules.requiredStatements.map((k: RequiredStatementKey) => REQUIRED_STATEMENT_LABELS[k]).join(", ") || "none required";
-}
 
 // Extraction is mechanical (copy numbers with their verbatim context), so it
 // runs at medium effort on every tier — the tier only decides which sections

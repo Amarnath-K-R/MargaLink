@@ -3,7 +3,7 @@
 import { useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { TAG_TINT, type Update } from "./updates.ts";
+import { TAG_TINT, type Update } from "../updates.ts";
 
 const when = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 

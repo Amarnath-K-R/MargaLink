@@ -4,7 +4,7 @@ import Link from "next/link";
 import PageHeader from "@/components/layout/PageHeader";
 import MatchFilters from "./_components/MatchFilters.tsx";
 import MatchResults from "./_components/MatchResults.tsx";
-import FormatCheckPanel from "./_components/FormatCheckPanel.tsx";
+import FormatCheckPanel from "../../components/checks/FormatCheckPanel.tsx";
 import ProcessingTrace from "./_components/ProcessingTrace.tsx";
 import PaperInput from "./_components/PaperInput.tsx";
 import WhatWeRead from "./_components/WhatWeRead.tsx";

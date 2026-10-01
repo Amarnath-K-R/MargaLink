@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Download } from "lucide-react";
 import { Coin } from "@/components/account/AccountButton";
 import SignInPanel from "@/components/account/SignInPanel";
-import { ProStatus } from "../pricing/Packs";
+import { ProStatus } from "../../pricing/_components/Packs";
 import { PRO } from "@/lib/accounts/coins";
 import { openPortal } from "@/lib/accounts/paddleCheckout";
 import { refreshAccount, signOut, useAccount } from "@/components/account/useAccount";

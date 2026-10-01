@@ -2,7 +2,6 @@
 //   node src/lib/review/reviewPrompt.selfcheck.ts
 import assert from "node:assert/strict";
 import {
-  requiredStatementsList,
   EXTRACT_MAX_TOKENS,
   TIER_PLAN,
   buildExtractPrompt,
@@ -27,16 +26,6 @@ const RULES: JournalRules = {
   scopeSummary: "A journal for selfcheck fixtures.",
 };
 
-assert.equal(
-  requiredStatementsList(RULES),
-  "Ethics/IRB approval statement, Funding statement",
-  "requiredStatementsList should join the labeled statements"
-);
-assert.equal(
-  requiredStatementsList({ ...RULES, requiredStatements: [] }),
-  "none required",
-  "an empty requiredStatements list should fall back to 'none required'"
-);
 
 const chunk = {
   id: "s4-p2",

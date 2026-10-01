@@ -1,7 +1,7 @@
 // Runnable check for motion.ts. Run directly:
 //   node src/app/_landing/motion.selfcheck.ts
 import assert from "node:assert/strict";
-import { localProgress, stagger, motionStyle, countUp, decodeText } from "./motion.ts";
+import { localProgress, stagger, motionStyle } from "./motion.ts";
 
 // localProgress: 0 when the section's top is at the viewport's bottom, 1
 // once it's mostly arrived (35% down from the viewport's top).
@@ -19,15 +19,5 @@ assert.equal(stagger(1, 0, 3, 24, "x").transform.startsWith("translateX"), true,
 assert.deepEqual(motionStyle(true, { opacity: 0.5 }), {}, "reduced motion returns an empty style");
 assert.deepEqual(motionStyle(false, { opacity: 0.5 }), { opacity: 0.5 }, "motion enabled passes the style through");
 
-// countUp
-assert.equal(countUp(100, 0), 0, "countUp at t=0 is 0");
-assert.equal(countUp(100, 1), 100, "countUp at t=1 is the target");
-assert.equal(countUp(100, 0.5), 50, "countUp at t=0.5 is the midpoint");
-
-// decodeText: fully revealed at t=1; spaces and periods always pass through
-// regardless of t.
-assert.equal(decodeText("hi.", 1, 0), "hi.", "t=1 reveals the whole string");
-assert.equal(decodeText("a b", 0, 0)[1], " ", "a space is never substituted");
-assert.equal(decodeText("a.b", 0, 0)[1], ".", "a period is never substituted");
 
 console.log("motion.selfcheck: OK");

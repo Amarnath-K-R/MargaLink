@@ -7,7 +7,7 @@ import type { ColumnSchema } from "./spreadsheet.ts";
 export type Template = { id: string; title: string; description: string; sample: string; spec: FigureSpec };
 export type Gallery = { samples: Record<string, ColumnSchema[]>; templates: Template[] };
 
-export async function loadTemplates(): Promise<Template[]> {
+export async function loadFigureTemplates(): Promise<Template[]> {
   const res = await fetch("/figure-gallery/templates.json");
   if (!res.ok) throw new Error(`Couldn't load the figure templates (HTTP ${res.status}).`);
   return ((await res.json()) as Gallery).templates;

@@ -1,7 +1,5 @@
-// Relative, not "@/lib/easing" — this file must run directly via plain
-// `node` for its selfcheck (see the npm test script), which doesn't
-// understand the bundler's path alias.
-import { between } from "../../lib/easing.ts";
+// Relative with its extension: the selfcheck runs this file under plain `node`.
+import { between } from "./easing.ts";
 import type { CSSProperties } from "react";
 
 // Local 0→1 progress for how far a section has scrolled into view — 0 when its
@@ -29,27 +27,4 @@ export function stagger(progress: number, index: number, count: number, distance
 // just renders at its natural position, fully visible, no scroll-linked motion.
 export function motionStyle(reducedMotion: boolean, style: CSSProperties): CSSProperties {
   return reducedMotion ? {} : style;
-}
-
-// t is an already-`between()`d 0→1 fraction; returns the counted-up integer.
-export function countUp(target: number, t: number) {
-  return Math.round(target * t);
-}
-
-// A terminal-style decode: the first `text.length * t` characters are resolved,
-// the rest are substituted from a fixed glyph set. `flicker` (a continuously
-// changing value, e.g. the raw section progress) reseeds the substitution so
-// unresolved characters visibly cycle as the visitor scrolls, and hold still
-// the moment they stop.
-const DECODE_GLYPHS = "!<>-_/[]{}=+*^?#0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-export function decodeText(text: string, t: number, flicker: number) {
-  const revealCount = Math.floor(text.length * t);
-  return text
-    .split("")
-    .map((char, index) => {
-      if (char === " " || char === "." || index < revealCount) return char;
-      const glyphIndex = Math.floor(index * 13 + flicker * 997) % DECODE_GLYPHS.length;
-      return DECODE_GLYPHS[glyphIndex];
-    })
-    .join("");
 }
