@@ -136,6 +136,10 @@ await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?
 assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "fresh@x.org" }, "", "198.51.100.9"))).status, 429);
 const freshFp = await fp2("test-key", "fresh@x.org");
 assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM rate_limits WHERE instr(key, ?) > 0").bind(freshFp).first<{ n: number }>())?.n, 0, "no rows for the address");
+// rotating IPv6 addresses inside one allocation (a /48 holds 65,536 /64s) still counts as one network
+const wideNet = await nk2("test-key", new Request("https://m.test/", { headers: { "cf-connecting-ip": "2001:db8:aa:1::5" } }), Date.now(), true);
+await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 30, ?)").bind(`mailwide:${wideNet}`, Date.now() + 3_600_000).run();
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "rotor@x.org" }, "", "2001:db8:aa:2::9"))).status, 429, "a fresh /64 in a busy /48");
 // one domain can't mint endless new accounts (a catch-all domain), though a big webmail provider can
 for (let i = 1; i <= 30; i++) assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: `u${i}@catchall.test` }, "", `192.0.2.${100 + i}`))).status, 200, `catch-all ${i}`);
 r = await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "u31@catchall.test" }, "", "192.0.2.200"));

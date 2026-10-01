@@ -59,6 +59,8 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
   const who = await fingerprint(secret, email);
   const net = await networkKey(secret, request, now);
   if (!(await rateLimit(db, `mailip:${net}`, 10, 60 * MIN, now))) return text("Too many sign-in emails from this network. Try again in an hour.", 429);
+  const wide = await networkKey(secret, request, now, true);
+  if (!(await rateLimit(db, `mailwide:${wide}`, 30, 60 * MIN, now))) return text("Too many sign-in emails from this network. Try again in an hour.", 429);
   // Per address *and* network, so a stranger asking for your links from
   // their network can't lock you out of yours; plus a ceiling per address
   // across all networks, against filling an inbox.

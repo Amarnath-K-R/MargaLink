@@ -82,6 +82,8 @@ const nets: [string, string][] = [
   ["::ffff:203.0.113.7", "203.0.113.7"],
 ];
 for (const [ip, net] of nets) assert.equal(networkOf(ip), net, ip);
+assert.equal(networkOf("2001:db8:aa:1::5", 3), "2001:db8:aa", "the wide network: an IPv6 /48");
+assert.equal(networkOf("203.0.113.7", 3), "203.0.113.7", "an IPv4 address is its own network either way");
 
 // fingerprints are keyed: the same value under another key doesn't match
 assert.equal(await fingerprint("k1", "ann@x.org"), await fingerprint("k1", "ann@x.org"));

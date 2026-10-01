@@ -151,7 +151,7 @@ export async function fingerprint(secret: string, value: string): Promise<string
 export const hashSecret = (env: { HASH_SECRET?: string }, req: Request) => env.HASH_SECRET ?? (new URL(req.url).hostname === "localhost" ? "localhost-dev-key" : null);
 
 /** The network an address belongs to: an IPv4 address as is, an IPv6 one as its /64 (a subscriber usually has a whole /64). */
-export function networkOf(ip: string): string {
+export function networkOf(ip: string, v6Groups = 4): string {
   const v4 = ip.match(/^(?:::ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/i);
   if (v4) return v4[1];
   if (!ip.includes(":")) return ip;
@@ -160,14 +160,18 @@ export function networkOf(ip: string): string {
   const t = tail ? tail.split(":") : [];
   const groups = tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t];
   return groups
-    .slice(0, 4)
+    .slice(0, v6Groups)
     .map((g) => parseInt(g || "0", 16).toString(16))
     .join(":");
 }
 
-/** A per-day keyed fingerprint of the caller's network, for rate limits: the address itself is never stored. */
-export const networkKey = (secret: string, req: Request, now: number) =>
-  fingerprint(secret, `${networkOf(req.headers.get("cf-connecting-ip") ?? "local")}:${new Date(now).toISOString().slice(0, 10)}`);
+/**
+ * A per-day keyed fingerprint of the caller's network, for rate limits: the
+ * address itself is never stored. An IPv6 network is its /64, or with `wide`
+ * its /48 (one allocation can rotate through 65,536 /64s).
+ */
+export const networkKey = (secret: string, req: Request, now: number, wide = false) =>
+  fingerprint(secret, `${wide ? "w:" : ""}${networkOf(req.headers.get("cf-connecting-ip") ?? "local", wide ? 3 : 4)}:${new Date(now).toISOString().slice(0, 10)}`);
 
 export type AccountEnv = {
   DB: D1Database;
