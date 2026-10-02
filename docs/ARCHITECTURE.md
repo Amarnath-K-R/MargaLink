@@ -92,7 +92,7 @@ Design and plan: `docs/specs/2026-09-24-matching-v2-design.md`,
   indexed journals credited correctly, 1 to the wrong one, and 132 of
   24,512 unindexed journals credited to some indexed one.
 
-**Measured (2026-09-29, 18,965 journals, 54,369 centres).** The held-out
+**Measured (2026-10-02, 18,965 journals, 54,369 centres).** The held-out
 set is each journal's newest papers, never indexed (347,619); the harness
 scores a seeded sample of 5,345 of them, which always includes the 351 with
 a resolved reference list. The real journal's rank:
@@ -101,10 +101,10 @@ a resolved reference list. The real journal's rank:
 |---|---|---|---|
 | One averaged vector per journal (v1), whole sample | 12.6% | 30.0% | 40.5% |
 | Multi-centre, whole sample | 12.7% | 29.4% | 40.0% |
-| Fitted (emb 1, topic 0.02, ref 0.05), unseen half | 13.3% | 30.3% | 40.3% |
+| Fitted (emb 1, topic 0.02, ref 0.05), unseen half | 13.3% | 30.3% | 40.2% |
 | Same weights, references off (content alone), unseen half | 13.1% | 29.8% | 39.8% |
 | Papers with a resolved reference list (351): no references | 11.7% | 25.9% | 38.5% |
-| Same papers, references at 0.03 | 15.4% | 38.7% | 48.4% |
+| Same papers, references at 0.03 | 15.1% | 38.7% | 48.4% |
 
 On 18,965 journals, content alone finds the real one in the top 10 for
 about 4 papers in 10. Multi-centre and the topic signal don't beat one
@@ -113,7 +113,8 @@ kept for what they explain (a result's closest cluster and shared topics).
 The paper's own reference list adds about 10 points, measured with
 references resolved perfectly through OpenAlex: parsing a real PDF's list
 finds fewer, so that gain is an upper bound. The top result's field is
-right about 58% of the time either way. Real PDFs: IJBNPA #1, J Clin Sleep
+right about 66% of the time either way (58% before a journal's field came
+from its own papers rather than OpenAlex's label). Real PDFs: IJBNPA #1, J Clin Sleep
 Med #2; a heart failure paper in JACC ranks heart failure journals and the
 journals it cites most (Int J Cardiol, J Card Fail) above JACC.
 
