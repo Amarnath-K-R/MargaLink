@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Mail } from "lucide-react";
 import { WELCOME_COINS } from "@/lib/accounts/coins";
+import { BETA } from "@/lib/access/beta";
 import { CONTACT_EMAIL } from "@/lib/site";
 import { signInWithGoogle } from "./useAccount";
 import NewTabLink from "@/components/ui/NewTabLink";
@@ -16,6 +17,8 @@ import NewTabLink from "@/components/ui/NewTabLink";
 // works, two unticked boxes (18 or older; the terms and the privacy notice),
 // under the itemised notice of what an account keeps; the server refuses a
 // sign-in without them. Links open in a new tab, so the page stays as it is.
+// While the beta runs: a notice of who it's open to, and Google only (the
+// server sends no link to an address that isn't invited anyway).
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || null;
 // `notice`: a problem from an earlier attempt, shown until the next one.
 // `fullPage`: on the sign-in page itself, where a blocked popup can fall
@@ -81,7 +84,20 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
           {notice}
         </p>
       )}
-      {lead ?? <p className="text-sm leading-relaxed text-ink-soft">AI reviews and Ask Claude need an account. New accounts get {WELCOME_COINS} M coins.</p>}
+      {BETA.on && (
+        <div className="mb-4 rounded-xl bg-[#dde6e6] px-3.5 py-3">
+          <p className="font-serif text-lg font-medium">Open to invited beta testers</p>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+            MargaLink is in a closed beta. If you were invited, continue with the Google account for the address you were invited with. For everyone
+            else, it&apos;s coming soon.
+          </p>
+        </div>
+      )}
+      {lead ?? (
+        <p className="text-sm leading-relaxed text-ink-soft">
+          {BETA.on ? `Testers start with ${WELCOME_COINS} M coins for the AI review and Ask Claude.` : `AI reviews and Ask Claude need an account. New accounts get ${WELCOME_COINS} M coins.`}
+        </p>
+      )}
       <p className="mt-3 text-xs leading-relaxed text-ink-soft">
         An account keeps your email address (and Google&apos;s id for you, if you use Google), your M coin history and purchases, fingerprints of
         your sign-in tokens, and a keyed fingerprint of your address so the welcome bonus is given once (kept 12 months after you delete the
@@ -113,35 +129,39 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
           setTried(true);
           setError(null);
           if (!signInWithGoogle(target(), { redirectIfBlocked: fullPage }) && !fullPage) {
-            setError("Your browser blocked the Google window. Allow pop-ups for this site and try again, or use an email link below.");
+            setError(`Your browser blocked the Google window. Allow pop-ups for this site and try again${BETA.on ? "" : ", or use an email link below"}.`);
           }
         }}
         className="clay-btn mt-4 h-11 w-full justify-center gap-2.5 text-sm font-medium disabled:opacity-50"
       >
         <GoogleMark /> Continue with Google
       </button>
-      <div className="my-4 flex items-center gap-3 text-xs text-ink-soft">
-        <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
-      </div>
-      <form onSubmit={sendLink} className="flex flex-col gap-2">
-        <label htmlFor={`${id}-email`} className="text-xs font-medium text-ink-soft">
-          Email me a sign-in link
-        </label>
-        <input
-          id={`${id}-email`}
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@university.edu"
-          className="clay-input h-11 text-sm"
-        />
-        {TURNSTILE_SITE_KEY && <Turnstile key={attempt} siteKey={TURNSTILE_SITE_KEY} onToken={setHuman} />}
-        <button type="submit" disabled={!ready || phase === "sending" || (!!TURNSTILE_SITE_KEY && !human)} className="clay-btn clay-primary h-11 justify-center text-sm font-medium disabled:opacity-50">
-          {phase === "sending" ? "Sending…" : "Send the link"}
-        </button>
-      </form>
+      {!BETA.on && (
+        <>
+          <div className="my-4 flex items-center gap-3 text-xs text-ink-soft">
+            <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
+          </div>
+          <form onSubmit={sendLink} className="flex flex-col gap-2">
+            <label htmlFor={`${id}-email`} className="text-xs font-medium text-ink-soft">
+              Email me a sign-in link
+            </label>
+            <input
+              id={`${id}-email`}
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@university.edu"
+              className="clay-input h-11 text-sm"
+            />
+            {TURNSTILE_SITE_KEY && <Turnstile key={attempt} siteKey={TURNSTILE_SITE_KEY} onToken={setHuman} />}
+            <button type="submit" disabled={!ready || phase === "sending" || (!!TURNSTILE_SITE_KEY && !human)} className="clay-btn clay-primary h-11 justify-center text-sm font-medium disabled:opacity-50">
+              {phase === "sending" ? "Sending…" : "Send the link"}
+            </button>
+          </form>
+        </>
+      )}
       {!ready && <p className="mt-2 text-xs text-ink-soft">Tick both boxes above to continue.</p>}
       {error && (
         <p role="alert" className="mt-3 text-sm text-away">

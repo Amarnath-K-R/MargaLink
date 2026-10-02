@@ -5,8 +5,11 @@
 // closing itself; the account page's history and a delete that needs the
 // address typed; buying a pack and Pro with Paddle.js stubbed, the balance
 // updating when the webhook's coins arrive; and managing Pro in the portal.
+// While the beta runs: the sign-in page's notice, Google only, the refusal
+// for an uninvited account, and Sign out for a signed-in one.
 import { chromium } from "playwright";
 import { mockAccount } from "./mock_account.mjs";
+import { BETA } from "../../src/lib/access/beta.ts";
 
 const O = "http://localhost:3000";
 const browser = await chromium.launch();
@@ -31,17 +34,27 @@ const watch = (page) => {
   check("signed out, no page asks the account API", asked.length === 0);
   check("the pricing page invites signing in to buy", (await page.goto(O + "/pricing"), await page.getByRole("link", { name: "Sign in to buy" }).count()) === 5);
 
-  // the email link
+  if (BETA.on) {
+    await page.goto(O + "/signin?next=/review");
+    check("the sign-in page says who it's open to", (await page.getByText(/open to invited beta testers/i).isVisible()) && (await page.getByText(/coming soon/i).isVisible()));
+    check("Google only during the beta", (await page.getByLabel("Email me a sign-in link").count()) === 0 && (await page.getByRole("button", { name: "Continue with Google" }).isDisabled()));
+    await page.goto(O + "/signin?error=not-approved&next=/home");
+    check("an uninvited account is told who to ask", await page.getByRole("alert").filter({ hasText: /isn't on the beta list.*developer@margalink\.com/ }).isVisible());
+  }
+
+  // the email link (off during the beta; links already sent still work)
   let requested = null;
   await ctx.route("**/api/auth/email/request", (r) => ((requested = r.request().postDataJSON()), r.fulfill({ json: { ok: true } })));
-  await page.goto(O + "/signin?next=/review");
-  await page.getByLabel("Email me a sign-in link").fill("ann@example.org");
-  check("no sign-in before both boxes are ticked", (await page.getByRole("button", { name: "Send the link" }).isDisabled()) && (await page.getByRole("button", { name: "Continue with Google" }).isDisabled()));
-  await page.getByLabel("I confirm I'm 18 or older.").check();
-  await page.getByLabel(/I agree to the terms/).check();
-  await page.click("text=Send the link");
-  await page.waitForSelector("text=Check your email");
-  check("the link is asked for with the page to return to, and the boxes ticked", requested?.email === "ann@example.org" && requested?.next === "/review" && requested?.agree === true);
+  if (!BETA.on) {
+    await page.goto(O + "/signin?next=/review");
+    await page.getByLabel("Email me a sign-in link").fill("ann@example.org");
+    check("no sign-in before both boxes are ticked", (await page.getByRole("button", { name: "Send the link" }).isDisabled()) && (await page.getByRole("button", { name: "Continue with Google" }).isDisabled()));
+    await page.getByLabel("I confirm I'm 18 or older.").check();
+    await page.getByLabel(/I agree to the terms/).check();
+    await page.click("text=Send the link");
+    await page.waitForSelector("text=Check your email");
+    check("the link is asked for with the page to return to, and the boxes ticked", requested?.email === "ann@example.org" && requested?.next === "/review" && requested?.agree === true);
+  }
 
   // the verify page asks first, then signs in and clears the token
   let spent = 0;
@@ -75,6 +88,24 @@ const watch = (page) => {
   await popup.waitForEvent("close", { timeout: 10000 });
   check("Google's popup closes itself when it's done", popup.isClosed());
   check("Google's sign-in carries the ticked boxes", new URL(googleStart).searchParams.get("agree") === "1");
+  await ctx.close();
+}
+
+// --- signed in, but not on the beta list (removed, or from before it): Sign out, not a Continue that bounces back
+{
+  const ctx = await browser.newContext();
+  await ctx.addCookies([{ name: "ml_in", value: "1", url: O }]);
+  let out = false;
+  await ctx.route("**/api/me", (r) => r.fulfill({ json: out ? { user: null } : { user: { id: "u2", email: "bo@example.org" }, balance: 0, pro: null, paddle: null, access: { approved: false, developer: false } } }));
+  await ctx.route("**/api/auth/logout", (r) => ((out = true), r.fulfill({ json: { ok: true } })));
+  const page = await ctx.newPage();
+  watch(page);
+  await page.goto(O + "/signin?next=/home");
+  await page.waitForSelector("text=isn't on the beta list");
+  check("an uninvited account gets Sign out, not Continue", (await page.getByRole("link", { name: "Continue" }).count()) === 0);
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.waitForSelector("text=Continue with Google");
+  check("signing out brings back the sign-in", out);
   await ctx.close();
 }
 

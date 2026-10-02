@@ -12,10 +12,12 @@ import { useSyncExternalStore } from "react";
 export type PaddleConfig = { env: "sandbox" | "production"; token: string; prices: Record<string, string>; checkout: string };
 // `pro`: the Pro plan, if there is one (renews: false once cancelled to the period's end).
 export type ProPlan = { interval: "month" | "year"; status: string; renews: boolean; periodEnd: number | null };
+// `approved`, `developer`: what the account may open while the beta runs (a
+// reply without them, from before the beta, counts as approved).
 export type Account =
   | { status: "unknown" }
   | { status: "out" }
-  | { status: "in"; id: string; email: string; balance: number; pro: ProPlan | null; paddle: PaddleConfig | null };
+  | { status: "in"; id: string; email: string; balance: number; pro: ProPlan | null; paddle: PaddleConfig | null; approved: boolean; developer: boolean };
 
 const SERVER: Account = { status: "unknown" };
 let state: Account = SERVER;
@@ -30,8 +32,11 @@ async function load() {
   try {
     const res = await fetch("/api/me");
     if (!res.ok) throw new Error(String(res.status));
-    const d = (await res.json()) as { user: { id: string; email: string } | null; balance?: number; pro?: ProPlan | null; paddle?: PaddleConfig | null };
-    set(d.user ? { status: "in", id: d.user.id, email: d.user.email, balance: d.balance ?? 0, pro: d.pro ?? null, paddle: d.paddle ?? null } : { status: "out" });
+    type Me = { user: { id: string; email: string } | null; balance?: number; pro?: ProPlan | null; paddle?: PaddleConfig | null; access?: { approved: boolean; developer: boolean } };
+    const d = (await res.json()) as Me;
+    if (!d.user) return set({ status: "out" });
+    const access = d.access ?? { approved: true, developer: false };
+    set({ status: "in", id: d.user.id, email: d.user.email, balance: d.balance ?? 0, pro: d.pro ?? null, paddle: d.paddle ?? null, ...access });
   } catch {
     // Offline or a server hiccup: keep what we knew; if we knew nothing, show signed out.
     if (state.status === "unknown") set({ status: "out" });

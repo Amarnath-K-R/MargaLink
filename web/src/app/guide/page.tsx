@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BarChart3, BookOpen, Coins, Compass, FileCheck2, LifeBuoy, PenLine, ScanSearch } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
+import { WELCOME_COINS } from "@/lib/accounts/coins";
 import ResetSiteData from "@/app/guide/_components/ResetSiteData";
 import { Aside, DocBody, DocPart, DocSection, Keys, OptionTable, Shot, type TocItem } from "@/components/docs/Doc";
 import { FiguresArt, JournalsArt, MatchArt, PrivacyArt, ReviewArt, WriteArt } from "@/components/docs/Art";
@@ -832,7 +833,7 @@ export default function GuidePage() {
             <p>
               From the tray&apos;s <strong>Sign in</strong>, from a review or figure button, or from the sign-in page. Google opens in a small window
               and an email link opens in a new tab, so a paper you&apos;ve loaded stays exactly where it is; the page notices you&apos;ve signed in
-              when you come back to it. A new account starts with 10 M coins.
+              when you come back to it. A new account starts with {WELCOME_COINS} M coins.
             </p>
           </DocPart>
           <Shot
