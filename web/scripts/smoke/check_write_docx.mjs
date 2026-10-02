@@ -10,7 +10,8 @@
 //   Review through its consent (mocked API) to Jump to source, which
 //   selects the quoted passage in the document. A figure from the Figures
 //   window goes in at the cursor at the size it was drawn (89 mm), and
-//   later saves don't store its picture twice.
+//   later saves don't store its picture twice. The editor's stylesheet,
+//   still loaded after the project closes, doesn't restyle / or /review.
 //   No page errors; only the review's requests carry a body, after consent;
 //   nothing leaves our origin but the matching model's and the figure
 //   engine's public files (cached in a persistent profile, as check_write.mjs).
@@ -96,6 +97,8 @@ const storedOnce = (p, id) =>
   }, id);
 const storedText = async (p, id) => docText(Buffer.from((await stored(p, id)).b64, "base64"));
 const bodyText = (p) => p.locator('[data-testid="doc-editor"] .layout-page');
+// The document as drawn, its lines joined (the page breaks lines where they wrap).
+const shownText = async (p) => (await p.locator('[data-testid="doc-editor"]').innerText()).replace(/\s+/g, " ");
 // Click at the end of a (one-line) paragraph as drawn on the page.
 const clickInto = async (p, text) => {
   const span = bodyText(p).getByText(text.slice(0, 30)).first();
@@ -116,6 +119,27 @@ const eventually = async (fn, ms = 8000) => {
 const storedHas = (p, id, text) => eventually(async () => (await storedText(p, id)).includes(text));
 
 // --- an empty project list (OPFS is per profile; cleared from a plain same-origin file) ---
+// The editor's stylesheet stays loaded after a Word project closes (Next keeps
+// it): every element's computed style on / and /review, before any Word
+// project opens, to compare with after one has (at the end).
+const styles = () =>
+  page.waitForLoadState("networkidle").then(() =>
+    page.waitForTimeout(500).then(() =>
+      page.evaluate(() => {
+        const props = ["font-family", "font-size", "font-weight", "line-height", "letter-spacing", "color", "background-color", "margin-top", "margin-bottom", "padding-top", "padding-left", "border-top-width", "border-top-style", "border-radius", "display", "box-sizing", "outline-style", "caret-color", "text-transform"];
+        // the visible elements (where a page's scripts and route wrappers sit
+        // differs between a load and a client-side visit), in no order
+        return [...document.querySelectorAll("body *")]
+          .filter((e) => e.checkVisibility())
+          .map((e) => `${e.tagName.toLowerCase()}.${String(e.className).slice(0, 40)} ${props.map((p) => getComputedStyle(e).getPropertyValue(p)).join(";")}`)
+          .sort();
+      }),
+    ),
+  );
+await page.goto(`${O}/`);
+const homeBefore = await styles();
+await page.goto(`${O}/review`);
+const reviewBefore = await styles();
 await page.goto(`${O}/templates/templates.json`);
 await page.evaluate(async () => (await navigator.storage.getDirectory()).removeEntry("margalink-write", { recursive: true }).catch(() => {}));
 await page.goto(`${O}/write`);
@@ -133,7 +157,7 @@ await importFile(page, "Sleep paper.docx", docx);
 await page.waitForSelector('[data-testid="doc-workspace"]');
 await bodyText(page).getByText(TEXT.intro.slice(0, 30)).first().waitFor({ timeout: 20000 });
 check("a .docx opens in the Word editor, its text on the page", true);
-check("the template's header shows", (await page.locator('[data-testid="doc-editor"]').innerText()).includes(TEXT.header));
+check("the template's header shows", (await shownText(page)).includes(TEXT.header));
 const id = projectId(page);
 check("the project is kept with its document unchanged until edited", (await stored(page, id)).b64 === Buffer.from(docx).toString("base64"));
 
@@ -170,7 +194,7 @@ check("the status line counts the document's words", /≈ \d+ words/.test(await 
 // --- a reload keeps the text ---
 await page.reload();
 await bodyText(page).getByText(TEXT.intro.slice(0, 30)).first().waitFor({ timeout: 20000 });
-const reloaded = await page.locator('[data-testid="doc-editor"]').innerText();
+const reloaded = await shownText(page);
 check(`a reload keeps the text${reloaded.includes("Typed in the smoke.") ? "" : ` (shows: "${reloaded.slice(reloaded.indexOf("Short sleep"), reloaded.indexOf("Short sleep") + 140)}")`}`, reloaded.includes("Typed in the smoke."));
 
 // --- leaving right after typing still saves ---
@@ -200,7 +224,7 @@ const beforeSecond = await storedText(second, id);
 await clickInto(second, TEXT.methods).catch(() => {});
 await second.keyboard.type(" stale words");
 await second.waitForTimeout(3000);
-check("a second tab on the same project is read-only", (await storedText(second, id)) === beforeSecond && !(await second.locator('[data-testid="doc-editor"]').innerText()).includes("stale words"));
+check("a second tab on the same project is read-only", (await storedText(second, id)) === beforeSecond && !(await shownText(second)).includes("stale words"));
 await second.close();
 
 // --- a backup comes back as a Word project ---
@@ -210,7 +234,7 @@ const [backup] = await Promise.all([page.waitForEvent("download"), page.locator(
 await page.setInputFiles(IMPORT, { name: "Sleep paper backup.zip", mimeType: "application/zip", buffer: readFileSync(await backup.path()) });
 await page.waitForSelector('[data-testid="doc-workspace"]');
 await bodyText(page).getByText(TEXT.intro.slice(0, 30)).first().waitFor({ timeout: 20000 });
-check("a Word project's backup imports as a Word project", (await page.locator('[data-testid="doc-editor"]').innerText()).includes("Left at once."));
+check("a Word project's backup imports as a Word project", (await shownText(page)).includes("Left at once."));
 
 // --- a template (.dotx) opens as a document ---
 await page.click("text=← All projects");
@@ -352,6 +376,24 @@ await page.keyboard.type(" Saved again.");
 await storedHas(page, hubId, "Saved again.");
 const mediaLater = await media(page, hubId);
 check(`a later save stores the picture once (${mediaAfterInsert.length} → ${mediaLater.length} files)`, mediaLater.length === mediaAfterInsert.length && new Set(mediaLater.map(([, d]) => Buffer.from(d).toString("base64"))).size === mediaLater.length);
+
+// --- the editor's styles stay inside it: / and /review look as they did, reached in the same page ---
+// Elements styled in a way the page didn't have before: a restyled element
+// shows up here. (Elements only the first visit shows, like the homepage's
+// intro, are just missing the second time: not counted.)
+const restyled = (before, after) => {
+  const left = new Map();
+  for (const k of before) left.set(k, (left.get(k) ?? 0) + 1);
+  return after.filter((k) => (left.get(k) ? (left.set(k, left.get(k) - 1), false) : true));
+};
+await page.click('a[aria-label="MargaLink home"]');
+await page.waitForURL(`${O}/`);
+const homeDiff = restyled(homeBefore, await styles());
+check(`after a Word project, / looks as before${homeDiff.length ? ` (${homeDiff.length} elements differ: ${homeDiff.slice(0, 2).join(" | ")})` : ""}`, homeDiff.length === 0);
+await page.locator('a[href="/review"]').filter({ visible: true }).first().click();
+await page.waitForURL(`${O}/review`);
+const reviewDiff = restyled(reviewBefore, await styles());
+check(`and so does /review${reviewDiff.length ? ` (${reviewDiff.length} elements differ: ${reviewDiff.slice(0, 2).join(" | ")})` : ""}`, reviewDiff.length === 0);
 
 check(`no page errors, no request bodies, nothing off our origin${problems.length ? `: ${problems.slice(0, 5).join(" | ")}` : ""}`, problems.length === 0);
 await context.close();
