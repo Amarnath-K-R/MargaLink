@@ -3,14 +3,11 @@ import { CONTACT_EMAIL, OPERATOR, POSTAL_ADDRESS, SUPPORT_PHONE } from "@/lib/si
 // Who runs MargaLink and how to reach them, from the build's env (site.ts),
 // for /contact, the privacy notice and the terms. Unset values say so
 // plainly rather than inventing anything.
-export const ContactEmail = () =>
-  CONTACT_EMAIL ? (
-    <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">
-      {CONTACT_EMAIL}
-    </a>
-  ) : (
-    <>the contact address listed here once accounts open</>
-  );
+export const ContactEmail = () => (
+  <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">
+    {CONTACT_EMAIL}
+  </a>
+);
 
 export const operatorName = OPERATOR ?? "the owner of MargaLink";
 

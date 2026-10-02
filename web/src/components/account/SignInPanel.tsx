@@ -86,7 +86,11 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
         An account keeps your email address (and Google&apos;s id for you, if you use Google), your M coin history and purchases, fingerprints of
         your sign-in tokens, and a keyed fingerprint of your address so the welcome bonus is given once (kept 12 months after you delete the
         account). Never anything from your papers. Download or delete it all on your account page at any time; deleting withdraws your consent.
-        Questions or complaints: {CONTACT_EMAIL ? <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">{CONTACT_EMAIL}</a> : "the address on the privacy page"}, or
+        Questions or complaints:{" "}
+        <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">
+          {CONTACT_EMAIL}
+        </a>
+        , or
         the Data Protection Board of India.{" "}
         <NewTabLink href="/privacy#accounts">What an account stores</NewTabLink>
       </p>
