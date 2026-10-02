@@ -12,6 +12,7 @@ import { onRequestGet as googleCallback } from "../../../functions/api/auth/goog
 import { onRequestPost as logout } from "../../../functions/api/auth/logout.ts";
 import { onRequestGet as me } from "../../../functions/api/me.ts";
 import { WELCOME_COINS } from "./coins.ts";
+import { addAccess } from "../access/access.ts";
 
 const env = { DB: testD1(), HASH_SECRET: "test-key", GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "sec", GOOGLE_REDIRECT_URI: "https://m.test/api/auth/google/callback", RESEND_API_KEY: "re", EMAIL_FROM: "MargaLink <signin@m.test>", TURNSTILE_SECRET: "ts-secret" };
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
@@ -20,6 +21,9 @@ const post = (path: string, body: unknown, cookie = "", ip = "203.0.113.1") =>
   new Request(`https://m.test${path}`, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", cookie, "cf-connecting-ip": ip } });
 const get = (path: string, cookie = "") => new Request(`https://m.test${path}`, { headers: { cookie } });
 const cookieHeader = (res: Response) => res.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+const count = async (sql: string, ...args: string[]) => (await env.DB.prepare(sql).bind(...args).first<{ n: number }>())!.n;
+// the beta list: Ann, the dev-log address and the known account are invited; the other rate-limit addresses aren't, and are refused after the limits
+await addAccess(env.DB, ["ann@example.org", "dev@x.org", "old@x.org"].map((email) => ({ email, role: "beta" as const })), null, Date.now());
 
 // stub the outside world
 const sent: { to: string[]; text: string }[] = [];
@@ -160,6 +164,19 @@ human = false;
 assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "t2@x.org" }, "", "192.0.2.9"), guarded)).status, 400);
 human = true;
 
+// the beta: an address that isn't invited gets the same answer, but no email and no link
+const sentBefore = sent.length;
+assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "stranger@x.org" }, "", "198.51.100.60"))).status, 200);
+assert.equal(sent.length, sentBefore, "nothing sent");
+assert.equal(await count("SELECT COUNT(*) AS n FROM magic_links WHERE email = ?", "stranger@x.org"), 0, "nothing stored");
+// and a link for one (made before it was removed from the list) signs no one in
+await env.DB.prepare("INSERT INTO magic_links (token_hash, email, next, expires_at) VALUES (?, 'stranger@x.org', '/home', ?)").bind(await sha256Hex("stranger-token-stranger-token-stranger-token"), Date.now() + 60_000).run();
+r = await run(emailVerify, post("/api/auth/email/verify", { token: "stranger-token-stranger-token-stranger-token" }));
+assert.equal(r.status, 403);
+assert.match(await r.text(), /beta/);
+assert.equal(r.headers.getSetCookie().length, 0);
+assert.equal(await count("SELECT COUNT(*) AS n FROM users WHERE email = ?", "stranger@x.org"), 0, "no account");
+
 // --- Google
 r = await run(googleStart, get("/api/auth/google/start?next=/review&popup=1"));
 assert.equal(r.headers.get("location"), "/signin?next=%2Freview&popup=1", "no Google without the two boxes ticked: back to the sign-in page");
@@ -194,7 +211,18 @@ assert.ok(tokenForm!.get("code_verifier")!.length >= 43, "PKCE verifier sent");
 const googleCookie = cookieHeader(r);
 assert.match(googleCookie, /__Host-ml_oauth=; __Host-ml_session=/, "the oauth cookie is cleared");
 r = await run(me, get("/api/me", googleCookie));
-assert.deepEqual(await r.json(), { user: { id: annMe.user.id, email: "ann@example.org" }, balance: WELCOME_COINS, pro: null, paddle: null }, "same account, no second welcome");
+assert.deepEqual(
+  await r.json(),
+  { user: { id: annMe.user.id, email: "ann@example.org" }, balance: WELCOME_COINS, pro: null, paddle: null, access: { approved: true, developer: false } },
+  "same account, no second welcome; what it may open",
+);
+// a Google account that isn't invited is turned away, with nothing stored
+idToken = `${b64({})}.${b64({ ...claims, sub: "g-stranger", email: "stranger@x.org" })}.s`;
+r = await run(googleCallback, get(`/api/auth/google/callback?code=c2&state=${state}`, oauth));
+assert.equal(r.headers.get("location"), "/signin?error=not-approved&next=%2Freview&popup=1");
+assert.ok(!r.headers.getSetCookie().some((c) => c.startsWith("__Host-ml_session=")), "no session");
+assert.equal(await count("SELECT COUNT(*) AS n FROM identities WHERE subject = ?", "g-stranger"), 0, "no identity");
+assert.equal(await count("SELECT COUNT(*) AS n FROM users WHERE email = ?", "stranger@x.org"), 0, "no account");
 
 // --- sign out, and a stale hint is cleared
 r = await run(logout, post("/api/auth/logout", {}, googleCookie));

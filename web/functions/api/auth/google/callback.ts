@@ -4,8 +4,8 @@
 // secret and the PKCE verifier) for an id_token, check its claims, and sign
 // the account in. A popup lands on /signin?done=1, which closes itself; the
 // page that opened it notices on focus.
-import { checkIdClaims, createSession, hashSecret, jwtPayload, OAUTH_COOKIE, readCookie, redirect, safeNext, sessionCookies, signInUser, type AccountEnv } from "../../../../src/lib/accounts/auth.ts";
-import { grantWelcome } from "../../../../src/lib/accounts/ledger.ts";
+import { checkIdClaims, createSession, hashSecret, jwtPayload, OAUTH_COOKIE, readCookie, redirect, safeNext, sessionCookies, type AccountEnv } from "../../../../src/lib/accounts/auth.ts";
+import { admitUser } from "../../../../src/lib/access/access.ts";
 
 const decodeNext = (s: string) => {
   try {
@@ -40,8 +40,8 @@ export const onRequestGet: PagesFunction<AccountEnv> = async ({ request, env }) 
   const who = checkIdClaims(jwtPayload(id_token ?? ""), env.GOOGLE_CLIENT_ID, now);
   if (typeof who === "string") return fail("google");
 
-  const user = await signInUser(env.DB, { email: who.email, google: who.sub }, now);
-  await grantWelcome(env.DB, user.id, user.email, now, secret);
+  const user = await admitUser(env.DB, { email: who.email, google: who.sub }, now, secret);
+  if (!user) return fail("not-approved"); // the closed beta: not invited, nothing stored
   const token = await createSession(env.DB, user.id, now);
   return redirect(popup === "1" ? `/signin?done=1&next=${encodeURIComponent(next)}` : next, [clear, ...sessionCookies(token)]);
 };

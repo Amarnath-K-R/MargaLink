@@ -23,6 +23,7 @@
 // account, without them.
 import { fingerprint, hashSecret, networkKey, randomToken, rateLimit, readJson, safeNext, sha256Hex, text, type AccountEnv } from "../../../../src/lib/accounts/auth.ts";
 import { isEmail, normalEmail } from "../../../../src/lib/accounts/coins.ts";
+import { mayEnter } from "../../../../src/lib/access/access.ts";
 
 const LINK_TTL_MS = 15 * 60 * 1000;
 // Providers big enough to police their own sign-ups; everyone else's domain has a daily limit on new accounts.
@@ -77,6 +78,11 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
     }
     if (!(await rateLimit(db, "mail-new", 90, DAY, now))) return text("Email sign-up is busy today. Use Google, or try again tomorrow.", 503);
   }
+  // The closed beta: an address that isn't invited gets the same answer as
+  // one that is, after the same limits, so no one can learn who's on the
+  // list; but no email, and nothing stored. Before the sending quota, which
+  // refused addresses shouldn't use up.
+  if (!(await mayEnter(db, email))) return Response.json({ ok: true });
   if (!(await rateLimit(db, "mail-all", 95, DAY, now))) return text("Email sign-in is busy today. Use Google, or try again tomorrow.", 503);
 
   const token = randomToken();

@@ -14,6 +14,11 @@ export type Role = "beta" | "developer";
 export const ROLES: readonly Role[] = ["beta", "developer"];
 export type Access = { session: Session; approved: boolean; developer: boolean };
 
+/** Whether an address may sign in: any, with the beta off; otherwise a listed one. */
+export async function mayEnter(db: D1Database, email: string): Promise<boolean> {
+  return !BETA.on || !!(await db.prepare("SELECT 1 FROM access_list WHERE email_key = ?").bind(canonicalEmail(email)).first());
+}
+
 /**
  * Signs in a verified address (and, from Google, its stable id), or returns
  * null, before anything about it is stored, while the beta runs and the
@@ -21,8 +26,8 @@ export type Access = { session: Session; approved: boolean; developer: boolean }
  * notice a new account signed up under, and the welcome coins.
  */
 export async function admitUser(db: D1Database, who: { email: string; google?: string }, now: number, secret: string) {
+  if (!(await mayEnter(db, who.email))) return null;
   const key = canonicalEmail(who.email);
-  if (BETA.on && !(await db.prepare("SELECT 1 FROM access_list WHERE email_key = ?").bind(key).first())) return null;
   const user = await signInUser(db, who, now);
   await db
     .prepare(`UPDATE users SET access_key = ?${user.created ? `, notice_version = ${NOTICE_VERSION}` : ""} WHERE id = ?`)
