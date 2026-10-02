@@ -11,6 +11,8 @@ import { chromium } from "playwright";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mockAccount } from "../smoke/mock_account.mjs";
 import { BETA } from "../../src/lib/access/beta.ts";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { paperDocx, TEXT } from "../fixtures/docx_fixtures.mjs";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const OUT = new URL("../../public/guide/", import.meta.url).pathname;
@@ -247,6 +249,17 @@ if (want("write")) {
   await sc.waitFor();
   await shot("write-shortcuts", [sc], [], 0);
   await page.keyboard.press("Escape");
+  // A Word document: the same tools, Word's own editor.
+  await page.click("text=← All projects");
+  // the smoke tests' paper, with a running head instead of the fixture's journal name
+  const docx = unzipSync(await paperDocx());
+  docx["word/header1.xml"] = strToU8(strFromU8(docx["word/header1.xml"]).replace(TEXT.header, "Sleep and recovery after cardiac surgery"));
+  await page.setInputFiles('input[aria-label="Import a .zip, .tex or .docx file"]', { name: "Sleep and recovery.docx", mimeType: "application/octet-stream", buffer: Buffer.from(zipSync(docx)) });
+  const dw = '[data-testid="doc-workspace"]';
+  await page.locator(`${dw} .layout-page`).first().waitFor({ timeout: 30_000 });
+  await tidy();
+  await page.waitForTimeout(1200);
+  await shot("write-word", [dw], ["text=← All projects", '[role="group"][aria-label="Tools"]', page.getByRole("button", { name: "Download .docx" }), `${dw} [role="toolbar"]`, `${dw} .layout-page`, '[data-testid="save-state"]'], 0);
 }
 
 if (want("coins")) {

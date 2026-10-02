@@ -22,9 +22,15 @@ runs in a Web Worker (`public/texWorker.js`, driven by `texRunner.ts`). The
 engine and its data packs are public files on our Cloudflare R2 bucket
 (`texEngine.ts` names the URL; `scripts/ops/publish_busytex.sh` uploads them,
 with pinned sizes and a total cap) — a public-asset origin, fetched with
-bodyless GETs, never anything from a paper. The workspace is also the hub:
-match, review, figures, checks and journal open as windows over it. Matching
-and the checks read the compiled PDF on-device (rule 1 unchanged); the two
+bodyless GETs, never anything from a paper. A Word project (`kind: "docx"`,
+one `paper.docx`) is kept the same way and edited in Folio
+(`@stll/folio-react`, `DocEditor.tsx`), which runs in the page and makes no
+requests; it saves with full saves only (its selective save lost edits:
+`docs/word-editor-known-issues.md`), and `check_docx_fidelity.mjs` is the
+gate for any Folio upgrade. The workspace is also the hub: match, review,
+figures, checks and journal open as windows over it. Matching and the
+checks read the compiled PDF, or the saved Word document, on-device (rule 1
+unchanged); the two
 rule-3 exceptions are reachable from there through the same `ReviewConsent`
 / `FigureConsent` components, and the status bar says when something was
 sent.

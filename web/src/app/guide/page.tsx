@@ -88,8 +88,8 @@ export default function GuidePage() {
           />
           <Aside title="What stays on your device">
             <p>
-              Reading your paper, matching it to journals, the format and journal-rules checks, drawing figures from your spreadsheet, and writing and
-              compiling LaTeX all run in your browser. What it downloads is public (the journal index, the matching model, the TeX engine, the figure
+              Reading your paper, matching it to journals, the format and journal-rules checks, drawing figures from your spreadsheet, writing and
+              compiling LaTeX, and editing Word documents all run in your browser. What it downloads is public (the journal index, the matching model, the TeX engine, the figure
               engine), and none of those requests carries anything of yours.
             </p>
           </Aside>
@@ -603,7 +603,8 @@ export default function GuidePage() {
                 <strong>Export</strong>: download links for each format, at the journal width.
               </>,
               <>
-                <strong>Add to a paper</strong>: puts the figure into a workspace project&apos;s figures folder and gives you the LaTeX to place it.
+                <strong>Add to a paper</strong>: puts the figure into a LaTeX project&apos;s figures folder and gives you the LaTeX to place it. (A Word
+                document takes figures from its own Figures window.)
               </>,
             ]}
           />
@@ -622,7 +623,7 @@ export default function GuidePage() {
           tint={TINT.write}
           icon={icon(PenLine)}
           art={<WriteArt />}
-          lead="LaTeX in your browser, in your journal's template, compiled to PDF on your device, with every other tool a window away."
+          lead="LaTeX or Word, in your browser and your journal's template, with every other tool a window away."
         >
           <Shot
             name="write-list"
@@ -642,7 +643,8 @@ export default function GuidePage() {
                 <strong>Other publishers</strong>: they share templates only on their own sites: download the zip there, then import it.
               </>,
               <>
-                <strong>Import a .zip or .tex</strong>: a publisher&apos;s template, an Overleaf download, a MargaLink backup, or a single .tex file (it becomes main.tex; add its figures and .bib after).
+                <strong>Import a .zip, .tex or Word file</strong>: a publisher&apos;s template, an Overleaf download, a MargaLink backup, a single .tex file
+                (it becomes main.tex; add its figures and .bib after), or a Word document or template (it opens in the Word editor, below).
               </>,
             ]}
             caption="Coming from a journal's page or a match result, the matching template is suggested and pressed in."
@@ -796,18 +798,18 @@ export default function GuidePage() {
           </DocPart>
           <OptionTable
             rows={[
-              { name: "Match", what: "Ranks journals for the compiled PDF. Set as target journal makes one yours; AI review available opens Review for it." },
+              { name: "Match", what: "Ranks journals for the compiled PDF (or the Word document). Set as target journal makes one yours; AI review available opens Review for it." },
               {
                 name: "Review",
-                what: "The review above, on the compiled PDF, against your target journal when it's one of the verified ones. Each quoted passage has Jump to source, which finds it in your LaTeX.",
+                what: "The review above, on the compiled PDF (or the Word document), against your target journal when it's one of the verified ones. Each quoted passage has Jump to source, which finds it in your LaTeX, or selects it in your Word document.",
                 away: true,
               },
               {
                 name: "Figures",
-                what: "The whole figure studio. Insert into paper saves the figure (PDF) and its recipe in figures/ and places it at the cursor; opening the recipe later offers Edit in the figure studio.",
+                what: "The whole figure studio. Insert into paper saves the figure (PDF) and its recipe in figures/ and places it at the cursor; opening the recipe later offers Edit in the figure studio. In a Word document, the figure goes in at the cursor as a picture, at the size it was drawn.",
               },
-              { name: "Checks", what: "The format check and your target journal's rules, on the compiled PDF, re-run whenever the draft changes." },
-              { name: "Journal", what: "Your target journal: its details, its rules, its template. Search to change it, or clear it." },
+              { name: "Checks", what: "The format check and your target journal's rules, on the compiled PDF (or the Word document), re-run whenever the draft changes." },
+              { name: "Journal", what: "Your target journal: its details, its rules, its LaTeX template. Search to change it, or clear it." },
             ]}
           />
           <div className="grid gap-8 md:grid-cols-2">
@@ -815,6 +817,48 @@ export default function GuidePage() {
             <Shot name="write-palette" alt="The command palette" notes={[<>Type to find a command</>, <>Arrow keys and Enter run it</>]} caption="Views, auto-compile, backups, the engine, inserting: all of it is here." />
           </div>
           <Shot name="write-shortcuts" alt="The keyboard shortcuts window" caption="Everything on the keyboard, from the ? on the status line." />
+          <DocPart id="word" title="Word documents">
+            <p>
+              Import a .docx (your own paper, or a journal&apos;s Word template; a .dotx opens as a new document) and it opens in a Word editor instead of
+              LaTeX: the template&apos;s styles, headers, numbering and page setup stay as they are, and what you download is a Word document to submit. An
+              old .doc, or a file with macros, is refused with what to do instead.
+            </p>
+          </DocPart>
+          <Shot
+            name="write-word"
+            alt="A Word document open in the workspace"
+            notes={[
+              <>
+                <strong>All projects</strong>
+              </>,
+              <>
+                <strong>Tools</strong>: the same windows. Match, Review and Checks read the document as last saved.
+              </>,
+              <>
+                <strong>Download .docx</strong>: the document, with your edits, to submit.
+              </>,
+              <>
+                <strong>The editor&apos;s own bar</strong>: paragraph styles, bold, italic, underline, pictures, tables and symbols; the rest under ⋯.
+              </>,
+              <>
+                <strong>The page</strong>, laid out as Word lays it out: click and type.
+              </>,
+              <>
+                <strong>Saved</strong>: every edit is saved in this browser two seconds after you stop typing, and before any window opens.
+              </>,
+            ]}
+            caption="Tracked changes and comments already in the document are shown and kept; there is no suggesting mode here."
+          />
+          <OptionTable
+            rows={[
+              { name: "Kept as they were", what: "Styles, numbering, the theme and fonts, headers and footers, citation-manager fields (Zotero, Mendeley and the like), cross-references, tables of contents, footnotes, comments, tracked changes, equations and content controls." },
+              { name: "Not yet", what: "Templates for Word in the Journal window (those are LaTeX only), and starting a blank Word document: import one." },
+              {
+                name: "Known rough edges",
+                what: "A two-column page that also holds a floating box (a frame or a wrapped picture) can show its words overlapping: only the display, the document is fine. Equations from Word's old equation editor show as a blank picture box and are kept. A comment attached across table cells can lose its place.",
+              },
+            ]}
+          />
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
@@ -940,10 +984,10 @@ export default function GuidePage() {
               ["The first compile is slow", "It downloads TeX once (about 140 MB). Later compiles reuse it and take a second or two."],
               ["\"Missing package\"", "The compile is retried with every package available. If it still fails, the package isn't in this TeX Live; the error names it."],
               ["A tool window says \"Compile first\"", "Match, Review and Checks read the PDF you compiled. Compile once, and they'll read the latest one."],
-              ["\"Couldn't find that passage in the source\"", "Jump to source searches your LaTeX for words the reviewer quoted from the PDF; heavy markup or maths can hide them. The quote is still right."],
+              ["\"Couldn't find that passage in the source\"", "Jump to source searches your LaTeX (or Word document) for words the reviewer quoted; heavy markup or maths can hide them. The quote is still right."],
               ["My review stopped", "Resume review picks up where it stopped. A section that failed can be retried alone; it doesn't use another review."],
               ["A match looks wrong", "Check What we read. If the title or abstract wasn't found, paste them and match again."],
-              ["Moving to another computer", "Download backup on the project, then Import a .zip or .tex on the other computer."],
+              ["Moving to another computer", "Download backup on the project, then Import a .zip, .tex or Word file on the other computer."],
               ["Where's my project?", "In this browser, on this device. Another browser or a private window doesn't see it."],
             ].map(([q, a]) => (
               <div key={q} className="clay p-5">

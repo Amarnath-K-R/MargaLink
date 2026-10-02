@@ -41,7 +41,7 @@ export default function HomeDashboard() {
             href="/write"
             art={<WriteArt bare />}
             title="Write your paper"
-            text="Your journal's LaTeX template, compiled in your browser, with matching, review, figures and checks a window away."
+            text="Your journal's LaTeX template or your Word document, in your browser, with matching, review, figures and checks a window away."
             cta="Open the workspace"
             primary
           />

@@ -339,12 +339,13 @@ The worker's own fetches (Pyodide from jsDelivr, `figurelib.py`, fonts) happen
 off the main thread. They are bodyless GETs for public, versioned assets —
 never anything from the dataset.
 
-### The writing workspace: LaTeX in the browser
+### The writing workspace: LaTeX or Word in the browser
 
 `/write` is a single-author LaTeX workspace: start from a journal's
 template (or import a zip), edit in CodeMirror, compile to PDF, back up
-as a zip. No server; no AI in the editor. It is also the hub: the other
-tools open as windows over it (see **Windows** below).
+as a zip. A Word document is the other kind of project (see **Word
+documents** below). No server; no AI in the editor. It is also the hub:
+the other tools open as windows over it (see **Windows** below).
 
 - **Engine.** TeX Live 2023 compiled to WebAssembly by the BusyTeX
   project — its MIT-licensed core build (`busytex.js`/`.wasm`, the
@@ -394,11 +395,14 @@ tools open as windows over it (see **Windows** below).
   journal chip's Journal) open in a native `<dialog>` (`components/ui/Dialog.tsx`: focus trap,
   Escape, focus back to the editor). Each body is a `next/dynamic`
   import, so pdf.js, the matching model and the figure studio load only
-  when asked for. Tool state lives in hooks mounted by `Workspace`
-  (`useMatch`, `useReview`, `useFigures` — the same hooks the standalone
-  pages render — plus `useChecks`), so closing a window keeps its
-  results and a running review carries on (the status bar shows it).
-  `Workspace` is keyed by project id so nothing leaks between projects.
+  when asked for. Tool state lives in hooks mounted by `useHub`
+  (`Hub.tsx`: `useMatch`, `useReview`, `useFigures` — the same hooks the
+  standalone pages render — plus `useChecks`), which either workspace
+  calls, so closing a window keeps its results and a running review
+  carries on (the status bar shows it). `HubWindows` renders the windows
+  for both. Each workspace is keyed by project id so nothing leaks
+  between projects; the per-project lock, unsaved-edit tracking and
+  save-on-leave are `useProjectSession.ts`, also shared.
 - **Paper text.** Match, Review and Checks read the last compiled PDF
   (`store.lastPdf` or the latest `CompileResult.pdf`) through the same
   `extractFromFile` pipeline as an upload — headings from fonts,
@@ -429,6 +433,28 @@ tools open as windows over it (see **Windows** below).
 - **URL.** `/write?p=<id>` reopens a project (a reload, or the figure
   studio's link); `/write?journal=<id>` (from a match result or a journal
   page) preselects a template for a new one.
+- **Word documents.** Importing a `.docx` or `.dotx` makes a project of
+  `kind: "docx"` (`importDocx` in `projectStore.ts`) holding one file,
+  `paper.docx`, stored as imported; a `.dotx` has its main part's content
+  type rewritten, and `.doc`, macro-enabled and encrypted files are
+  refused with what to do. `DocWorkspace.tsx` opens it in Folio
+  (`@stll/folio-react`, Apache-2.0, a fork of Eigenpal's docx-editor,
+  pinned exact): `DocEditor.tsx` wraps it (its own `next/dynamic` chunk,
+  about 2 MB, no requests, fonts bundled). Saves are debounced two
+  seconds and happen before any window opens, a download, a backup and
+  leaving; every save is a **full** save (Folio's selective save reset
+  its baseline to the first-opened file and dropped an earlier save's
+  edits), which still carries the template's styles, numbering, theme,
+  fonts and headers over byte for byte. The windows read the document as
+  last saved (`new File([saved], "paper.docx")` through `extractFromFile`,
+  where `docxText` keeps Word's list numbers so an auto-numbered
+  reference list is counted); Jump to source selects the quoted
+  paragraph; a figure goes in at the cursor at its drawn size (300 dpi
+  PNG, sized to 96/300 of its pixels). No Word templates in the Journal
+  window. Folio's stylesheet is scoped to the editor
+  (`folioCss.selfcheck.ts`, and the Word smoke's style comparison of `/`
+  and `/review` after a Word project). Known rough edges, with upstream
+  issue drafts: `docs/word-editor-known-issues.md`.
 
 Nothing in the workspace shows a network trace any more (the tool pages
 lost theirs too); the status line says whether a request carried text
@@ -608,9 +634,11 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `figures/_components/PanelEditor.tsx`, `StyleBar.tsx` | Per-panel controls (family, roles, axes, summary, order, overlays, statistics, annotations) and whole-figure style/size/palette/grid. |
 | `figures/_components/FigurePreview.tsx`, `ExportBar.tsx`, `RecipeImportExport.tsx` | The live image with local-only error details and test results; PNG/TIFF/SVG/PDF export (with a `children` slot beside Export); recipe save/load. |
 | `figures/layout.tsx` | Route metadata shim. |
-| `figures/_components/AddToPaper.tsx` | Puts the figure as a PDF into a `/write` project's `figures/` and copies the LaTeX. |
+| `figures/_components/AddToPaper.tsx` | Puts the figure as a PDF into a LaTeX `/write` project's `figures/` and copies the LaTeX (Word projects are left out: they take figures from their own Figures window). |
 | `write/page.tsx` | Project list, template picker, zip import; `?journal=` preselects a template, `?p=` reopens a project; an open project renders the full-screen `Workspace` alone. `useNetworkTrace()` counts requests with a body for the workspace's status line. |
-| `write/_components/Workspace.tsx` | One open project, full screen: the tray, the files/outline slab, the source and PDF sheets (a draggable split, or one of them alone), diagnostics, the status line, and the tool windows over it. Owns the tools' hooks (the one route that imports another route's `_components/`), the compiled PDF as a `File`, the text files' contents (for suggestions, the outline and the word count), the remembered view settings, auto-compile and figure insertion. |
+| `write/_components/Workspace.tsx` | One open LaTeX project, full screen: the tray, the files/outline slab, the source and PDF sheets (a draggable split, or one of them alone), diagnostics, the status line, and the tool windows over it. Owns the compiled PDF as a `File`, the text files' contents (for suggestions, the outline and the word count), the remembered view settings, auto-compile and figure insertion. |
+| `write/_components/DocWorkspace.tsx`, `DocEditor.tsx`, `folioCss.selfcheck.ts` | One open Word project: the tray (with Download .docx), the document in Folio, the status line, the same windows. `DocEditor`'s handle: save (full), pending, text, insertImage (at its drawn size), showQuote, focus. The selfcheck keeps Folio's stylesheet from restyling the site. |
+| `write/_components/Hub.tsx`, `useProjectSession.ts` | Shared by both workspaces. `useHub` owns the tools' hooks (the one route that imports another route's `_components/`), ⌘K, the target journal, the running-tool line and leave-while-reviewing; `HubWindows` renders the windows; `hubCommands` the palette's shared entries. `useProjectSession`: the per-project Web Lock, unsaved edits, beforeunload and the save on hide and on leave. |
 | `write/_components/Toolbar.tsx`, `StatusBar.tsx`, `CommandPalette.tsx`, `Shortcuts.tsx`, `CompileFirst.tsx` | The shell: home / back / rename / journal chip / tools / files toggle / view / Compile / ⌘K; the status line (compile status, counts, the paper's word count and limit, saved, a running tool, the engine, auto-compile, what was sent, the shortcuts key); the ⌘K palette; the keyboard shortcuts window; the "Compile first" notice. |
 | `write/_components/EditorFormatBar.tsx`, `latexCompletions.ts`, `Outline.tsx` | The formatting bar over the source (wrap or insert; Cite/Ref/Figure lists, a table-size grid); the suggestions inside `\cite{`, `\ref{`, `\begin{` and after `\`; the Outline tab. |
 | `write/_components/MatchWindow.tsx`, `ReviewWindow.tsx`, `FiguresWindow.tsx`, `ChecksWindow.tsx`, `JournalWindow.tsx`, `useChecks.ts` | The windows' bodies (dynamic imports) over the shared hooks; `useChecks` runs the format and rules checks over the PDF text. |
@@ -683,7 +711,7 @@ checks.
 | File | What |
 |---|---|
 | `references.ts` | A paper's reference list → the journals it cites. |
-| `extract.ts` | PDF/DOCX → text (browser-only: uses `pdfjs-dist`/`mammoth`); with `{ headings: true }` (the review only) also the document's heading structure. |
+| `extract.ts` | PDF/DOCX → text (browser-only: uses `pdfjs-dist`/`mammoth`); with `{ headings: true }` (the review only) also the document's heading structure. A .docx's text is `docxText` over mammoth's document, which writes in the numbers Word draws on numbered lists (selfchecked). |
 | `headingHints.ts` | Pure: the document's own heading structure — `pickPdfHeadings()` from per-line font data, `pickDocxHeadings()` from Word heading styles. |
 
 *`src/lib/match/`*: matching: the index, embedding, ranking.
@@ -743,7 +771,7 @@ checks.
 | `texEngine.ts` | The engine's R2 URL, release, files and data packs; `packsFor()`. |
 | `texRunner.ts` | The TeX worker lifecycle: `compileProject()`, supersession, deadline, the all-packs retry. Talks to `public/texWorker.js`. |
 | `texLog.ts` | `parseTexLog()` — errors, warnings and missing packages with file and line. |
-| `projectStore.ts` | `/write` projects in the Origin Private File System (`ProjectMeta` carries the target journal's id and name); `autosaver()`; zip export/import. |
+| `projectStore.ts` | `/write` projects in the Origin Private File System (`ProjectMeta` carries the target journal's id and name, and `kind: "docx"` for a Word project); `importDocx` / `toDocx` (what's refused, a .dotx made a document); `autosaver()`; zip export/import (a Word project's backup comes back as one). |
 | `texSource.ts` | Pure LaTeX-source helpers for the workspace: a rough word count, `.bib` keys and entries, labels, the outline, `\input`s and the paper's files, `findQuoteInTex`, the figure and table snippets, the next free figure path. |
 | `templateCatalog.ts` | `loadTexTemplates()`, `templateForJournal()`, `starterProject()`. |
 | `zip.ts` | `zipFiles()`, `unzipFiles()`, `flattenSingleRoot()` over fflate. |

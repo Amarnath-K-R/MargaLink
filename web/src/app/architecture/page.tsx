@@ -66,7 +66,7 @@ export default function ArchitecturePage() {
           <DocPart title="Heavy things run in workers">
             <p>
               LaTeX compiles in a Web Worker running TeX Live compiled to WebAssembly (BusyTeX). Figures draw in a worker running Python (Pyodide) with{" "}
-              {code("public/figurelib.py")}. PDF text comes from pdf.js. The embedding model runs through transformers.js. Their files are public and
+              {code("public/figurelib.py")}. PDF text comes from pdf.js, a Word document&apos;s from mammoth. The embedding model runs through transformers.js. Their files are public and
               versioned: the TeX engine and packs on an R2 bucket, Pyodide and the ONNX runtime from jsDelivr, the model from Hugging Face.
             </p>
           </DocPart>
@@ -82,8 +82,8 @@ export default function ArchitecturePage() {
                   <>
                     Reading ({code("extract.ts")}), embedding ({code("embed.ts")}), ranking ({code("rank.ts")}, {code("match.ts")}), the format check (
                     {code("formatCheck.ts")}) and the journal-rules check ({code("rulesCheck.ts")}) run in the browser. Their only requests are bodyless GETs
-                    for public files. The workspace reads its own compiled PDF the same way. Checked by {code("check_match.mjs")} and {code("check_write.mjs")}
-                    : no request carries a body.
+                    for public files. The workspace reads its own compiled PDF, or its Word document, the same way. Checked by {code("check_match.mjs")},{" "}
+                    {code("check_write.mjs")} and {code("check_write_docx.mjs")}: no request carries a body.
                   </>
                 ),
               },
@@ -205,7 +205,7 @@ export default function ArchitecturePage() {
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
-        <DocSection id="writing" title="The writing workspace" icon={icon(PenLine)} tint="#dde6e6" lead="LaTeX in the browser, full screen, and the hub the other tools open inside.">
+        <DocSection id="writing" title="The writing workspace" icon={icon(PenLine)} tint="#dde6e6" lead="LaTeX or a Word document in the browser, full screen, and the hub the other tools open inside.">
           <Steps
             tint="#dde6e6"
             steps={[
@@ -217,6 +217,18 @@ export default function ArchitecturePage() {
               { title: "Back into the paper", detail: "Insert into paper writes the figure's PDF and data-free recipe to figures/; review citations jump to their line; the target journal is kept in the project's meta.", files: "FiguresWindow.tsx · ReviewWindow.tsx" },
             ]}
           />
+          <DocPart title="Word documents">
+            <p>
+              A project of kind {code("docx")} holds one file, {code("paper.docx")}, stored as imported (a .dotx gets its main part&apos;s content type
+              rewritten; .doc, macros and encrypted files are refused). It opens in Folio ({code("@stll/folio-react")}, Apache-2.0, pinned), an editor
+              that lays the document out as Word does and edits the .docx itself; it loads with the project, as its own chunk, and makes no requests.
+              Every save is a full save: the document&apos;s text rewritten from the editor, the other parts carried over, so a template&apos;s styles,
+              numbering, theme, fonts and headers come back byte for byte. (Folio&apos;s selective save dropped an earlier save&apos;s edits; see{" "}
+              {code("docs/word-editor-known-issues.md")}.) The lock, unsaved edits and save-on-leave are shared with LaTeX projects, as are the windows,
+              which read the document as last saved through the same extraction as an upload. {code("check_docx_fidelity.mjs")} imports real templates
+              and papers, edits them across saves and a reopen, and compares every field, comment, tracked change, equation, picture and style.
+            </p>
+          </DocPart>
           <DocPart title="Engine hosting">
             <p>
               The engine (about 30 MB of WASM) and its data packs (about 110 MB basic) are too big for Pages&apos; per-file cap, so they live on a public R2
@@ -365,6 +377,7 @@ export default function ArchitecturePage() {
               { name: "check_account", what: "No account request while signed out; the email link and its confirm step; Google's popup; the account page; a pack and Pro through a stubbed Paddle.js; the portal." },
               { name: "check_figures · check_figure_sandbox", what: "A messy spreadsheet read right, templates, editors, recipes, a mocked Ask Claude; tweaks that try every way out fail with zero requests." },
               { name: "check_write", what: "Compile, diagnostics, backups, files, the hub windows (a mocked review, the figure window), the formatting bar, suggestions, the outline, views, a failed engine download." },
+              { name: "check_write_docx · check_docx_fidelity", what: "Word projects: what's refused, autosave, undo, reload, leaving at once, the download, a second tab, backups, every window, a figure at its size, the editor's styles kept in; a document's contents through edits and saves." },
               { name: "check_keyboard · check_intro · check_homepage", what: "The dropzone by keyboard; the first-visit intro; the homepage." },
               { name: "check_docs", what: "The guide and this page: every screenshot exists, every marker sits on its image, no broken anchors." },
             ]}

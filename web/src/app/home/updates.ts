@@ -31,6 +31,19 @@ export const TAG_TINT: Record<UpdateTag, string> = {
 export const UPDATES: Update[] = [
   {
     date: "2026-10-02",
+    tag: "Write",
+    title: "Word documents in the workspace",
+    summary: "Import a .docx, your paper or a journal's Word template, and edit it in the browser with the same tools around it. What you download is a Word document, the template's styles intact.",
+    points: [
+      "Formatting, pictures and tables in a Word editor, saved in this browser as you type",
+      "Match, Checks and the AI review read the document; Jump to source selects the passage",
+      "Figures from the studio go in at the cursor, at the size they were drawn",
+    ],
+    href: "/write",
+    cta: "Open the workspace",
+  },
+  {
+    date: "2026-10-02",
     tag: "Accounts",
     title: "The closed beta",
     summary: "MargaLink is open to invited testers for now, to hear what works before it opens to everyone. Testers sign in with Google and start with 50 M coins.",

@@ -33,7 +33,7 @@ const TOOLS = [
     href: "/write",
     icon: PenLine,
     title: "Write your paper",
-    description: "Your journal's LaTeX template, compiled in your browser, with every other tool a window away.",
+    description: "Your journal's LaTeX template, or your Word document, in your browser, with every other tool a window away.",
   },
 ] as const;
 
