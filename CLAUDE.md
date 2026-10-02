@@ -147,7 +147,10 @@ Functions and a local D1: copy `web/.dev.vars.example` to `.dev.vars`, then
 Pipeline: `cd pipeline && uv sync && cp .env.example .env`, then the run
 order in `pipeline/README.md` (fetch, enrich, build, then
 `eval_match.ts --fit --write-manifest`, which publishes the ranking;
-`fetch_works.py` alone takes hours and is resumable).
+`fetch_works.py` alone takes hours and is resumable). Its data and each
+built index are kept in R2: `uv run backup.py push` after a run,
+`uv run backup.py pull` on a new machine instead of re-fetching (README,
+"Backups").
 
 Deploy: `cd web && npm run deploy` (builds, strips the oversized WASM file
 Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then

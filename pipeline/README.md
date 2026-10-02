@@ -36,6 +36,7 @@ uv run fetch_nlm_abbrevs.py               # NLM journal abbreviations ("J Am Col
 uv run build_index.py                     # held-out split, centres, topics, quality pass → web/public/index/* (~7 h at ~110 papers/s; vectors cached)
 uv run --env-file .env fetch_heldout_refs.py  # resolves 500 held-out papers' references, for the reference signal's evaluation
 cd ../web && node scripts/eval/eval_match.ts --refs --fit --write-manifest   # measures, fits and publishes the ranking
+cd ../pipeline && uv run backup.py push   # keeps this run's data and index in R2 (see Backups)
 ```
 
 Model choice: `uv run bakeoff.py` compares the candidate models in
@@ -59,13 +60,37 @@ whatever's already fetched" pattern used by every fetcher here).
 ## Outputs — what's gitignored and why
 
 Everything in `pipeline/data/` is gitignored (root `.gitignore`) — it's
-fetched data, multi-GB at full scale (`works.jsonl` alone is ~4GB),
-regeneratable from the commands above. `web/public/index/*` is gitignored
-too, for the same reason: it's pipeline output, not source.
+fetched data, multi-GB at full scale (`works_v2.jsonl` alone is ~4.6GB),
+regeneratable from the commands above, but only over hours. `web/public/index/*`
+is gitignored too, for the same reason: it's pipeline output, not source.
+Both are kept in R2 instead (Backups, below).
 
 A fresh clone doesn't need to run the pipeline to work on the app:
 `cd web && npm run fetch-index` downloads the deployed index. Run the
 pipeline when the index itself has to change.
+
+## Backups
+
+`backup.py` keeps `pipeline/data` and the built index in the private R2
+bucket `margalink-data`, so neither depends on one machine. Each snapshot is
+complete (the data and the index it built); a file that hasn't changed since
+the last snapshot isn't uploaded again, so a snapshot after a rebuild sends
+only what the rebuild changed. Files go up gzipped in 16 MiB pieces, which
+a slow link can manage, and an interrupted upload resumes.
+
+```bash
+uv run backup.py push                     # after a pipeline run (it refuses while one is running)
+uv run backup.py list                     # the snapshots, newest last
+uv run backup.py pull                     # a new machine: everything, from the newest
+uv run backup.py pull <name> --only index # roll the index back to an earlier build, then deploy
+```
+
+Once per Cloudflare account: `cd ../web && npx wrangler r2 bucket create margalink-data`.
+On a new machine: clone, `cd web && npm install && npx wrangler login`,
+`cd ../pipeline && uv sync && uv run backup.py pull`. `pipeline/.env` (the
+OpenAlex key) isn't backed up; it's in your OpenAlex account. Not kept: the
+v1 data (`works.jsonl`, `sources_v1.jsonl`, `index_v1_backup/`, read only by
+`build_index.py --v1`), logs and half-written caches.
 
 ## Verification
 
@@ -92,4 +117,5 @@ uv run ruff check .
 | `build_index.py` | joins everything, embeds, writes the production index |
 | `fetch_heldout_refs.py` | resolves held-out papers' references, for evaluating the reference signal |
 | `bakeoff.py` | compares candidate embedding models |
+| `backup.py` | keeps `data/` and the built index in R2, and restores them |
 | `selfcheck.py` | runs all of the above's `_self_check()` in one pass |

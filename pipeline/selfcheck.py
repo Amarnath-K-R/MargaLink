@@ -7,6 +7,7 @@ bearing for correctness (each `_self_check()` is independent), just easier
 to read when one fails.
 """
 
+import backup
 import bakeoff
 import build_index
 import embedding
@@ -21,7 +22,7 @@ import kmeans
 import openalex
 import quality
 
-MODULES = [openalex, embedding, kmeans, quality, enrichment, fetch_sources, fetch_topics, fetch_works, enrich_doaj, enrich_nlm, build_index, bakeoff, fetch_heldout_refs]
+MODULES = [openalex, embedding, kmeans, quality, enrichment, fetch_sources, fetch_topics, fetch_works, enrich_doaj, enrich_nlm, build_index, bakeoff, fetch_heldout_refs, backup]
 
 if __name__ == "__main__":
     for module in MODULES:
