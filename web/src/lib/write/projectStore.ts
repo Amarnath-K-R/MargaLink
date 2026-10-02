@@ -20,6 +20,7 @@ export type DirHandle = {
 export type ProjectMeta = {
   id: string;
   name: string;
+  kind?: "docx"; // a Word document (DocWorkspace), its one file paper.docx; absent: a LaTeX project
   main: string;
   engine: "pdftex" | "xetex";
   journalId: string | null;
@@ -46,6 +47,38 @@ export function checkPath(path: string): void {
   const segs = path.split("/");
   if (!path || segs.some((s) => s === "" || s === "." || s === "..")) throw new Error(`"${path}" isn't a file name this project can use.`);
   if (path === META || segs[0] === HIDDEN) throw new Error(`"${path}" is reserved. Pick another name.`);
+}
+
+// A Word project's one file, and its type (for the File the hub windows read).
+export const DOCX_MAIN = "paper.docx";
+export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const WORD_DOCUMENT = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
+const WORD_TEMPLATE = "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml";
+
+/**
+ * A Word file as the document a Word project keeps: a .docx unchanged, byte
+ * for byte; a template (.dotx) with its main part declared a document, which
+ * is all that differs. Anything else is refused with what to do instead.
+ */
+export function toDocx(bytes: Uint8Array): Uint8Array {
+  // Word's old binary format and password-protected .docx files are both OLE containers.
+  if (bytes[0] === 0xd0 && bytes[1] === 0xcf) {
+    throw new Error("This is a password-protected document or Word's old .doc format. In Word, remove the password or save it as a .docx, then import it again.");
+  }
+  const notWord = new Error("That isn't a Word document (.docx). In Word, save it as a .docx, then import it again.");
+  if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw notWord;
+  let entries: ZipEntry[];
+  try {
+    entries = unzipFiles(bytes);
+  } catch (err) {
+    throw err instanceof Error && /too (many|large)/.test(err.message) ? err : notWord;
+  }
+  const types = entries.find((e) => e.path === "[Content_Types].xml");
+  if (!types || !entries.some((e) => e.path === "word/document.xml")) throw notWord;
+  const xml = new TextDecoder().decode(types.data);
+  if (/macroEnabled/i.test(xml)) throw new Error("That document contains macros (.docm). In Word, save it as a plain .docx, then import it again.");
+  if (!xml.includes(WORD_TEMPLATE)) return bytes;
+  return zipFiles(entries.map((e) => (e === types ? { path: e.path, data: new TextEncoder().encode(xml.replace(WORD_TEMPLATE, WORD_DOCUMENT)) } : e)));
 }
 
 export function findMainTex(entries: { path: string; text: string | null }[]): string | null {
@@ -223,13 +256,16 @@ export class ProjectStore {
   }
 
   // A backup, a publisher's template or an Overleaf export: one top-level
-  // folder is flattened. A MargaLink backup brings its settings; otherwise the
-  // main file is the one with \documentclass, and fontspec means XeTeX.
+  // folder is flattened. A MargaLink backup brings its settings (a Word
+  // project's comes back as one); otherwise the main file is the one with
+  // \documentclass, and fontspec means XeTeX.
   async importZip(name: string, bytes: Uint8Array, journalId: string | null = null, journalName: string | null = null): Promise<ProjectMeta> {
     const all = flattenSingleRoot(unzipFiles(bytes));
     const entries = all.filter((e) => e.path !== META && !e.path.startsWith(`${HIDDEN}/`));
     const decoder = new TextDecoder();
     const saved = backupSettings(all.find((e) => e.path === META)?.data);
+    const doc = saved.kind === "docx" ? entries.find((e) => e.path === DOCX_MAIN) : undefined;
+    if (doc) return this.importDocx(name, doc.data, journalId ?? saved.journalId ?? null, journalId ? journalName : (saved.journalName ?? null));
     const main =
       saved.main && entries.some((e) => e.path === saved.main) ? saved.main : findMainTex(entries.map((e) => ({ path: e.path, text: TEXT_EXT.test(e.path) ? decoder.decode(e.data) : null })));
     if (!main) throw new Error("That zip has no .tex file with a \\documentclass line, so there's nothing to compile.");
@@ -247,11 +283,17 @@ export class ProjectStore {
     if (!/\\documentclass/.test(text)) throw new Error("That .tex file has no \\documentclass line, so it can't compile on its own. To bring a whole project, import its .zip.");
     return this.create({ name, main: "main.tex", engine: FONTSPEC.test(text) ? "xetex" : "pdftex", journalId, journalName, templateId: null }, [{ path: "main.tex", data: bytes }]);
   }
+
+  // A Word document or template (DocWorkspace edits it). The engine is a LaTeX
+  // setting and unused here; the type requires one.
+  async importDocx(name: string, bytes: Uint8Array, journalId: string | null = null, journalName: string | null = null): Promise<ProjectMeta> {
+    return this.create({ name, kind: "docx", main: DOCX_MAIN, engine: "pdftex", journalId, journalName, templateId: null }, [{ path: DOCX_MAIN, data: toDocx(bytes) }]);
+  }
 }
 
 // The settings a MargaLink backup carries (its project.json), each checked:
 // a zip is untrusted input, so anything malformed is simply not used.
-function backupSettings(data: Uint8Array | undefined): Partial<Pick<ProjectMeta, "main" | "engine" | "journalId" | "journalName" | "templateId" | "packs">> {
+function backupSettings(data: Uint8Array | undefined): Partial<Pick<ProjectMeta, "kind" | "main" | "engine" | "journalId" | "journalName" | "templateId" | "packs">> {
   if (!data) return {};
   let m: Record<string, unknown>;
   try {
@@ -262,6 +304,7 @@ function backupSettings(data: Uint8Array | undefined): Partial<Pick<ProjectMeta,
   if (!m || typeof m !== "object") return {};
   const str = (v: unknown) => (typeof v === "string" && v.length <= 500 ? v : undefined);
   return {
+    kind: m.kind === "docx" ? "docx" : undefined,
     main: str(m.main),
     engine: m.engine === "pdftex" || m.engine === "xetex" ? m.engine : undefined,
     journalId: str(m.journalId),
@@ -274,8 +317,10 @@ function backupSettings(data: Uint8Array | undefined): Partial<Pick<ProjectMeta,
 // Debounced saving: the editor calls save() on every change; the store is
 // written once typing pauses for `delay` ms, with the latest text. flush()
 // writes anything pending right away (page hide, compile, switching files).
-export function autosaver(
-  write: (id: string, path: string, text: string) => Promise<void>,
+// `T`: what's saved, text for a LaTeX file; a Word project saves `null` and
+// its write() asks the editor for the document's bytes when it runs.
+export function autosaver<T = string>(
+  write: (id: string, path: string, text: T) => Promise<void>,
   delay = 1000,
   setTimer: (fn: () => void, ms: number) => unknown = (fn, ms) => setTimeout(fn, ms),
   clearTimer: (t: unknown) => void = (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
@@ -283,7 +328,7 @@ export function autosaver(
 ) {
   // One entry per file, so a save that failed for one file is still pending
   // after edits to another.
-  const pending = new Map<string, { id: string; path: string; text: string }>();
+  const pending = new Map<string, { id: string; path: string; text: T }>();
   const key = (id: string, path: string) => `${id}\u0000${path}`;
   let timer: unknown = null;
   // Writes run one at a time, in order; flush() waits for the one in flight,
@@ -313,7 +358,7 @@ export function autosaver(
     chain = next.catch(() => {});
     return next;
   };
-  const save = (id: string, path: string, text: string) => {
+  const save = (id: string, path: string, text: T) => {
     const k = key(id, path);
     if ([...pending.keys()].some((other) => other !== k)) void run().catch(() => {}); // a different file: save the others now (errors go to onError)
     pending.set(k, { id, path, text });

@@ -3,7 +3,7 @@
 //   node src/lib/write/projectStore.selfcheck.ts
 import assert from "node:assert/strict";
 import { NotUtf8Error, ProjectStore, autosaver, findMainTex, type DirHandle, type FileHandle } from "./projectStore.ts";
-import { zipFiles } from "./zip.ts";
+import { unzipFiles, zipFiles } from "./zip.ts";
 
 // --- a minimal OPFS fake: directories of files holding bytes ---
 class FakeFile implements FileHandle {
@@ -297,6 +297,47 @@ await assert.rejects(store.meta(copy.id));
   save("p", "main.tex", "abcd");
   await save.flush(); // leaving the page flushes what's pending
   assert.deepEqual(writes, ["abc", "abcd"]);
+}
+
+// 6j. a Word document is a project of its own kind: kept byte for byte, a template (.dotx) made a document,
+// anything else refused with a reason the person can act on, and its backup comes back as a Word project
+{
+  const MAIN_PART = (type: string) =>
+    `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/word/document.xml" ContentType="${type}"/></Types>`;
+  const word = (type: string, extra: Record<string, string> = {}) =>
+    zipFiles([
+      { path: "[Content_Types].xml", data: enc(MAIN_PART(type)) },
+      { path: "word/document.xml", data: enc("<w:document><w:body><w:p><w:r><w:t>Hello</w:t></w:r></w:p></w:body></w:document>") },
+      { path: "word/styles.xml", data: enc("<w:styles/>") },
+      ...Object.entries(extra).map(([path, text]) => ({ path, data: enc(text) })),
+    ]);
+  const DOC = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
+  const docx = word(DOC);
+  const p = await store.importDocx("My paper", docx, "https://openalex.org/S7", "J Seven");
+  assert.deepEqual([p.kind, p.main, p.journalId, p.journalName], ["docx", "paper.docx", "https://openalex.org/S7", "J Seven"]);
+  assert.deepEqual(await store.files(p.id), ["paper.docx"]);
+  assert.deepEqual(await store.read(p.id, "paper.docx"), docx, "a .docx is kept exactly as it came");
+
+  const dotx = await store.importDocx("Template", word("application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml"));
+  const parts = unzipFiles(await store.read(dotx.id, "paper.docx"));
+  assert.match(new TextDecoder().decode(parts.find((e) => e.path === "[Content_Types].xml")!.data), /wordprocessingml\.document\.main\+xml/, "a template becomes a document");
+  assert.ok(parts.some((e) => e.path === "word/styles.xml"), "with its styles");
+
+  await assert.rejects(store.importDocx("Macros", word("application/vnd.ms-word.document.macroEnabled.main+xml")), /macros/);
+  await assert.rejects(store.importDocx("Old", new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])), /\.doc|password/);
+  await assert.rejects(store.importDocx("Text", enc("just some text")), /Word document/);
+  await assert.rejects(store.importDocx("Empty", zipFiles([{ path: "readme.txt", data: enc("x") }])), /Word document/);
+  assert.equal((await store.list()).filter((m) => ["Macros", "Old", "Text", "Empty"].includes(m.name)).length, 0, "a refused file leaves no project behind");
+
+  const back = await store.importZip("My paper again", await store.exportZip(p.id));
+  assert.deepEqual([back.kind, back.main, back.journalName], ["docx", "paper.docx", "J Seven"], "a Word project's backup comes back as one");
+  assert.deepEqual(await store.read(back.id, "paper.docx"), docx);
+  // a backup's settings are untrusted: a kind it doesn't know isn't kept
+  const forged = await store.importZip("Forged", zipFiles([{ path: "project.json", data: enc(JSON.stringify({ kind: "spreadsheet" })) }, { path: "main.tex", data: enc(MAIN) }]));
+  assert.equal(forged.kind, undefined);
+  const latex = await store.importTex("Still LaTeX", enc(MAIN));
+  assert.equal(latex.kind, undefined, "LaTeX projects are unchanged");
+  for (const m of [p, dotx, back, forged, latex]) await store.remove(m.id);
 }
 
 console.log("projectStore.selfcheck: OK");

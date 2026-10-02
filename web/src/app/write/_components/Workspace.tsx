@@ -204,7 +204,7 @@ export default function Workspace({
   );
   // Created on first use (from a handler or the mount effect, never in
   // render); one per project, since Workspace remounts per project.
-  const saverRef = useRef<ReturnType<typeof autosaver> | null>(null);
+  const saverRef = useRef<ReturnType<typeof autosaver<string>> | null>(null);
   const saver = useCallback(
     () => (saverRef.current ??= autosaver(write, undefined, undefined, undefined, () => setError("Couldn't save your last edit (is the disk full?). It will be retried; download a backup to be safe."))),
     [write],
