@@ -56,6 +56,12 @@ export async function accessFor(db: D1Database, req: Request, now: number): Prom
   return { session: { token, idHash, ...rest }, approved: !BETA.on || list.length > 0, developer: list.includes("developer") };
 }
 
+/** For the console's handlers: the developer the API middleware let through (context.data.access), or null. */
+export function developerIn(data: Record<string, unknown> | undefined): Access | null {
+  const a = data?.access as Access | undefined;
+  return a?.developer ? a : null;
+}
+
 /** Adds addresses to the list (one transaction); reports each by its canonical key, and the ones that aren't addresses as given. */
 export async function addAccess(db: D1Database, entries: { email: string; role: Role; note?: string }[], by: string | null, now: number) {
   const invalid: string[] = [];
@@ -106,13 +112,13 @@ export async function removeAccess(db: D1Database, emailKey: string, role: Role)
 
 export type AccessEntry = { email_key: string; email: string; role: Role; note: string | null; added_at: number; user_id: string | null };
 
-/** The list, developers first, each with the account that signed in with it (null until someone has). */
+/** The list, developers first, newest first, each with the account that signed in with it (null until someone has). */
 export async function listAccess(db: D1Database): Promise<AccessEntry[]> {
   const { results } = await db
     .prepare(
       `SELECT a.email_key, a.email, a.role, a.note, a.added_at,
               (SELECT id FROM users u WHERE u.access_key = a.email_key ORDER BY u.created_at LIMIT 1) AS user_id
-       FROM access_list a ORDER BY a.role DESC, a.added_at DESC`,
+       FROM access_list a ORDER BY a.role DESC, a.added_at DESC, a.email_key`,
     )
     .all<AccessEntry>();
   return results;

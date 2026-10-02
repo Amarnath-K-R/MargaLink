@@ -15,6 +15,10 @@ const r = await add(10, "a").run();
 assert.equal(r.meta.changes, 1);
 assert.equal((await db.prepare("SELECT SUM(delta) AS b FROM coin_ledger").first<{ b: number }>())?.b, 10);
 
+// batch: a SELECT in it answers with its rows, as D1's does
+const [sel] = await db.batch([db.prepare("SELECT email FROM users WHERE id = ?").bind("u1")]);
+assert.deepEqual(sel.results, [{ email: "a@b.c" }]);
+
 // batch: all or nothing (the second row breaks UNIQUE(kind, ref))
 await assert.rejects(db.batch([add(5, "b"), add(5, "a")]));
 assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM coin_ledger").first<{ n: number }>())?.n, 1, "failed batch rolled back");

@@ -17,7 +17,8 @@ export function testD1(): D1Database {
   const plain = (rows: unknown[]) => rows.map((r) => ({ ...(r as Row) })); // node:sqlite rows have a null prototype
   const exec = (sql: string, args: SQLInputValue[]) => {
     const s = db.prepare(sql);
-    if (/\breturning\b/i.test(sql)) {
+    if (s.columns().length) {
+      // a SELECT, or a write with RETURNING: D1 answers with its rows
       const rows = plain(s.all(...args));
       return { results: rows, success: true, meta: { changes: rows.length, last_row_id: 0 } };
     }
