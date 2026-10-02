@@ -8,20 +8,24 @@
 //   The windows read the document as saved: Checks (an auto-numbered
 //   reference list counted), Journal (no templates for Word), Match, and
 //   Review through its consent (mocked API) to Jump to source, which
-//   selects the quoted passage in the document.
+//   selects the quoted passage in the document. A figure from the Figures
+//   window goes in at the cursor at the size it was drawn (89 mm), and
+//   later saves don't store its picture twice.
 //   No page errors; only the review's requests carry a body, after consent;
-//   nothing leaves our origin but the matching model's public files.
+//   nothing leaves our origin but the matching model's and the figure
+//   engine's public files (cached in a persistent profile, as check_write.mjs).
 //   node scripts/smoke/check_write_docx.mjs
 import { chromium } from "playwright";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { unzipSync, strFromU8 } from "fflate";
 import { asMacroDocument, asTemplate, docText, oldWordDoc, paperDocx, part, TEXT } from "../fixtures/docx_fixtures.mjs";
 import { mockAccount } from "./mock_account.mjs";
 
 const O = "http://localhost:3000";
-const browser = await chromium.launch();
-const context = await browser.newContext({ viewport: { width: 1400, height: 900 }, acceptDownloads: true });
-const page = await context.newPage();
+const SCRATCH = process.env.SMOKE_OUT ?? new URL("../../.smoke/", import.meta.url).pathname;
+mkdirSync(SCRATCH, { recursive: true });
+const context = await chromium.launchPersistentContext(`${SCRATCH}/write-docx-profile`, { viewport: { width: 1400, height: 900 }, acceptDownloads: true });
+const page = context.pages()[0] ?? (await context.newPage());
 const problems = [];
 let consented = false; // the review's consent was given: its requests may carry the paper's text
 const reviewBodies = [];
@@ -306,6 +310,31 @@ check("the review was paid for once", account.starts.length === 1);
 check("the status bar says something was sent", (await page.locator('[data-testid="doc-workspace"]').innerText()).includes("carried text you agreed to send"));
 check(`only the review's requests carried a body (${reviewBodies.length})`, reviewBodies.length > 0);
 
+// --- a figure from the Figures window, at the cursor, at the size it was drawn ---
+const drawings = (xml) => xml.match(/<w:drawing>/g)?.length ?? 0;
+const storedPart = async (p, id, path) => part(Buffer.from((await stored(p, id)).b64, "base64"), path) ?? "";
+const media = async (p, id) => Object.entries(unzipSync(Buffer.from((await stored(p, id)).b64, "base64"))).filter(([n]) => n.startsWith("word/media/") && !n.endsWith("/"));
+const before = drawings(await storedPart(page, hubId, "word/document.xml"));
+await clickInto(page, TEXT.results);
+await openTool("Figures");
+const [csvChooser] = await Promise.all([page.waitForEvent("filechooser"), window_("Figures").getByText("Drop a CSV or XLSX").click()]);
+await csvChooser.setFiles(new URL("../fixtures/messy.csv", import.meta.url).pathname);
+await window_("Figures").locator('[data-testid="preview-table"]').waitFor({ timeout: 15_000 });
+await window_("Figures").locator('[data-template="box"]').click();
+await window_("Figures").locator('[data-testid="figure-image"]').waitFor({ timeout: 180_000 }); // first run fetches the figure engine into this profile
+await window_("Figures").getByRole("button", { name: "Insert into paper" }).click();
+check("Insert into paper closes the window", await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 90_000 }).then(() => true, () => false));
+check("the figure is in the saved document", await eventually(async () => drawings(await storedPart(page, hubId, "word/document.xml")) === before + 1));
+const cx = Number((await storedPart(page, hubId, "word/document.xml")).match(/<wp:extent cx="(\d+)"/)?.[1]);
+check(`at the width it was drawn for, 89 mm (${(cx / 36000).toFixed(1)} mm)`, Math.abs(cx - 3_204_000) / 3_204_000 < 0.02);
+check("next to the paragraph the cursor was in", (await storedPart(page, hubId, "word/document.xml")).indexOf("<w:drawing>") > (await storedPart(page, hubId, "word/document.xml")).indexOf(TEXT.results.slice(0, 30)));
+const mediaAfterInsert = await media(page, hubId);
+await clickInto(page, TEXT.intro);
+await page.keyboard.type(" Saved again.");
+await storedHas(page, hubId, "Saved again.");
+const mediaLater = await media(page, hubId);
+check(`a later save stores the picture once (${mediaAfterInsert.length} → ${mediaLater.length} files)`, mediaLater.length === mediaAfterInsert.length && new Set(mediaLater.map(([, d]) => Buffer.from(d).toString("base64"))).size === mediaLater.length);
+
 check(`no page errors, no request bodies, nothing off our origin${problems.length ? `: ${problems.slice(0, 5).join(" | ")}` : ""}`, problems.length === 0);
-await browser.close();
+await context.close();
 process.exit(failed ? 1 : 0);

@@ -2,7 +2,8 @@
 //   Part 1 — a messy real-world export (metadata lines, ";" delimiter,
 //   decimal commas, thousands dots, NA tokens) is read correctly, the
 //   number-format control really matters, a template renders on this device,
-//   all four export formats come back, and no request carries a body.
+//   all four export formats come back, "Add to a paper" offers LaTeX
+//   projects only, and no request carries a body.
 //   Part 2 — the editors: a second panel (scatter), a title and unit, Welch
 //   brackets against the first group (loads SciPy once), and a recipe that
 //   round-trips to the identical image; a recipe for other data is refused.
@@ -19,6 +20,7 @@
 import { chromium } from "playwright";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mockAccount } from "./mock_account.mjs";
+import { paperDocx } from "../fixtures/docx_fixtures.mjs";
 
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../../.smoke/", import.meta.url).pathname;
 mkdirSync(SCRATCH, { recursive: true });
@@ -28,7 +30,9 @@ const context = await chromium.launchPersistentContext(`${SCRATCH}/figures-profi
 const page = context.pages()[0] ?? (await context.newPage());
 const account = await mockAccount(context, { balance: 5 });
 
-// One /write project in this browser, for "Add to a paper" (part 1).
+// One LaTeX /write project in this browser, for "Add to a paper" (part 1),
+// and one Word project, which it doesn't offer (a Word document takes
+// figures from the Figures window inside it).
 {
   const w = await context.newPage();
   await w.goto("http://localhost:3000/templates/templates.json"); // clear while the app isn't reading it
@@ -36,6 +40,9 @@ const account = await mockAccount(context, { balance: 5 });
   await w.goto("http://localhost:3000/write");
   await w.click('[data-template="article"]');
   await w.waitForSelector('[data-testid="workspace"]');
+  await w.click("text=← All projects");
+  await w.setInputFiles('input[aria-label="Import a .zip, .tex or .docx file"]', { name: "Word paper.docx", mimeType: "application/octet-stream", buffer: Buffer.from(await paperDocx()) });
+  await w.waitForSelector('[data-testid="doc-workspace"]');
   await w.close();
 }
 const consoleErrors = [];
@@ -101,6 +108,9 @@ check(`four downloads (${names.join(", ")})`, ["figure.png", "figure.tiff", "fig
 
 // --- add to a paper: the PDF goes into the /write project's figures/ folder ---
 await bar.getByRole("button", { name: "Add to a paper" }).click();
+await page.locator('[data-testid="add-to-paper"]').getByRole("button", { name: "New Plain article paper" }).waitFor();
+check("Add to a paper leaves Word documents out", (await page.locator('[data-testid="add-to-paper"]').getByRole("button", { name: "Word paper" }).count()) === 0);
+check("and says where a Word document's figures come from", /Figures window/.test(await page.locator('[data-testid="add-to-paper"]').innerText()));
 await page.locator('[data-testid="add-to-paper"]').getByRole("button", { name: "New Plain article paper" }).click();
 await page.waitForSelector('[data-testid="add-to-paper"]:has-text("figures/figure.pdf")', { timeout: 60000 });
 check("Add to a paper links to that project in the workspace", (await page.locator('[data-testid="add-to-paper"] a[href^="/write?p="]').count()) === 1);

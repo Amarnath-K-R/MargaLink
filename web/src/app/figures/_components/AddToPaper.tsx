@@ -6,12 +6,14 @@ import { ProjectStore, type ProjectMeta } from "@/lib/write/projectStore";
 import { figureSnippet, nextFigurePath } from "@/lib/write/texSource";
 import ErrorText from "@/components/ui/ErrorText";
 
-// Puts the figure (as a 300 dpi PDF) into one of this browser's /write
-// projects, under figures/, and copies the LaTeX that includes it. Nothing
+// Puts the figure (as a 300 dpi PDF) into one of this browser's LaTeX /write
+// projects, under figures/, and copies the LaTeX that includes it. A Word
+// project takes figures from the Figures window inside it instead. Nothing
 // leaves the device: both live in the browser's own storage.
 export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; getPdf: () => Promise<Uint8Array> }) {
   const [store, setStore] = useState<ProjectStore | null>(null);
   const [projects, setProjects] = useState<ProjectMeta[] | null>(null);
+  const [wordDocs, setWordDocs] = useState(0); // Word projects, left out of the list
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ id: string; project: string; path: string; copied: boolean; tex: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +24,9 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
     try {
       const s = store ?? (await ProjectStore.open());
       setStore(s);
-      setProjects(await s.list());
+      const all = await s.list();
+      setProjects(all.filter((p) => p.kind !== "docx"));
+      setWordDocs(all.filter((p) => p.kind === "docx").length);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -62,7 +66,7 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
       {projects &&
         (projects.length === 0 ? (
           <p className="mt-2 text-ink-soft">
-            No papers in this browser yet.{" "}
+            No LaTeX papers in this browser yet.{" "}
             <Link href="/write" className="text-accent hover:underline">
               Start one
             </Link>
@@ -79,6 +83,7 @@ export default function AddToPaper({ disabled, getPdf }: { disabled: boolean; ge
             ))}
           </ul>
         ))}
+      {projects && wordDocs > 0 && <p className="mt-2 text-ink-soft">To put it in a Word document, open the document in the workspace and use its Figures window.</p>}
       {done && (
         <div className="mt-2 text-ink-soft" role="status">
           Added to {done.project} as <code className="font-mono text-xs">{done.path}</code>.{" "}
