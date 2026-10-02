@@ -4,6 +4,8 @@
 // (seen as a 524 from fetch()); with streaming, bytes flow so no idle
 // timeout trips. Isomorphic (fetch/ReadableStream/TextDecoder only) so the
 // selfcheck can drive it with a stubbed fetch, and functions/ can import it.
+// `onUsage` gets the call's token counts for the activity log, once the
+// stream ends, including when the output was cut short (it was billed).
 export class UpstreamError extends Error {
   override name = "UpstreamError";
   status: number;
@@ -16,9 +18,12 @@ export class TruncatedOutputError extends Error {
   override name = "TruncatedOutputError";
 }
 
+type Usage = { input_tokens?: number; output_tokens?: number };
 type SseEvent = {
   type?: string;
   index?: number;
+  message?: { usage?: Usage };
+  usage?: Usage;
   content_block?: { type?: string; name?: string };
   delta?: { type?: string; partial_json?: string; stop_reason?: string };
   error?: unknown;
@@ -27,7 +32,7 @@ type SseEvent = {
 export async function callAnthropicTool(
   apiKey: string,
   body: Record<string, unknown>,
-  opts: { toolName: string; timeoutMs: number }
+  opts: { toolName: string; timeoutMs: number; onUsage?: (u: { input: number; output: number }) => void }
 ): Promise<{ toolInput: unknown | undefined; stopReason: string | undefined }> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -41,6 +46,7 @@ export async function callAnthropicTool(
   const decoder = new TextDecoder();
   const blocks = new Map<number, { name: string; json: string }>();
   let stopReason: string | undefined;
+  let usage: { input: number; output: number } | null = null;
   let buffer = "";
 
   const handle = (raw: string) => {
@@ -65,6 +71,8 @@ export async function callAnthropicTool(
       if (b) b.json += evt.delta.partial_json ?? "";
     }
     if (evt.type === "message_delta" && evt.delta?.stop_reason) stopReason = evt.delta.stop_reason;
+    const u = evt.type === "message_start" ? evt.message?.usage : evt.type === "message_delta" ? evt.usage : undefined;
+    if (u) usage = { input: u.input_tokens ?? usage?.input ?? 0, output: u.output_tokens ?? usage?.output ?? 0 }; // message_delta's counts are running totals
   };
 
   for (;;) {
@@ -77,6 +85,7 @@ export async function callAnthropicTool(
   }
   buffer += decoder.decode();
   if (buffer.trim()) handle(buffer);
+  if (usage) opts.onUsage?.(usage);
 
   // Even when the JSON happens to parse, a max_tokens stop means a list was
   // cut short — silent data loss. Surface it so the caller can retry smaller.

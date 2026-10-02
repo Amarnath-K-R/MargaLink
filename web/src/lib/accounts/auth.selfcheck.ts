@@ -98,22 +98,23 @@ assert.deepEqual([await rateLimit(db, "k", 2, 1000, now), await rateLimit(db, "k
 assert.equal(await rateLimit(db, "k", 2, 1000, now + 1000), true, "a new window");
 
 // cross-site guard: non-GET needs our own Origin; the Paddle webhook is exempt
+// (on /api/account: the beta's gate stands in front of /api/review, below)
 const post = (path: string, origin?: string) => new Request(`https://m.test${path}`, { method: "POST", headers: origin ? { origin } : {} });
 assert.ok(sameOrigin(post("/api/x", "https://m.test")));
 assert.ok(!sameOrigin(post("/api/x", "https://evil.test")));
 assert.ok(!sameOrigin(post("/api/x")));
 const mw = onRequest as unknown as (ctx: { request: Request; next: () => Promise<Response> }) => Promise<Response>;
 const next = async () => new Response("ok", { headers: { "content-type": "text/plain" } });
-assert.equal((await mw({ request: post("/api/review", "https://evil.test"), next })).status, 403);
-assert.equal((await mw({ request: post("/api/review"), next })).status, 403);
-const ok = await mw({ request: post("/api/review", "https://m.test"), next });
+assert.equal((await mw({ request: post("/api/account", "https://evil.test"), next })).status, 403);
+assert.equal((await mw({ request: post("/api/account"), next })).status, 403);
+const ok = await mw({ request: post("/api/account", "https://m.test"), next });
 assert.equal(ok.status, 200);
 assert.equal(ok.headers.get("cache-control"), "no-store");
 assert.equal((await mw({ request: post("/api/pay/webhook"), next })).status, 200);
 assert.equal((await mw({ request: new Request("https://m.test/api/me"), next })).status, 200);
 // every API answer: not cacheable, and not to be sniffed as another type; refusals too
 assert.equal(ok.headers.get("x-content-type-options"), "nosniff");
-const refused = await mw({ request: post("/api/review", "https://evil.test"), next });
+const refused = await mw({ request: post("/api/account", "https://evil.test"), next });
 assert.equal(refused.headers.get("cache-control"), "no-store");
 assert.equal(refused.headers.get("x-content-type-options"), "nosniff");
 // an old deployment's own URL (abc123.margalink.pages.dev) can't reach the live database: only the site's own address can
@@ -134,6 +135,8 @@ await hk.batch([
   hk.prepare("INSERT INTO review_tickets (id_hash, user_id, tier, coins, chunks, extract_left, synth_left, created_at, expires_at) VALUES ('t-old', 'h1', 'quick', 4, '{}', 0, 0, 0, ?)").bind(old),
   // welcome fingerprints: a live account's stays; a deleted account's, 12 months
   hk.prepare("INSERT INTO welcome_claims (email_hash, created_at, released_at) VALUES ('w-live', 0, NULL), ('w-old', 0, ?), ('w-new', 0, ?)").bind(Date.now() - 366 * 864e5, Date.now() - 364 * 864e5),
+  // the activity log: 30 days
+  hk.prepare("INSERT INTO api_events (at, route, method, status, ms) VALUES (?, '/api/old', 'GET', 200, 1), (?, '/api/recent', 'GET', 200, 1)").bind(Date.now() - 31 * 864e5, Date.now() - 29 * 864e5),
 ]);
 const waits: Promise<unknown>[] = [];
 const mwEnv = onRequest as unknown as (ctx: { request: Request; next: () => Promise<Response>; env: object; waitUntil: (p: Promise<unknown>) => void }) => Promise<Response>;
@@ -143,4 +146,47 @@ const count = async (t: string) => (await hk.prepare(`SELECT COUNT(*) AS n FROM 
 assert.deepEqual([await count("sessions"), await count("magic_links"), await count("rate_limits"), await count("review_tickets"), await count("payment_events")], [1, 0, 0, 0, 1], "expired rows gone; Paddle event ids kept 90 days");
 assert.equal((await hk.prepare("SELECT SUM(delta) AS b FROM coin_ledger").first<{ b: number }>())?.b, 0, "the expired ticket was refunded on the way");
 assert.deepEqual((await hk.prepare("SELECT email_hash AS h FROM welcome_claims ORDER BY h").all<{ h: string }>()).results.map((r) => r.h), ["w-live", "w-new"], "a deleted account's welcome fingerprint goes after 12 months");
+assert.deepEqual((await hk.prepare("SELECT route FROM api_events ORDER BY id").all<{ route: string }>()).results.map((r) => r.route), ["/api/recent", "/api/me"], "log rows go after 30 days; this request is logged");
+// the beta's gate on the API: the AI features need an invited account, the console a developer;
+// everything else (export, deletion, sign-out) only its own session
+const { addAccess, admitUser } = await import("../access/access.ts");
+const { usageSink } = await import("../telemetry/apiEvents.ts");
+const gdb = testD1();
+await addAccess(gdb, [{ email: "ann@x.org", role: "beta" }], null, now);
+const ann = (await admitUser(gdb, { email: "ann@x.org" }, now, "key"))!;
+const annCookie = `__Host-ml_session=${await createSession(gdb, ann.id, now)}`;
+const old2 = await signInUser(gdb, { email: "old@x.org" }, now);
+const oldCookie = `__Host-ml_session=${await createSession(gdb, old2.id, now)}`;
+type FullCtx = { request: Request; next: () => Promise<Response>; env: object; data: Record<string, unknown>; waitUntil: (p: Promise<unknown>) => void };
+const mwFull = onRequest as unknown as (ctx: FullCtx) => Promise<Response>;
+let reached = 0;
+const gwaits: Promise<unknown>[] = [];
+const call = (path: string, cookie = "", method = "POST") => {
+  const data: Record<string, unknown> = {};
+  const request = new Request(`https://m.test${path}`, { method, headers: { origin: "https://m.test", cookie } });
+  // the handler behind it: Ask Claude reports its tokens, as figure.ts does
+  const handler = async () => (reached++, path === "/api/figure" && usageSink(data, "claude-sonnet-5")({ input: 700, output: 90 }), new Response("ok"));
+  return mwFull({ request, next: handler, env: { DB: gdb }, data, waitUntil: (p) => void gwaits.push(p) });
+};
+let res = await call("/api/review/start");
+assert.deepEqual([res.status, reached], [401, 0], "signed out: no review");
+assert.match(await res.text(), /Sign in/);
+res = await call("/api/figure", oldCookie);
+assert.deepEqual([res.status, reached], [403, 0], "not on the list: no Ask Claude");
+assert.match(await res.text(), /beta list/);
+assert.equal((await call("/api/admin/stats", annCookie, "GET")).status, 403, "a tester isn't a developer");
+assert.equal((await call("/api/account", oldCookie, "GET")).status, 200, "anyone signed in can still export or delete their account");
+assert.equal(reached, 1);
+res = await call("/api/figure", annCookie);
+assert.equal(res.status, 200);
+assert.equal(res.headers.get("cache-control"), "no-store");
+assert.equal((await call("/api/review", "", "POST")).status, 401, "/api/review itself too, not just its folder");
+await Promise.all(gwaits);
+const logged = (await gdb.prepare("SELECT user_id, route, method, status, model, input_tokens, output_tokens FROM api_events ORDER BY id").all<Record<string, unknown>>()).results;
+assert.deepEqual(
+  logged.map((e) => [e.route, e.status, e.user_id]),
+  [["/api/review/start", 401, null], ["/api/figure", 403, old2.id], ["/api/admin/stats", 403, ann.id], ["/api/account", 200, old2.id], ["/api/figure", 200, ann.id], ["/api/review", 401, null]],
+  "every request logged, refusals too",
+);
+assert.deepEqual([logged[4].model, logged[4].input_tokens, logged[4].output_tokens], ["claude-sonnet-5", 700, 90], "with the tokens of its AI call");
 console.log("auth.selfcheck: OK");

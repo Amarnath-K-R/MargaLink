@@ -48,6 +48,19 @@ await assert.rejects(call, TruncatedOutputError, "max_tokens mid-JSON is a typed
 stubFetch([TOOL_STREAM.slice(0, 5).join("") + ev("message_delta", { delta: { stop_reason: "max_tokens" } })]);
 await assert.rejects(call, TruncatedOutputError, "max_tokens with parseable JSON is still truncation");
 
+// token counts, for the console: input from message_start, output from the last message_delta; reported on truncation too (it was billed)
+const usage: { input: number; output: number }[] = [];
+const counted = () => callAnthropicTool("key", { model: "m", messages: [] }, { toolName: "submit_extraction", timeoutMs: 5000, onUsage: (u) => void usage.push(u) });
+stubFetch([ev("message_start", { message: { id: "m", usage: { input_tokens: 1500, output_tokens: 1 } } }), ...TOOL_STREAM.slice(1, 5), ev("message_delta", { delta: { stop_reason: "end_turn" }, usage: { output_tokens: 420 } })]);
+await counted();
+assert.deepEqual(usage, [{ input: 1500, output: 420 }]);
+stubFetch([ev("message_start", { message: { usage: { input_tokens: 900, output_tokens: 1 } } }), ev("message_delta", { delta: { stop_reason: "max_tokens" }, usage: { output_tokens: 8000 } })]);
+await assert.rejects(counted, TruncatedOutputError);
+assert.deepEqual(usage[1], { input: 900, output: 8000 });
+stubFetch([TOOL_STREAM.join("")]);
+await counted();
+assert.equal(usage.length, 2, "no usage in the stream, nothing reported");
+
 stubFetch([ev("message_start", { message: {} }) + ev("error", { error: { type: "overloaded_error", message: "busy" } })]);
 await assert.rejects(call, (e: unknown) => e instanceof UpstreamError && e.status === 502 && /busy/.test(e.message), "an error event is an UpstreamError 502");
 

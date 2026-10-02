@@ -18,6 +18,7 @@ import { groundExtractOutput } from "../../src/lib/review/reviewGrounding.ts";
 import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/ai/anthropicStream.ts";
 import { getSession, type AccountEnv } from "../../src/lib/accounts/auth.ts";
 import { claimReviewPass, deliveredChunks, markDelivered, markSynthesized } from "../../src/lib/accounts/ledger.ts";
+import { usageSink } from "../../src/lib/telemetry/apiEvents.ts";
 
 type Env = AccountEnv & { ANTHROPIC_API_KEY: string };
 
@@ -39,7 +40,7 @@ const MAX_BODY_BYTES = 1_000_000;
 // while this call may still finish and be recorded.
 const UPSTREAM_TIMEOUT_MS = { extract: 110_000, synthesize: 290_000 } as const;
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) => {
   if (Number(request.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) {
     return new Response("Request body too large", { status: 413 });
   }
@@ -99,7 +100,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         // No tool_choice — incompatible with thinking; the prompt's closing line carries it.
         messages: [{ role: "user", content: prompt }],
       },
-      { toolName: tool.name, timeoutMs: UPSTREAM_TIMEOUT_MS[req.pass] }
+      { toolName: tool.name, timeoutMs: UPSTREAM_TIMEOUT_MS[req.pass], onUsage: usageSink(data, MODEL) }
     ));
   } catch (err) {
     if (err instanceof TruncatedOutputError) return new Response("Review model output was truncated for this section", { status: 422 });

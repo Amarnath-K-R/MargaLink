@@ -23,6 +23,7 @@ import { FIGURE_PRICE } from "../../src/lib/accounts/coins.ts";
 import { balance, credit, debit } from "../../src/lib/accounts/ledger.ts";
 import type { FigurePayload } from "../../src/lib/figures/figureSchema.ts";
 import { DAILY, reserveUse } from "../../src/lib/accounts/dailyCaps.ts";
+import { usageSink } from "../../src/lib/telemetry/apiEvents.ts";
 
 type Env = AccountEnv & { ANTHROPIC_API_KEY: string };
 // Pinned, and not one of Anthropic's "Covered Models" (Mythos class), which have their own
@@ -35,7 +36,7 @@ const MAX_BODY_BYTES = 200_000;
 const UPSTREAM_TIMEOUT_MS = 60_000;
 
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) => {
   if (Number(request.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) return text("Request body too large", 413);
   // Signed in before the body is even read, so strangers can't make us parse it.
   const now = Date.now();
@@ -72,7 +73,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // (the Worker itself being stopped midway is the one case this can't cover).
   let answer: unknown = null;
   try {
-    const res = await askClaude(body, problem, env.ANTHROPIC_API_KEY);
+    const res = await askClaude(body, problem, env.ANTHROPIC_API_KEY, usageSink(data, MODEL));
     if (res.status !== 200) return res;
     answer = await res.json();
     return Response.json({ ...(answer as object), balance: await balance(env.DB, s.userId) });
@@ -85,7 +86,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 };
 
 // The upstream call and every output gate; any non-200 is refunded above.
-async function askClaude(body: FigurePayload, problem: string | null, apiKey: string): Promise<Response> {
+async function askClaude(body: FigurePayload, problem: string | null, apiKey: string, onUsage: (u: { input: number; output: number }) => void): Promise<Response> {
   const hook = body.mode === "hook";
   const tool = hook ? HOOK_TOOL : SPEC_TOOL;
   let toolInput: unknown;
@@ -103,7 +104,7 @@ async function askClaude(body: FigurePayload, problem: string | null, apiKey: st
         // No tool_choice — incompatible with thinking; the prompt's closing line carries it.
         messages: [{ role: "user", content: buildFigurePrompt(body, problem) }],
       },
-      { toolName: tool.name, timeoutMs: UPSTREAM_TIMEOUT_MS },
+      { toolName: tool.name, timeoutMs: UPSTREAM_TIMEOUT_MS, onUsage },
     ));
   } catch (err) {
     if (err instanceof TruncatedOutputError) return text("The figure description came back cut short. Try asking for fewer panels.", 422);

@@ -25,6 +25,15 @@ export function pageNeeds(path: string): Need {
   return GATED.some((p) => under(path, p)) ? "approved" : "public";
 }
 
+// The API: the two AI features need an invited account, the console a
+// developer. Everything else needs only what its handler asks (usually a
+// session), so export, deletion and sign-out never depend on the list.
+export function apiNeeds(path: string): Need {
+  if (path.startsWith("/api/admin/")) return "developer";
+  if (!BETA.on) return "public";
+  return path === "/api/review" || path.startsWith("/api/review/") || path === "/api/figure" ? "approved" : "public";
+}
+
 /** public/_routes.json: the API, and every gated page, payload and folder. */
 export function routesJson() {
   const pages = BETA.on ? GATED : ["/admin"];
