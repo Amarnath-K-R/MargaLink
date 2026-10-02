@@ -2,12 +2,14 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { BarChart3, BookOpen, CircleHelp, FileCheck2, House, PenLine, ScanSearch } from "lucide-react";
 import AccountButton from "../account/AccountButton";
+import AdminLink from "../account/AdminLink";
 import BetaTag from "./BetaTag";
 import { LogoMark, Wordmark } from "./Logo";
 
 // The shared header for every non-homepage route: a sticky clay tray (the
 // landing, Home — the dashboard — the five tools with the current one
-// pressed in, the guide, and the account: Sign in, or the M coin balance;
+// pressed in, the guide, the console for developers, and the account: Sign
+// in, or the M coin balance;
 // Privacy and the other site links are in the dashboard's footer) that is the same
 // width on every page, so moving between tools feels like one app; then the
 // page's h1 with its tool's bead, and an optional subtitle. The h1 keeps
@@ -48,7 +50,7 @@ export default function PageHeader({
 }: {
   width: keyof typeof TITLE_CLASS;
   tool?: ToolId;
-  page?: "home" | "guide"; // a non-tool page the tray links to, shown as current
+  page?: "home" | "guide" | "admin"; // a non-tool page the tray links to, shown as current
   title?: ReactNode; // none: the tray only — the page draws its own heading, with id="content"
   subtitle?: ReactNode;
 }) {
@@ -91,6 +93,7 @@ export default function PageHeader({
             <CircleHelp size={15} strokeWidth={1.9} className="sm:hidden" />
             <span className="sr-only sm:not-sr-only">Guide</span>
           </Link>
+          <AdminLink current={page === "admin"} />
           <AccountButton />
         </nav>
       </div>
