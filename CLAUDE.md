@@ -129,7 +129,7 @@ Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
 | `NEXT_PUBLIC_CONTACT_EMAIL` | `web/`, build-time | The address the privacy page and the terms give for questions and complaints. Set before accounts open. |
 | `NEXT_PUBLIC_OPERATOR` | `web/`, build-time | The sole proprietor's full legal name, as the privacy notice, the terms and `/contact` give it (also the grievance officer). Set before accounts open. |
 | `NEXT_PUBLIC_POSTAL_ADDRESS`, `NEXT_PUBLIC_SUPPORT_PHONE` | `web/`, build-time | The postal address and buyer-support phone number on `/contact`, the privacy notice and the terms (Paddle's seller policy and India's rules ask for both). Set before accounts open. |
-| `NEXT_PUBLIC_SITE_URL` | `web/`, build-time | Absolute URL for `sitemap.ts`/`robots.ts`/OG tags. Unset in dev; no domain registered yet. |
+| `NEXT_PUBLIC_SITE_URL` | `web/`, build-time | Absolute URL for `sitemap.ts`/`robots.ts`/OG tags. Defaults to `https://margalink.com` (`src/lib/site.ts`); set it only for a copy at another address. |
 
 ## Working here
 

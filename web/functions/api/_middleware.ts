@@ -21,7 +21,7 @@ const refuse = (message: string) => new Response(message, { status: 403, headers
 
 export const onRequest: PagesFunction<{ DB?: D1Database }> = async ({ request, next, env, waitUntil }) => {
   const url = new URL(request.url);
-  if (url.hostname.endsWith(".margalink.pages.dev")) return refuse("This is an old version of MargaLink. Use margalink.pages.dev.");
+  if (url.hostname.endsWith(".margalink.pages.dev")) return refuse("This is an old version of MargaLink. Use margalink.com.");
   const safe = request.method === "GET" || request.method === "HEAD";
   if (!safe && url.pathname !== "/api/pay/webhook" && !sameOrigin(request)) return refuse("Cross-site request refused");
   const now = Date.now();

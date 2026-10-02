@@ -4,7 +4,7 @@
 # without the pipeline (which takes hours and ~11 GB of OpenAlex data).
 # Usage: npm run fetch-index [-- <site-url>]
 set -euo pipefail
-SITE="${1:-https://margalink.pages.dev}"
+SITE="${1:-https://margalink.com}"
 OUT="$(cd "$(dirname "$0")/../.." && pwd)/public/index"
 mkdir -p "$OUT"
 for f in manifest.json index.bin meta.json topics.bin topics.json; do
