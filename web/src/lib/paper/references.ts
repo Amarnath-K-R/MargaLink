@@ -14,7 +14,16 @@ export type NameEntry = { tokens: string[]; ids: string[]; oneWord: boolean };
 export type NameIndex = { byFirstToken: Map<string, NameEntry[]> };
 
 // Single words too generic to be a journal on their own, whatever the index says.
-const STOP_NAMES = new Set(["journal", "review", "reviews", "letters", "proceedings", "research", "reports", "annals", "bulletin", "advances", "science and technology", "medicine", "nursing", "chemistry", "physics", "biology"]);
+const STOP_NAMES = new Set(["journal", "review", "reviews", "letters", "proceedings", "research", "reports", "annals", "bulletin", "advances", "science and technology", "medicine", "nursing", "chemistry", "physics", "biology", "proc", "nat", "chem", "opt"]);
+
+// Stems of abbreviated journal and conference names. A full stop after one
+// isn't the end of a title ("Proc. IEEE Conf. Comput. Vis. Pattern Recognit.",
+// "Angew. Chem.", "Acta Belg. Med. Phys."), so a name inside a longer
+// abbreviated one isn't credited. A list, not "any short capitalised word":
+// "…mortality in Japan. Lancet 2019" must still end its title.
+const ABBREVIATION_STEMS = new Set(
+  "proc conf int intl symp trans comput vis recognit natl acad sci eng med biol chem phys res rev lett soc assoc ann am eur jpn br can clin exp appl mol angew belg opt mater environ technol inf syst mech electr commun anal stat math theor adv curr ind lat".split(" "),
+);
 
 const stripDiacritics = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
 
@@ -30,9 +39,10 @@ export function normalizeName(s: string): string {
 
 // The entry keeps digits and ;:() for the guard; full stops, commas, question
 // and exclamation marks become a "|" boundary marker so "the end of the
-// title" is still visible.
+// title" is still visible (but not the full stop of an abbreviation stem).
 function normalizeEntry(s: string): string {
   return stripDiacritics(s)
+    .replace(/\b([A-Z][a-z]{0,7})\./g, (m, word: string) => (ABBREVIATION_STEMS.has(word.toLowerCase()) ? `${word} ` : m))
     .toLowerCase()
     .replace(/&/g, " and ")
     .replace(/[.,?!]/g, " | ")
@@ -80,13 +90,15 @@ export function splitReferences(text: string): string[] {
     return out;
   };
   if (lines.filter((l) => NUMBERED.test(l)).length >= 3) return join((l) => NUMBERED.test(l)).filter((e) => NUMBERED.test(e));
+  // Author-year before blank lines: a PDF's pages join with one, so a list over three pages would be three "entries".
+  if (lines.filter((l) => APA_START.test(l)).length >= 3) return join((l) => APA_START.test(l));
   const paragraphs = text.split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean);
   if (paragraphs.length >= 3) return paragraphs;
-  if (lines.filter((l) => APA_START.test(l)).length >= 3) return join((l) => APA_START.test(l));
   return lines.filter(Boolean);
 }
 
-const AFTER = /^[|\s:;]*(?:\(?(?:19|20)\d{2}\b|\d{1,4}\s*(?:[(:;]|\|?\s*\d))/;
+// After the name: a year, or a volume (IEEE writes "vol. 8, pp. …" or "vol. 8, no. 3").
+const AFTER = /^[|\s:;]*(?:(?:vol(?:ume)?|no)\s*\|?\s*)?(?:\(?(?:19|20)\d{2}\b|\d{1,4}\s*(?:[(:;]|\|?\s*(?:\d|pp\b|no\b)))/;
 
 function matchesIn(entry: string, index: NameIndex): string[] | null {
   const norm = normalizeEntry(entry);

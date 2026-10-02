@@ -75,18 +75,20 @@ export function passesFilters(m: JournalMeta, f: JournalFilters): boolean {
   return true;
 }
 
-let metaCache: JournalMeta[] | null = null;
+let metaPromise: Promise<JournalMeta[]> | null = null;
 let indexCache: { int8: Int8Array; meta: JournalMeta[]; dim: number; ranking: RankingConfig } | null = null;
 
-/** meta.json only (~a few hundred KB) — for anything that just needs journal
- * info (browse/search, the field dropdown), without pulling the int8 vector
- * file (index.bin) that only matching/ranking actually needs. */
-export async function loadMeta(): Promise<JournalMeta[]> {
-  if (metaCache) return metaCache;
-  const res = await fetch("/index/meta.json");
-  if (!res.ok) throw new Error("failed to load journal list");
-  metaCache = (await res.json()) as JournalMeta[];
-  return metaCache;
+/** meta.json only (~18 MB, one fetch however many callers ask at once) — for
+ * anything that just needs journal info (browse/search, the field dropdown),
+ * without pulling the int8 vector file (index.bin) that only matching/ranking
+ * needs. A failed load isn't cached: the next call tries again. */
+export function loadMeta(): Promise<JournalMeta[]> {
+  metaPromise ??= fetch("/index/meta.json").then(async (res) => {
+    if (!res.ok) throw new Error("The journal list couldn't load. Check your connection and reload the page.");
+    return (await res.json()) as JournalMeta[];
+  });
+  metaPromise.catch(() => (metaPromise = null));
+  return metaPromise;
 }
 
 async function loadIndex() {

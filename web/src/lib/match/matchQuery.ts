@@ -2,7 +2,7 @@
 // keywords, and its reference list — instead of "the first 3,000 characters",
 // which for most PDFs is a title page of authors and affiliations. Pure and
 // local; the page shows the result ("What we read") so a bad read is visible.
-import { extractAbstract } from "../checks/formatCheck.ts";
+import { extractAbstract, referencesStart } from "../checks/formatCheck.ts";
 
 export type PaperQuery = {
   title: string;
@@ -13,16 +13,34 @@ export type PaperQuery = {
   references: string | null; // the reference list's text, for references.ts
 };
 
-// Lines that are never the title and never belong in the query: author
-// affiliations, contact lines, dates, licences, journal banners.
-const NOT_CONTENT =
-  /@|\buniversit|\bdepartment\b|\bdept\b|\binstitut|\bhospital\b|\bschool of\b|\bfaculty\b|\bcollege\b|\bcorrespond|\borcid\b|\breceived\b|\baccepted\b|\bpublished\b|\bdoi\b|©|\bcopyright\b|\blicen[cs]e\b|\bvol(?:ume)?\.?\s*\d|\bissn\b|https?:|www\./i;
+// Lines that are never content, wherever they are: contact details, dates
+// of receipt, licences, journal banners.
+const META_LINE =
+  /@|\borcid\b|^\W*corresponding\b|^\W*correspondence\b|\b(?:received|accepted|revised|published)\b[^.]{0,30}\d{4}|\bdoi\b|©|\bcopyright\b|\blicen[cs]e\b|\bvol(?:ume)?\.?\s*\d|\bissn\b|https?:|www\./i;
+// An institution word marks an affiliation only on a line shaped like one
+// (a footnote marker first, an address of commas, or the institution first):
+// "In-hospital mortality…" is a title, "1 Department of Cardiology, …" isn't.
+const INSTITUTION = /\buniversit|\bdepartment\b|\bdept\b|\binstitut|\bhospital\b|\bschool of\b|\bfaculty\b|\bcollege\b/i;
+const isAffiliation = (l: string) =>
+  INSTITUTION.test(l) && (/^\s*[\d¹²³⁴⁵⁶⁷⁸⁹*†‡§]/.test(l) || (l.match(/,/g)?.length ?? 0) >= 2 || /^\s*(?:the\s+)?(?:universit|department|dept|institut|hospital|school of|faculty|college)/i.test(l));
+// "Amir Foroutan1, Jane Doe2*, Ravi Kumar1,3": two or more capitalised names, each with its markers.
+const AUTHOR = /^(?:\p{Lu}[\p{L}'’.-]*\s+){0,3}\p{Lu}[\p{L}'’-]+[\d*†‡§¶,\s]*$/u;
+const isAuthorLine = (l: string) => {
+  const parts = l.split(/,(?!\d)|\band\b|&/).map((p) => p.trim()).filter(Boolean);
+  return parts.length >= 2 && parts.every((p) => AUTHOR.test(p));
+};
+const notContent = (l: string) => META_LINE.test(l) || isAffiliation(l) || isAuthorLine(l);
 const MOSTLY_SYMBOLS = /^[\d\s,.*†‡§¶#|–-]+$/;
 
+// The fallback query (no abstract found): the front matter's author and
+// affiliation lines go, but only before the first real paragraph, so an
+// opening paragraph that mentions a hospital stays.
 export function stripAffiliations(text: string): string {
-  return text
-    .split("\n")
-    .filter((l) => !NOT_CONTENT.test(l) && !MOSTLY_SYMBOLS.test(l.trim()))
+  const lines = text.split("\n");
+  const firstParagraph = lines.findIndex((l) => l.trim().length >= 200);
+  const front = firstParagraph === -1 ? lines.length : firstParagraph;
+  return lines
+    .filter((l, i) => !META_LINE.test(l) && !MOSTLY_SYMBOLS.test(l.trim()) && !(i < front && (isAffiliation(l) || isAuthorLine(l))))
     .join("\n")
     .trim();
 }
@@ -31,12 +49,12 @@ function findTitle(head: string): string {
   const lines = head.split("\n").map((l) => l.trim());
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
-    if (l.length < 20 || l.length > 300 || NOT_CONTENT.test(l) || /^(abstract|summary)\b/i.test(l)) continue;
+    if (l.length < 20 || l.length > 300 || notContent(l) || /^(abstract|summary)\b/i.test(l)) continue;
     // "Original research article" banners and all-caps journal names aren't titles.
     if (l === l.toUpperCase() && /[A-Z]/.test(l) && l.split(" ").length <= 6) continue;
     // A title wrapped onto a second line that continues it in lower case.
     const next = lines[i + 1] ?? "";
-    return !/[.:?!]$/.test(l) && /^[a-z]/.test(next) && !NOT_CONTENT.test(next) ? `${l} ${next}` : l;
+    return !/[.:?!]$/.test(l) && /^[a-z]/.test(next) && !notContent(next) ? `${l} ${next}` : l;
   }
   return "";
 }
@@ -46,17 +64,10 @@ function findKeywords(head: string): string[] {
   return m ? m[1].split(/[;,·•]/).map((k) => k.trim()).filter((k) => k.length > 1 && k.length < 80).slice(0, 10) : [];
 }
 
-// Everything after the paper's last reference-list heading ("References",
-// "5. References", "Bibliography", or typeset letter-spaced "R E F E R E N C E S").
-const REF_HEADING = /^\s*(?:[ivx]+\.|\d+\.?)?\s*(?:references|reference list|bibliography|literature cited|works cited)\s*:?\s*$/i;
+// Everything after the paper's last reference-list heading (formatCheck.ts's rule).
 function findReferences(fullText: string): string | null {
-  const lines = fullText.split("\n");
-  let at = -1;
-  lines.forEach((l, i) => {
-    const squeezed = /^\s*(?:[A-Za-z] ){3,}[A-Za-z]\s*$/.test(l) ? l.replace(/ /g, "") : l;
-    if (REF_HEADING.test(squeezed)) at = i;
-  });
-  const text = at >= 0 ? lines.slice(at + 1).join("\n").trim() : "";
+  const at = referencesStart(fullText);
+  const text = at !== null ? fullText.slice(at).trim() : "";
   return text || null;
 }
 

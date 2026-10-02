@@ -17,7 +17,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from openalex import BASE, get, safe_iter_jsonl
+from openalex import BASE, get, open_append, safe_iter_jsonl
 
 DATA = Path(__file__).parent / "data"
 SAMPLE = DATA / "heldout_sample.json"
@@ -82,7 +82,7 @@ def main() -> None:
     done = {r["work"] for r in safe_iter_jsonl(PARTIAL)}
     todo = [w for w in sample if w not in done]
     print(f"{len(done)} done, {len(todo)} to resolve", flush=True)
-    with PARTIAL.open("a") as out:
+    with open_append(PARTIAL) as out:
 
         def write(row: dict) -> None:
             out.write(json.dumps(row) + "\n")

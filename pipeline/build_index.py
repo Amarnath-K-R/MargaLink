@@ -46,7 +46,7 @@ from enrichment import (
 )
 from kmeans import cluster_journal
 from openalex import safe_iter_jsonl
-from quality import coherence, field_fit, is_suspect, top_topics
+from quality import coherence, dominant_field, field_fit, is_suspect, top_topics
 
 DATA_DIR = Path(__file__).parent / "data"
 OUT_DIR = Path(__file__).parent.parent / "web" / "public" / "index"
@@ -255,6 +255,8 @@ def main() -> None:
         entry["centres"] = [sum(len(c) for c in centres_all), len(centres)]
         entry["centre_topics"] = centre_labels(labels, paper_topics, len(centres), topic_name)
         entry["topics"] = top_topics(paper_topics) or source_topic_profile(sources[sid])
+        # The field filter and chips use the papers' own field, not OpenAlex's journal label.
+        entry["field"] = dominant_field(entry["topics"], topic_field) or entry["field"]
         spans.append((entry["centres"][0], len(centres)))
         centres_all.append(centres)
         # The single averaged vector the v1 index used — kept (never deployed)

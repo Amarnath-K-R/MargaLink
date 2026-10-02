@@ -11,7 +11,7 @@
 import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { DEFAULT_RANKING, validateRanking, type RankingConfig } from "../../src/lib/match/manifest.ts";
 import type { JournalMeta } from "../../src/lib/match/match.ts";
-import { calibrate, candidatePool, fusedOrder, type PoolEntry, type RankInput } from "../../src/lib/match/rank.ts";
+import { contentScore, calibrate, candidatePool, fusedOrder, type PoolEntry, type RankInput } from "../../src/lib/match/rank.ts";
 import { topicShares, type TopicTable } from "../../src/lib/match/topics.ts";
 
 const INDEX = new URL("../../public/index/", import.meta.url).pathname;
@@ -200,13 +200,16 @@ if (refsA.length) {
 }
 console.log(`\nfitted weights: ${JSON.stringify(best.w)}`);
 
-// Fit scale: the share of real paper→journal pairings (half B) whose fused
-// score is at or below a given score — "as close as N% of real pairings".
+// Fit scale: the share of real paper→journal pairings (half B) whose content
+// score (the fused score without citations, rank.ts contentScore) is at or
+// below a given score — "as close as N% of real pairings". Without
+// citations, because most uploads carry references and few held-out papers
+// do; and every true journal counts, also one outside the candidate pool.
 const trueScores = B.map((i) => {
   const truth = heldout.papers[i].j;
-  const hit = fusedOrder(pools.get(i)!, best.w).find((x) => x.entry.j === truth);
-  return hit ? hit.fused : -Infinity;
-}).filter((x) => x > -Infinity).sort((a, b) => a - b);
+  const entry = pools.get(i)!.find((x) => x.j === truth) ?? candidatePool(input(i, { candidates: [truth] }))[0];
+  return contentScore(entry.signals, best.w);
+}).sort((a, b) => a - b);
 const edges: number[] = [];
 const probs: number[] = [];
 for (let q = 0; q <= 20; q++) {

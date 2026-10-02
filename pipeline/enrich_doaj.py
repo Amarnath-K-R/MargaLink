@@ -22,7 +22,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from openalex import HEADERS, safe_iter_jsonl
+from openalex import HEADERS, open_append, safe_iter_jsonl
 
 SOURCES_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 OUT_PATH = Path(__file__).parent / "data" / "doaj.jsonl"
@@ -75,6 +75,7 @@ def extract_fields(bibjson: dict) -> dict:
         # DOAJ reports fees in the journal's own currency, not always USD —
         # named apc_amount (not apc_usd) to avoid mislabeling a EUR/GBP/etc.
         # figure as dollars. Pair with apc_currency, don't assume one currency.
+        "has_apc": apc.get("has_apc"),
         "apc_amount": apc_max[0].get("price") if apc.get("has_apc") and apc_max else None,
         "apc_currency": apc_max[0].get("currency") if apc.get("has_apc") and apc_max else None,
         "license_type": license_list[0].get("type") if license_list else None,
@@ -90,7 +91,7 @@ def main() -> None:
     print(f"{len(done)} already fetched, {len(todo)} remaining of {len(candidates)} DOAJ candidates", flush=True)
 
     matched = 0
-    with OUT_PATH.open("a") as out:
+    with open_append(OUT_PATH) as out:
         for i, source in enumerate(todo):
             issn = source["issn_l"]
             data = _get(f"https://doaj.org/api/search/journals/issn:{issn}")

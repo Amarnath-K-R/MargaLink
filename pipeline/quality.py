@@ -68,10 +68,24 @@ def top_topics(paper_topics: list[list[str]], n: int = 8) -> list[tuple[str, flo
     return [(tid, round(c / len(primary), 4)) for tid, c in counts]
 
 
+def dominant_field(topic_shares: list[tuple[str, float]], topic_field: dict[str, str]) -> str | None:
+    """The field a journal's own papers are in: their primary topics' fields,
+    summed by share. OpenAlex's journal-level label is wrong often enough to
+    be useless for the field filter (The Lancet: Engineering)."""
+    totals: Counter = Counter()
+    for tid, share in topic_shares:
+        if tid in topic_field:
+            totals[topic_field[tid]] += share
+    return totals.most_common(1)[0][0] if totals else None
+
+
 def _self_check() -> None:
     same = np.ones((5, 4), dtype=np.float32) / 2
     assert abs(coherence(same, same[:1], np.zeros(5, dtype=int)) - 1.0) < 1e-6
     tf = {"T1": "Medicine", "T2": "Medicine", "T3": "Physics", "T4": "Psychology", "T5": "Mathematics", "T6": "Agriculture", "T7": "Engineering"}
+    # a journal's field is where its own papers are, by share (The Lancet's journal label said Engineering)
+    assert dominant_field([("T7", 0.3), ("T1", 0.25), ("T2", 0.2), ("T3", 0.25)], tf) == "Medicine"
+    assert dominant_field([], tf) is None and dominant_field([("T99", 1.0)], tf) is None
     src = lambda *fc: [{"field": {"display_name": f}, "count": c} for f, c in fc]
     # the papers' field mix against the source's own count-weighted one, and how scattered the papers are
     fit = field_fit(src(("Medicine", 3), ("Physics", 1)), [["T1"], ["T2", "T3"], ["T3"], []], tf)

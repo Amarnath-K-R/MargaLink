@@ -48,4 +48,9 @@ assert(unchecked.referenceStyleDetected === null, "no style to check should yiel
 const noStatements: JournalRules = { ...RULES, requiredStatements: [] };
 assert(checkRules("short text", noStatements).statementChecks.length === 0, "empty requiredStatements -> no checks run");
 
+// the limit is for the main text: the title page, abstract and references don't count against it
+const FULL = `A title of some length\nAbstract\n${"abstract ".repeat(100)}\n1. Introduction\n${"body ".repeat(300)}\nReferences\n${"[1] Ref, ref ref. Journal 2020;1:1.\n".repeat(50)}`;
+const main = checkRules(FULL, RULES).wordCount;
+assert(main >= 300 && main <= 305, `main text only, got ${main}`);
+
 console.log("rulesCheck.selfcheck: OK");

@@ -63,4 +63,26 @@ predictions from standard transport formulae, finding systematic overprediction 
 
 assert.equal(stripAffiliations("Title line\n1,2,*\nx@y.z\nKeep this"), "Title line\nKeep this");
 
+// 8. a title with an institution word in it is still the title, and the author line never is
+const HOSPITAL = `In-hospital mortality and readmission among patients with heart failure
+Amir Foroutan1, Jane Doe2*, Ravi Kumar1,3
+1 Department of Cardiology, University of Somewhere, City, Country
+Abstract
+${ABSTRACT}
+`;
+assert.equal(buildQuery({ fullText: HOSPITAL }).title, "In-hospital mortality and readmission among patients with heart failure");
+// 9. no "Abstract" heading (a DOCX, one line per paragraph): the opening paragraph stays, even though it mentions a hospital
+const OPENING = "We followed 2,140 patients admitted to hospital with acute heart failure across 12 centres and recorded every readmission within one year, along with the institutional factors that predicted it. Readmission was common and varied threefold between centres.";
+const NOHEAD = `Readmission after acute heart failure in twelve centres
+Amir Foroutan1, Jane Doe2*
+1 Department of Cardiology, University of Somewhere, City, Country
+*Correspondence: jane.doe@example.org
+${OPENING}
+Introduction
+`;
+const fb = buildQuery({ fullText: NOHEAD });
+assert.equal(fb.source, "fallback");
+assert.ok(fb.queryText.includes("admitted to hospital"), fb.queryText);
+assert.ok(!fb.queryText.includes("Department of Cardiology") && !fb.queryText.includes("Foroutan") && !fb.queryText.includes("@"), fb.queryText);
+
 console.log("matchQuery.selfcheck: OK");

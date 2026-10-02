@@ -137,4 +137,18 @@ assert.equal(validateRanking({ ...fitted, calibration: { edges: [0, 1], probs: [
 assert.equal(validateRanking({ ...fitted, accuracy: { n: 1 } }), DEFAULT_RANKING);
 assert.equal(validateRanking(fitted), fitted);
 
+// 9. citations of journals outside the index don't shrink the indexed ones' reference scores (the harness's refs include them)
+{
+  const onlyIndexed = rankJournals(input({ k: 6, cited: new Map([["J4", 2]]) }), fitted).find((x) => x.id === "J4")!;
+  const withOutsiders = rankJournals(input({ k: 6, cited: new Map([["J4", 2], ["NOT-IN-INDEX", 40]]) }), fitted).find((x) => x.id === "J4")!;
+  assert.equal(withOutsiders.signals.ref, onlyIndexed.signals.ref);
+}
+// 10. Fit is the text's fit: citations reorder the list, but don't move a journal's Fit
+{
+  const plain = rankJournals(input(), fitted).find((x) => x.id === "J0")!;
+  const cited = rankJournals(input({ cited: new Map([["J0", 9]]) }), fitted).find((x) => x.id === "J0")!;
+  assert.ok(cited.fused > plain.fused, "the citation raises its rank score");
+  assert.equal(cited.fit, plain.fit, "but not its Fit");
+}
+
 console.log("rank.selfcheck: OK");

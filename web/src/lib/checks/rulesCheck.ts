@@ -2,7 +2,7 @@
 // guidelines (journalRules.ts) — same rule-based, no-AI approach as
 // formatCheck.ts, reusing its word-count and section-detection helpers and
 // its statement-pattern definitions rather than redefining them.
-import { countWords, findSection, REQUIRED_STATEMENT_PATTERNS } from "./formatCheck.ts";
+import { countWords, findSection, REQUIRED_STATEMENT_PATTERNS, mainText } from "./formatCheck.ts";
 import { REQUIRED_STATEMENT_LABELS, type JournalRules, type RequiredStatementKey } from "../journals/journalRules.ts";
 
 export type RulesCheckResult = {
@@ -31,7 +31,8 @@ function looksAuthorYear(fullText: string): boolean {
 }
 
 export function checkRules(fullText: string, rules: JournalRules): RulesCheckResult {
-  const wordCount = countWords(fullText);
+  // Journals' limits count the main text: not the title page, abstract or references.
+  const wordCount = countWords(mainText(fullText));
   const referenceStyleDetected =
     rules.referenceStyle === "bracket-numbered"
       ? looksBracketNumbered(fullText)

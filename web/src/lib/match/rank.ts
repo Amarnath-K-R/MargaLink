@@ -102,6 +102,9 @@ export function fuse(s: Signals, w: RankingConfig["weights"]): number {
 }
 
 // Piecewise-linear, clamped to the first/last probability.
+/** The fused score without the reference signal: what Fit is calibrated on. */
+export const contentScore = (s: Signals, w: RankingConfig["weights"]) => fuse({ ...s, ref: 0 }, w);
+
 export function calibrate(x: number, cal: RankingConfig["calibration"]): number {
   const { edges, probs } = cal;
   if (x <= edges[0]) return probs[0];
@@ -139,7 +142,9 @@ export function candidatePool(input: RankInput): PoolEntry[] {
     const j = idOf.get(id);
     if (j !== undefined && !inPool.has(j)) pool.push(scored.find((s) => s.j === j)!);
   }
-  const maxCited = Math.max(0, ...cited.values());
+  // Scaled against the most-cited journal in the index: citations of sources
+  // outside it (preprints, books) don't count (the browser never sees them).
+  const maxCited = Math.max(0, ...[...cited].filter(([id]) => idOf.has(id)).map(([, n]) => n));
   return pool.map(({ j, cos, centre }) => {
     const m = meta[j];
     const t = input.paperTopics.length ? topicScore(input.paperTopics, m.topics ?? [], input.topicSubfield) : { score: 0, shared: [] };
@@ -158,7 +163,8 @@ export function scorePool(pool: PoolEntry[], meta: JournalMeta[], cfg: RankingCo
     .slice(0, k)
     .map(({ entry, fused }) => {
       const m = meta[entry.j];
-      const fit = cfg.fitted ? calibrate(fused, cfg.calibration) : null;
+      // Fit is the text's fit (calibrated on it, eval_match.ts): citations reorder the list, but don't move it.
+      const fit = cfg.fitted ? calibrate(contentScore(entry.signals, cfg.weights), cfg.calibration) : null;
       const [start] = centreSpan(m, entry.j);
       return {
         ...m,

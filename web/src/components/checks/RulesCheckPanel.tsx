@@ -9,11 +9,11 @@ export default function RulesCheckPanel({ result }: { result: RulesCheckResult }
       </p>
       <dl className="mt-1">
         <CheckRow
-          label="Word count"
+          label="Main text (approx.)"
           value={
             result.wordLimit != null
-              ? `${result.wordCount.toLocaleString()} / ${result.wordLimit.toLocaleString()} limit`
-              : `${result.wordCount.toLocaleString()} (no limit stated)`
+              ? `${result.wordCount.toLocaleString()} words / ${result.wordLimit.toLocaleString()} limit`
+              : `${result.wordCount.toLocaleString()} words (no limit stated)`
           }
           detected={result.withinWordLimit ?? undefined}
         />

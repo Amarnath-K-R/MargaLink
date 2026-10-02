@@ -101,6 +101,29 @@ def reconstruct_abstract(inverted_index: dict | None) -> str:
     return " ".join(word for _, word in positions)
 
 
+def open_append(path: Path):
+    """Opens a JSONL checkpoint for appending. A run killed mid-write leaves a
+    half-written last line; it's cut off first (that record isn't in the done
+    set, so it's fetched again), or the next record would land on the end of it
+    and both would be skipped as malformed. Scans back from the end, so a
+    multi-GB file isn't read."""
+    if path.exists():
+        with path.open("rb+") as f:
+            end = f.seek(0, os.SEEK_END)
+            cut, pos = 0, end
+            while pos > 0:
+                step = min(1 << 16, pos)
+                pos -= step
+                f.seek(pos)
+                nl = f.read(step).rfind(b"\n")
+                if nl != -1:
+                    cut = pos + nl + 1
+                    break
+            if cut != end:
+                f.truncate(cut)
+    return path.open("a")
+
+
 def _self_check() -> None:
     assert with_key("http://x?a=1", "k") == "http://x?a=1&api_key=k"
     assert with_key("http://x", "k") == "http://x?api_key=k"
@@ -120,6 +143,16 @@ def _self_check() -> None:
         rows = list(safe_iter_jsonl(p))
         assert [r["id"] for r in rows] == ["a", "b"], "malformed line skipped, good ones kept"
         assert list(safe_iter_jsonl(Path(d) / "missing.jsonl")) == [], "missing file yields nothing, doesn't crash"
+        # resuming after a kill: the half-written last line is cut off first, so the next record isn't glued to it
+        with open_append(p) as out:
+            out.write('{"id": "d"}\n')
+        assert [r["id"] for r in safe_iter_jsonl(p)] == ["a", "b", "d"], "the record after a kill survives"
+        with open_append(p) as out:  # a clean file is only appended to
+            out.write('{"id": "e"}\n')
+        assert [r["id"] for r in safe_iter_jsonl(p)] == ["a", "b", "d", "e"]
+        with open_append(Path(d) / "new.jsonl") as out:
+            out.write('{"id": "f"}\n')
+        assert [r["id"] for r in safe_iter_jsonl(Path(d) / "new.jsonl")] == ["f"]
 
     # a 404 or other 4xx won't change on retry: raised at once (the review found 13 retries, 7.6 minutes, per deleted work)
     import urllib.error as ue

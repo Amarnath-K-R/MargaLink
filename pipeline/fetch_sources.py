@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from openalex import BASE, get, safe_iter_jsonl
+from openalex import BASE, get, open_append, safe_iter_jsonl
 
 OUT_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 TARGET = 20_000
@@ -58,7 +58,7 @@ def main() -> None:
 
     cursor = "*"
     saved = len(done)
-    with OUT_PATH.open("a") as out:
+    with open_append(OUT_PATH) as out:
         while saved < TARGET:
             url = f"{BASE}/sources?filter=type:journal,is_core:true&select={FIELDS}&per_page=200&cursor={cursor}"
             data = get(url)

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getAllJournals } from "@/lib/journals/journalsServer";
+import { getPrerenderedJournals } from "@/lib/journals/journalsServer";
 import { journalHref } from "@/lib/journals/journalUrl";
 import { SITE_URL } from "@/lib/site";
 
@@ -9,7 +9,8 @@ import { SITE_URL } from "@/lib/site";
 export const dynamic = "force-static";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const journalUrls = getAllJournals().map((j) => ({
+  // Only the journals with a page of their own (the rest open inline on /journals).
+  const journalUrls = getPrerenderedJournals().map((j) => ({
     url: `${SITE_URL}${journalHref(j.id)}`,
     changeFrequency: "monthly" as const,
     priority: 0.6,

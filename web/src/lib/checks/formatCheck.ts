@@ -23,6 +23,36 @@ export function countWords(text: string): number {
   return words ? words.length : 0;
 }
 
+// "A B S T R A C T" (letter-spaced typesetting, Elsevier's) → "ABSTRACT", line by line.
+const LETTER_SPACED = /^[ \t]*(?:[A-Za-z] ){3,}[A-Za-z][ \t]*$/;
+const squeeze = (text: string) => text.replace(new RegExp(LETTER_SPACED.source, "gm"), (l) => l.replace(/\s/g, ""));
+
+const REF_HEADING = /^\s*(?:[ivx]+\.|\d+\.?)?\s*(?:references|reference list|bibliography|literature cited|works cited)\s*:?\s*$/i;
+/**
+ * Where the reference list starts: just after the paper's last reference-list
+ * heading (a contents page names it earlier), letter-spaced headings
+ * included. One rule for the matcher's references, the reference count and
+ * the main-text word count. Null when there's no such heading.
+ */
+export function referencesStart(fullText: string): number | null {
+  let at: number | null = null;
+  let pos = 0;
+  for (const line of fullText.split("\n")) {
+    const l = LETTER_SPACED.test(line) ? line.replace(/\s/g, "") : line;
+    if (REF_HEADING.test(l)) at = Math.min(pos + line.length + 1, fullText.length);
+    pos += line.length + 1;
+  }
+  return at;
+}
+
+/** The main text, roughly: after the abstract and before the reference list, which is what journals' word limits count. */
+export function mainText(fullText: string): string {
+  const abstract = extractAbstract(fullText);
+  const at = abstract ? fullText.indexOf(abstract.text) : -1;
+  const from = at >= 0 ? at + abstract!.text.length : 0;
+  return fullText.slice(from, Math.max(from, referencesStart(fullText) ?? fullText.length));
+}
+
 /** Find the Abstract section: from a line that's just "Abstract" (near the
  * top, so we don't match the word appearing later, e.g. in a reference
  * title) to the next heading-like line. Exported for review.ts — an LLM
@@ -31,7 +61,7 @@ export function countWords(text: string): number {
  * it this already-extracted, labeled span instead removes that failure mode
  * at the source rather than hoping the model gets it right. */
 export function extractAbstract(fullText: string): { text: string } | null {
-  const head = fullText.slice(0, 6000); // abstract is always near the start
+  const head = squeeze(fullText.slice(0, 6000)); // abstract is always near the start
   // "Abstract" or "Summary" (The Lancet's word) alone on a line, or "Abstract:" with the text on the same line.
   const startMatch = head.match(/^\s*(?:abstract|summary)\s*:?\s*$/im) ?? head.match(/^\s*abstract\s*[:.—-]\s*(?=\S)/im);
   if (!startMatch || startMatch.index === undefined) return null;
@@ -84,13 +114,9 @@ export const REQUIRED_STATEMENT_PATTERNS = {
  * counting "(YYYY)" citations if the style isn't numbered (e.g. APA). Both
  * are approximations — labeled as such in the UI, never asserted exact. */
 function countReferences(fullText: string): number | null {
-  // Optional numbering prefix (1./I./A.) — "5. References" is a common
-  // Word-numbered-heading style, and the bare version missed it entirely.
-  const headingMatch = fullText.match(
-    /^\s*(?:[ivx]+\.|[a-z]\.|\d+\.?)?\s*(references|bibliography|works cited)\s*$/im
-  );
-  if (!headingMatch || headingMatch.index === undefined) return null;
-  const section = fullText.slice(headingMatch.index + headingMatch[0].length);
+  const start = referencesStart(fullText);
+  if (start === null) return null;
+  const section = fullText.slice(start);
 
   const numbered = section.match(/^\s*(?:\[\d{1,3}\]|\d{1,3}[.)])\s+\S/gm);
   if (numbered && numbered.length > 0) return numbered.length;

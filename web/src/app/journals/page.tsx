@@ -18,11 +18,13 @@ export default function JournalsPage() {
   const [field, setField] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [topicNames, setTopicNames] = useState<Record<string, string>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    void loadMeta().then(setJournals);
-    void getAvailableFields().then(setFields);
-    void loadTopicNames().then(setTopicNames);
+    const fail = (err: unknown) => setLoadError(err instanceof Error ? err.message : String(err));
+    void loadMeta().then(setJournals, fail);
+    void getAvailableFields().then(setFields, fail);
+    void loadTopicNames().then(setTopicNames, () => {}); // topic names only label the details; the list works without them
   }, []);
 
   const filtered = useMemo(() => {
@@ -43,7 +45,7 @@ export default function JournalsPage() {
         title="Browse journals"
         subtitle={
           <p className="mt-2 text-ink-soft">
-            {journals ? `${journals.length.toLocaleString()} journals in this build.` : "Loading…"}{" "}
+            {journals ? `${journals.length.toLocaleString()} journals in this build.` : loadError ?? "Loading…"}{" "}
             Looking to match a specific paper?{" "}
             <Link href="/match" className="text-accent hover:underline">
               Upload it instead

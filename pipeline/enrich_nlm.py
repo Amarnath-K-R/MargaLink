@@ -23,29 +23,16 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from openalex import HEADERS, safe_iter_jsonl
+from openalex import HEADERS, open_append, safe_iter_jsonl
 
 SOURCES_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 OUT_PATH = Path(__file__).parent / "data" / "nlm.jsonl"
 REQUEST_DELAY_S = 0.4  # ~2.5 req/s, safely under NCBI's 3 req/s (no key)
 
-# Fields where MEDLINE indexing is plausible — everything else is essentially
-# always count:0, not worth the request. ponytail: a field-name allowlist is
-# an approximation, not a guarantee — a biomedical paper in an odd field
-# would be missed. Upgrade: query all 20k if/when the rate-limit budget for
-# a full sweep is worth spending.
-BIOMEDICAL_FIELDS = {
-    "Medicine",
-    "Biochemistry, Genetics and Molecular Biology",
-    "Health Professions",
-    "Neuroscience",
-    "Immunology and Microbiology",
-    "Nursing",
-    "Dentistry",
-    "Pharmacology, Toxicology and Pharmaceutics",
-    "Veterinary",
-    "Agricultural and Biological Sciences",
-}
+# Every journal with an ISSN is checked: OpenAlex's journal-level field label
+# is wrong for some of the most-cited medical journals (The Lancet:
+# Engineering), so selecting by it left NEJM, The Lancet, JAMA and Annals
+# "not verified". About two hours at NCBI's pace; checked ones are skipped.
 
 
 def _get(url: str, attempts: int = 12) -> dict:
@@ -72,17 +59,11 @@ def _get(url: str, attempts: int = 12) -> dict:
     raise RuntimeError("unreachable")
 
 
-def top_field(topics: list[dict]) -> str | None:
-    if not topics:
-        return None
-    return topics[0].get("field", {}).get("display_name")
-
-
 def candidates() -> list[dict]:
     return [
         j
         for j in safe_iter_jsonl(SOURCES_PATH)
-        if j.get("issn_l") and top_field(j.get("topics", [])) in BIOMEDICAL_FIELDS
+        if j.get("issn_l")
     ]
 
 
@@ -114,10 +95,10 @@ def main() -> None:
     todo_all = candidates()
     done = already_done()
     todo = [c for c in todo_all if c["id"] not in done]
-    print(f"{len(done)} already checked, {len(todo)} remaining of {len(todo_all)} biomedical-field candidates", flush=True)
+    print(f"{len(done)} already checked, {len(todo)} remaining of {len(todo_all)} journals with an ISSN", flush=True)
 
     indexed_count = 0
-    with OUT_PATH.open("a") as out:
+    with open_append(OUT_PATH) as out:
         for i, source in enumerate(todo):
             indexed = is_medline_indexed(source["issn_l"])
             if indexed is None:
@@ -134,11 +115,6 @@ def main() -> None:
 
 
 def _self_check() -> None:
-    assert top_field([{"field": {"display_name": "Medicine"}}]) == "Medicine"
-    assert top_field([]) is None
-    assert "Medicine" in BIOMEDICAL_FIELDS
-    assert "Engineering" not in BIOMEDICAL_FIELDS
-
     assert _parse_indexed_count({"esearchresult": {"count": "1"}}) is True
     assert _parse_indexed_count({"esearchresult": {"count": "0"}}) is False
     # a malformed/error response (e.g. NCBI's error body) must not be read

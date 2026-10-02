@@ -194,4 +194,11 @@ assert(
 const NUMBERED_FUNDING = "Abstract\n\nShort abstract.\n\n4. Funding\n\nNo external funding was received.";
 assert(checkFormat(NUMBERED_FUNDING).requiredSections.funding, "numbered '4. Funding' heading should be detected");
 
+// a letter-spaced "A B S T R A C T" heading (Elsevier's typesetting) is the abstract's heading
+const SPACED = `A title\nA B S T R A C T\nThis study examines ${"words ".repeat(40)}the outcome.\n1. Introduction\nBody.`;
+assert(extractAbstract(SPACED)?.text.startsWith("This study"), "letter-spaced abstract heading");
+// references are counted from the list itself, not a contents page that names it
+const THESIS = `Contents\n1. Introduction\n2. Methods\nReferences\n\n1. Introduction\nBody text.\nReferences\n[1] A. B. Title. J 2020;1:1.\n[2] C. D. Title. J 2021;2:2.\n[3] E. F. Title. J 2022;3:3.\n`;
+assert.equal(checkFormat(THESIS).referenceCount, 3, "the last References heading starts the list");
+
 console.log("formatCheck.selfcheck: OK");
