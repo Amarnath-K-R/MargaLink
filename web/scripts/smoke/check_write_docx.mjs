@@ -291,16 +291,17 @@ check("the review's quotes offer Jump to source", (await jumps.count()) >= 1);
 const quote = (await review.locator("li:has(button:text-is('Jump to source'))").first().innerText()).match(/“([^”]+)”/)?.[1] ?? "";
 await jumps.first().click();
 check("Jump to source closes the window", await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 }).then(() => true, () => false));
-// the passage is selected: step to its end and type there
-if (process.env.DEBUG_JUMP) {
-  await page.waitForTimeout(300);
-  console.log("DEBUG active:", await page.evaluate(() => `${document.activeElement?.tagName}.${document.activeElement?.className?.toString().slice(0, 60)} sel="${document.getSelection()?.toString().slice(0, 60)}"`));
-  await page.screenshot({ path: `${process.env.SMOKE_OUT ?? ".smoke"}/jump.png` });
-}
+// The passage is selected: step to its end and type there. The editor learns
+// of a caret moved by a key from the browser's selectionchange event, which
+// headless Chrome can deliver late: typing before it arrives would land where
+// the caret was before (a person can't type that fast), so wait for it.
+await page.evaluate(() => void (window.__caretMoved = new Promise((r) => document.addEventListener("selectionchange", r, { once: true }))));
 await page.keyboard.press("ArrowRight");
+await page.evaluate(() => window.__caretMoved);
 await page.keyboard.type(" JUMPED");
-check(`the quoted passage was selected in the document ("${quote.slice(0, 40)}…")`, quote.length > 0 && (await storedHas(page, hubId, `${quote} JUMPED`)));
-if (process.env.DEBUG_JUMP) { await page.waitForTimeout(3000); const t = await storedText(page, hubId); const i = t.indexOf("JUMPED"); console.log("DEBUG stored around JUMPED:", i, JSON.stringify(t.slice(Math.max(0, i - 80), i + 20))); }
+const jumped = quote.length > 0 && (await storedHas(page, hubId, `${quote} JUMPED`));
+const landed = jumped ? "" : await storedText(page, hubId).then((t) => ` (typed at: "${t.slice(Math.max(0, t.indexOf("JUMPED") - 60), t.indexOf("JUMPED") + 6)}")`);
+check(`the quoted passage was selected in the document ("${quote.slice(0, 40)}…")${landed}`, jumped);
 check("the review was paid for once", account.starts.length === 1);
 check("the status bar says something was sent", (await page.locator('[data-testid="doc-workspace"]').innerText()).includes("carried text you agreed to send"));
 check(`only the review's requests carried a body (${reviewBodies.length})`, reviewBodies.length > 0);
