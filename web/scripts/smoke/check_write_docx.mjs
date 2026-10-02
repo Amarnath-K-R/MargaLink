@@ -15,13 +15,16 @@
 //   nothing leaves our origin but the matching model's and the figure
 //   engine's public files (cached in a persistent profile, as check_write.mjs).
 //   node scripts/smoke/check_write_docx.mjs
+//   ORIGIN=http://localhost:8789 node scripts/smoke/check_write_docx.mjs   # against a build
 import { chromium } from "playwright";
 import { mkdirSync, readFileSync } from "node:fs";
 import { unzipSync, strFromU8 } from "fflate";
 import { asMacroDocument, asTemplate, docText, oldWordDoc, paperDocx, part, TEXT } from "../fixtures/docx_fixtures.mjs";
 import { mockAccount } from "./mock_account.mjs";
 
-const O = "http://localhost:3000";
+// ORIGIN: another server, e.g. the production build under its real headers
+// (wrangler pages dev out, from a folder without functions/, so no beta gate).
+const O = process.env.ORIGIN ?? "http://localhost:3000";
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../../.smoke/", import.meta.url).pathname;
 mkdirSync(SCRATCH, { recursive: true });
 const context = await chromium.launchPersistentContext(`${SCRATCH}/write-docx-profile`, { viewport: { width: 1400, height: 900 }, acceptDownloads: true });
@@ -39,12 +42,16 @@ const watch = (p) => {
     }
     // the matching model and its runtime: public files, fetched without a body
     const publicModel = /^https:\/\/(huggingface\.co|(?:[\w-]+\.)+hf\.co|cdn\.jsdelivr\.net)\//.test(r.url()) && r.method() === "GET";
-    if (!/^(https?:\/\/localhost:3000|data:|blob:)/.test(r.url()) && !publicModel) problems.push(`left the origin: ${r.url().slice(0, 120)}`);
+    if (!r.url().startsWith(O) && !/^(data:|blob:)/.test(r.url()) && !publicModel) problems.push(`left the origin: ${r.url().slice(0, 120)}`);
   });
 };
 watch(page);
 page.on("dialog", (d) => void d.accept());
-const account = await mockAccount(context); // the Review window's review is paid for
+const account = await mockAccount(context, { origin: O }); // the Review window's review is paid for
+// Anything the Content-Security-Policy blocks is a console error, so a problem;
+// except eval: the zip reader's util polyfill (is-generator-function) probes
+// for generators with Function() inside a try, and falls back when it's refused.
+await context.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => e.blockedURI !== "eval" && console.error(`CSP blocked ${e.blockedURI} (${e.violatedDirective})`)));
 // The review's passes go to a mocked /api/review (as check_write.mjs): every
 // extract quotes its section's first sentence. Never a real Anthropic call.
 const firstSentence = (t) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12) ?? t.trim()).split(". ")[0];
@@ -151,13 +158,20 @@ await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z"
 const undone = await eventually(async () => !(await storedText(page, id)).includes("Then undone."));
 check("undo works after an autosave", undone && (await storedText(page, id)).includes("Typed in the smoke."));
 
+// --- a later save in another paragraph keeps what earlier saves wrote ---
+await clickInto(page, TEXT.methods);
+await page.keyboard.type(" And in methods.");
+await storedHas(page, id, "And in methods.");
+check("a save after an edit elsewhere keeps the earlier saved edits", (await storedText(page, id)).includes("Typed in the smoke."));
+
 // --- the word count follows the document ---
 check("the status line counts the document's words", /≈ \d+ words/.test(await page.locator('[data-testid="doc-workspace"]').innerText()));
 
 // --- a reload keeps the text ---
 await page.reload();
 await bodyText(page).getByText(TEXT.intro.slice(0, 30)).first().waitFor({ timeout: 20000 });
-check("a reload keeps the text", (await page.locator('[data-testid="doc-editor"]').innerText()).includes("Typed in the smoke."));
+const reloaded = await page.locator('[data-testid="doc-editor"]').innerText();
+check(`a reload keeps the text${reloaded.includes("Typed in the smoke.") ? "" : ` (shows: "${reloaded.slice(reloaded.indexOf("Short sleep"), reloaded.indexOf("Short sleep") + 140)}")`}`, reloaded.includes("Typed in the smoke."));
 
 // --- leaving right after typing still saves ---
 await clickInto(page, TEXT.results);
@@ -295,17 +309,21 @@ check("the review's quotes offer Jump to source", (await jumps.count()) >= 1);
 const quote = (await review.locator("li:has(button:text-is('Jump to source'))").first().innerText()).match(/“([^”]+)”/)?.[1] ?? "";
 await jumps.first().click();
 check("Jump to source closes the window", await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 }).then(() => true, () => false));
-// The passage is selected: step to its end and type there. The editor learns
-// of a caret moved by a key from the browser's selectionchange event, which
-// headless Chrome can deliver late: typing before it arrives would land where
-// the caret was before (a person can't type that fast), so wait for it.
-await page.evaluate(() => void (window.__caretMoved = new Promise((r) => document.addEventListener("selectionchange", r, { once: true }))));
-await page.keyboard.press("ArrowRight");
-await page.evaluate(() => window.__caretMoved);
-await page.keyboard.type(" JUMPED");
-const jumped = quote.length > 0 && (await storedHas(page, hubId, `${quote} JUMPED`));
-const landed = jumped ? "" : await storedText(page, hubId).then((t) => ` (typed at: "${t.slice(Math.max(0, t.indexOf("JUMPED") - 60), t.indexOf("JUMPED") + 6)}")`);
-check(`the quoted passage was selected in the document ("${quote.slice(0, 40)}…")${landed}`, jumped);
+// The passage is selected: typing replaces exactly it (no caret movement,
+// so nothing waits on the browser's selectionchange timing).
+const beforeJumpType = await storedText(page, hubId);
+await page.keyboard.type("JUMPED");
+const at = beforeJumpType.indexOf(quote);
+const expected = at < 0 ? null : beforeJumpType.slice(0, at) + "JUMPED" + beforeJumpType.slice(at + quote.length);
+const replaced = expected !== null && (await eventually(async () => (await storedText(page, hubId)) === expected));
+const landed = replaced
+  ? ""
+  : await storedText(page, hubId).then((t) => {
+      let d = 0;
+      while (d < t.length && t[d] === expected?.[d]) d++;
+      return ` (differs at ${d}: saved "${t.slice(Math.max(0, d - 30), d + 30)}", expected "${expected?.slice(Math.max(0, d - 30), d + 30)}")`;
+    });
+check(`the quoted passage was selected in the document ("${quote.slice(0, 40)}…")${landed}`, replaced);
 check("the review was paid for once", account.starts.length === 1);
 check("the status bar says something was sent", (await page.locator('[data-testid="doc-workspace"]').innerText()).includes("carried text you agreed to send"));
 check(`only the review's requests carried a body (${reviewBodies.length})`, reviewBodies.length > 0);

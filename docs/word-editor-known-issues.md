@@ -76,11 +76,59 @@ happens rarely; JMIR's author template has one (on an empty table row).
 
 Equations made with Word's old Equation Editor 3.0 are OLE objects with a
 WMF preview. The editor draws a broken-picture box for them; the equation
-itself is kept in the saved file and shows normally in Word. Modern Word
-equations (OMML) display and save correctly.
+itself is kept in the saved file (the gate counts them: ACM's template has
+two) and shows normally in Word. Modern Word equations (OMML) display and
+save correctly.
 
-## 4. Pictures stored twice (avoided)
+## 4. Selective saves lose earlier edits (avoided: full saves only)
 
-Mixing Folio's selective save with a full save stored an unchanged picture
-a second time. `DocEditor.tsx` uses only the default (selective) save; the
-gate's "no picture stored twice" check holds it.
+**What it did:** with Folio's default (selective) save, the second save of a
+session dropped what the first had written: type in one paragraph, wait for
+the autosave, type in another, and the saved file had only the second edit
+(the editor still showed both). Found late, by the Word smoke's Jump to
+source check; the fidelity gate's edits were then split by a reopen, which
+hid it. Mixing selective and full saves also stored an unchanged picture
+twice.
+
+**What we do:** `DocEditor.tsx` saves with `save({ selective: false })`
+only. The gate edits two paragraphs in one session, then a third after a
+reopen, and fails on the selective save (every document lost its first
+edit); with full saves, everything carried is kept and styles, numbering,
+theme and fonts are still byte for byte the same.
+
+**Cause (folio-react 0.24.1):** `serializeCurrentDocx` moves the save
+baseline (`originalBufferRef`) to the file it just wrote, but an effect in
+`src/components/hooks/useDocumentLoader.ts` sets it back to
+`history.state.originalBuffer`, the file as first opened, whenever
+`history.state` changes, which editing does.
+The next selective save patches only the paragraphs changed since the last
+save into that original file.
+
+**Issue draft:**
+
+> **Selective save drops edits written by an earlier save in the same
+> session**
+>
+> Repro: open a document, type in paragraph A, `save()`; type in paragraph
+> B, `save()`. The second buffer has B's edit and not A's; the editor still
+> shows both. `save({ selective: false })` keeps both.
+>
+> `serializeCurrentDocx` sets `originalBufferRef.current = buffer` and clears
+> the tracked changes, but `useDocumentLoader`'s effect keyed on
+> `history.state` and `documentBuffer` resets `originalBufferRef.current` to
+> `history.state.originalBuffer`, the buffer first loaded. The second
+> selective save then patches only paragraph B into the first-loaded
+> buffer. Keeping the saved buffer as the baseline (or tracking changes
+> since load rather than since the last save) would fix it.
+
+## 5. A generated table of contents can lose its instruction
+
+A table of contents as the `docx` JavaScript library writes it (the field's
+begin, instruction and separator in one run, an empty result, and its end in
+the next paragraph) comes back as a field with no instruction, which Word
+shows as nothing; re-inserting the table in Word restores it. Tables of
+contents as Word writes them, and as pandoc's `--toc` writes them, are kept
+(both are in the gate's kitchen-sink document). A kept table's entries come
+back as plain text with their links, without the page-number fields inside
+them; Word rebuilds the entries, fields included, whenever the table is
+updated.

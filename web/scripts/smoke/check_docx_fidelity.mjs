@@ -1,6 +1,8 @@
 // Dev-only: does a Word document survive being edited in /write? Each
-// document is imported, edited, closed, reopened, edited again and closed
-// (two saves, as in real use), and the saved file is compared with the
+// document is imported and edited in one paragraph, saved, edited in
+// another paragraph (a second save in the same session must keep the
+// first's edit), closed, reopened, edited again and closed, as in real use,
+// and the saved file is compared with the
 // original: everything a paper carries is still there (citation fields,
 // cross-references, footnotes, comments, tracked changes, equations,
 // pictures, content controls, line numbering, columns), the template's
@@ -36,9 +38,11 @@ const docs = [
 // --- what a document carries, counted ---
 const parts = (bytes) => Object.fromEntries(Object.entries(unzipSync(bytes)).filter(([p]) => !p.endsWith("/")));
 const text = (xml) => [...(xml ?? "").matchAll(/<w:t(?: [^>]*)?>([^<]*)<\/w:t>/g)].map((m) => m[1]).join("");
+const docBody = (bytes) => text(strFromU8(unzipSync(bytes)["word/document.xml"]));
 const FEATURES = {
   tables: /<w:tbl>/g,
   pictures: /<w:drawing>/g,
+  "embedded objects (old equations)": /<w:object\b/g,
   links: /<w:hyperlink\b/g,
   sections: /<w:sectPr\b/g,
   "column settings": /<w:cols\b[^>]*w:num="\d+"/g,
@@ -56,12 +60,31 @@ const FEATURES = {
   bookmarks: /<w:bookmarkStart\b/g,
   "numbered paragraphs": /<w:numPr>/g,
 };
+// A table of contents' entries are generated: Word rebuilds them (with their
+// own PAGEREF fields) whenever the table is updated, and an editor may keep
+// them as plain text. Counted without them; the TOC field itself still counts.
+function withoutTocEntries(xml) {
+  const cut = [];
+  const open = [];
+  for (const m of xml.matchAll(/<w:fldChar w:fldCharType="(begin|separate|end)"[^>]*>|<w:instrText[^>]*>([^<]*)<\/w:instrText>/g)) {
+    if (m[1] === "begin") open.push({ instr: "", from: -1 });
+    else if (m[2] !== undefined && open.length) open.at(-1).instr += m[2];
+    else if (m[1] === "separate" && open.length) open.at(-1).from = m.index + m[0].length;
+    else if (m[1] === "end" && open.length) {
+      const f = open.pop();
+      if (/^\s*TOC\b/.test(f.instr) && f.from >= 0 && !open.length) cut.push([f.from, m.index]);
+    }
+  }
+  return cut.reduceRight((x, [from, to]) => x.slice(0, from) + x.slice(to), xml);
+}
 function measure(bytes) {
   const all = parts(bytes);
-  const xml = Object.entries(all)
-    .filter(([p]) => /^word\/(document|header\d*|footer\d*)\.xml$/.test(p))
-    .map(([, d]) => strFromU8(d))
-    .join("");
+  const xml = withoutTocEntries(
+    Object.entries(all)
+      .filter(([p]) => /^word\/(document|header\d*|footer\d*)\.xml$/.test(p))
+      .map(([, d]) => strFromU8(d))
+      .join(""),
+  );
   const counts = Object.fromEntries(Object.entries(FEATURES).map(([k, re]) => [k, (xml.match(re) ?? []).length]));
   // the kinds of field: citation managers (ADDIN), SEQ, REF, PAGEREF, TOC, PAGE…
   const kinds = [...xml.matchAll(/<w:instrText[^>]*>\s*([A-Z]+)(?:\s+([A-Z_.]+))?/g), ...xml.matchAll(/<w:fldSimple w:instr="\s*([A-Z]+)/g)].map((m) => (m[1] === "ADDIN" ? `ADDIN ${m[2] ?? ""}`.trim() : m[1])).sort();
@@ -103,13 +126,23 @@ const stored = (id) =>
     const dir = await (await (await navigator.storage.getDirectory()).getDirectoryHandle("margalink-write")).getDirectoryHandle(id);
     return btoa(Array.from(new Uint8Array(await (await (await dir.getFileHandle("paper.docx")).getFile()).arrayBuffer()), (c) => String.fromCharCode(c)).join(""));
   }, id);
-// Type at the end of the first line of real text on the first page.
-const editOnce = async (mark) => {
-  const span = page.locator('[data-testid="doc-editor"] .layout-page span').filter({ hasText: /\w{4,}/ }).first();
-  await span.waitFor({ timeout: 30000 });
-  const box = await span.boundingBox();
-  await page.mouse.click(box.x + box.width - 1, box.y + box.height / 2);
+// Type at the end of the first run of text of the nth body paragraph (not
+// a header's or footer's) with a real word in it.
+const editParagraph = async (n, mark) => {
+  await page.locator('[data-testid="doc-editor"] .layout-page .layout-paragraph').first().waitFor({ timeout: 30000 });
+  const at = await page.evaluate((n) => {
+    const paragraphs = [...document.querySelectorAll('[data-testid="doc-editor"] .layout-page .layout-paragraph')].filter((p) => !p.closest("[data-hf-r-id]") && /\w{4,}/.test(p.textContent));
+    const span = [...(paragraphs[n]?.querySelectorAll("span") ?? [])].find((s) => !s.querySelector("span") && /\w{4,}/.test(s.textContent));
+    const r = span?.getBoundingClientRect();
+    return r && { x: r.right - 1, y: r.top + r.height / 2 };
+  }, n);
+  if (!at) throw new Error(`no body paragraph ${n} to edit`);
+  await page.mouse.click(at.x, at.y);
   await page.keyboard.type(` ${mark}`);
+};
+const savedHas = async (id, mark) => {
+  for (const end = Date.now() + 10000; Date.now() < end; await new Promise((r) => setTimeout(r, 250))) if (docBody(Buffer.from(await stored(id), "base64")).includes(mark)) return true;
+  return false;
 };
 const leave = async () => {
   await page.click("text=← All projects");
@@ -132,7 +165,9 @@ for (const doc of docs) {
   await page.setInputFiles(IMPORT, { name: doc.name, mimeType: "application/octet-stream", buffer: Buffer.from(doc.bytes) });
   await page.waitForSelector('[data-testid="doc-workspace"]');
   const id = new URL(page.url()).searchParams.get("p");
-  await editOnce("FIDELITY-ONE");
+  await editParagraph(0, "FIDELITY-ONE");
+  if (!(await savedHas(id, "FIDELITY-ONE"))) report(doc.name, "the first edit saves", false);
+  await editParagraph(1, "FIDELITY-TWO"); // another paragraph, another save, same session
   await page.screenshot({ path: `${SCRATCH}/fidelity-${shortName}.png` });
   // Every drawn line holds no more text than fits it (a line measured for a
   // wider column draws its words on top of each other).
@@ -154,14 +189,14 @@ for (const doc of docs) {
   await leave();
   await page.locator('[data-testid="project-list"] li', { hasText: shortName }).first().locator("button").first().click();
   await page.waitForSelector('[data-testid="doc-workspace"]');
-  await editOnce("FIDELITY-TWO");
+  await editParagraph(2, "FIDELITY-THREE");
   await leave();
   const out = new Uint8Array(Buffer.from(await stored(id), "base64"));
   writeFileSync(`${SCRATCH}/fidelity-${shortName}.saved.docx`, out);
 
   const before = measure(doc.bytes);
   const after = measure(out);
-  report(doc.name, "both edits are in the saved document", after.body.includes("FIDELITY-ONE") && after.body.includes("FIDELITY-TWO"));
+  report(doc.name, "all three edits are in the saved document", ["FIDELITY-ONE", "FIDELITY-TWO", "FIDELITY-THREE"].every((m) => after.body.includes(m)), ["FIDELITY-ONE", "FIDELITY-TWO", "FIDELITY-THREE"].filter((m) => !after.body.includes(m)).join(", ") && `missing ${["FIDELITY-ONE", "FIDELITY-TWO", "FIDELITY-THREE"].filter((m) => !after.body.includes(m)).join(", ")}`);
   const lost = Object.keys(FEATURES).filter((k) => after.counts[k] !== before.counts[k]).map((k) => `${k} ${before.counts[k]} → ${after.counts[k]}`);
   report(doc.name, "everything it carries is still there", lost.length === 0, lost.join(", "));
   report(doc.name, "the same fields", JSON.stringify(after.kinds) === JSON.stringify(before.kinds), `${before.kinds.join(" ")} → ${after.kinds.join(" ")}`);

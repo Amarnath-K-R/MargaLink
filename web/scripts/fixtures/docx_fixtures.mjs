@@ -31,7 +31,6 @@ import {
   SequentialIdentifier,
   Table,
   TableCell,
-  TableOfContents,
   TableRow,
   TextRun,
 } from "docx";
@@ -110,7 +109,10 @@ const PNG = squarePng();
 
 // Everything a real paper may carry that an editor must not lose: citation
 // manager fields (Zotero, Mendeley: complex fields, injected as Word writes
-// them), figure numbering (SEQ), a cross-reference (REF), a table of contents,
+// them), figure numbering (SEQ), a cross-reference (REF), two tables of
+// contents (as Word writes one: each field part in its own run, filled in;
+// and as pandoc's --toc writes one: all four parts in one run, to be filled
+// in by Word),
 // page numbers, a content control (injected), line numbering, tracked changes,
 // a footnote, a comment, an equation, a picture in the body and in the
 // header, a link, a two-column section and a numbered reference list.
@@ -129,7 +131,8 @@ export async function kitchenSinkDocx() {
         footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [t("Page "), new TextRun({ children: [PageNumber.CURRENT] }), t(" of "), new TextRun({ children: [PageNumber.TOTAL_PAGES] })] })] }) },
         children: [
           new Paragraph({ heading: HeadingLevel.TITLE, text: "Everything a manuscript carries" }),
-          new TableOfContents("Contents", { hyperlink: true, headingStyleRange: "1-2" }),
+          p(t("PANDOC_TOC_HERE")),
+          p(t("WORD_TOC_HERE")),
           new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new Bookmark({ id: "methods", children: [t("Methods")] })] }),
           p(t("Adults recovering from surgery were enrolled"), new FootnoteReferenceRun(1), t(" and followed for ninety days. ZOTERO_HERE")),
           p(new CommentRangeStart(0), t("The protocol was approved by the ethics committee."), new CommentRangeEnd(0), new TextRun({ children: [new CommentReference(0)] })),
@@ -165,6 +168,23 @@ export async function kitchenSinkDocx() {
   };
   swap("ZOTERO_HERE", field(' ADDIN ZOTERO_ITEM CSL_CITATION {"citationID":"k1","citationItems":[{"id":1,"uris":["http://zotero.org/users/1/items/AB12"]}]} ', "(Smith, 2019)"));
   swap("MENDELEY_HERE", field(' ADDIN CSL_CITATION {"citationItems":[{"id":"ITEM-1"}],"mendeley":{"formattedCitation":"[2]"}} ', "[2]"));
+  const wordToc = /<w:p>(?:(?!<w:p>).)*?WORD_TOC_HERE(?:(?!<\/w:p>).)*<\/w:p>/s;
+  if (!wordToc.test(xml)) throw new Error("fixture marker WORD_TOC_HERE not found");
+  xml = xml.replace(
+    wordToc,
+    '<w:sdt><w:sdtPr><w:docPartObj><w:docPartGallery w:val="Table of Contents"/><w:docPartUnique/></w:docPartObj></w:sdtPr><w:sdtContent>' +
+      '<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \\o "1-2" \\h \\z \\u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>' +
+      '<w:hyperlink w:anchor="methods" w:history="1"><w:r><w:t>Methods</w:t></w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGEREF methods \\h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink></w:p>' +
+      '<w:p><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:sdtContent></w:sdt>',
+  );
+  const pandocToc = /<w:p>(?:(?!<w:p>).)*?PANDOC_TOC_HERE(?:(?!<\/w:p>).)*<\/w:p>/s;
+  if (!pandocToc.test(xml)) throw new Error("fixture marker PANDOC_TOC_HERE not found");
+  xml = xml.replace(
+    pandocToc,
+    '<w:sdt><w:sdtPr><w:docPartObj><w:docPartGallery w:val="Table of Contents"/><w:docPartUnique/></w:docPartObj></w:sdtPr><w:sdtContent>' +
+      '<w:p><w:r><w:t xml:space="preserve">Table of Contents</w:t></w:r></w:p>' +
+      '<w:p><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/><w:instrText xml:space="preserve">TOC \\o "1-3" \\h \\z \\u</w:instrText><w:fldChar w:fldCharType="separate"/><w:fldChar w:fldCharType="end"/></w:r></w:p></w:sdtContent></w:sdt>',
+  );
   const sdtPara = /<w:p>(?:(?!<w:p>).)*?SDT_HERE(?:(?!<\/w:p>).)*<\/w:p>/s;
   if (!sdtPara.test(xml)) throw new Error("fixture marker SDT_HERE not found");
   xml = xml.replace(

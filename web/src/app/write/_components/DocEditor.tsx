@@ -10,8 +10,10 @@ import "@stll/folio-react/standalone.css";
 import { findQuoteInTex } from "@/lib/write/texSource";
 
 // The Word editor: Folio (Apache-2.0, a fork of Eigenpal's docx-editor),
-// which edits the .docx itself and saves only what changed, so a journal
-// template's styles, headers, page setup and columns come back as they were.
+// which edits the .docx itself: a save rewrites the document's text from the
+// editor and carries the rest over, so a journal template's styles,
+// numbering, theme, fonts, headers and page setup come back byte for byte
+// (scripts/smoke/check_docx_fidelity.mjs holds it to that).
 // Loaded only when a Word project opens (next/dynamic, ssr: false): it is
 // most of a megabyte. Everything happens in the browser; it makes no
 // requests of its own (fonts are bundled). The workspace drives it through
@@ -69,7 +71,12 @@ export default function DocEditor({
   useEffect(() => {
     handleRef.current = {
       async save() {
-        const out = await ref.current?.save();
+        // Full saves only. A selective save patches the paragraphs changed
+        // since the last save into Folio's baseline, which Folio resets to the
+        // file as first opened whenever its document history changes: the
+        // second save of a session dropped the first one's edits. (Mixing the
+        // two modes also stored pictures twice.) See docs/word-editor-known-issues.md.
+        const out = await ref.current?.save({ selective: false });
         if (!out) throw new Error("The document couldn't be saved.");
         return new Uint8Array(out);
       },
