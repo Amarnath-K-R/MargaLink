@@ -765,7 +765,7 @@ checks.
 | File | What |
 |---|---|
 | `beta.ts` | `BETA = { on, coins }`: the one switch. No imports, so the client and the Functions both read it. |
-| `policy.ts` | `pageNeeds`, `apiNeeds` (public, approved or developer), `routesJson()` (what `public/_routes.json` must be) and `PAGE_HEADERS` (the `/*` block of `public/_headers`, for gated pages). Pure. |
+| `policy.ts` | `pageNeeds`, `apiNeeds` (public, approved or developer, any spelling of a path read as one), `routesJson()` (what `public/_routes.json` must be) and `PAGE_HEADERS` (the `/*` block of `public/_headers`, for gated pages). Pure. |
 | `access.ts` | Server: the access list. `admitUser` (the only door to an account), `accessFor` (session and roles in one query), `addAccess`, `removeAccess` (never the last developer), `listAccess`, `developerIn`. |
 
 *`src/lib/telemetry/`*: the activity log.
@@ -802,7 +802,7 @@ relative paths) and only genuinely server-specific code stays here.
 | File | What |
 |---|---|
 | `api/review.ts` | One of the two AI Functions: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the daily pass limits (`dailyCaps.ts`: 1,500 a day in all, 150 per account), one `callAnthropicTool`, grounding/validation. |
-| `_middleware.ts` | The beta's page gate, on the paths `public/_routes.json` lists: sign-in for the signed out, a refusal for the uninvited, `/admin` for developers only; gated pages get the `_headers` security headers. |
+| `_middleware.ts` | The beta's page gate, on every request but the static assets (`public/_routes.json`): sign-in for the signed out, a refusal for the uninvited, `/admin` for developers only, every spelling of a path read as one; the pages it serves get the `_headers` security headers. |
 | `api/_middleware.ts` | Old deployments refused, the Origin check on every non-GET (not the Paddle webhook), the beta's API gate, `Cache-Control: no-store`, housekeeping, and the activity log row after each answer. |
 | `api/admin/*` | The console: `stats`, `users` (and coin grants), `access` (the lists), `events` (the log). Developers only. |
 | `api/me.ts`, `api/account.ts` | Who's signed in, the balance, Pro, Paddle's public config; the account page's data, the export, deletion. |

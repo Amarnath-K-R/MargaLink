@@ -141,7 +141,7 @@ export default function AccountView() {
         </a>
       </Panel>
 
-      <DeletePanel email={account.email} coins={account.balance} pro={!!account.pro && account.pro.status !== "canceled"} onDeleted={() => setDeleted(true)} />
+      <DeletePanel email={account.email} coins={account.balance} pro={!!account.pro && account.pro.status !== "canceled"} tester={BETA.on && !account.developer} onDeleted={() => setDeleted(true)} />
     </div>
   );
 }
@@ -172,7 +172,7 @@ function BillingButton() {
   );
 }
 
-function DeletePanel({ email, coins, pro, onDeleted }: { email: string; coins: number; pro: boolean; onDeleted: () => void }) {
+function DeletePanel({ email, coins, pro, tester, onDeleted }: { email: string; coins: number; pro: boolean; tester: boolean; onDeleted: () => void }) {
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -203,7 +203,7 @@ function DeletePanel({ email, coins, pro, onDeleted }: { email: string; coins: n
         )}
         We keep a keyed fingerprint of your email address for 12 months, so the welcome bonus isn&apos;t given to it again; it can&apos;t be turned back
         into your address.
-        {BETA.on && " It also takes you off the beta list, so you can't sign back in unless you're invited again."}
+        {tester && " It also takes you off the beta list, so you can't sign back in unless you're invited again."}
       </p>
       {pro && (
         <p className="mt-2 text-away">

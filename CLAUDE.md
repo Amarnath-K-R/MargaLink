@@ -75,11 +75,16 @@ email address, a token or a request body.
 `BETA.on` (`access/beta.ts`, the one switch), the dashboard and every tool
 need an invited account, and new accounts start with `BETA.coins` (50) in
 place of the 10 welcome coins. `access/policy.ts` says what each path
-needs; `functions/_middleware.ts` gates pages (only the paths in
-`public/_routes.json`, which `policy.selfcheck.ts` keeps equal to
-`routesJson()`, run a Function at all), and `functions/api/_middleware.ts`
-gates the API (the AI features need an invited account, `/api/admin/*` a
-developer). `access/access.ts` holds the access list (`access_list`:
+needs, reading every spelling of a path as one (`/HOME`, `/home/`,
+`/h%6Fme`: Pages routes Functions case-insensitively and a static server
+may answer them with the page). `functions/_middleware.ts` gates pages
+(`public/_routes.json`, which `policy.selfcheck.ts` keeps equal to
+`routesJson()`, sends it every request but the static asset folders, and
+it sets `_headers`' security headers on what it serves, since Pages skips
+that file once a Function runs), and `functions/api/_middleware.ts` gates
+the API (the AI features need an invited account, `/api/admin/*` a
+developer). Email sign-in is off while the beta runs (Google only), except
+on localhost for the e2e. `access/access.ts` holds the access list (`access_list`:
 canonical address, `beta` or `developer`): `admitUser` is the only way an
 account is created or signed in, and turns uninvited addresses away
 before anything is stored. Every API request is logged after it's answered
@@ -98,6 +103,13 @@ by hand, once per database (Gmail addresses: lowercase, no dots or +tag in
 ```bash
 npx wrangler d1 execute margalink --remote --command "INSERT INTO access_list (email_key, email, role, note, added_at) VALUES ('<canonical>', '<address>', 'developer', 'owner', unixepoch() * 1000)"
 ```
+Turning the beta on in a database that already has accounts closes it to
+them: before migrating, count them
+(`SELECT COUNT(*) FROM users`, and `SELECT COUNT(*) FROM subscriptions WHERE status != 'canceled'`),
+and either invite them or email them first (the terms promise notice of
+changes that matter to account holders). After deploying, sign out anyone
+who signed in through the old code between the migration and the deploy:
+`DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE access_key IS NULL)`.
 
 ## Layout
 

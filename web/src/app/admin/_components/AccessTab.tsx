@@ -8,7 +8,7 @@ type Entry = { email_key: string; email: string; role: "beta" | "developer"; not
 type Added = { added: string[]; already: string[]; invalid: string[] };
 
 // The beta and developer lists. Addresses are matched however they're
-// spelled (Gmail dots, +tags), so each shows as the address that signs in.
+// spelled (Gmail dots, +tags), so each also shows the form it's matched as.
 // Removing someone's last role signs them out everywhere; their account and
 // coins stay. The last developer can't be removed.
 export default function AccessTab() {
@@ -102,7 +102,7 @@ function AccessList({ title, entries, onRemove }: { title: string; entries: Entr
         <tr key={e.email_key}>
           <th scope="row" className="px-5 py-3 text-left font-medium">
             {e.email}
-            {e.email !== e.email_key && <span className="block text-xs font-normal text-ink-soft">signs in as {e.email_key}</span>}
+            {e.email !== e.email_key && <span className="block text-xs font-normal text-ink-soft">matched as {e.email_key}</span>}
           </th>
           <td className="px-3 py-3 text-ink-soft">{e.note ?? ""}</td>
           <td className="px-3 py-3 text-right tabular-nums">{date(e.added_at)}</td>

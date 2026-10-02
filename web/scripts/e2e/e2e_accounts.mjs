@@ -74,6 +74,16 @@ try {
   const landing = await fetch(`${O}/`);
   check("the landing page is public, with its CSP", landing.status === 200 && /frame-ancestors 'none'/.test(landing.headers.get("content-security-policy") ?? ""));
   check("so are the privacy notice and sign-in", (await fetch(`${O}/privacy`)).status === 200 && (await fetch(`${O}/signin`)).status === 200);
+  const worker = await fetch(`${O}/figureWorker.mjs`);
+  check("the figure worker keeps its own, stricter CSP (it never passes through a Function)", worker.status === 200 && /(^|, )default-src 'none'/.test(worker.headers.get("content-security-policy") ?? ""));
+  // other spellings of a gated page: never the page itself (a redirect or a 404 is fine)
+  const spellings = ["/HOME", "/Home/", "/home.html", "/journal/S100014455.html", "/h%6Fme", "//home", "/home.txt/"];
+  const served = [];
+  for (const p of spellings) {
+    const r = await fetch(`${O}${p}`, { redirect: "manual" });
+    if (r.status === 200) served.push(p);
+  }
+  check(`no other spelling serves a gated page signed out${served.length ? `: ${served.join(", ")}` : ""}`, served.length === 0);
 
   // outside the browser: the cross-site guard and an unsigned webhook
   const cross = await fetch(`${O}/api/auth/logout`, { method: "POST", headers: { origin: "https://evil.example" } });
@@ -84,6 +94,19 @@ try {
   browser = await chromium.launch();
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
+
+  // the landing page prefetches the gated pages it links to; each answer is a 401, and none is asked for over and over
+  const prefetched = new Map();
+  page.on("request", (r) => {
+    const path = new URL(r.url()).pathname;
+    if (/^\/(home|match|journals|journal|review|figures|write|guide|architecture|account|pricing|admin)\b/.test(path)) prefetched.set(path, (prefetched.get(path) ?? 0) + 1);
+  });
+  await page.goto(`${O}/`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(5000);
+  const most = Math.max(0, ...prefetched.values());
+  console.log(`     landing page: ${prefetched.size} gated paths asked for, at most ${most} times each`);
+  check("the landing page doesn't retry gated prefetches", most <= 2);
+  page.removeAllListeners("request");
 
   // a client-side link into the gate (the tray's Home, from a public page): its payload's 401 makes the router load the page, which redirects
   await page.goto(`${O}/privacy`);
@@ -122,6 +145,13 @@ try {
   await page.goto(`${O}/admin`);
   check("but not the console page", new URL(page.url()).pathname === "/home");
   check("nor its API", (await page.evaluate(() => fetch("/api/admin/stats").then((r) => r.status))) === 403);
+  // taken off the list (still signed in): the AI features refuse, however the path is spelled
+  sql("DELETE FROM access_list WHERE email_key = 'e2e@example.org'");
+  const aiVariants = await page.evaluate(() =>
+    Promise.all(["/api/figure", "/api/Figure", "/api/figure/", "/api/Review/start", "/api/review/start/"].map((p) => fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).then((r) => `${p} ${r.status}`))),
+  );
+  check(`off the list, every spelling of the AI routes is refused (${aiVariants.join(", ")})`, aiVariants.every((v) => v.endsWith(" 403")));
+  sql("INSERT INTO access_list (email_key, email, role, added_at) VALUES ('e2e@example.org', 'e2e@example.org', 'beta', 0)");
   check("and gets Paddle's public config, never a secret", me.paddle?.token === "test_e2e" && !JSON.stringify(me).includes(SECRET));
 
   // a pack, through a signed webhook
@@ -187,7 +217,7 @@ const unused = await page.evaluate(async (journalId) => {
   // a developer: the console, its figures, a grant, and never the last developer removed
   sql("INSERT INTO access_list (email_key, email, role, added_at) VALUES ('e2e@example.org', 'e2e@example.org', 'developer', 0)");
   await page.goto(`${O}/admin`);
-  await page.waitForSelector("text=Active today");
+  await page.waitForSelector("text=Active, last 24 hours");
   check("a developer opens the console", new URL(page.url()).pathname === "/admin");
   const stats = await page.evaluate(() => fetch("/api/admin/stats").then((r) => r.json()));
   check("whose figures come from the log", stats.overview.users.total === 1 && stats.overview.requests.day > 5 && stats.overview.list.developer.listed === 1);

@@ -24,6 +24,7 @@
 import { fingerprint, hashSecret, networkKey, randomToken, rateLimit, readJson, safeNext, sha256Hex, text, type AccountEnv } from "../../../../src/lib/accounts/auth.ts";
 import { isEmail, normalEmail } from "../../../../src/lib/accounts/coins.ts";
 import { mayEnter } from "../../../../src/lib/access/access.ts";
+import { BETA } from "../../../../src/lib/access/beta.ts";
 
 const LINK_TTL_MS = 15 * 60 * 1000;
 // Providers big enough to police their own sign-ups; everyone else's domain has a daily limit on new accounts.
@@ -50,6 +51,9 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
   const next = safeNext(body?.next);
   const url = new URL(request.url);
   const dev = env.DEV_EMAIL_LOG === "1" && url.hostname === "localhost";
+  // The closed beta signs in with Google only. Off for everyone alike, before
+  // any work, so neither the answer nor its timing says who's invited.
+  if (BETA.on && !dev) return text("Email sign-in is off during the beta. Continue with Google.", 503);
   const secret = hashSecret(env, request);
   if (!secret || (!dev && (!env.RESEND_API_KEY || !env.EMAIL_FROM || !env.TURNSTILE_SECRET))) return text("Email sign-in isn't set up yet. Use Google for now.", 503);
   if (!dev && !(await passesTurnstile(env.TURNSTILE_SECRET!, body?.turnstile, request))) {
@@ -78,10 +82,9 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
     }
     if (!(await rateLimit(db, "mail-new", 90, DAY, now))) return text("Email sign-up is busy today. Use Google, or try again tomorrow.", 503);
   }
-  // The closed beta: an address that isn't invited gets the same answer as
-  // one that is, after the same limits, so no one can learn who's on the
-  // list; but no email, and nothing stored. Before the sending quota, which
-  // refused addresses shouldn't use up.
+  // The closed beta on localhost (DEV_EMAIL_LOG, how the e2e signs in): an
+  // address that isn't invited gets the usual answer, but no link, and
+  // nothing stored.
   if (!(await mayEnter(db, email))) return Response.json({ ok: true });
   if (!(await rateLimit(db, "mail-all", 95, DAY, now))) return text("Email sign-in is busy today. Use Google, or try again tomorrow.", 503);
 

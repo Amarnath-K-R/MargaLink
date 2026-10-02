@@ -7,7 +7,8 @@
 // for 12 months once no account holds it (housekeeping deletes it then),
 // and the sign-in counters keyed by the address, until they expire within a
 // day (deleting an account mustn't reset its limits). Its activity log goes
-// with it, and so does its place on the beta list (a developer's stays).
+// with it, and so does its place on the beta list (a developer's stays; and
+// one another account shares, as bob and bob+x do, stays until that goes too).
 // Pro is cancelled at Paddle first, so a deleted account is never charged.
 import { getSession, readJson, sessionCookies, text, withCookies, type AccountEnv } from "../../src/lib/accounts/auth.ts";
 import { cancelSubscription, type PaddleApiEnv } from "../../src/lib/accounts/paddle.ts";
@@ -98,7 +99,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // and its unused sign-in links go too.
   await env.DB.batch([
     releaseWelcomeStatement(env.DB, s.userId, Date.now()),
-    env.DB.prepare("DELETE FROM access_list WHERE role = 'beta' AND email_key = (SELECT access_key FROM users WHERE id = ?)").bind(s.userId),
+    env.DB.prepare(
+      `DELETE FROM access_list WHERE role = 'beta' AND email_key = (SELECT access_key FROM users WHERE id = ?1)
+         AND NOT EXISTS (SELECT 1 FROM users WHERE access_key = access_list.email_key AND id <> ?1)`,
+    ).bind(s.userId),
     env.DB.prepare("DELETE FROM users WHERE id = ?").bind(s.userId),
     env.DB.prepare("DELETE FROM magic_links WHERE email = ?").bind(s.email),
   ]);

@@ -2,6 +2,8 @@
 // something, add an entry at the top: the date (YYYY-MM-DD), which part of
 // MargaLink it's about, a title, a sentence or two, optional highlights, and
 // where to try it. Entries on the same date are grouped under it.
+import { CONTACT_EMAIL } from "@/lib/site";
+
 export type UpdateTag = "Write" | "Match" | "Review" | "Figures" | "Journals" | "Guide" | "Design" | "Accounts";
 
 export type Update = {
@@ -32,7 +34,7 @@ export const UPDATES: Update[] = [
     tag: "Accounts",
     title: "The closed beta",
     summary: "MargaLink is open to invited testers for now, to hear what works before it opens to everyone. Testers sign in with Google and start with 50 M coins.",
-    points: ["Every tool needs an invited account until the beta ends", "50 M coins to try the AI review and Ask Claude", "Tell us what to fix: developer@margalink.com"],
+    points: ["Every tool needs an invited account until the beta ends", "50 M coins to try the AI review and Ask Claude", `Tell us what to fix: ${CONTACT_EMAIL}`],
     href: "/account",
     cta: "Your account",
   },

@@ -61,13 +61,13 @@ function Overview({ stats }: { stats: Stats }) {
         <Tile label="Accounts" value={num(o.users.total)}>
           {num(o.users.new7)} new this week
         </Tile>
-        <Tile label="Active today" value={num(o.active.day)}>
+        <Tile label="Active, last 24 hours" value={num(o.active.day)}>
           {num(o.active.week)} this week, {num(o.active.month)} in 30 days
         </Tile>
         <Tile label="Beta testers signed in" value={`${num(o.list.beta.joined)} of ${num(o.list.beta.listed)}`}>
           Developers: {num(o.list.developer.joined)} of {num(o.list.developer.listed)}
         </Tile>
-        <Tile label="Requests today" value={num(o.requests.day)}>
+        <Tile label="Requests, last 24 hours" value={num(o.requests.day)}>
           {num(o.requests.errors)} failed, {num(o.requests.refused)} refused
         </Tile>
         <Tile label="AI cost, 30 days" value={money(o.ai.cost)}>

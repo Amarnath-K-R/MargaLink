@@ -174,6 +174,8 @@ assert.match(await res.text(), /Sign in/);
 res = await call("/api/figure", oldCookie);
 assert.deepEqual([res.status, reached], [403, 0], "not on the list: no Ask Claude");
 assert.match(await res.text(), /beta list/);
+// Pages routes /api/Figure and /api/figure/ to the same Function: refused just the same
+for (const variant of ["/api/Figure", "/api/figure/", "/API/REVIEW/start"]) assert.deepEqual([(await call(variant, oldCookie)).status, reached], [403, 0], variant);
 assert.equal((await call("/api/admin/stats", annCookie, "GET")).status, 403, "a tester isn't a developer");
 assert.equal((await call("/api/account", oldCookie, "GET")).status, 200, "anyone signed in can still export or delete their account");
 assert.equal(reached, 1);
@@ -185,8 +187,14 @@ await Promise.all(gwaits);
 const logged = (await gdb.prepare("SELECT user_id, route, method, status, model, input_tokens, output_tokens FROM api_events ORDER BY id").all<Record<string, unknown>>()).results;
 assert.deepEqual(
   logged.map((e) => [e.route, e.status, e.user_id]),
-  [["/api/review/start", 401, null], ["/api/figure", 403, old2.id], ["/api/admin/stats", 403, ann.id], ["/api/account", 200, old2.id], ["/api/figure", 200, ann.id], ["/api/review", 401, null]],
+  [["/api/review/start", 401, null], ["/api/figure", 403, old2.id], ["/api/Figure", 403, old2.id], ["/api/figure/", 403, old2.id], ["/API/REVIEW/start", 403, old2.id], ["/api/admin/stats", 403, ann.id], ["/api/account", 200, old2.id], ["/api/figure", 200, ann.id], ["/api/review", 401, null]],
   "every request logged, refusals too",
 );
-assert.deepEqual([logged[4].model, logged[4].input_tokens, logged[4].output_tokens], ["claude-sonnet-5", 700, 90], "with the tokens of its AI call");
+const answered = logged.find((e) => e.route === "/api/figure" && e.status === 200)!;
+assert.deepEqual([answered.model, answered.input_tokens, answered.output_tokens], ["claude-sonnet-5", 700, 90], "with the tokens of its AI call");
+// a handler that crashes is logged too, as a 500, and the error still reaches Pages
+const crash = mwFull({ request: new Request("https://m.test/api/me"), next: async () => { throw new Error("boom"); }, env: { DB: gdb }, data: {}, waitUntil: (p) => void gwaits.push(p) });
+await assert.rejects(crash, /boom/);
+await Promise.all(gwaits);
+assert.deepEqual({ ...(await gdb.prepare("SELECT route, status FROM api_events ORDER BY id DESC LIMIT 1").first()) }, { route: "/api/me", status: 500 });
 console.log("auth.selfcheck: OK");

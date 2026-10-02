@@ -9,7 +9,7 @@ import { testD1 } from "../accounts/testD1.ts";
 import { createSession, signInUser, SESSION_COOKIE } from "../accounts/auth.ts";
 import { BETA } from "./beta.ts";
 import { addAccess, admitUser } from "./access.ts";
-import { PAGE_HEADERS, pageNeeds, routesJson } from "./policy.ts";
+import { apiNeeds, PAGE_HEADERS, pageNeeds, routesJson } from "./policy.ts";
 import { onRequest as gate } from "../../../functions/_middleware.ts";
 
 // --- the policy
@@ -46,14 +46,43 @@ const table: [string, string][] = [
   ["/pricing", "approved"],
   ["/admin", "developer"],
   ["/admin.txt", "developer"],
+  // the spellings a router or an asset server may treat as the same page
+  ["/HOME", "approved"],
+  ["/Home/", "approved"],
+  ["/home.html", "approved"],
+  ["/journal/S100014455.html", "approved"],
+  ["/h%6Fme", "approved"],
+  ["//home", "approved"],
+  ["/Admin", "developer"],
 ];
 for (const [path, need] of table) assert.equal(pageNeeds(path), need, path);
 
-// only the gated paths run a Function: the committed _routes.json is the policy's
+// the API: Pages routes a Function whatever the case and with or without a trailing slash, so the gate must too
+const apiTable: [string, string][] = [
+  ["/api/me", "public"],
+  ["/api/account", "public"],
+  ["/api/reviews", "public"],
+  ["/api/review", "approved"],
+  ["/api/review/start", "approved"],
+  ["/api/figure", "approved"],
+  ["/api/figure/", "approved"],
+  ["/api/Figure", "approved"],
+  ["/API/REVIEW/start", "approved"],
+  ["/api/review/start/", "approved"],
+  ["/api/admin/stats", "developer"],
+  ["/api/Admin/stats/", "developer"],
+];
+for (const [path, need] of apiTable) assert.equal(apiNeeds(path), need, path);
+
+// which paths run a Function at all: the committed _routes.json is the policy's. While the beta runs,
+// everything does but the static asset folders (a static server may answer /HOME or /h%6Fme with
+// home.html, so no spelling of a page may skip the gate), and nothing excluded is a page that's gated.
 const routes = JSON.parse(readFileSync(new URL("../../../public/_routes.json", import.meta.url), "utf8"));
 assert.deepEqual(routes, routesJson(), `public/_routes.json is out of date; it should be:\n${JSON.stringify(routesJson(), null, 2)}`);
 assert.ok(routes.include.length + routes.exclude.length <= 100, "Pages allows 100 rules");
-assert.ok(routes.include.includes("/api/*") && routes.include.includes("/home.txt") && routes.include.includes("/journal/*"));
+assert.deepEqual(routes.include, ["/*"]);
+assert.ok(routes.exclude.includes("/_next/*") && routes.exclude.includes("/index/*") && routes.exclude.includes("/figureWorker.mjs"));
+for (const ex of routes.exclude) assert.equal(pageNeeds(ex.replace("/*", "/x")), "public", `${ex} is excluded, so it must not be gated`);
 
 // the gate sets the same security headers public/_headers gives static pages
 const block = readFileSync(new URL("../../../public/_headers", import.meta.url), "utf8").split(/^\/\*$/m)[1].split(/\n\s*\n/)[0];
@@ -87,12 +116,21 @@ const visit = (path: string, token?: string, env: Ctx["env"] = { DB: db }) =>
     data: {},
   });
 
-// public paths and the API pass straight through, untouched
-for (const path of ["/", "/privacy", "/api/me", "/api/review/start", "/guide/coins-account.jpg"]) {
+// the API passes straight through, untouched (it has its own gate and headers)
+for (const path of ["/api/me", "/api/review/start", "/API/Figure"]) {
   const before = served;
   const r = await visit(path);
-  assert.equal([r.status, served - before, r.headers.get("cache-control")].join(), "200,1,", path);
+  assert.deepEqual([r.status, served - before, r.headers.get("cache-control"), r.headers.get("content-security-policy")], [200, 1, null, null], path);
 }
+// public pages are served, with the security headers _headers would have given them (Pages skips that file once a Function runs), cached as usual
+for (const path of ["/", "/privacy", "/guide/coins-account.jpg", "/no-such-page"]) {
+  const before = served;
+  const r = await visit(path);
+  assert.deepEqual([r.status, served - before, r.headers.get("cache-control")], [200, 1, null], path);
+  assert.equal(r.headers.get("content-security-policy"), PAGE_HEADERS["Content-Security-Policy"], path);
+}
+// any spelling of a gated page is gated
+for (const path of ["/HOME", "/h%6Fme", "//home", "/Journal/S1.html"]) assert.equal((await visit(path)).status, 302, path);
 
 // signed out: to the sign-in page, coming back after; a payload gets a bare 401 (the router then loads the page)
 let r = await visit("/journal/S1?from=match");

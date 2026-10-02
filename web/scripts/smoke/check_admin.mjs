@@ -106,9 +106,9 @@ await page.click('nav a[href="/admin"]');
 await page.waitForURL(/\/admin$/);
 
 // overview
-await page.waitForSelector("text=Active today");
+await page.waitForSelector("text=Active, last 24 hours");
 const overview = await page.locator("main").innerText();
-check("the overview shows users, activity, the lists and the AI cost", ["14", "Active today", "11 of 20", "$4.30", "318"].every((s) => overview.includes(s)));
+check("the overview shows users, activity, the lists and the AI cost", ["14", "Active, last 24 hours", "Requests, last 24 hours", "Today (UTC)", "11 of 20", "$4.30", "318"].every((s) => overview.includes(s)));
 check("the overview draws the 30 days", (await page.locator('svg[role="img"] rect[data-day]').count()) === 30);
 
 // AI usage

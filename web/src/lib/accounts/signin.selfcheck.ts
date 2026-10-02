@@ -13,6 +13,7 @@ import { onRequestPost as logout } from "../../../functions/api/auth/logout.ts";
 import { onRequestGet as me } from "../../../functions/api/me.ts";
 import { WELCOME_COINS } from "./coins.ts";
 import { addAccess } from "../access/access.ts";
+import { BETA } from "../access/beta.ts";
 
 const env = { DB: testD1(), HASH_SECRET: "test-key", GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "sec", GOOGLE_REDIRECT_URI: "https://m.test/api/auth/google/callback", RESEND_API_KEY: "re", EMAIL_FROM: "MargaLink <signin@m.test>", TURNSTILE_SECRET: "ts-secret" };
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
@@ -46,7 +47,8 @@ globalThis.fetch = (async (url: string, init?: RequestInit) => {
   throw new Error(`unexpected fetch ${url}`);
 }) as typeof fetch;
 
-// --- email link
+// --- email link, as it works once the beta is over (during it, below, it's off when deployed)
+(BETA as { on: boolean }).on = false;
 assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "nope" }))).status, 400);
 // no link without the two boxes ticked (18 or older; the terms and privacy notice)
 const r0 = await run(emailRequest, post("/api/auth/email/request", { turnstile: "ts-token", email: "ann@example.org" }));
@@ -164,11 +166,25 @@ human = false;
 assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "t2@x.org" }, "", "192.0.2.9"), guarded)).status, 400);
 human = true;
 
-// the beta: an address that isn't invited gets the same answer, but no email and no link
+// the beta: email sign-in is off when deployed, the same answer for an invited address as for anyone (nothing to time), nothing sent or stored
+(BETA as { on: boolean }).on = true;
 const sentBefore = sent.length;
-assert.equal((await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email: "stranger@x.org" }, "", "198.51.100.60"))).status, 200);
+const linksBefore = await count("SELECT COUNT(*) AS n FROM magic_links");
+for (const email of ["ann@example.org", "stranger@x.org"]) {
+  r = await run(emailRequest, post("/api/auth/email/request", { agree: true, turnstile: "ts-token", email }, "", "198.51.100.60"));
+  assert.equal(r.status, 503, email);
+  assert.match(await r.text(), /Google/);
+}
 assert.equal(sent.length, sentBefore, "nothing sent");
-assert.equal(await count("SELECT COUNT(*) AS n FROM magic_links WHERE email = ?", "stranger@x.org"), 0, "nothing stored");
+assert.equal(await count("SELECT COUNT(*) AS n FROM magic_links"), linksBefore, "nothing stored");
+// on localhost (the e2e signs in this way), links go to the invited only
+const devLogged: string[] = [];
+const devLog = console.log;
+console.log = (s: string) => void devLogged.push(s);
+const devAsk = (email: string) => run(emailRequest, new Request("http://localhost:8788/api/auth/email/request", { method: "POST", body: JSON.stringify({ agree: true, email }) }), { ...env, RESEND_API_KEY: undefined, DEV_EMAIL_LOG: "1" });
+const devStatuses = [(await devAsk("stranger@x.org")).status, devLogged.length, (await devAsk("dev@x.org")).status, devLogged.length];
+console.log = devLog;
+assert.deepEqual(devStatuses, [200, 0, 200, 1], "nothing for the uninvited; a link for the invited");
 // and a link for one (made before it was removed from the list) signs no one in
 await env.DB.prepare("INSERT INTO magic_links (token_hash, email, next, expires_at) VALUES (?, 'stranger@x.org', '/home', ?)").bind(await sha256Hex("stranger-token-stranger-token-stranger-token"), Date.now() + 60_000).run();
 r = await run(emailVerify, post("/api/auth/email/verify", { token: "stranger-token-stranger-token-stranger-token" }));

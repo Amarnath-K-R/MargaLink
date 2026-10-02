@@ -94,4 +94,17 @@ assert.equal(await releasedAt(), null, "the other account still holds it");
 // ...and the last one releases it, even deployed without the fingerprint key (the account remembers its own)
 assert.equal((await deleteAs(a2, { DB: env.DB })).status, 200);
 assert.ok(((await releasedAt()) ?? 0) >= now, "released when the last account using it goes");
+// the same for a beta invitation two accounts share (bob and bob+x): the other keeps its access until it goes too
+{
+  const { addAccess, admitUser, accessFor } = await import("../access/access.ts");
+  await addAccess(env.DB, [{ email: "bob@corp.org", role: "beta" }], null, now);
+  const bob = (await admitUser(env.DB, { email: "bob@corp.org" }, now, "key"))!;
+  const bobX = (await admitUser(env.DB, { email: "bob+x@corp.org" }, now, "key"))!;
+  const bobCookie = `__Host-ml_session=${await createSession(env.DB, bob.id, now)}`;
+  assert.equal((await deleteAs(bobX)).status, 200);
+  const still = await accessFor(env.DB, new Request("https://m.test/", { headers: { cookie: bobCookie } }), now);
+  assert.equal(still?.approved, true, "the other account is still invited, and still signed in");
+  assert.equal((await deleteAs(bob)).status, 200);
+  assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM access_list WHERE email_key = 'bob@corp.org'").first<{ n: number }>())?.n, 0, "the last one takes the invitation with it");
+}
 console.log("account.selfcheck: OK");

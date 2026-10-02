@@ -50,14 +50,21 @@ export const onRequest: PagesFunction<{ DB?: D1Database }> = async (ctx) => {
   const { request, env, data, waitUntil } = ctx;
   const url = new URL(request.url);
   const now = Date.now();
-  const res = await answer(ctx, url, now);
+  // A handler that throws is logged as a 500 (the failures the log is for), then rethrown for Pages to answer.
+  let res: Response | null = null;
+  let crash: unknown = null;
+  try {
+    res = await answer(ctx, url, now);
+  } catch (e) {
+    crash = e;
+  }
   const ms = Date.now() - now;
   if (env?.DB) {
     const db = env.DB;
     const token = readCookie(request, SESSION_COOKIE);
     const chores: Promise<unknown>[] = [
       // ponytail: /api/me (every tab focus) will be most of the rows; skip or sample it here if the table grows too fast
-      logEvent(db, { at: now, idHash: token && token.length <= 100 ? await sha256Hex(token) : null, route: url.pathname, method: request.method, status: res.status, ms, ai: data?.ai as AiUsage | undefined }),
+      logEvent(db, { at: now, idHash: token && token.length <= 100 ? await sha256Hex(token) : null, route: url.pathname, method: request.method, status: res?.status ?? 500, ms, ai: data?.ai as AiUsage | undefined }),
     ];
     if (now - lastHousekeeping > HOUSEKEEPING_EVERY_MS) {
       lastHousekeeping = now;
@@ -65,5 +72,6 @@ export const onRequest: PagesFunction<{ DB?: D1Database }> = async (ctx) => {
     }
     waitUntil(Promise.all(chores).catch((e) => console.error(`after-request chores failed: ${e instanceof Error ? e.message : e}`)));
   }
+  if (!res) throw crash;
   return res;
 };

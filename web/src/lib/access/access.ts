@@ -1,7 +1,7 @@
 // The closed beta's access list, and the one door to an account while it
 // runs. Addresses match by their canonical form (coins.ts canonicalEmail), so
-// a tester listed as Ann.Lee+beta@googlemail.com signs in as
-// annlee@gmail.com. The sign-in handlers ask admitUser, the gates
+// a tester listed as Ann.Lee+beta@googlemail.com can sign in as
+// ann.lee@gmail.com or annlee@gmail.com (both match annlee@gmail.com). The sign-in handlers ask admitUser, the gates
 // (functions/_middleware.ts, functions/api/_middleware.ts) ask accessFor, and
 // the console (/api/admin/access) edits the list.
 import { readCookie, SESSION_COOKIE, sha256Hex, signInUser, type Session } from "../accounts/auth.ts";

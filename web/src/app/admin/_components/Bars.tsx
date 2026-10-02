@@ -1,4 +1,4 @@
-// Thirty days as bars, one per day (hover for the figure). Inline SVG: no
+// Thirty days as bars, one per UTC day (hover for the figure). Inline SVG: no
 // chart library for one bar chart.
 export default function Bars({ days, values, label, format }: { days: string[]; values: number[]; label: string; format: (n: number) => string }) {
   const top = Math.max(0, ...values);
@@ -19,7 +19,7 @@ export default function Bars({ days, values, label, format }: { days: string[]; 
       </svg>
       <div aria-hidden className="mt-1 flex justify-between text-xs text-ink-soft tabular-nums">
         <span>{days[0]}</span>
-        <span>Today</span>
+        <span>Today (UTC)</span>
       </div>
       <figcaption className="mt-2 text-sm text-ink-soft">
         {label}. Highest: {format(top)}.
