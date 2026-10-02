@@ -117,9 +117,10 @@ export function useHub({
 export type Hub = ReturnType<typeof useHub>;
 
 // The palette entries both workspaces have: every window, the backup, the shortcuts, back to the projects.
-export function hubCommands(hub: Hub, { onBackup, onProjects }: { onBackup: () => void; onProjects: () => void }): Command[] {
+// `open` opens a window (the Word workspace saves first).
+export function hubCommands(hub: Hub, { onBackup, onProjects, open = hub.setTool }: { onBackup: () => void; onProjects: () => void; open?: (t: Tool) => void }): Command[] {
   return [
-    ...WINDOWS.map((w) => ({ id: w.tool, label: `Open ${w.title}`, run: () => hub.setTool(w.tool) })),
+    ...WINDOWS.map((w) => ({ id: w.tool, label: `Open ${w.title}`, run: () => open(w.tool) })),
     { id: "backup", label: "Download backup", run: onBackup },
     { id: "shortcuts", label: "Keyboard shortcuts", run: () => hub.setTool("shortcuts") },
     { id: "projects", label: "All projects", run: onProjects },
@@ -140,6 +141,7 @@ export function HubWindows({
   pendingRecipe = null,
   onRecipeApplied = () => {},
   commands,
+  shortcuts = "latex",
 }: {
   hub: Hub;
   project: ProjectMeta;
@@ -154,6 +156,7 @@ export function HubWindows({
   pendingRecipe?: string | null;
   onRecipeApplied?: (note: string | null) => void;
   commands: () => Command[];
+  shortcuts?: "latex" | "docx"; // which editor's keys the shortcuts window lists
 }) {
   const { tool, setTool, closeTool, checks, match, review, studio, rules, setTarget, openReview, confirmLeave } = hub;
   const windowBody = (t: Tool) => {
@@ -218,7 +221,7 @@ export function HubWindows({
       ))}
       <CommandPalette open={tool === "palette"} onClose={closeTool} commands={commands} />
       <Dialog open={tool === "shortcuts"} onClose={closeTool} title="Keyboard shortcuts" size="md">
-        {tool === "shortcuts" && <Shortcuts />}
+        {tool === "shortcuts" && <Shortcuts kind={shortcuts} />}
       </Dialog>
     </>
   );

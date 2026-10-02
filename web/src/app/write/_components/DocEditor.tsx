@@ -18,6 +18,7 @@ import { findQuoteInTex } from "@/lib/write/texSource";
 // `handleRef`.
 export type DocHandle = {
   save(): Promise<Uint8Array>; // the document as it is now, a .docx
+  pending(): boolean; // edits not yet saved (known at once, before the editor reports the change)
   text(): string; // the body's text, one line per paragraph (for the word count and the review's quotes)
   insertImage(png: Uint8Array, dpi: number): Promise<void>; // at the cursor, at the size it was drawn for
   showQuote(quote: string): boolean; // select and scroll to a passage; false when it isn't found
@@ -37,12 +38,14 @@ export default function DocEditor({
   bytes,
   readOnly,
   onEdit,
+  onDocument,
   onSaveNow,
   handleRef,
 }: {
   bytes: Uint8Array; // the document as opened; never fed back while editing
   readOnly: boolean; // another tab holds the project
   onEdit: () => void; // the document changed (not just the selection)
+  onDocument: () => void; // the document is laid out, or changed in any way (the word count follows it)
   onSaveNow: () => void; // Ctrl+S
   handleRef: React.MutableRefObject<DocHandle | null>;
 }) {
@@ -70,6 +73,7 @@ export default function DocEditor({
         if (!out) throw new Error("The document couldn't be saved.");
         return new Uint8Array(out);
       },
+      pending: () => ref.current?.hasPendingChanges() ?? false,
       text: () =>
         blocks()
           .map((b) => b.text)
@@ -104,7 +108,16 @@ export default function DocEditor({
       },
       focus: () => ref.current?.focus(),
     };
+    // Tell the workspace once the document is laid out (Folio builds its view after parsing).
+    let tries = 0;
+    const ready = setInterval(() => {
+      if (view() || ++tries > 100) {
+        clearInterval(ready);
+        onDocument();
+      }
+    }, 100);
     return () => {
+      clearInterval(ready);
       handleRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the handle reads the editor through refs
@@ -121,7 +134,10 @@ export default function DocEditor({
         showPrintButton={false}
         keyboardShortcuts="editor"
         // Only real edits count: Folio also reports changes that need no save.
-        onChange={() => ref.current?.hasPendingChanges() && onEdit()}
+        onChange={() => {
+          onDocument();
+          if (ref.current?.hasPendingChanges()) onEdit();
+        }}
         onSave={onSaveNow}
         onInsertImage={() => picker.current?.click()}
         onInsertTable={(rows, columns) => {

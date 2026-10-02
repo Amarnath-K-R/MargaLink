@@ -69,7 +69,7 @@ export default function StatusBar({
         ) : (
           <span>≈ {words.toLocaleString()} words</span>
         ))}
-      <span>{dirty ? "Unsaved edit" : "Saved"}</span>
+      <span data-testid="save-state">{dirty ? "Unsaved edit" : "Saved"}</span>
       {running && (
         <button type="button" onClick={running.onOpen} className="clay-btn h-6 px-2.5 text-xs text-accent">
           {running.label}

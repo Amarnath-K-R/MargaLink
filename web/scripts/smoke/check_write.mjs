@@ -122,7 +122,7 @@ const originalFiles = await fileList();
 const [download] = await Promise.all([page.waitForEvent("download"), page.click('[data-testid="storage-banner"] button:has-text("Download backup")')]);
 const zipPath = await download.path();
 await page.click("text=← All projects");
-await page.setInputFiles('input[aria-label="Import a .zip or .tex file"]', { name: "backup.zip", mimeType: "application/zip", buffer: (await import("node:fs")).readFileSync(zipPath) });
+await page.setInputFiles('input[aria-label="Import a .zip, .tex or .docx file"]', { name: "backup.zip", mimeType: "application/zip", buffer: (await import("node:fs")).readFileSync(zipPath) });
 await page.waitForSelector('[data-testid="workspace"] h2:has-text("backup")');
 await page.waitForFunction((n) => document.querySelectorAll('[data-testid="file-tree"] li').length === n, originalFiles.length);
 check(`imported copy has the same files (${originalFiles.length})`, JSON.stringify(await fileList()) === JSON.stringify(originalFiles));
@@ -141,7 +141,7 @@ check("imported copy compiles (retried with every pack)", (await pdfBytes()) > 1
 // --- a single .tex file imports as a project of its own (as main.tex) and compiles ---
 await page.goto("http://localhost:3000/write");
 const singleTex = "\\documentclass{article}\n\\begin{document}\nA single file.\n\\end{document}\n";
-await page.setInputFiles('input[aria-label="Import a .zip or .tex file"]', { name: "single paper.tex", mimeType: "text/x-tex", buffer: Buffer.from(singleTex) });
+await page.setInputFiles('input[aria-label="Import a .zip, .tex or .docx file"]', { name: "single paper.tex", mimeType: "text/x-tex", buffer: Buffer.from(singleTex) });
 await page.waitForSelector('[data-testid="workspace"] h2:has-text("single paper")');
 await page.waitForFunction(() => document.querySelectorAll('[data-testid="file-tree"] li').length === 1);
 check("a .tex import is one file, main.tex", JSON.stringify(await fileList()) === JSON.stringify(["main.tex"]));
