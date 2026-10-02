@@ -2,16 +2,34 @@
 
 import { useSyncExternalStore } from "react";
 
-// Every keyboard shortcut the workspace has, grouped. ⌘ on a Mac, Ctrl
-// elsewhere (the editor's Mod key follows the same rule).
-const GROUPS: { title: string; keys: { combo: string[]; what: string }[] }[] = [
+// Every keyboard shortcut the workspace has, grouped: the LaTeX source's, or
+// the Word document's. ⌘ on a Mac, Ctrl elsewhere (the editor's Mod key
+// follows the same rule).
+type Group = { title: string; keys: { combo: string[]; what: string }[] };
+const ANYWHERE: Group = {
+  title: "Anywhere",
+  keys: [
+    { combo: ["Mod", "K"], what: "Commands: every action, searchable" },
+    { combo: ["Esc"], what: "Close a window" },
+  ],
+};
+const DOCX: Group[] = [
+  ANYWHERE,
   {
-    title: "Anywhere",
+    title: "In the document",
     keys: [
-      { combo: ["Mod", "K"], what: "Commands: every action, searchable" },
-      { combo: ["Esc"], what: "Close a window" },
+      { combo: ["Mod", "S"], what: "Save now (it also saves on its own as you type)" },
+      { combo: ["Mod", "B"], what: "Bold" },
+      { combo: ["Mod", "I"], what: "Italic" },
+      { combo: ["Mod", "U"], what: "Underline" },
+      { combo: ["Mod", "Z"], what: "Undo" },
+      { combo: ["Mod", "Shift", "Z"], what: "Redo" },
+      { combo: ["Mod", "F"], what: "Find and replace" },
     ],
   },
+];
+const LATEX: Group[] = [
+  ANYWHERE,
   {
     title: "In the source",
     keys: [
@@ -38,7 +56,7 @@ const GROUPS: { title: string; keys: { combo: string[]; what: string }[] }[] = [
 
 const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
-export default function Shortcuts() {
+export default function Shortcuts({ kind = "latex" }: { kind?: "latex" | "docx" }) {
   const mac = useSyncExternalStore(
     () => () => {},
     isMac,
@@ -47,7 +65,7 @@ export default function Shortcuts() {
   const label = (k: string) => (k === "Mod" ? (mac ? "⌘" : "Ctrl") : k === "Alt" && mac ? "⌥" : k === "Shift" && mac ? "⇧" : k);
   return (
     <div className="space-y-6 text-sm">
-      {GROUPS.map((g) => (
+      {(kind === "docx" ? DOCX : LATEX).map((g) => (
         <section key={g.title}>
           <h3 className="mb-2 text-xs font-medium text-accent">{g.title}</h3>
           <dl className="divide-y divide-line/70">

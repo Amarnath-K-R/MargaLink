@@ -9,34 +9,35 @@ import CompileFirst from "./CompileFirst.tsx";
 import type { ChecksApi } from "./useChecks.ts";
 
 // The Checks window: the format check and the target journal's rules,
-// read from the compiled PDF on this device. Runs itself whenever the PDF
-// or the target journal changed since it last ran.
+// read from the paper (the compiled PDF, or the Word document) on this
+// device. Runs itself whenever the paper or the target journal changed
+// since it last ran.
 export default function ChecksWindow({
   checks,
-  pdfFile,
+  paperFile,
   compiling,
   onCompile,
   rules,
   targetName,
 }: {
   checks: ChecksApi;
-  pdfFile: File | null;
+  paperFile: File | null;
   compiling: boolean;
-  onCompile: () => void;
+  onCompile?: () => void; // absent: a Word document, which needs no compile
   rules: JournalRules | undefined;
   targetName: string | null;
 }) {
   const { busy, source, rulesFor, run } = checks;
   useEffect(() => {
-    if (pdfFile && !busy && (source !== pdfFile || rulesFor !== (rules?.journalId ?? null))) void run(pdfFile, rules);
-  }, [pdfFile, busy, source, rulesFor, run, rules]);
+    if (paperFile && !busy && (source !== paperFile || rulesFor !== (rules?.journalId ?? null))) void run(paperFile, rules);
+  }, [paperFile, busy, source, rulesFor, run, rules]);
 
-  if (!pdfFile) return <CompileFirst compiling={compiling} onCompile={onCompile} />;
+  if (!paperFile) return <CompileFirst compiling={compiling} onCompile={onCompile} />;
   return (
     <div data-testid="checks" className="text-sm">
-      <p className="text-ink-soft">Read from the compiled PDF on this device. Counts include headings, captions and references. Nothing is sent.</p>
+      <p className="text-ink-soft">Read from your paper on this device. Counts include headings, captions and references. Nothing is sent.</p>
       {checks.error && <ErrorText>{checks.error}</ErrorText>}
-      {checks.busy && !checks.format && <p className="mt-3 text-ink-soft">Reading the PDF…</p>}
+      {checks.busy && !checks.format && <p className="mt-3 text-ink-soft">Reading the paper…</p>}
       {checks.format && <FormatCheckPanel result={checks.format} />}
       <section className="mt-12 border-t border-line pt-8">
         <h2 className="font-serif text-xl font-medium">{rules ? `${rules.journalName}'s rules` : "Journal rules"}</h2>

@@ -151,7 +151,7 @@ export default function PrivacyPage() {
               IP address; Cloudflare keeps request logs under its own terms to serve and protect the site.
             </p>
             <p>
-              <strong>Your drafts live in your browser.</strong> Writing projects are kept in your browser&apos;s own storage on your device, never on
+              <strong>Your drafts live in your browser.</strong> Writing projects, LaTeX and Word documents alike, are kept in your browser&apos;s own storage on your device, never on
               a server. Clearing this site&apos;s data in your browser deletes them, so use &ldquo;Download backup&rdquo; to keep a copy or move to
               another computer.
             </p>

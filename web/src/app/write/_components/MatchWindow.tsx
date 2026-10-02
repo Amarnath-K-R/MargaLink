@@ -7,12 +7,13 @@ import ProcessingTrace from "@/app/match/_components/ProcessingTrace";
 import WhatWeRead from "@/app/match/_components/WhatWeRead";
 import CompileFirst from "./CompileFirst.tsx";
 
-// The Match window: the compiled PDF against the journal index, on this
-// device — the same run as /match, over the same hook. A result can become
+// The Match window: the paper (the compiled PDF, or the Word document)
+// against the journal index, on this device — the same run as /match, over
+// the same hook. A result can become
 // the project's target journal, or open the Review window for that journal.
 export default function MatchWindow({
   match: m,
-  pdfFile,
+  paperFile,
   compiling,
   onCompile,
   targetJournalId,
@@ -20,27 +21,27 @@ export default function MatchWindow({
   onReview,
 }: {
   match: MatchApi;
-  pdfFile: File | null;
+  paperFile: File | null;
   compiling: boolean;
-  onCompile: () => void;
+  onCompile?: () => void; // absent: a Word document, which needs no compile
   targetJournalId: string | null;
   onSetTarget: (id: string, name: string) => void;
   onReview: (journalId: string) => void;
 }) {
-  if (!pdfFile) return <CompileFirst compiling={compiling} onCompile={onCompile} />;
-  const stale = m.results !== null && m.source !== pdfFile;
+  if (!paperFile) return <CompileFirst compiling={compiling} onCompile={onCompile} />;
+  const stale = m.results !== null && m.source !== paperFile;
   return (
     <div data-testid="match-window" className="text-sm">
       <div className="flex flex-wrap items-center gap-4">
         <button
           type="button"
-          onClick={() => void m.process(pdfFile)}
+          onClick={() => void m.process(paperFile)}
           disabled={m.busy}
           className="rounded-sm border border-line bg-paper-alt px-4 py-1.5 hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
           {m.busy ? "Matching…" : stale ? "Draft changed: match again" : m.results ? "Match again" : "Find matching journals"}
         </button>
-        <span className="text-ink-soft">Matches the compiled PDF against the journal index; the paper never leaves this device.</span>
+        <span className="text-ink-soft">Matches your paper against the journal index; it never leaves this device.</span>
       </div>
 
       {m.stage !== "idle" && (

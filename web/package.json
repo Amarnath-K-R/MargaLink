@@ -18,11 +18,12 @@
     "db:local": "wrangler d1 migrations apply margalink --local",
     "dev:full": "next build && wrangler d1 migrations apply margalink --local && wrangler pages dev out --port 8788",
     "smoke": "for f in scripts/smoke/check_*.mjs; do node \"$f\" || exit 1; done",
-    "deploy": "next build && rm -f out/_next/static/media/ort-wasm-simd-threaded.asyncify*.wasm && rm -rf out/__pycache__ && wrangler pages deploy out --project-name margalink --branch main --commit-dirty=true"
+    "deploy": "next build && rm -f out/_next/static/media/ort-wasm-simd-threaded.asyncify*.wasm && rm -rf out/__pycache__ && node scripts/ops/check_out_limits.mjs && wrangler pages deploy out --project-name margalink --branch main --commit-dirty=true"
   },
   "dependencies": {
     "@codemirror/legacy-modes": "^6.5.4",
     "@huggingface/transformers": "^4.3.0",
+    "@stll/folio-react": "0.24.1",
     "codemirror": "^6.0.2",
     "fflate": "^0.8.3",
     "lucide-react": "^1.47.0",
@@ -34,7 +35,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "read-excel-file": "^9.3.10",
-    "three": "^0.186.0"
+    "three": "^0.186.0",
+    "use-intl": "4.14.8"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260919.1",
@@ -43,9 +45,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.186.0",
+    "docx": "9.8.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "playwright": "^1.63.0",
+    "postcss": "8.5.28",
     "tailwindcss": "^4",
     "typescript": "^5",
     "wrangler": "^4.135.0"
