@@ -3,8 +3,40 @@
 // footer, a table, a numbered reference list), and the same document as a
 // template (.dotx), with macros (.docm), and in Word's old binary format.
 // Never anyone's real paper.
-import { AlignmentType, Document, Footer, Header, HeadingLevel, LevelFormat, Packer, Paragraph, Table, TableCell, TableRow, TextRun } from "docx";
+import {
+  AlignmentType,
+  Bookmark,
+  CommentRangeEnd,
+  CommentRangeStart,
+  CommentReference,
+  DeletedTextRun,
+  Document,
+  ExternalHyperlink,
+  Footer,
+  FootnoteReferenceRun,
+  Header,
+  HeadingLevel,
+  ImageRun,
+  InsertedTextRun,
+  LevelFormat,
+  LineNumberRestartFormat,
+  Math as OMath,
+  MathFraction,
+  MathRun,
+  Packer,
+  PageNumber,
+  PageReference,
+  Paragraph,
+  SectionType,
+  SequentialIdentifier,
+  Table,
+  TableCell,
+  TableOfContents,
+  TableRow,
+  TextRun,
+} from "docx";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { deflateSync } from "node:zlib";
 
 export const TEXT = {
   title: "Sleep duration and recovery after cardiac surgery",
@@ -44,6 +76,103 @@ export async function paperDocx() {
     ],
   });
   return new Uint8Array(await Packer.toBuffer(doc));
+}
+
+// A small solid square, as a real PNG (signature, IHDR, IDAT, IEND), for
+// pictures in the body and the header.
+function squarePng(size = 32, rgb = [200, 60, 40]) {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (buf) => {
+    let c = 0xffffffff;
+    for (const b of buf) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    out.write(type, 4, "ascii");
+    data.copy(out, 8);
+    out.writeUInt32BE(crc(out.subarray(4, 8 + data.length)), 8 + data.length);
+    return out;
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr.set([8, 2, 0, 0, 0], 8); // 8-bit RGB
+  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: size }, () => rgb).flat())]);
+  return new Uint8Array(Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(Buffer.concat(Array.from({ length: size }, () => row)))), chunk("IEND", Buffer.alloc(0))]));
+}
+const PNG = squarePng();
+
+// Everything a real paper may carry that an editor must not lose: citation
+// manager fields (Zotero, Mendeley: complex fields, injected as Word writes
+// them), figure numbering (SEQ), a cross-reference (REF), a table of contents,
+// page numbers, a content control (injected), line numbering, tracked changes,
+// a footnote, a comment, an equation, a picture in the body and in the
+// header, a link, a two-column section and a numbered reference list.
+export async function kitchenSinkDocx() {
+  const p = (...children) => new Paragraph({ alignment: AlignmentType.JUSTIFIED, children });
+  const t = (text) => new TextRun(text);
+  const doc = new Document({
+    features: { updateFields: true, trackRevisions: false },
+    comments: { children: [{ id: 0, author: "Reviewer", date: new Date("2026-09-01"), children: [new Paragraph("Please cite the trial registry here.")] }] },
+    footnotes: { 1: { children: [new Paragraph("Registered at ClinicalTrials.gov, NCT00000000.")] } },
+    numbering: { config: [{ reference: "vancouver", levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.START }] }] },
+    sections: [
+      {
+        properties: { lineNumbers: { countBy: 1, restart: LineNumberRestartFormat.CONTINUOUS } },
+        headers: { default: new Header({ children: [new Paragraph({ children: [new ImageRun({ type: "png", data: PNG, transformation: { width: 24, height: 24 } }), t(" Kitchen Sink Journal")] })] }) },
+        footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [t("Page "), new TextRun({ children: [PageNumber.CURRENT] }), t(" of "), new TextRun({ children: [PageNumber.TOTAL_PAGES] })] })] }) },
+        children: [
+          new Paragraph({ heading: HeadingLevel.TITLE, text: "Everything a manuscript carries" }),
+          new TableOfContents("Contents", { hyperlink: true, headingStyleRange: "1-2" }),
+          new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new Bookmark({ id: "methods", children: [t("Methods")] })] }),
+          p(t("Adults recovering from surgery were enrolled"), new FootnoteReferenceRun(1), t(" and followed for ninety days. ZOTERO_HERE")),
+          p(new CommentRangeStart(0), t("The protocol was approved by the ethics committee."), new CommentRangeEnd(0), new TextRun({ children: [new CommentReference(0)] })),
+          p(t("Readmission was "), new DeletedTextRun({ text: "rare", id: 1, author: "Coauthor", date: "2026-09-02T10:00:00Z" }), new InsertedTextRun({ text: "uncommon", id: 2, author: "Coauthor", date: "2026-09-02T10:00:00Z" }), t(" in the reference group.")),
+          p(t("The hazard was estimated as "), new OMath({ children: [new MathRun("h = "), new MathFraction({ numerator: [new MathRun("events")], denominator: [new MathRun("person-years")] })] }), t(".")),
+          p(t("SDT_HERE")),
+          p(new ImageRun({ type: "png", data: PNG, transformation: { width: 120, height: 120 } })),
+          p(t("Figure "), new TextRun({ children: [new SequentialIdentifier("Figure")] }), t(". Readmission by sleep duration. MENDELEY_HERE")),
+          p(t("As described in Methods (page "), new PageReference("methods"), t("), see the registry at "), new ExternalHyperlink({ link: "https://clinicaltrials.gov", children: [new TextRun({ text: "clinicaltrials.gov", style: "Hyperlink" })] }), t(".")),
+        ],
+      },
+      {
+        properties: { type: SectionType.CONTINUOUS, column: { count: 2, space: 708 } },
+        children: [
+          new Paragraph({ heading: HeadingLevel.HEADING_1, text: "References" }),
+          ...["Smith J. Sleep after surgery. Heart. 2019;105:1-8.", "Lee K. Actigraphy in recovery. Sleep. 2021;44:2-9.", "Patel R. Readmission after cardiac surgery. JAMA. 2020;323:10-17."].map(
+            (text) => new Paragraph({ numbering: { reference: "vancouver", level: 0 }, children: [t(text)] }),
+          ),
+        ],
+      },
+    ],
+  });
+  const bytes = new Uint8Array(await Packer.toBuffer(doc));
+  // What the library can't write, written as Word and the citation managers do.
+  const field = (instr, shown) =>
+    `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">${instr}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>${shown}</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+  const parts = unzipSync(bytes);
+  let xml = strFromU8(parts["word/document.xml"]);
+  const swap = (marker, replacement) => {
+    const re = new RegExp(`<w:r>(?:(?!<w:r>).)*?<w:t[^>]*>([^<]*)${marker}</w:t></w:r>`, "s");
+    if (!re.test(xml)) throw new Error(`fixture marker ${marker} not found`);
+    xml = xml.replace(re, (_, before) => `<w:r><w:t xml:space="preserve">${before}</w:t></w:r>${replacement}`);
+  };
+  swap("ZOTERO_HERE", field(' ADDIN ZOTERO_ITEM CSL_CITATION {"citationID":"k1","citationItems":[{"id":1,"uris":["http://zotero.org/users/1/items/AB12"]}]} ', "(Smith, 2019)"));
+  swap("MENDELEY_HERE", field(' ADDIN CSL_CITATION {"citationItems":[{"id":"ITEM-1"}],"mendeley":{"formattedCitation":"[2]"}} ', "[2]"));
+  const sdtPara = /<w:p>(?:(?!<w:p>).)*?SDT_HERE(?:(?!<\/w:p>).)*<\/w:p>/s;
+  if (!sdtPara.test(xml)) throw new Error("fixture marker SDT_HERE not found");
+  xml = xml.replace(
+    sdtPara,
+    '<w:sdt><w:sdtPr><w:alias w:val="Structured abstract"/><w:tag w:val="abstract"/><w:id w:val="4242"/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>Text inside a content control, as journal templates use for the abstract.</w:t></w:r></w:p></w:sdtContent></w:sdt>',
+  );
+  parts["word/document.xml"] = strToU8(xml);
+  return zipSync(parts);
 }
 
 // The document's main part declared as something else: a template, or a macro-enabled document.
