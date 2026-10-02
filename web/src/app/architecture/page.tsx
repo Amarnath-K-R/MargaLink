@@ -93,7 +93,8 @@ export default function ArchitecturePage() {
                   <>
                     Both AI Functions keep nothing from a request: they validate, charge, call Claude, gate the answer and return it. Server state, all in D1, is
                     the daily limits per feature (for the service and for each account, {code("dailyCaps.ts")}), accounts, the coin ledger and a running
-                    review&apos;s ticket (section ids and lengths). Writing projects live in the browser&apos;s Origin Private File
+                    review&apos;s ticket (section ids and lengths), the beta&apos;s access list ({code("access.ts")}) and a 30-day activity log of API
+                    requests, metadata and token counts only ({code("apiEvents.ts")}). Writing projects live in the browser&apos;s Origin Private File
                     System ({code("projectStore.ts")}).
                   </>
                 ),

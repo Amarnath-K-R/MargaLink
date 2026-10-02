@@ -71,6 +71,34 @@ ids and character counts, and its ticket row keeps only those, for two
 hours. Rule 2 holds for signed-in users exactly as before. Never log an
 email address, a token or a request body.
 
+**The closed beta and the console** (`web/src/lib/access/`): while
+`BETA.on` (`access/beta.ts`, the one switch), the dashboard and every tool
+need an invited account, and new accounts start with `BETA.coins` (50) in
+place of the 10 welcome coins. `access/policy.ts` says what each path
+needs; `functions/_middleware.ts` gates pages (only the paths in
+`public/_routes.json`, which `policy.selfcheck.ts` keeps equal to
+`routesJson()`, run a Function at all), and `functions/api/_middleware.ts`
+gates the API (the AI features need an invited account, `/api/admin/*` a
+developer). `access/access.ts` holds the access list (`access_list`:
+canonical address, `beta` or `developer`): `admitUser` is the only way an
+account is created or signed in, and turns uninvited addresses away
+before anything is stored. Every API request is logged after it's answered
+(`telemetry/apiEvents.ts`, table `api_events`: the path without its query,
+status, time, the account from its session, an AI call's model and token
+counts; never an IP, address or body), kept 30 days. Developers read it
+all at `/admin` (`src/app/admin/`, `functions/api/admin/*`, SQL in
+`src/lib/admin/stats.ts`, whose `PRICES` table must match Anthropic's
+rates for the model in `review.ts`/`figure.ts`). To end the beta: set
+`BETA.on` false, commit the smaller `_routes.json` the policy selfcheck
+asks for, and update the privacy notice and terms.
+
+Adding someone: the console's Access tab. The first developer is seeded
+by hand, once per database (Gmail addresses: lowercase, no dots or +tag in
+`email_key`):
+```bash
+npx wrangler d1 execute margalink --remote --command "INSERT INTO access_list (email_key, email, role, note, added_at) VALUES ('<canonical>', '<address>', 'developer', 'owner', unixepoch() * 1000)"
+```
+
 ## Layout
 
 - `pipeline/` — offline data pipeline (Python, `uv`). Fetches OpenAlex
@@ -78,10 +106,11 @@ email address, a token or a request body.
   its output (`web/public/index/*`) is static files the browser fetches.
 - `web/` — Next.js app, static export (`output: "export"` in
   `next.config.ts`) — no backend, **except** the Cloudflare Pages
-  Functions in `web/functions/api/`: `review.ts` and `figure.ts`, holding
-  the Anthropic API key server-side since the browser must never see it
-  (see the disclosed exceptions above), and the account and payment
-  Functions beside them (see "Accounts, M coins and payments").
+  Functions in `web/functions/`: `api/review.ts` and `api/figure.ts`,
+  holding the Anthropic API key server-side since the browser must never
+  see it (see the disclosed exceptions above), the account, payment and
+  console Functions beside them (see "Accounts, M coins and payments"),
+  and the beta's page gate, `_middleware.ts`.
 
 ## Frozen decisions (Phase 0)
 
@@ -137,7 +166,8 @@ Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
   with a pull request into `main`; the owner merges after testing. Never
   commit straight to `main` or merge a PR unasked.
 - Code lives by feature: `web/src/lib/<feature>/` (`paper`, `match`,
-  `journals`, `checks`, `review`, `figures`, `write`, `accounts`, `ai`),
+  `journals`, `checks`, `review`, `figures`, `write`, `accounts`, `ai`,
+  `access`, `telemetry`, `admin`),
   shared UI in `web/src/components/<concern>/`, single-route pieces in that
   route's `_components/` (the homepage's in `_landing/`). A new
   `*.selfcheck.ts` sits beside the file it tests.

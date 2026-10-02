@@ -100,8 +100,8 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
       )}
       <p className="mt-3 text-xs leading-relaxed text-ink-soft">
         An account keeps your email address (and Google&apos;s id for you, if you use Google), your M coin history and purchases, fingerprints of
-        your sign-in tokens, and a keyed fingerprint of your address so the welcome bonus is given once (kept 12 months after you delete the
-        account). Never anything from your papers. Download or delete it all on your account page at any time; deleting withdraws your consent.
+        your sign-in tokens, a 30-day log of your requests to our server (never what you send), and a keyed fingerprint of your address so the
+        welcome bonus is given once (kept 12 months after you delete the account). Never anything from your papers. Download or delete it all on your account page at any time; deleting withdraws your consent.
         Questions or complaints:{" "}
         <a href={`mailto:${CONTACT_EMAIL}`} className="text-accent hover:underline">
           {CONTACT_EMAIL}

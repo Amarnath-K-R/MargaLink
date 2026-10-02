@@ -17,6 +17,12 @@ const u = await signInUser(env.DB, { email: "ann@example.org", google: "g-1" }, 
 await grantWelcome(env.DB, u.id, u.email, now, "key");
 await credit(env.DB, u.id, 50, "pack", "txn_1", now + 1);
 const cookie = `__Host-ml_session=${await createSession(env.DB, u.id, now)}`;
+// on the beta list (with a developer's note about them), and one request in the activity log
+const { addAccess } = await import("../access/access.ts");
+const { logEvent } = await import("../telemetry/apiEvents.ts");
+await addAccess(env.DB, [{ email: "ann@example.org", role: "beta", note: "lab" }], null, now);
+await env.DB.prepare("UPDATE users SET access_key = 'ann@example.org' WHERE id = ?").bind(u.id).run();
+await logEvent(env.DB, { at: now, idHash: (await env.DB.prepare("SELECT id_hash AS h FROM sessions").first<{ h: string }>())!.h, route: "/api/figure", method: "POST", status: 200, ms: 900, ai: { model: "m", input: 10, output: 5 } });
 const get = (q = "", c = cookie) => (onRequestGet as unknown as Handler)({ request: new Request(`https://m.test/api/account${q}`, { headers: { cookie: c } }), env });
 const del = (body: unknown) => (onRequestPost as unknown as Handler)({ request: new Request("https://m.test/api/account", { method: "POST", body: JSON.stringify(body), headers: { cookie } }), env });
 
@@ -36,6 +42,8 @@ assert.equal(data.coins.ledger.length, 2);
 assert.equal(data.sessions.length, 1);
 assert.deepEqual([data.purchases, data.subscriptions, data.adjustments, data.reviews], [[], [], [], []], "payments and running reviews are part of the export");
 assert.equal(data.account.id, u.id, "the account's own id");
+assert.deepEqual(data.access, [{ role: "beta", email: "ann@example.org", note: "lab", addedAt: now }], "the beta list's entry, note included");
+assert.deepEqual(data.activity, [{ at: now, route: "/api/figure", method: "POST", status: 200, ms: 900, model: "m", inputTokens: 10, outputTokens: 5 }], "the activity log's rows");
 assert.deepEqual(data.identities, [{ provider: "google", subject: "g-1" }], "the Google id we keep, not just a yes");
 assert.deepEqual(
   data.sharedWith.map((p: { name: string }) => p.name),
@@ -57,7 +65,7 @@ assert.equal((await del({})).status, 400);
 const gone = await del({ delete: " Ann@Example.org " });
 assert.equal(gone.status, 200);
 assert.ok(gone.headers.getSetCookie().every((c) => c.endsWith("Max-Age=0")));
-for (const t of ["users", "identities", "sessions", "coin_ledger", "magic_links"]) {
+for (const t of ["users", "identities", "sessions", "coin_ledger", "magic_links", "api_events", "access_list"]) {
   assert.equal((await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first<{ n: number }>())?.n, 0, t);
 }
 const claim = await env.DB.prepare("SELECT released_at AS at FROM welcome_claims").first<{ at: number | null }>();

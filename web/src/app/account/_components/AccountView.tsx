@@ -10,6 +10,7 @@ import { PRO } from "@/lib/accounts/coins";
 import { openPortal } from "@/lib/accounts/paddleCheckout";
 import { refreshAccount, signOut, useAccount } from "@/components/account/useAccount";
 import type { LedgerKind } from "@/lib/accounts/coins";
+import { BETA } from "@/lib/access/beta";
 
 type Details = { email: string; balance: number; google: boolean; since?: number; noticeVersion?: number; history: { kind: LedgerKind; label: string; delta: number; at: number }[] };
 const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
@@ -124,8 +125,8 @@ export default function AccountView() {
 
       <Panel title="Your data">
         <p>
-          We keep your email address, how you sign in, your M coin history and, for a paid review in progress, which sections it covers (for two hours).
-          Never anything from your papers.{" "}
+          We keep your email address, how you sign in, your M coin history, a 30-day log of your requests to our server (never what you sent) and,
+          for a paid review in progress, which sections it covers (for two hours). Never anything from your papers.{" "}
           <Link href="/privacy#accounts" className="text-accent hover:underline">
             The full list
           </Link>
@@ -202,6 +203,7 @@ function DeletePanel({ email, coins, pro, onDeleted }: { email: string; coins: n
         )}
         We keep a keyed fingerprint of your email address for 12 months, so the welcome bonus isn&apos;t given to it again; it can&apos;t be turned back
         into your address.
+        {BETA.on && " It also takes you off the beta list, so you can't sign back in unless you're invited again."}
       </p>
       {pro && (
         <p className="mt-2 text-away">

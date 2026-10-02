@@ -10,6 +10,7 @@
 import { chromium } from "playwright";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mockAccount } from "../smoke/mock_account.mjs";
+import { BETA } from "../../src/lib/access/beta.ts";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const OUT = new URL("../../public/guide/", import.meta.url).pathname;
@@ -253,7 +254,11 @@ if (want("coins")) {
   await ctx.clearCookies();
   await go("/signin");
   const card = page.locator("main .sheet").first();
-  await shot("coins-signin", [card], [page.getByRole("button", { name: "Continue with Google" }), page.getByLabel("Email me a sign-in link"), page.getByRole("button", { name: "Send the link" }), card.getByRole("link", { name: "What an account stores" })]);
+  // During the beta: its notice and Google only (the guide's notes follow BETA too).
+  const signInMarks = BETA.on
+    ? [card.getByText("Open to invited beta testers"), page.getByRole("button", { name: "Continue with Google" }), card.getByRole("link", { name: "What an account stores" })]
+    : [page.getByRole("button", { name: "Continue with Google" }), page.getByLabel("Email me a sign-in link"), page.getByRole("button", { name: "Send the link" }), card.getByRole("link", { name: "What an account stores" })];
+  await shot("coins-signin", [card], signInMarks);
   await ctx.addCookies([{ name: "ml_in", value: "1", url: BASE }]);
   // What things cost, and buying coins.
   await go("/pricing");

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BarChart3, BookOpen, Coins, Compass, FileCheck2, LifeBuoy, PenLine, ScanSearch } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import { WELCOME_COINS } from "@/lib/accounts/coins";
+import { BETA } from "@/lib/access/beta";
 import ResetSiteData from "@/app/guide/_components/ResetSiteData";
 import { Aside, DocBody, DocPart, DocSection, Keys, OptionTable, Shot, type TocItem } from "@/components/docs/Doc";
 import { FiguresArt, JournalsArt, MatchArt, PrivacyArt, ReviewArt, WriteArt } from "@/components/docs/Art";
@@ -825,32 +826,44 @@ export default function GuidePage() {
           lead={
             <>
               Only the AI review and Ask Claude need an account, because each run costs money. They&apos;re paid in M coins; everything else stays
-              free, with no account.
+              free, with no account.{BETA.on && " While the closed beta runs, every tool needs an invited account."}
             </>
           }
         >
           <DocPart title="Signing in">
             <p>
               From the tray&apos;s <strong>Sign in</strong>, from a review or figure button, or from the sign-in page. Google opens in a small window
-              and an email link opens in a new tab, so a paper you&apos;ve loaded stays exactly where it is; the page notices you&apos;ve signed in
-              when you come back to it. A new account starts with {WELCOME_COINS} M coins.
+              {BETA.on ? "" : " and an email link opens in a new tab"}, so a paper you&apos;ve loaded stays exactly where it is; the page notices
+              you&apos;ve signed in when you come back to it. A new account starts with {WELCOME_COINS} M coins.
+              {BETA.on && " During the beta, only invited addresses can sign in, with Google; the invitation's address is the one to use."}
             </p>
           </DocPart>
           <Shot
             name="coins-signin"
             narrow
-            alt="Signing in: Continue with Google, or an emailed link"
+            alt={BETA.on ? "Signing in during the beta: who it's open to, and Continue with Google" : "Signing in: Continue with Google, or an emailed link"}
             notes={[
+              ...(BETA.on
+                ? [
+                    <>
+                      <strong>Open to invited beta testers</strong>: anyone else is told MargaLink is coming soon, and nothing about them is stored.
+                    </>,
+                  ]
+                : []),
               <>
                 <strong>Continue with Google</strong>, once you&apos;ve ticked the two boxes above it (you&apos;re 18 or older; you agree to the terms
                 and have read the privacy notice): shares your verified email address and Google&apos;s id for your account, nothing else.
               </>,
-              <>
-                <strong>Your email address</strong>, for a one-time link instead. It works once, within 15 minutes.
-              </>,
-              <>
-                <strong>Send the link</strong>. Opening it asks you to confirm before signing in, so an email scanner can&apos;t use it up.
-              </>,
+              ...(BETA.on
+                ? []
+                : [
+                    <>
+                      <strong>Your email address</strong>, for a one-time link instead. It works once, within 15 minutes.
+                    </>,
+                    <>
+                      <strong>Send the link</strong>. Opening it asks you to confirm before signing in, so an email scanner can&apos;t use it up.
+                    </>,
+                  ]),
               <>
                 <strong>What an account stores</strong>: the list, on the privacy page.
               </>,

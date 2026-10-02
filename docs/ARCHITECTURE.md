@@ -757,7 +757,28 @@ checks.
 | `dailyCaps.ts` | The AI features' daily limits (service-wide and per account), counted in D1's `rate_limits`. |
 | `paddle.ts` | Server: the webhook signature, price ids, what each event does to the ledger, and the portal and cancel calls. |
 | `paddleCheckout.ts` | Client: Paddle.js loaded on demand, the checkout, the customer portal. |
+| `notice.ts` | `NOTICE_VERSION`: the privacy notice's version, shown on /privacy and recorded on each new account. |
 | `testD1.ts` | Selfchecks only: D1's API over `node:sqlite` with every migration applied. |
+
+*`src/lib/access/`*: the closed beta (see CLAUDE.md, "The closed beta and the console").
+
+| File | What |
+|---|---|
+| `beta.ts` | `BETA = { on, coins }`: the one switch. No imports, so the client and the Functions both read it. |
+| `policy.ts` | `pageNeeds`, `apiNeeds` (public, approved or developer), `routesJson()` (what `public/_routes.json` must be) and `PAGE_HEADERS` (the `/*` block of `public/_headers`, for gated pages). Pure. |
+| `access.ts` | Server: the access list. `admitUser` (the only door to an account), `accessFor` (session and roles in one query), `addAccess`, `removeAccess` (never the last developer), `listAccess`, `developerIn`. |
+
+*`src/lib/telemetry/`*: the activity log.
+
+| File | What |
+|---|---|
+| `apiEvents.ts` | `logEvent` (one row per API request, metadata only), `purgeEvents` (30 days), `usageSink` (an AI call's tokens into the request's row). |
+
+*`src/lib/admin/`*: the developer console's data.
+
+| File | What |
+|---|---|
+| `stats.ts` | Server: the overview, AI usage by day, feature and person, the users table, the activity log's pages, and `aiCost` from `PRICES` ($ per million tokens). |
 
 *`src/lib/ai/`*: the Anthropic transport the two AI Functions share.
 
@@ -781,7 +802,9 @@ relative paths) and only genuinely server-specific code stays here.
 | File | What |
 |---|---|
 | `api/review.ts` | One of the two AI Functions: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the daily pass limits (`dailyCaps.ts`: 1,500 a day in all, 150 per account), one `callAnthropicTool`, grounding/validation. |
-| `api/_middleware.ts` | The Origin check on every non-GET (not the Paddle webhook) and `Cache-Control: no-store`. |
+| `_middleware.ts` | The beta's page gate, on the paths `public/_routes.json` lists: sign-in for the signed out, a refusal for the uninvited, `/admin` for developers only; gated pages get the `_headers` security headers. |
+| `api/_middleware.ts` | Old deployments refused, the Origin check on every non-GET (not the Paddle webhook), the beta's API gate, `Cache-Control: no-store`, housekeeping, and the activity log row after each answer. |
+| `api/admin/*` | The console: `stats`, `users` (and coin grants), `access` (the lists), `events` (the log). Developers only. |
 | `api/me.ts`, `api/account.ts` | Who's signed in, the balance, Pro, Paddle's public config; the account page's data, the export, deletion. |
 | `api/auth/google/*`, `api/auth/email/*`, `api/auth/logout.ts` | Signing in and out. |
 | `api/review/start.ts` | Charges a review and issues its ticket. |
@@ -791,7 +814,8 @@ relative paths) and only genuinely server-specific code stays here.
 ## `lib/` conventions
 
 - **One folder per feature** (`paper/`, `match/`, `journals/`, `checks/`,
-  `review/`, `figures/`, `write/`, `accounts/`, `ai/`), with only the
+  `review/`, `figures/`, `write/`, `accounts/`, `ai/`, `access/`,
+  `telemetry/`, `admin/`), with only the
   genuinely shared helpers (`errorMessage.ts`, `site.ts`) at
   the root. Files keep their full names (`reviewPrompt.ts`, not
   `review/prompt.ts`) so a name means the same thing in a search, a stack

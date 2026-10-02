@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 // credits for MargaLink's own AI features: never a wallet, never money.
 // When these change, change the date below; a change that matters to
 // account holders is emailed to them before it takes effect.
-const UPDATED = "Last updated 28 September 2026";
+const UPDATED = "Last updated 2 October 2026";
 
 export default function TermsPage() {
   return (
@@ -42,7 +42,8 @@ export default function TermsPage() {
         <LegalSection title="The service">
           <p>
             MargaLink helps you find a journal for a paper, check it against a journal&apos;s rules, make figures and write it. Most of it runs in your
-            browser, is free and needs no account; those tools are open to everyone. Two features send something to Anthropic&apos;s Claude and cost M
+            browser, is free and needs no account; those tools are open to everyone (while the closed beta runs, the whole service is open only
+            to invited testers, who sign in with Google, and we may end anyone&apos;s access to the beta at any time). Two features send something to Anthropic&apos;s Claude and cost M
             coins: the AI pre-submission review and Ask Claude in the figure studio. The{" "}
             <Link href="/privacy" className="text-accent hover:underline">
               privacy notice

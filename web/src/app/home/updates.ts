@@ -28,6 +28,15 @@ export const TAG_TINT: Record<UpdateTag, string> = {
 
 export const UPDATES: Update[] = [
   {
+    date: "2026-10-02",
+    tag: "Accounts",
+    title: "The closed beta",
+    summary: "MargaLink is open to invited testers for now, to hear what works before it opens to everyone. Testers sign in with Google and start with 50 M coins.",
+    points: ["Every tool needs an invited account until the beta ends", "50 M coins to try the AI review and Ask Claude", "Tell us what to fix: developer@margalink.com"],
+    href: "/account",
+    cta: "Your account",
+  },
+  {
     date: "2026-09-28",
     tag: "Accounts",
     title: "Accounts and M coins",

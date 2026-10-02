@@ -6,6 +6,7 @@ import { Aside, DocBody, OptionTable, type TocItem } from "@/components/docs/Doc
 import { PADDLE_RESELLER } from "@/lib/site";
 import { ContactEmail as Contact, OperatorDetails } from "@/components/layout/ContactDetails";
 import { FIGURE_PRICE, WELCOME_COINS } from "@/lib/accounts/coins";
+import { NOTICE_VERSION } from "@/lib/accounts/notice";
 
 export const metadata: Metadata = {
   title: "How privacy works | MargaLink",
@@ -17,10 +18,10 @@ export const metadata: Metadata = {
 // in plain language, with how to withdraw consent, use your rights and
 // complain) ask for, from what the code actually does. When the product
 // changes what it collects or sends, change this page in the same commit,
-// and bump the version and date below.
-// users.notice_version (migrations/0001) records which version each account
-// agreed to: bump its default with the version.
-const VERSION = "Version 1, last updated 28 September 2026";
+// and bump the version (accounts/notice.ts) and the date below.
+// users.notice_version records which version each account agreed to; new
+// accounts get NOTICE_VERSION (access/access.ts admitUser).
+const VERSION = `Version ${NOTICE_VERSION}, last updated 2 October 2026`;
 
 const TOC: TocItem[] = [
   { id: "summary", label: "In short" },
@@ -68,8 +69,12 @@ export default function PrivacyPage() {
                 values).
               </li>
               <li>
-                <strong>You need an account only for those two.</strong> It holds your email address, your M coin history and your purchases. Not your
-                name, not your papers.
+                <strong>You need an account only for those two</strong>, except while the closed beta runs, when every tool needs an invited
+                account. It holds your email address, your M coin history and your purchases. Not your name, not your papers.
+              </li>
+              <li>
+                <strong>During the beta</strong> we keep the list of invited addresses, and a 30-day log of requests to our server (when, which
+                feature, the result; never what was sent), to run the beta and see what the AI costs.
               </li>
               <li>
                 <strong>No ads, no analytics, no advertising or analytics cookies</strong>, and we never sell or rent anything about you.
@@ -126,8 +131,8 @@ export default function PrivacyPage() {
 
           <Section id="no-account" title="Using MargaLink without an account">
             <p>
-              Browsing journals, matching, the checks, the figure studio (drawing, statistics, exports) and the writing workspace need no account and
-              don&apos;t send your papers or your data anywhere. To run in your browser, the page downloads public files, the same for everyone:
+              Browsing journals, matching, the checks, the figure studio (drawing, statistics, exports) and the writing workspace need no account
+              (while the closed beta runs, they need an invited one, below) and don&apos;t send your papers or your data anywhere. To run in your browser, the page downloads public files, the same for everyone:
             </p>
             <OptionTable
               title="What your browser downloads, and from where"
@@ -142,8 +147,8 @@ export default function PrivacyPage() {
               Like any request on the web, each of these reaches its host with your IP address and ordinary browser details (such as its version),
               which the host uses to deliver the file and protect its service under its own privacy policy. None of them carries anything from your
               papers, spreadsheets or drafts. So besides our host, Cloudflare, Hugging Face and jsDelivr also receive your IP address when their
-              files load. We don&apos;t run analytics or keep access logs of our own; Cloudflare keeps request logs under its own terms to serve and
-              protect the site.
+              files load. We don&apos;t run analytics. Our server logs requests to its own API (see the activity log under Your account), never your
+              IP address; Cloudflare keeps request logs under its own terms to serve and protect the site.
             </p>
             <p>
               <strong>Your drafts live in your browser.</strong> Writing projects are kept in your browser&apos;s own storage on your device, never on
@@ -201,14 +206,16 @@ export default function PrivacyPage() {
             <p>
               <strong>What we keep.</strong> Nothing of what&apos;s sent, before or after. To charge a review once and refund what didn&apos;t run, we
               keep which sections it covers, their lengths and which came back (never their text), for about two hours. Ask Claude costs{" "}
-              {FIGURE_PRICE} M coin a request; we keep only that coin&apos;s charge or refund.
+              {FIGURE_PRICE} M coin a request; we keep only that coin&apos;s charge or refund. The activity log notes how many tokens each request
+              used (a count, nothing of the text), for 30 days.
             </p>
           </Section>
 
           <Section id="accounts" title="Your account">
             <p>
-              You need an account only for the two features above. Sign in with Google (which tells us your verified email address and its id for
-              your account, nothing else) or with a one-time link sent to your email. Here is everything an account involves:
+              You need an account only for the two features above, except while the closed beta runs: then every tool needs an account, and only
+              invited addresses can have one. Sign in with Google (which tells us your verified email address and its id for your account, nothing
+              else) or, outside the beta, with a one-time link sent to your email. Here is everything an account involves:
             </p>
             <OptionTable
               title="What we keep, why, and for how long"
@@ -229,6 +236,16 @@ export default function PrivacyPage() {
                   name: "Welcome-bonus fingerprint",
                   what: `A fingerprint of your email address made with a secret key, so the ${WELCOME_COINS}-coin welcome bonus is given once per address. It holds no address, and we can't turn it back into one without that address. For our legitimate interest in preventing abuse.`,
                   def: "While an account uses it, then 12 months after the last one is deleted",
+                },
+                {
+                  name: "Beta list entry",
+                  what: "If you're invited: the address you were invited with, as a tester or a developer, when, and any note our developers added about the invitation. Held from the invitation, before you sign up. It decides who can sign in during the beta.",
+                  def: "Until you're removed from the list, or a tester deletes their account",
+                },
+                {
+                  name: "Activity log",
+                  what: "For each request to our server: when, the address within the site it went to (never what was sent or a link's code), the result, how long it took, your account if you're signed in, and for an AI request the model and how many tokens it used. Never your IP address. To run the beta, fix problems and see what the AI costs.",
+                  def: "30 days, or until you delete your account",
                 },
                 {
                   name: "Your agreement",
@@ -281,13 +298,18 @@ export default function PrivacyPage() {
                   what: "Our legitimate interest in keeping the service secure and fair, weighed against yours: they hold no address, name or IP, and each is kept only as long as shown above (GDPR Art. 6(1)(f)).",
                 },
                 {
+                  name: "The beta list and the activity log",
+                  what: "Our legitimate interest in running a closed beta, keeping it secure and knowing what it costs, weighed against yours: the log holds no IP, nothing you sent, and is kept 30 days; an invitation holds only an address and a note (GDPR Art. 6(1)(f)).",
+                },
+                {
                   name: "Purchase records",
                   what: "To provide what you bought (our contract with you, GDPR Art. 6(1)(b)). They go when you delete your account; Paddle, as the seller, keeps the records tax law requires.",
                 },
               ]}
             />
             <p>
-              Giving your email address is needed to have an account; without one you can still use every tool except the two AI features. We make
+              Giving your email address is needed to have an account; without one you can still use every tool except the two AI features (once
+              the beta is over). We make
               no decisions about you by automated means that have legal or similar effects: match suggestions and the AI review are aids you read
               and judge yourself.
             </p>
@@ -355,8 +377,9 @@ export default function PrivacyPage() {
             <p>
               <strong>Safeguards.</strong> Everything travels over HTTPS. Sign-in tokens and links are stored only as one-way fingerprints, and the
               session cookie can&apos;t be read by scripts. Abuse counters and the welcome fingerprint are keyed with a secret, so they can&apos;t be
-              matched to an address or IP by anyone without it. The API keys stay on the server. Only the person who runs MargaLink can reach the
-              database. If a breach ever affected your data, we&apos;d tell you and the authorities as the law requires.
+              matched to an address or IP by anyone without it. The API keys stay on the server. Only the people who run MargaLink can reach the
+              database: its owner, and the developers on its developer list, who see account details, the beta list and the activity log in a
+              console, to run the service. If a breach ever affected your data, we&apos;d tell you and the authorities as the law requires.
             </p>
           </Section>
 
@@ -375,6 +398,10 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong>Delete it</strong>: &ldquo;Delete my account&rdquo; on the same page removes it at once (it also cancels Pro).
+              </li>
+              <li>
+                <strong>Removed from the beta?</strong> Without access you can&apos;t sign in to download or delete your data yourself: write to{" "}
+                <Contact /> and we&apos;ll send it, or delete it, for you. The same if you were invited and want your address off the list.
               </li>
               <li>
                 <strong>Correct it</strong>: write to <Contact /> to change your email address or fix anything else.
