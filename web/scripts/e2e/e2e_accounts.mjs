@@ -5,7 +5,10 @@
 // pays for a review through the real /api/review/start (the passes
 // themselves are mocked in the browser, so Claude is never called), meets a
 // 402 when a review costs more than the balance, and signs out; plus the
-// cross-site guard and an unsigned webhook, from outside the browser.
+// cross-site guard and an unsigned webhook, from outside the browser. And the
+// closed beta: the page gate, an uninvited address getting nothing, the
+// invited one's coins, the console refused to a tester and opened to a
+// developer (the lists are edited with `d1 execute --local`).
 //   node scripts/e2e/e2e_accounts.mjs
 import { chromium } from "playwright";
 import { spawn, execFileSync } from "node:child_process";
@@ -14,6 +17,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JOURNAL_RULES } from "../../src/lib/journals/journalRules.ts";
+import { WELCOME_COINS } from "../../src/lib/accounts/coins.ts";
 
 const PORT = 8790;
 const O = `http://localhost:${PORT}`;
@@ -51,7 +55,26 @@ for (let i = 0; i < 60; i++) {
   await new Promise((r) => setTimeout(r, 1000));
 }
 
+const sql = (command) => JSON.parse(execFileSync("npx", ["wrangler", "d1", "execute", "margalink", "--local", "--persist-to", state, "--json", "--command", command], { cwd: WEB, encoding: "utf8" }))[0].results;
+const signInLink = async (since) => {
+  for (let i = 0; i < 20; i++) {
+    const found = log.slice(since).match(/sign-in link: (http:\/\/localhost:\d+\/signin\/verify#t=[\w-]+)/)?.[1];
+    if (found) return found;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return null;
+};
+
 try {
+  // the page gate, signed out: the dashboard and tools redirect, their payloads 401; the landing and the legal pages stay static
+  const home = await fetch(`${O}/home`, { redirect: "manual" });
+  check("signed out, /home goes to sign-in", home.status === 302 && home.headers.get("location") === "/signin?next=%2Fhome");
+  check("and its payload is a 401", (await fetch(`${O}/home.txt`)).status === 401);
+  check("so is a journal page's", (await fetch(`${O}/journal/x`, { redirect: "manual" })).status === 302);
+  const landing = await fetch(`${O}/`);
+  check("the landing page is public, with its CSP", landing.status === 200 && /frame-ancestors 'none'/.test(landing.headers.get("content-security-policy") ?? ""));
+  check("so are the privacy notice and sign-in", (await fetch(`${O}/privacy`)).status === 200 && (await fetch(`${O}/signin`)).status === 200);
+
   // outside the browser: the cross-site guard and an unsigned webhook
   const cross = await fetch(`${O}/api/auth/logout`, { method: "POST", headers: { origin: "https://evil.example" } });
   check("a cross-site POST is refused", cross.status === 403);
@@ -62,24 +85,43 @@ try {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
 
-  // sign in with an email link, read from the dev log
+  // a client-side link into the gate (the tray's Home, from a public page): its payload's 401 makes the router load the page, which redirects
+  await page.goto(`${O}/privacy`);
+  await page.locator('nav a[href="/home"]').click();
+  await page.waitForURL(/\/signin\?next=%2Fhome$/, { timeout: 15000 });
+  check("signed out, a link into the tools lands on sign-in", true);
+
+  // an email link (the beta hides the form, so it's asked for from the page): nothing for an uninvited address
   await page.goto(`${O}/signin?next=/review`);
-  await page.getByLabel("Email me a sign-in link").fill("e2e@example.org");
-  await page.getByLabel("I confirm I'm 18 or older.").check();
-  await page.getByLabel(/I agree to the terms/).check();
-  await page.click("text=Send the link");
-  await page.waitForSelector("text=Check your email");
-  let link = null;
-  for (let i = 0; i < 20 && !link; i++) {
-    link = log.match(/sign-in link: (http:\/\/localhost:\d+\/signin\/verify#t=[\w-]+)/)?.[1] ?? null;
-    if (!link) await new Promise((r) => setTimeout(r, 250));
-  }
+  await page.waitForSelector("text=Open to invited beta testers");
+  const askLink = () =>
+    page.evaluate(() =>
+      fetch("/api/auth/email/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "e2e@example.org", next: "/review", agree: true }) }).then((r) => r.status),
+    );
+  let mark = log.length;
+  check("an uninvited address gets the usual answer", (await askLink()) === 200);
+  check("but no link, and no account", !(await signInLink(mark)) && sql("SELECT COUNT(*) AS n FROM users")[0].n === 0);
+  sql("INSERT INTO access_list (email_key, email, role, added_at) VALUES ('e2e@example.org', 'e2e@example.org', 'beta', 0)");
+  mark = log.length;
+  check("once invited, the link is sent", (await askLink()) === 200);
+  const link = await signInLink(mark);
   check("the sign-in link was written to the dev log", !!link);
   await page.goto(link);
   await page.locator(".sheet button", { hasText: "Sign in" }).click();
   await page.waitForSelector("text=You're signed in as e2e@example.org");
   const me = await page.evaluate(() => fetch("/api/me").then((r) => r.json()));
-  check("the new account has the welcome coins", me.user?.email === "e2e@example.org" && me.balance === 10);
+  check(`the new account has the beta's ${WELCOME_COINS} coins`, me.user?.email === "e2e@example.org" && me.balance === WELCOME_COINS && me.access?.approved === true && me.access?.developer === false);
+
+  // a tester: the tools, with their security headers; not the console
+  const tool = await page.goto(`${O}/review`);
+  check("a tester opens the tools, which carry the CSP and aren't cached shared", /frame-ancestors 'none'/.test(tool.headers()["content-security-policy"] ?? "") && tool.headers()["cache-control"] === "private, no-cache");
+  await page.evaluate(() => (window.__stayed = true));
+  await page.locator('nav a[href="/match"]').click();
+  await page.waitForURL(/\/match$/);
+  check("and moves between them without reloading (payloads pass the gate)", await page.evaluate(() => window.__stayed === true));
+  await page.goto(`${O}/admin`);
+  check("but not the console page", new URL(page.url()).pathname === "/home");
+  check("nor its API", (await page.evaluate(() => fetch("/api/admin/stats").then((r) => r.status))) === 403);
   check("and gets Paddle's public config, never a secret", me.paddle?.token === "test_e2e" && !JSON.stringify(me).includes(SECRET));
 
   // a pack, through a signed webhook
@@ -97,7 +139,7 @@ try {
     check(`the webhook is acknowledged (delivery ${i + 1})`, r.status === 200);
   }
   const afterPack = await page.evaluate(() => fetch("/api/me").then((r) => r.json()));
-  check("the pack's coins arrived once", afterPack.balance === 60);
+  check("the pack's coins arrived once", afterPack.balance === WELCOME_COINS + 50);
 
   // a paid review: the real start (charge + ticket), the passes mocked in the browser
   const tickets = [];
@@ -119,7 +161,7 @@ try {
   await page.waitForSelector('[data-testid="review-summary"], [data-testid="review-coverage"]', { timeout: 30000 });
   await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 30000 });
   const afterReview = await page.evaluate(() => fetch("/api/me").then((r) => r.json()));
-  check(`the review cost its price (${price})`, price > 0 && afterReview.balance === 60 - price);
+  check(`the review cost its price (${price})`, price > 0 && afterReview.balance === WELCOME_COINS + 50 - price);
   check("every pass carried the same real ticket", tickets.length > 1 && tickets.every((t) => t && t === tickets[0] && t.length >= 40));
 
   // more than the balance: 402 with the price and balance, nothing taken
@@ -141,6 +183,20 @@ const unused = await page.evaluate(async (journalId) => {
   // Both tickets expired: the unused one, and the first review's, whose passes were mocked
   // in the browser, so the server never saw a part delivered. Each is refunded in full.
   check(`expiry refunds what wasn't delivered (${swept.balance})`, swept.balance === afterReview.balance + price);
+
+  // a developer: the console, its figures, a grant, and never the last developer removed
+  sql("INSERT INTO access_list (email_key, email, role, added_at) VALUES ('e2e@example.org', 'e2e@example.org', 'developer', 0)");
+  await page.goto(`${O}/admin`);
+  await page.waitForSelector("text=Active today");
+  check("a developer opens the console", new URL(page.url()).pathname === "/admin");
+  const stats = await page.evaluate(() => fetch("/api/admin/stats").then((r) => r.json()));
+  check("whose figures come from the log", stats.overview.users.total === 1 && stats.overview.requests.day > 5 && stats.overview.list.developer.listed === 1);
+  const post = (path, body) => page.evaluate(([p, b]) => fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).then(async (r) => ({ status: r.status, body: await r.text() })), [path, body]);
+  const granted = await post("/api/admin/users", { userId: me.user.id, coins: 5 });
+  check("a developer can give coins", granted.status === 200 && JSON.parse(granted.body).balance === swept.balance + 5);
+  check("the last developer can't be removed", (await post("/api/admin/access", { action: "remove", role: "developer", emailKey: "e2e@example.org" })).status === 409);
+  const rows = sql("SELECT COUNT(*) AS n, SUM(user_id IS NOT NULL) AS mine, SUM(instr(route, '?') > 0) AS queries FROM api_events")[0];
+  check(`the activity log has the requests (${rows.n}), by account, without queries`, rows.n > 10 && rows.mine > 5 && rows.queries === 0);
 
   // sign out
   await page.evaluate(() => fetch("/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }));
