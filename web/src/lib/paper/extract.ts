@@ -74,11 +74,17 @@ async function extractFromPdf(file: File, withHeadings: boolean): Promise<Extrac
 
 async function extractFromDocx(file: File, withHeadings: boolean): Promise<ExtractedPaper> {
   const mammoth = await import("mammoth");
-  const buf = await file.arrayBuffer();
-  const { value } = await mammoth.extractRawText({ arrayBuffer: buf });
-  const fullText = value.replace(/[ \t]+/g, " ").trim();
+  let text = "";
+  const { value: html } = await mammoth.convertToHtml(
+    { arrayBuffer: await file.arrayBuffer() },
+    {
+      transformDocument: (doc) => ((text = docxText(doc)), doc),
+      convertImage: mammoth.images.imgElement(async () => ({ src: "" })), // pictures aren't read: only the text is wanted
+    },
+  );
+  const fullText = text.replace(/[ \t]+/g, " ").trim();
   // Word's own heading styles — exact where the author used them.
-  const headings = withHeadings ? pickDocxHeadings((await mammoth.convertToHtml({ arrayBuffer: buf })).value) : undefined;
+  const headings = withHeadings ? pickDocxHeadings(html) : undefined;
   // ponytail: first-3000-chars-of-whole-document, not "find the Abstract
   // heading" — a doc with a long title page/author block/TOC before the
   // abstract could get truncated before the abstract even starts. Works for
@@ -87,6 +93,29 @@ async function extractFromDocx(file: File, withHeadings: boolean): Promise<Extra
   return { text: fullText.slice(0, 3000), fullText, headings };
 }
 
-// No unit test here — nothing pure to check without a browser + a real file.
+type DocxNode = { type: string; value?: string; children?: DocxNode[]; numbering?: { isOrdered: boolean } | null };
+
+/** A Word document's text, as mammoth's raw text gives it (paragraphs end
+ * in a blank line, tabs kept), plus the numbers Word draws on numbered
+ * lists, which aren't in the document's text: a PDF of the paper shows
+ * them, and the reference count reads them. */
+export function docxText(root: DocxNode): string {
+  // ponytail: one counter per list level, so a sub-list doesn't restart under
+  // its next parent item; exact numbers only matter to "is this numbered".
+  const counters = new Map<object, number>();
+  const walk = (el: DocxNode): string => {
+    if (el.type === "text") return el.value ?? "";
+    if (el.type === "tab") return "\t";
+    const inner = (el.children ?? []).map(walk).join("");
+    if (el.type !== "paragraph") return inner;
+    const level = el.numbering?.isOrdered ? el.numbering : null;
+    const n = level ? (counters.get(level) ?? 0) + 1 : 0;
+    if (level) counters.set(level, n);
+    return `${level ? `${n}. ` : ""}${inner}\n\n`;
+  };
+  return walk(root);
+}
+
+// The PDF path has no unit test — nothing pure to check without a browser + a real file.
 // Covered by the manual Phase 2 gate: upload a real PDF, confirm sane text
 // comes back, confirm devtools shows no network call carrying it.

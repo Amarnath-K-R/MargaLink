@@ -5,28 +5,53 @@
 //   the text survives a reload and leaving right after typing; Download .docx
 //   gives the edited document with the template's styles untouched; a
 //   second tab is read-only; a backup comes back as a Word project.
-//   No page errors, no request carries a body, nothing leaves our origin.
+//   The windows read the document as saved: Checks (an auto-numbered
+//   reference list counted), Journal (no templates for Word), Match, and
+//   Review through its consent (mocked API) to Jump to source, which
+//   selects the quoted passage in the document.
+//   No page errors; only the review's requests carry a body, after consent;
+//   nothing leaves our origin but the matching model's public files.
 //   node scripts/smoke/check_write_docx.mjs
 import { chromium } from "playwright";
 import { readFileSync } from "node:fs";
 import { unzipSync, strFromU8 } from "fflate";
 import { asMacroDocument, asTemplate, docText, oldWordDoc, paperDocx, part, TEXT } from "../fixtures/docx_fixtures.mjs";
+import { mockAccount } from "./mock_account.mjs";
 
 const O = "http://localhost:3000";
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1400, height: 900 }, acceptDownloads: true });
 const page = await context.newPage();
 const problems = [];
+let consented = false; // the review's consent was given: its requests may carry the paper's text
+const reviewBodies = [];
 const watch = (p) => {
   p.on("pageerror", (e) => problems.push(`pageerror: ${e.message.slice(0, 160)}`));
   p.on("console", (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && problems.push(`console: ${m.text().slice(0, 160)}`));
   p.on("request", (r) => {
-    if (r.postData()) problems.push(`a request with a body: ${r.method()} ${r.url()}`);
-    if (!/^(https?:\/\/localhost:3000|data:|blob:)/.test(r.url())) problems.push(`left the origin: ${r.url().slice(0, 120)}`);
+    if (r.postData()) {
+      if (consented && /\/api\/review(\/start)?$/.test(r.url())) reviewBodies.push(r.url());
+      else problems.push(`a request with a body: ${r.method()} ${r.url()}`);
+    }
+    // the matching model and its runtime: public files, fetched without a body
+    const publicModel = /^https:\/\/(huggingface\.co|(?:[\w-]+\.)+hf\.co|cdn\.jsdelivr\.net)\//.test(r.url()) && r.method() === "GET";
+    if (!/^(https?:\/\/localhost:3000|data:|blob:)/.test(r.url()) && !publicModel) problems.push(`left the origin: ${r.url().slice(0, 120)}`);
   });
 };
 watch(page);
 page.on("dialog", (d) => void d.accept());
+const account = await mockAccount(context); // the Review window's review is paid for
+// The review's passes go to a mocked /api/review (as check_write.mjs): every
+// extract quotes its section's first sentence. Never a real Anthropic call.
+const firstSentence = (t) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12) ?? t.trim()).split(". ")[0];
+await context.route("**/api/review", async (route) => {
+  const req = route.request().postDataJSON();
+  if (req.pass === "extract") {
+    const q = firstSentence(req.chunk.text);
+    return route.fulfill({ json: { claims: [{ quote: q, measure: `count in ${req.chunk.id}`, values: [{ value: 1, unit: null }] }], statisticalReporting: [], notes: [] } });
+  }
+  return route.fulfill({ json: { journalFit: { assessment: "possible", explanation: "Scope overlaps." }, inconsistencies: [], summary: [{ text: "Reconcile the sample size.", severity: "major", refs: req.ledger.slice(0, 1).map((e) => e.id) }], otherObservations: [] } });
+});
 
 let failed = false;
 const check = (label, ok) => {
@@ -182,6 +207,103 @@ check("Word projects are marked as such in the list", await (async () => {
   await page.waitForSelector("text=Write your paper.");
   return (await page.locator('[data-testid="project-list"] li', { hasText: "Journal template" }).innerText()).includes("Word");
 })());
+
+// --- the windows read the document as saved ---
+const window_ = (name) => page.getByRole("dialog", { name });
+const openTool = async (name) => {
+  await page.click(`[role="group"][aria-label="Tools"] button:has-text("${name}")`);
+  await window_(name).waitFor();
+};
+const closeWindow = async () => {
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+};
+await importFile(page, "Hub paper.docx", docx);
+await page.waitForSelector('[data-testid="doc-workspace"]');
+await bodyText(page).getByText(TEXT.intro.slice(0, 30)).first().waitFor({ timeout: 20000 });
+const hubId = projectId(page);
+
+// Checks: the document's counts, its auto-numbered references included; a window opened right after typing reads the typing
+await clickInto(page, TEXT.methods);
+await page.keyboard.type(" Opened at once.");
+await openTool("Checks");
+check("opening a window right after typing saves first", (await storedText(page, hubId)).includes("Opened at once."));
+await page.waitForSelector('[data-testid="checks"] dl');
+const checksText = await page.locator('[data-testid="checks"]').innerText();
+check("Checks reads the Word document (word count)", /Word count/.test(checksText));
+check(
+  `an auto-numbered reference list is counted (${(await page.locator('[data-testid="checks"] dt:text-is("References (approximate)") + dd').textContent())?.trim()})`,
+  (await page.locator('[data-testid="checks"] dt:text-is("References (approximate)") + dd').textContent())?.trim() === "2",
+);
+await closeWindow();
+const beforeReopen = await stored(page, hubId);
+await openTool("Checks");
+await page.waitForSelector('[data-testid="checks"] dl');
+await closeWindow();
+check("reopening a window without edits saves nothing", (await stored(page, hubId)).updatedAt === beforeReopen.updatedAt);
+
+// Journal: a target journal, and no template section (templates are LaTeX only)
+const hasIndex = await page.evaluate(() => fetch("/index/meta.json").then((r) => r.ok, () => false));
+await page.click('button[aria-label="Target journal"]');
+await window_("Journal").waitFor();
+if (hasIndex) {
+  await window_("Journal").getByLabel("Search journals").fill("JAMA Neurology");
+  await window_("Journal").getByRole("button", { name: /^JAMA Neurology/ }).click();
+  check(
+    "the Journal window sets the target journal",
+    await page.waitForFunction(() => document.querySelector('button[aria-label="Target journal"]')?.textContent?.includes("JAMA Neurology"), null, { timeout: 10_000 }).then(() => true, () => false),
+  );
+}
+check("the Journal window offers no LaTeX template for a Word project", (await window_("Journal").getByRole("heading", { name: "Template" }).count()) === 0);
+await closeWindow();
+
+// Match: the saved document against the index (the first run fetches the model)
+if (hasIndex) {
+  await openTool("Match");
+  await window_("Match").getByRole("button", { name: "Find matching journals" }).click();
+  check("Match ranks journals for the Word document", await window_("Match").locator("[data-testid=results] li").first().waitFor({ timeout: 180_000 }).then(() => true, () => false));
+  await closeWindow();
+} else console.log("skip the Journal search and Match (no index built)");
+
+// Review: through the consent notice to results; Jump to source selects the quoted passage
+check("no request carried a body before the review's consent", problems.every((p) => !p.startsWith("a request with a body")));
+await openTool("Review");
+const review = window_("Review");
+await page.waitForFunction(
+  () => {
+    const w = document.querySelector('[data-testid="review-window"]');
+    return !!w && (w.textContent.includes("(your target journal)") || [...w.querySelectorAll("button")].some((b) => b.textContent.startsWith("JAMA")));
+  },
+  null,
+  { timeout: 30_000 },
+);
+if (!(await review.getByText("(your target journal)").count())) await review.getByRole("button", { name: /^JAMA/ }).click();
+await review.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
+await review.locator('[role="alertdialog"]').waitFor();
+check("the review's consent notice appears inside the window", /in \d+ short requests/.test(await review.locator('[role="alertdialog"]').innerText()));
+await review.getByLabel(/I agree to send this text to Anthropic/).check();
+consented = true;
+await review.getByText("Send it and review").click();
+await review.locator('[data-testid="review-coverage"]').waitFor({ timeout: 60_000 });
+await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });
+const jumps = review.getByRole("button", { name: "Jump to source" });
+check("the review's quotes offer Jump to source", (await jumps.count()) >= 1);
+const quote = (await review.locator("li:has(button:text-is('Jump to source'))").first().innerText()).match(/“([^”]+)”/)?.[1] ?? "";
+await jumps.first().click();
+check("Jump to source closes the window", await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 }).then(() => true, () => false));
+// the passage is selected: step to its end and type there
+if (process.env.DEBUG_JUMP) {
+  await page.waitForTimeout(300);
+  console.log("DEBUG active:", await page.evaluate(() => `${document.activeElement?.tagName}.${document.activeElement?.className?.toString().slice(0, 60)} sel="${document.getSelection()?.toString().slice(0, 60)}"`));
+  await page.screenshot({ path: `${process.env.SMOKE_OUT ?? ".smoke"}/jump.png` });
+}
+await page.keyboard.press("ArrowRight");
+await page.keyboard.type(" JUMPED");
+check(`the quoted passage was selected in the document ("${quote.slice(0, 40)}…")`, quote.length > 0 && (await storedHas(page, hubId, `${quote} JUMPED`)));
+if (process.env.DEBUG_JUMP) { await page.waitForTimeout(3000); const t = await storedText(page, hubId); const i = t.indexOf("JUMPED"); console.log("DEBUG stored around JUMPED:", i, JSON.stringify(t.slice(Math.max(0, i - 80), i + 20))); }
+check("the review was paid for once", account.starts.length === 1);
+check("the status bar says something was sent", (await page.locator('[data-testid="doc-workspace"]').innerText()).includes("carried text you agreed to send"));
+check(`only the review's requests carried a body (${reviewBodies.length})`, reviewBodies.length > 0);
 
 check(`no page errors, no request bodies, nothing off our origin${problems.length ? `: ${problems.slice(0, 5).join(" | ")}` : ""}`, problems.length === 0);
 await browser.close();
