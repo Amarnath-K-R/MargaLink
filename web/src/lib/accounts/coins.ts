@@ -2,9 +2,10 @@
 // rules around them. Shared by the browser (to show a price before
 // anything is sent) and the Functions (which charge it), so the two can't
 // disagree. Prices here must match the Paddle dashboard and /pricing.
+import { BETA } from "../access/beta.ts";
 import type { ReviewTier } from "../review/reviewTypes.ts";
 
-export const WELCOME_COINS = 10;
+export const WELCOME_COINS = BETA.on ? BETA.coins : 10;
 export const FIGURE_PRICE = 1;
 // A paid review run stays usable (Resume, Retry) this long; if it hasn't
 // finished by then, its coins come back.

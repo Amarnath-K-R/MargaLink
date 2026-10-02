@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { testD1 } from "./testD1.ts";
 import { createSession, signInUser } from "./auth.ts";
 import { credit, grantWelcome } from "./ledger.ts";
+import { WELCOME_COINS } from "./coins.ts";
 import { onRequestGet, onRequestPost } from "../../../functions/api/account.ts";
 
 const env = { DB: testD1(), HASH_SECRET: "key" };
@@ -22,10 +23,10 @@ const del = (body: unknown) => (onRequestPost as unknown as Handler)({ request: 
 assert.equal((await get("", "")).status, 401);
 const page = (await (await get()).json()) as { email: string; balance: number; google: boolean; noticeVersion: number; since: number; history: { kind: string; delta: number; label: string }[] };
 assert.equal(page.email, "ann@example.org");
-assert.equal(page.balance, 60);
+assert.equal(page.balance, WELCOME_COINS + 50);
 assert.equal(page.google, true);
 assert.deepEqual([page.noticeVersion, typeof page.since], [1, "number"], "when they agreed, and to which version of the notice");
-assert.deepEqual(page.history.map((h) => [h.kind, h.delta]), [["pack", 50], ["welcome", 10]]);
+assert.deepEqual(page.history.map((h) => [h.kind, h.delta]), [["pack", 50], ["welcome", WELCOME_COINS]]);
 
 const dl = await get("?download=1");
 assert.match(dl.headers.get("content-disposition") ?? "", /attachment; filename="margalink-account-data\.json"/);

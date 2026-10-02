@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { balance, credit, debit, grantWelcome, history, sweepTickets } from "./ledger.ts";
 import { fingerprint, signInUser } from "./auth.ts";
-import { canonicalEmail } from "./coins.ts";
+import { canonicalEmail, WELCOME_COINS } from "./coins.ts";
 import { testD1 } from "./testD1.ts";
 
 const db = testD1();
@@ -18,10 +18,10 @@ assert.equal(await grantWelcome(db, u.id, u.email, now, "key"), true);
 assert.equal(await grantWelcome(db, u.id, u.email, now, "key"), false, "once");
 const claim = await db.prepare("SELECT email_hash AS h FROM welcome_claims").first<{ h: string }>();
 assert.equal(claim?.h, await fingerprint("key", canonicalEmail(u.email)), "kept as a keyed fingerprint, not a plain hash");
-assert.equal(await balance(db, u.id), 10);
+assert.equal(await balance(db, u.id), WELCOME_COINS);
 
 // a debit that fits, one that doesn't, and two racing for the last coins
-assert.equal(await debit(db, u.id, 4, "figure", "f1", now), true);
+assert.equal(await debit(db, u.id, WELCOME_COINS - 6, "figure", "f1", now), true);
 assert.equal(await debit(db, u.id, 7, "figure", "f2", now), false);
 assert.equal(await balance(db, u.id), 6);
 const race = await Promise.all([debit(db, u.id, 4, "figure", "f3", now), debit(db, u.id, 4, "figure", "f4", now)]);

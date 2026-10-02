@@ -11,6 +11,7 @@ import { onRequestGet as googleStart } from "../../../functions/api/auth/google/
 import { onRequestGet as googleCallback } from "../../../functions/api/auth/google/callback.ts";
 import { onRequestPost as logout } from "../../../functions/api/auth/logout.ts";
 import { onRequestGet as me } from "../../../functions/api/me.ts";
+import { WELCOME_COINS } from "./coins.ts";
 
 const env = { DB: testD1(), HASH_SECRET: "test-key", GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "sec", GOOGLE_REDIRECT_URI: "https://m.test/api/auth/google/callback", RESEND_API_KEY: "re", EMAIL_FROM: "MargaLink <signin@m.test>", TURNSTILE_SECRET: "ts-secret" };
 type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
@@ -71,7 +72,7 @@ assert.equal((await run(emailVerify, post("/api/auth/email/verify", { token: "x"
 
 r = await run(me, get("/api/me", annCookie));
 const annMe = (await r.json()) as { user: { id: string; email: string }; balance: number; paddle: unknown };
-assert.deepEqual([annMe.user.email, annMe.balance, annMe.paddle], ["ann@example.org", 10, null], "no Paddle config, no checkout");
+assert.deepEqual([annMe.user.email, annMe.balance, annMe.paddle], ["ann@example.org", WELCOME_COINS, null], "no Paddle config, no checkout");
 assert.match(annMe.user.id, /^[0-9a-f]{32}$/, "the id checkout names in custom_data");
 assert.equal(r.headers.getSetCookie().length, 0, "a fresh session isn't re-sent");
 
@@ -193,7 +194,7 @@ assert.ok(tokenForm!.get("code_verifier")!.length >= 43, "PKCE verifier sent");
 const googleCookie = cookieHeader(r);
 assert.match(googleCookie, /__Host-ml_oauth=; __Host-ml_session=/, "the oauth cookie is cleared");
 r = await run(me, get("/api/me", googleCookie));
-assert.deepEqual(await r.json(), { user: { id: annMe.user.id, email: "ann@example.org" }, balance: 10, pro: null, paddle: null }, "same account, no second welcome");
+assert.deepEqual(await r.json(), { user: { id: annMe.user.id, email: "ann@example.org" }, balance: WELCOME_COINS, pro: null, paddle: null }, "same account, no second welcome");
 
 // --- sign out, and a stale hint is cleared
 r = await run(logout, post("/api/auth/logout", {}, googleCookie));
@@ -202,7 +203,7 @@ assert.ok(r.headers.getSetCookie().every((c) => c.endsWith("Max-Age=0")));
 r = await run(me, get("/api/me", googleCookie));
 assert.deepEqual(await r.json(), { user: null });
 assert.equal(r.headers.getSetCookie().length, 2, "hint cookie cleared");
-assert.equal(((await (await run(me, get("/api/me", annCookie))).json()) as { balance: number }).balance, 10, "the other device is still in");
+assert.equal(((await (await run(me, get("/api/me", annCookie))).json()) as { balance: number }).balance, WELCOME_COINS, "the other device is still in");
 // with Paddle configured, the page gets what Paddle.js needs (never a secret)
 const paddled = { ...env, PADDLE_ENV: "sandbox", PADDLE_CLIENT_TOKEN: "test_tok", PADDLE_PRICE_IDS: '{"S":"pri_s"}', PADDLE_API_KEY: "secret", PADDLE_WEBHOOK_SECRET: "secret" };
 const withPaddle = (await (await run(me, get("/api/me", annCookie), paddled)).json()) as { paddle: unknown };
