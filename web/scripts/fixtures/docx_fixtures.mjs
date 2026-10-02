@@ -115,7 +115,8 @@ const PNG = squarePng();
 // in by Word),
 // page numbers, a content control (injected), line numbering, tracked changes,
 // a footnote, a comment, an equation, a picture in the body and in the
-// header, a link, a two-column section and a numbered reference list.
+// header, a link, a two-column section, a numbered reference list, and a
+// citation manager's document variable.
 export async function kitchenSinkDocx() {
   const p = (...children) => new Paragraph({ alignment: AlignmentType.JUSTIFIED, children });
   const t = (text) => new TextRun(text);
@@ -192,6 +193,10 @@ export async function kitchenSinkDocx() {
     '<w:sdt><w:sdtPr><w:alias w:val="Structured abstract"/><w:tag w:val="abstract"/><w:id w:val="4242"/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>Text inside a content control, as journal templates use for the abstract.</w:t></w:r></w:p></w:sdtContent></w:sdt>',
   );
   parts["word/document.xml"] = strToU8(xml);
+  // Zotero keeps its settings for a document (the citation style) in a document variable.
+  const settings = strFromU8(parts["word/settings.xml"]);
+  if (!settings.includes("</w:compat>")) throw new Error("fixture: settings.xml has no compat element");
+  parts["word/settings.xml"] = strToU8(settings.replace("</w:compat>", '</w:compat><w:docVars><w:docVar w:name="ZOTERO_PREF_1" w:val="&lt;data data-version=&quot;3&quot;&gt;&lt;style id=&quot;http://www.zotero.org/styles/vancouver&quot;/&gt;&lt;/data&gt;"/></w:docVars>'));
   return zipSync(parts);
 }
 

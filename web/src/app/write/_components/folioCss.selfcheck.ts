@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import postcss, { type AtRule, type Declaration, type Node } from "postcss";
 
 const web = new URL("../../../../", import.meta.url).pathname;
 const css = readFileSync(join(web, "node_modules/@stll/folio-react/dist/standalone.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -56,20 +57,33 @@ for (const [name, value] of rootVars) {
 // LaTeX editor) is elsewhere: it hides the native caret and selection and draws
 // its own, so a caret colour, outline:none and a transparent ::selection
 // change nothing there (check_write_docx confirms it on screen).
-const outside = new Set<string>();
 const SCOPED = /^(?::where\(\.folio-[\w-]+[^)]*\)|\.(?:folio|docx|layout|paged|hf|prosemirror|ProseMirror|image)[\w-]*|\.dark\s+\.(?:folio|docx|layout|ProseMirror)|(?:li|img)\.ProseMirror|\[data-(?:folio|tc-author)[\w-]*|\.dark\s+\[contenteditable)/;
 const ANY_CONTENTEDITABLE = new Set(["[contenteditable=true]", "[contenteditable=true]::selection", "[contenteditable=true] ::selection"]);
-for (const block of css.matchAll(/(?:^|[}])\s*([^{}@]+)\{([^{}]*)\}/g)) {
-  const [, selectors, body] = block;
-  for (const raw of selectors.split(/(?<!\\),/)) { // a Tailwind class may hold an escaped comma: grid-cols-[a\,b]
-    const s = raw.trim();
-    if (!s || /^(?:from|to|\d+%)$/.test(s)) continue; // keyframe steps
-    if (/^(?:\*|:before|:after|::backdrop)$/.test(s) && /^\s*(?:--tw-[\w-]+:[^;]*;?\s*)+$/.test(body)) continue; // Tailwind's own variable fallbacks
-    if (/^(?::root|:host)$/.test(s) || ANY_CONTENTEDITABLE.has(s)) continue; // checked in 2; above
-    if (!SCOPED.test(s)) outside.add(s);
-  }
+// The selectors in a stylesheet that could match outside the editor, read by
+// a CSS parser: every rule, after an @import, inside @media or @layer. A rule
+// nested in another is scoped by its outer rule, which is checked itself.
+function outsideSelectors(sheet: string): string[] {
+  const outside = new Set<string>();
+  postcss.parse(sheet).walkRules((rule) => {
+    for (let up: Node | undefined = rule.parent; up; up = up.parent) {
+      if (up.type === "rule") return;
+      if (up.type === "atrule" && /keyframes$/.test((up as AtRule).name)) return; // keyframe steps
+    }
+    const decls = (rule.nodes ?? []).filter((n): n is Declaration => n.type === "decl");
+    const onlyTwVars = decls.length > 0 && decls.every((d) => d.prop.startsWith("--tw-"));
+    for (const raw of rule.selectors) {
+      const s = raw.trim();
+      if (/^(?:\*|:before|:after|::backdrop)$/.test(s) && onlyTwVars) continue; // Tailwind's own variable fallbacks
+      if (/^(?::root|:host)$/.test(s) || ANY_CONTENTEDITABLE.has(s)) continue; // checked in 2; above
+      if (!SCOPED.test(s)) outside.add(s);
+    }
+  });
+  return [...outside].sort();
 }
-assert.deepEqual([...outside].sort(), [], "selectors in Folio's CSS that could match outside the editor");
+// The check reads every rule: after an @import, nested, inside @media.
+assert.deepEqual(outsideSelectors('@import "./x.css";\n.leak{color:red}\n.folio-root{.inner{color:red}}\n@media (min-width:1px){p{color:red}}\n@keyframes k{from{opacity:0}}'), [".leak", "p"]);
+const outside = outsideSelectors(css);
+assert.deepEqual(outside, [], "selectors in Folio's CSS that could match outside the editor");
 
 // 4. and its class names aren't ours too
 const clash = /className=[^>]*\b(?:docx-|layout-page|paged-editor|hf-editor|ProseMirror)/;

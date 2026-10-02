@@ -23,7 +23,7 @@ export default function MatchWindow({
   match: MatchApi;
   paperFile: File | null;
   compiling: boolean;
-  onCompile: () => void;
+  onCompile?: () => void; // absent: a Word document, which needs no compile
   targetJournalId: string | null;
   onSetTarget: (id: string, name: string) => void;
   onReview: (journalId: string) => void;

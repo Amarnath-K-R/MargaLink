@@ -71,14 +71,27 @@ export function toDocx(bytes: Uint8Array): Uint8Array {
   try {
     entries = unzipFiles(bytes);
   } catch (err) {
-    throw err instanceof Error && /too (many|large)/.test(err.message) ? err : notWord;
+    if (err instanceof Error && /too (many|large)/.test(err.message)) throw new Error(err.message.replace("This zip has too many files", "This Word file has too many parts").replace("This zip", "This Word file"));
+    throw notWord;
   }
-  const types = entries.find((e) => e.path === "[Content_Types].xml");
-  if (!types || !entries.some((e) => e.path === "word/document.xml")) throw notWord;
-  const xml = new TextDecoder().decode(types.data);
-  if (/macroEnabled/i.test(xml)) throw new Error("That document contains macros (.docm). In Word, save it as a plain .docx, then import it again.");
-  if (!xml.includes(WORD_TEMPLATE)) return bytes;
-  return zipFiles(entries.map((e) => (e === types ? { path: e.path, data: new TextEncoder().encode(xml.replace(WORD_TEMPLATE, WORD_DOCUMENT)) } : e)));
+  const text = (path: string) => {
+    const e = entries.find((x) => x.path === path);
+    return e ? new TextDecoder().decode(e.data) : null;
+  };
+  const types = text("[Content_Types].xml");
+  // The package names its main part; the editor reads only word/document.xml, where Word puts it.
+  const main = text("_rels/.rels")?.match(/<Relationship\b[^>]*relationships\/officeDocument"[^>]*>/)?.[0].match(/Target="\/?([^"]+)"/)?.[1] ?? "word/document.xml";
+  if (main !== "word/document.xml" && entries.some((e) => e.path === main)) {
+    throw new Error("This Word document is stored in a way the editor can't open. In Word, use Save As to save it again as a .docx, then import that.");
+  }
+  if (types === null || !entries.some((e) => e.path === "word/document.xml")) throw notWord;
+  // What the main part is (a document, a template, macro-enabled) is its own declared type, not any other part's.
+  const override = types.match(/<Override\b[^>]*PartName="\/word\/document\.xml"[^>]*\/?>/)?.[0] ?? "";
+  const mainType = override.match(/ContentType="([^"]+)"/)?.[1] ?? "";
+  if (/macroEnabled/i.test(mainType)) throw new Error("That document contains macros (.docm). In Word, save it as a plain .docx, then import it again.");
+  if (mainType !== WORD_TEMPLATE) return bytes;
+  const fixed = types.replace(override, override.replace(WORD_TEMPLATE, WORD_DOCUMENT));
+  return zipFiles(entries.map((e) => (e.path === "[Content_Types].xml" ? { path: e.path, data: new TextEncoder().encode(fixed) } : e)));
 }
 
 export function findMainTex(entries: { path: string; text: string | null }[]): string | null {

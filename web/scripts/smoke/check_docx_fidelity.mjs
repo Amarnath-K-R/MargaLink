@@ -6,8 +6,9 @@
 // original: everything a paper carries is still there (citation fields,
 // cross-references, footnotes, comments, tracked changes, equations,
 // pictures, content controls, line numbering, columns), the template's
-// styles, numbering, theme and fonts are byte for byte the same, headers
-// and footers say what they said, every part the document points to exists,
+// styles, numbering, theme and fonts are byte for byte the same, headers,
+// footers, footnotes and endnotes say what they said, document variables (a
+// citation manager's settings) are kept, every part the document points to exists,
 // no picture was stored twice, our paper reader still reads it, and no
 // drawn line holds more text than fits (Folio's two-column float bug, see
 // docs/word-editor-known-issues.md). Against
@@ -89,7 +90,10 @@ function measure(bytes) {
   // the kinds of field: citation managers (ADDIN), SEQ, REF, PAGEREF, TOC, PAGE…
   const kinds = [...xml.matchAll(/<w:instrText[^>]*>\s*([A-Z]+)(?:\s+([A-Z_.]+))?/g), ...xml.matchAll(/<w:fldSimple w:instr="\s*([A-Z]+)/g)].map((m) => (m[1] === "ADDIN" ? `ADDIN ${m[2] ?? ""}`.trim() : m[1])).sort();
   const headers = Object.fromEntries(Object.entries(all).filter(([p]) => /^word\/(header|footer)\d*\.xml$/.test(p)).map(([p, d]) => [p, text(strFromU8(d))]));
-  return { all, counts, kinds, headers, body: text(strFromU8(all["word/document.xml"])) };
+  const notes = ["word/footnotes.xml", "word/endnotes.xml"].map((p) => text(all[p] && strFromU8(all[p])));
+  // document variables: citation managers keep a document's settings there (Zotero's style)
+  const docVars = [...(all["word/settings.xml"] ? strFromU8(all["word/settings.xml"]) : "").matchAll(/<w:docVar\b[^>]*\/>/g)].map((m) => m[0]).sort();
+  return { all, counts, kinds, headers, notes, docVars, body: text(strFromU8(all["word/document.xml"])) };
 }
 // Every part a relationship points to (other than a web link) exists in the file.
 function brokenLinks(all) {
@@ -120,7 +124,7 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message.slice(0, 160)));
 page.on("dialog", (d) => void d.accept());
-const IMPORT = 'input[aria-label="Import a .zip, .tex or .docx file"]';
+const IMPORT = 'input[aria-label="Import a .zip, .tex or Word file"]';
 const stored = (id) =>
   page.evaluate(async (id) => {
     const dir = await (await (await navigator.storage.getDirectory()).getDirectoryHandle("margalink-write")).getDirectoryHandle(id);
@@ -204,6 +208,8 @@ for (const doc of docs) {
   report(doc.name, "styles, numbering, theme and fonts byte for byte", unlike.length === 0, unlike.join(", "));
   const headerDiff = Object.keys(before.headers).filter((p) => after.headers[p] !== before.headers[p]);
   report(doc.name, "headers and footers say the same", headerDiff.length === 0, headerDiff.join(", "));
+  report(doc.name, "footnotes and endnotes say the same", JSON.stringify(after.notes) === JSON.stringify(before.notes));
+  report(doc.name, "document variables kept (a citation manager's settings)", JSON.stringify(after.docVars) === JSON.stringify(before.docVars), `${before.docVars.length} → ${after.docVars.length}`);
   const broken = brokenLinks(after.all);
   report(doc.name, "every part it points to exists", broken.length === 0, broken.slice(0, 3).join("; "));
   const dupes = duplicateMedia(after.all).filter((ps) => !duplicateMedia(before.all).some((b) => b.join() === ps.join()));

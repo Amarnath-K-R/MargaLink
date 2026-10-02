@@ -132,3 +132,30 @@ contents as Word writes them, and as pandoc's `--toc` writes them, are kept
 back as plain text with their links, without the page-number fields inside
 them; Word rebuilds the entries, fields included, whenever the table is
 updated.
+
+## 6. A save forgets edits made while it ran (handled)
+
+**What it did:** Folio clears its record of edits (`hasPendingChanges`) when
+a save ends, including edits typed while that save ran. Folio reports a
+change 250 ms after the last keystroke, so an edit typed in a save's last
+moments was reported as no change: the status said Saved, and leaving lost
+it. Reproduced in a browser with the CPU slowed (edits 50 to 90 ms before a
+save ended were lost).
+
+**What we do:** `docSaveState.ts` (selfchecked) keeps what Folio's record
+doesn't: the document each stored save began from, and whether an edit is
+known unstored. A save that ends with a different document than it began
+from asks for another save; a save whose bytes never reach the disk leaves
+its edits unstored, to be tried again.
+
+**Issue draft:**
+
+> **`hasPendingChanges()` is false after a save even when the document
+> changed while the save ran**
+>
+> `serializeCurrentDocx` captures the document, awaits the repack, then
+> dispatches `clearTrackedChanges`, which clears every changed paragraph id,
+> including ones changed during the await. An edit made then, whose change
+> notification (250 ms debounce) arrives after the clear, is never reported
+> as pending. Clearing only the paragraphs captured at the start of the save
+> (or comparing the document with the one the save began from) would fix it.

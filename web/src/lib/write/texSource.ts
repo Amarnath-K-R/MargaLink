@@ -183,6 +183,12 @@ export function findQuoteInTex(tex: string, quote: string): number | null {
   return null;
 }
 
+// The same in plain text (a Word document's paragraphs, one per line), where
+// "%" is a percentage rather than the start of a LaTeX comment.
+export function findQuoteInText(text: string, quote: string): number | null {
+  return findQuoteInTex(text.replace(/%/g, " "), quote.replace(/%/g, " "));
+}
+
 // The LaTeX that places a figure file from the project, labelled after it.
 export function figureSnippet(path: string): string {
   const label = path.replace(/^.*\//, "").replace(/\.[^.]+$/, "").replace(/[^\w-]/g, "-");

@@ -23,7 +23,7 @@ export default function ChecksWindow({
   checks: ChecksApi;
   paperFile: File | null;
   compiling: boolean;
-  onCompile: () => void;
+  onCompile?: () => void; // absent: a Word document, which needs no compile
   rules: JournalRules | undefined;
   targetName: string | null;
 }) {

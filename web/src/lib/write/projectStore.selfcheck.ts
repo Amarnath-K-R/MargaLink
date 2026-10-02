@@ -324,6 +324,22 @@ await assert.rejects(store.meta(copy.id));
   assert.ok(parts.some((e) => e.path === "word/styles.xml"), "with its styles");
 
   await assert.rejects(store.importDocx("Macros", word("application/vnd.ms-word.document.macroEnabled.main+xml")), /macros/);
+  // a plain document that embeds a macro-enabled workbook is still a plain document
+  const withXlsm = zipFiles([
+    { path: "[Content_Types].xml", data: enc(MAIN_PART(DOC).replace("<Override", '<Default Extension="xlsm" ContentType="application/vnd.ms-excel.sheet.macroEnabled.12"/><Override')) },
+    { path: "word/document.xml", data: enc("<w:document/>") },
+    { path: "word/embeddings/Sheet.xlsm", data: enc("x") },
+  ]);
+  const embedded = await store.importDocx("With a workbook", withXlsm);
+  assert.equal(embedded.kind, "docx");
+  await store.remove(embedded.id);
+  // a document whose text lives elsewhere than word/document.xml: refused, saying to save it again from Word
+  await assert.rejects(
+    store.importDocx("Moved", zipFiles([{ path: "[Content_Types].xml", data: enc(MAIN_PART(DOC).replace("/word/document.xml", "/word/document2.xml")) }, { path: "_rels/.rels", data: enc('<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document2.xml"/></Relationships>') }, { path: "word/document2.xml", data: enc("<w:document/>") }])),
+    /save it again/,
+  );
+  // a Word file over the size limits says so, as a Word file
+  await assert.rejects(store.importDocx("Huge", zipFiles(Array.from({ length: 2001 }, (_, i) => ({ path: `word/media/p${i}.png`, data: enc("x") })))), /^Error: This Word file has too many parts/);
   await assert.rejects(store.importDocx("Old", new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])), /\.doc|password/);
   await assert.rejects(store.importDocx("Text", enc("just some text")), /Word document/);
   await assert.rejects(store.importDocx("Empty", zipFiles([{ path: "readme.txt", data: enc("x") }])), /Word document/);

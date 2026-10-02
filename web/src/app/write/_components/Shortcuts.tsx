@@ -24,8 +24,7 @@ const DOCX: Group[] = [
       { combo: ["Mod", "U"], what: "Underline" },
       { combo: ["Mod", "Z"], what: "Undo" },
       { combo: ["Mod", "Shift", "Z"], what: "Redo" },
-      { combo: ["Mod", "F"], what: "Find" },
-      { combo: ["Mod", "H"], what: "Find and replace" },
+      { combo: ["Mod", "F"], what: "Find and replace" },
     ],
   },
 ];

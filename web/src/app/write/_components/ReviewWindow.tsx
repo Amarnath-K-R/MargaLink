@@ -28,7 +28,7 @@ export default function ReviewWindow({
   review: ReviewApi;
   paperFile: File | null;
   compiling: boolean;
-  onCompile: () => void;
+  onCompile?: () => void; // absent: a Word document, which needs no compile
   pilotId: string | null; // the project's target journal, when it has hand-verified rules
   targetName: string | null;
   onJump: (quote: string) => boolean;

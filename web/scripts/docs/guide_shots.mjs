@@ -254,7 +254,7 @@ if (want("write")) {
   // the smoke tests' paper, with a running head instead of the fixture's journal name
   const docx = unzipSync(await paperDocx());
   docx["word/header1.xml"] = strToU8(strFromU8(docx["word/header1.xml"]).replace(TEXT.header, "Sleep and recovery after cardiac surgery"));
-  await page.setInputFiles('input[aria-label="Import a .zip, .tex or .docx file"]', { name: "Sleep and recovery.docx", mimeType: "application/octet-stream", buffer: Buffer.from(zipSync(docx)) });
+  await page.setInputFiles('input[aria-label="Import a .zip, .tex or Word file"]', { name: "Sleep and recovery.docx", mimeType: "application/octet-stream", buffer: Buffer.from(zipSync(docx)) });
   const dw = '[data-testid="doc-workspace"]';
   await page.locator(`${dw} .layout-page`).first().waitFor({ timeout: 30_000 });
   await tidy();

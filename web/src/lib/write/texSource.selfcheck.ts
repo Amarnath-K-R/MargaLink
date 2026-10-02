@@ -1,7 +1,7 @@
 // Runnable check for texSource.ts: the LaTeX-source helpers the workspace's
 // toolbar, status bar and review window use. Run: node src/lib/write/texSource.selfcheck.ts
 import assert from "node:assert/strict";
-import { bibEntries, figureSnippet, tableSnippet, findQuoteInTex, nextFigurePath, paperFiles, texInputs, texLabels, texOutline, texWordCount } from "./texSource.ts";
+import { bibEntries, figureSnippet, tableSnippet, findQuoteInTex, findQuoteInText, nextFigurePath, paperFiles, texInputs, texLabels, texOutline, texWordCount } from "./texSource.ts";
 
 // 1. word count: comments, the preamble, commands and citations don't count; brace contents do
 {
@@ -51,6 +51,11 @@ leaves mountain catchments.
 The final sentence of the paragraph ends with these exact closing words.`;
   assert.equal(findQuoteInTex(tex, "pulses now arrive eleven days earlier than before"), 2); // through \emph and \cite
   assert.equal(findQuoteInTex(tex, "snowmelt is changing when nitrogen leaves mountain catchments"), 3); // wraps onto the next line
+  // A Word document's text: "%" is a percentage there, not a LaTeX comment.
+  const doc = "Results\nReadmission rose by 26% among patients who slept less than five hours a night.\nMood scores fell.";
+  assert.equal(findQuoteInText(doc, "among patients who slept less than five hours a night"), 2);
+  assert.equal(findQuoteInText(doc, "26% among patients who slept less than five hours"), 2);
+  assert.equal(findQuoteInText(doc, "Mood scores fell"), 3);
   assert.equal(findQuoteInTex(tex, "nothing like this appears anywhere"), null);
   assert.equal(findQuoteInTex(tex, "the hidden sentence lives only in a comment"), null);
   assert.equal(findQuoteInTex(tex, "Some totally different opening phrase words but ends with these exact closing words"), 6); // first six miss, last six hit

@@ -132,7 +132,7 @@ export function HubWindows({
   project,
   paperFile,
   compiling = false,
-  onCompile = () => {},
+  onCompile,
   figureFormat,
   onInsertFigure,
   onJump,
@@ -147,7 +147,7 @@ export function HubWindows({
   project: ProjectMeta;
   paperFile: File | null;
   compiling?: boolean; // a LaTeX compile in progress
-  onCompile?: () => void;
+  onCompile?: () => void; // absent for a Word document
   figureFormat: "pdf" | "png"; // what Insert into paper asks the figure studio for
   onInsertFigure: (image: Uint8Array, recipe: Recipe) => Promise<void>;
   onJump: (quote: string) => boolean; // a review's quoted passage, found in the paper (true) or not

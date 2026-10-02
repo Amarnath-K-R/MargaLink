@@ -187,10 +187,9 @@ export default function TermsPage() {
         <LegalSection title="Open source">
           <p>
             MargaLink uses open source software, including TeX Live, Pyodide, ONNX Runtime, Transformers.js and Folio (the Word editor, which
-            builds on Eigenpal&apos;s docx-editor), each under its own licence. These terms don&apos;t change those licences. The Word editor&apos;s
-            licences and notices, and those of the fonts it includes, are{" "}
+            builds on Eigenpal&apos;s docx-editor), each under its own licence. These terms don&apos;t change those licences. See{" "}
             <a href="/licenses/word-editor.txt" className="text-accent hover:underline">
-              here
+              the licences of the Word editor and its fonts
             </a>
             .
           </p>

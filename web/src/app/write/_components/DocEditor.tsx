@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { IntlProvider } from "use-intl";
 import { DocxEditor, insertImageFromFile, insertPageBreakInView, insertTableInView, type DocxEditorRef } from "@stll/folio-react";
 import { getFolioMessages } from "@stll/folio-react/messages";
 // Scoped to the editor, but Next keeps a stylesheet once loaded:
 // folioCss.selfcheck.ts proves this one can't restyle the rest of the site.
 import "@stll/folio-react/standalone.css";
-import { findQuoteInTex } from "@/lib/write/texSource";
+import { findQuoteInText } from "@/lib/write/texSource";
+import { docSaveState } from "@/lib/write/docSaveState";
 
 // The Word editor: Folio (Apache-2.0, a fork of Eigenpal's docx-editor),
 // which edits the .docx itself: a save rewrites the document's text from the
@@ -19,8 +20,9 @@ import { findQuoteInTex } from "@/lib/write/texSource";
 // requests of its own (fonts are bundled). The workspace drives it through
 // `handleRef`.
 export type DocHandle = {
-  save(): Promise<Uint8Array>; // the document as it is now, a .docx
-  pending(): boolean; // edits not yet saved (known at once, before the editor reports the change)
+  // The document as it is now, a .docx; `written()` once those bytes are stored.
+  save(): Promise<{ bytes: Uint8Array; written: () => void }>;
+  pending(): boolean; // edits not yet stored (known at once, before the editor reports the change)
   text(): string; // the body's text, one line per paragraph (for the word count and the review's quotes)
   insertImage(png: Uint8Array, dpi: number): Promise<void>; // at the cursor, at the size it was drawn for
   showQuote(quote: string): boolean; // select and scroll to a passage; false when it isn't found
@@ -41,22 +43,47 @@ export default function DocEditor({
   readOnly,
   onEdit,
   onDocument,
-  onSaveNow,
   handleRef,
 }: {
   bytes: Uint8Array; // the document as opened; never fed back while editing
   readOnly: boolean; // another tab holds the project
   onEdit: () => void; // the document changed (not just the selection)
   onDocument: () => void; // the document is laid out, or changed in any way (the word count follows it)
-  onSaveNow: () => void; // Ctrl+S
   handleRef: React.MutableRefObject<DocHandle | null>;
 }) {
   const ref = useRef<DocxEditorRef>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const onEditRef = useRef(onEdit);
+  useEffect(() => {
+    onEditRef.current = onEdit;
+  });
   const view = (): View | null => {
     ref.current?.ensureEditorView();
     return ref.current?.getEditorRef()?.getView() ?? null;
   };
+  // What's stored: Folio's own record of edits doesn't survive its saves (docSaveState.ts).
+  const stored = useRef(docSaveState<unknown>()).current;
+  const doc = () => ref.current?.getEditorRef()?.getView()?.state.doc;
+  const changed = () => stored.changed(doc(), ref.current?.hasPendingChanges() ?? false);
+  // The save started as the editor closed (see the layout effect below), until it's stored.
+  const closing = useRef<Promise<Uint8Array> | null>(null);
+  useLayoutEffect(
+    () => () => {
+      // Closing without the workspace's own way out (Back, another route):
+      // Folio lets go of the document right after this cleanup, before the
+      // workspace's asks for a save. Start that save now, while it's here.
+      if (ref.current && changed()) {
+        const saving = ref.current.save({ selective: false }).then((out) => {
+          if (!out) throw new Error("The document couldn't be saved.");
+          return new Uint8Array(out);
+        });
+        saving.catch(() => {}); // a failure surfaces where it's awaited
+        closing.current = saving;
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, as the editor closes; reads the editor through refs
+    [],
+  );
   // The body's paragraphs, in order, with where each starts.
   const blocks = () => {
     const out: { pos: number; text: string }[] = [];
@@ -71,16 +98,26 @@ export default function DocEditor({
   useEffect(() => {
     handleRef.current = {
       async save() {
+        if (!ref.current) {
+          if (!closing.current) throw new Error("The document has closed.");
+          return { bytes: await closing.current, written: () => void (closing.current = null) };
+        }
+        const from = doc();
+        stored.saving(); // until these bytes are stored: a save that never reaches the disk is tried again
         // Full saves only. A selective save patches the paragraphs changed
         // since the last save into Folio's baseline, which Folio resets to the
         // file as first opened whenever its document history changes: the
         // second save of a session dropped the first one's edits. (Mixing the
         // two modes also stored pictures twice.) See docs/word-editor-known-issues.md.
-        const out = await ref.current?.save({ selective: false });
+        const out = await ref.current.save({ selective: false });
         if (!out) throw new Error("The document couldn't be saved.");
-        return new Uint8Array(out);
+        return {
+          bytes: new Uint8Array(out),
+          // An edit made while the save ran isn't in these bytes: save again.
+          written: () => void (stored.written(from, doc()) && onEditRef.current()),
+        };
       },
-      pending: () => ref.current?.hasPendingChanges() ?? false,
+      pending: () => (ref.current ? changed() : closing.current !== null),
       text: () =>
         blocks()
           .map((b) => b.text)
@@ -105,7 +142,7 @@ export default function DocEditor({
       },
       showQuote(quote) {
         const list = blocks();
-        const line = findQuoteInTex(list.map((b) => b.text).join("\n"), quote);
+        const line = findQuoteInText(list.map((b) => b.text).join("\n"), quote);
         const block = line ? list[line - 1] : undefined;
         const editor = ref.current?.getEditorRef();
         if (!block || !editor) return false;
@@ -143,9 +180,11 @@ export default function DocEditor({
         // Only real edits count: Folio also reports changes that need no save.
         onChange={() => {
           onDocument();
-          if (ref.current?.hasPendingChanges()) onEdit();
+          if (changed()) {
+            stored.edited();
+            onEdit();
+          }
         }}
-        onSave={onSaveNow}
         onInsertImage={() => picker.current?.click()}
         onInsertTable={(rows, columns) => {
           const v = view();

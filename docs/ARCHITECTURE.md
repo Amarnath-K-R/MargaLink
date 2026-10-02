@@ -441,8 +441,11 @@ the other tools open as windows over it (see **Windows** below).
   (`@stll/folio-react`, Apache-2.0, a fork of Eigenpal's docx-editor,
   pinned exact): `DocEditor.tsx` wraps it (its own `next/dynamic` chunk,
   about 2 MB, no requests, fonts bundled). Saves are debounced two
-  seconds and happen before any window opens, a download, a backup and
-  leaving; every save is a **full** save (Folio's selective save reset
+  seconds and happen at ⌘S and before any window opens, a download, a
+  backup and leaving; closing any other way (Back, another route) starts
+  a last save as the editor closes, which the workspace's cleanup stores.
+  What's stored is tracked in `docSaveState.ts`, since Folio's own record
+  of edits forgets those made while a save ran. Every save is a **full** save (Folio's selective save reset
   its baseline to the first-opened file and dropped an earlier save's
   edits), which still carries the template's styles, numbering, theme,
   fonts and headers over byte for byte. The windows read the document as
@@ -772,6 +775,7 @@ checks.
 | `texRunner.ts` | The TeX worker lifecycle: `compileProject()`, supersession, deadline, the all-packs retry. Talks to `public/texWorker.js`. |
 | `texLog.ts` | `parseTexLog()` — errors, warnings and missing packages with file and line. |
 | `projectStore.ts` | `/write` projects in the Origin Private File System (`ProjectMeta` carries the target journal's id and name, and `kind: "docx"` for a Word project); `importDocx` / `toDocx` (what's refused, a .dotx made a document); `autosaver()`; zip export/import (a Word project's backup comes back as one). |
+| `docSaveState.ts` | What a Word project's editor has stored: the document the last stored save began from and whether an edit is unstored, since Folio's record of edits forgets those made while a save ran (selfchecked). |
 | `texSource.ts` | Pure LaTeX-source helpers for the workspace: a rough word count, `.bib` keys and entries, labels, the outline, `\input`s and the paper's files, `findQuoteInTex`, the figure and table snippets, the next free figure path. |
 | `templateCatalog.ts` | `loadTexTemplates()`, `templateForJournal()`, `starterProject()`. |
 | `zip.ts` | `zipFiles()`, `unzipFiles()`, `flattenSingleRoot()` over fflate. |

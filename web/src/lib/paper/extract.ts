@@ -93,12 +93,13 @@ async function extractFromDocx(file: File, withHeadings: boolean): Promise<Extra
   return { text: fullText.slice(0, 3000), fullText, headings };
 }
 
-type DocxNode = { type: string; value?: string; children?: DocxNode[]; numbering?: { isOrdered: boolean } | null };
+type DocxNode = { type: string; value?: string; children?: DocxNode[]; numbering?: { isOrdered: boolean } | null; styleName?: string | null };
 
 /** A Word document's text, as mammoth's raw text gives it (paragraphs end
  * in a blank line, tabs kept), plus the numbers Word draws on numbered
  * lists, which aren't in the document's text: a PDF of the paper shows
- * them, and the reference count reads them. */
+ * them, and the reference count reads them. Headings stay unnumbered: the
+ * review finds sections by the headings' text as their styles name them. */
 export function docxText(root: DocxNode): string {
   // ponytail: one counter per list level, so a sub-list doesn't restart under
   // its next parent item; exact numbers only matter to "is this numbered".
@@ -108,7 +109,7 @@ export function docxText(root: DocxNode): string {
     if (el.type === "tab") return "\t";
     const inner = (el.children ?? []).map(walk).join("");
     if (el.type !== "paragraph") return inner;
-    const level = el.numbering?.isOrdered ? el.numbering : null;
+    const level = el.numbering?.isOrdered && !/^(heading\s*\d|title)$/i.test(el.styleName ?? "") ? el.numbering : null;
     const n = level ? (counters.get(level) ?? 0) + 1 : 0;
     if (level) counters.set(level, n);
     return `${level ? `${n}. ` : ""}${inner}\n\n`;

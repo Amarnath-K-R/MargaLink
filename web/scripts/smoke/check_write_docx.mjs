@@ -72,7 +72,7 @@ const check = (label, ok) => {
 };
 
 const docx = await paperDocx();
-const IMPORT = 'input[aria-label="Import a .zip, .tex or .docx file"]';
+const IMPORT = 'input[aria-label="Import a .zip, .tex or Word file"]';
 const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const importFile = (p, name, bytes, type = DOCX_TYPE) => p.setInputFiles(IMPORT, { name, mimeType: type, buffer: Buffer.from(bytes) });
 const projectId = (p) => new URL(p.url()).searchParams.get("p");
@@ -188,6 +188,75 @@ await page.keyboard.type(" And in methods.");
 await storedHas(page, id, "And in methods.");
 check("a save after an edit elsewhere keeps the earlier saved edits", (await storedText(page, id)).includes("Typed in the smoke."));
 
+// --- ⌘S saves at once (not two seconds later) ---
+await clickInto(page, TEXT.methods);
+await page.keyboard.type(" Saved by key.");
+await page.keyboard.press("ControlOrMeta+s");
+check("⌘S saves at once", await eventually(async () => (await storedText(page, id)).includes("Saved by key."), 1200));
+
+// --- edits made while a save runs, up to its last moment, are saved too (Folio's
+// save forgets edits made while it ran, so its own record alone would lose them) ---
+// The CPU is slowed so a save takes most of a second; opening a window starts
+// one, and a numbered word goes in every 25 ms until the file is written.
+await page.evaluate(() => {
+  window.__realCreateWritable = FileSystemFileHandle.prototype.createWritable;
+  FileSystemFileHandle.prototype.createWritable = function (...args) {
+    if (this.name === "paper.docx") window.__saving = false;
+    return window.__realCreateWritable.apply(this, args);
+  };
+});
+const cpu = await context.newCDPSession(page);
+await cpu.send("Emulation.setCPUThrottlingRate", { rate: 10 });
+await clickInto(page, TEXT.results);
+await page.keyboard.type(" Typing through a save:");
+const typedDuring = await page.evaluate(
+  () =>
+    new Promise((done) => {
+      const words = [];
+      window.__saving = true;
+      [...document.querySelectorAll('[role="group"][aria-label="Tools"] button')].find((b) => b.textContent.includes("Checks")).click(); // saves first
+      const next = () => {
+        if (!window.__saving) return done(words);
+        words.push(`w${words.length + 1}`);
+        document.execCommand("insertText", false, ` ${words.at(-1)}`);
+        setTimeout(next, 25);
+      };
+      setTimeout(next, 0);
+    }),
+);
+await page.getByRole("dialog", { name: "Checks" }).waitFor({ timeout: 60_000 });
+await page.keyboard.press("Escape");
+await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+await cpu.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+await page.evaluate(() => (FileSystemFileHandle.prototype.createWritable = window.__realCreateWritable));
+check(
+  `edits made while a save runs are saved too (${typedDuring.length} words typed during it)`,
+  typedDuring.length > 0 && (await eventually(async () => (await storedText(page, id)).includes(`${typedDuring.join(" ")}`), 12000)),
+);
+
+// --- a save that fails says so; Download .docx then still has the latest edits; the next save clears it ---
+await page.evaluate(() => {
+  window.__realWrite = FileSystemWritableFileStream.prototype.write;
+  FileSystemWritableFileStream.prototype.write = () => Promise.reject(new DOMException("The disk is full.", "QuotaExceededError"));
+});
+await clickInto(page, TEXT.methods);
+await page.keyboard.type(" Not on disk.");
+check("a failed save says so", await shown(page, /Couldn't save your last edit/));
+const [failedDownload] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download .docx" }).click()]);
+check("after a failed save, Download .docx has the latest edits", docText(readFileSync(await failedDownload.path())).includes("Not on disk."));
+await page.evaluate(() => (FileSystemWritableFileStream.prototype.write = window.__realWrite));
+await clickInto(page, TEXT.methods);
+await page.keyboard.type(" On disk now.");
+check(
+  "the next save goes through and clears the message",
+  (await storedHas(page, id, "On disk now.")) && (await storedText(page, id)).includes("Not on disk.") && (await eventually(async () => (await page.getByText(/Couldn't save your last edit/).count()) === 0, 3000)),
+);
+
+// --- ⌘-click on the logo opens home in a new tab and leaves the document open here ---
+const [homeTab] = await Promise.all([context.waitForEvent("page", { timeout: 5000 }).catch(() => null), page.click('a[aria-label="MargaLink home"]', { modifiers: ["ControlOrMeta"] })]);
+check("⌘-click on the logo opens home in a new tab", homeTab !== null && (await page.locator('[data-testid="doc-workspace"]').count()) === 1);
+await homeTab?.close();
+
 // --- the word count follows the document ---
 check("the status line counts the document's words", /≈ \d+ words/.test(await page.locator('[data-testid="doc-workspace"]').innerText()));
 
@@ -249,6 +318,25 @@ check("Word projects are marked as such in the list", await (async () => {
   await page.waitForSelector("text=Write your paper.");
   return (await page.locator('[data-testid="project-list"] li', { hasText: "Journal template" }).innerText()).includes("Word");
 })());
+
+// --- a document that can't be read: an error, and the windows say the document isn't open (no Compile button) ---
+await page.evaluate(() => {
+  window.__realGetFile = FileSystemFileHandle.prototype.getFile;
+  FileSystemFileHandle.prototype.getFile = function () {
+    return this.name === "paper.docx" ? Promise.reject(new DOMException("Unreadable.", "NotReadableError")) : window.__realGetFile.call(this);
+  };
+});
+await page.locator('[data-testid="project-list"] li', { hasText: "Journal template" }).locator("button").first().click();
+await page.waitForSelector('[data-testid="doc-workspace"]');
+check("a document that can't be read says so", await shown(page, /couldn't be opened/));
+await page.click('[role="group"][aria-label="Tools"] button:has-text("Checks")');
+await page.getByRole("dialog", { name: "Checks" }).waitFor();
+const sayNotOpen = await page.getByRole("dialog", { name: "Checks" }).getByText(/isn.t open/).waitFor({ timeout: 10000 }).then(() => true, () => false);
+check("its windows say the document isn't open, with no Compile button", sayNotOpen && !/Compile/.test(await page.getByRole("dialog", { name: "Checks" }).innerText()));
+await page.keyboard.press("Escape");
+await page.evaluate(() => (FileSystemFileHandle.prototype.getFile = window.__realGetFile));
+await page.click("text=← All projects");
+await page.waitForSelector("text=Write your paper.");
 
 // --- the windows read the document as saved ---
 const window_ = (name) => page.getByRole("dialog", { name });
@@ -394,6 +482,32 @@ await page.locator('a[href="/review"]').filter({ visible: true }).first().click(
 await page.waitForURL(`${O}/review`);
 const reviewDiff = restyled(reviewBefore, await styles());
 check(`and so does /review${reviewDiff.length ? ` (${reviewDiff.length} elements differ: ${reviewDiff.slice(0, 2).join(" | ")})` : ""}`, reviewDiff.length === 0);
+
+// --- the browser's Back (a client-side route change) still saves the last edits ---
+await page.click('nav[aria-label="MargaLink"] a[href="/write"]');
+await page.waitForSelector("text=Write your paper.");
+await page.locator('[data-testid="project-list"] li', { hasText: "Hub paper" }).locator("button").first().click();
+await page.waitForSelector('[data-testid="doc-workspace"]');
+await clickInto(page, TEXT.methods);
+await page.keyboard.type(" Gone back.");
+await page.goBack();
+await page.waitForURL(`${O}/review`);
+check("Back right after typing still saves", await storedHas(page, hubId, "Gone back."));
+
+// --- closing the tab right after typing asks first (the edit isn't saved yet) ---
+const closing = await context.newPage();
+watch(closing);
+let asked = false;
+closing.on("dialog", (d) => {
+  if (d.type() === "beforeunload") asked = true;
+  void d.accept();
+});
+await closing.goto(`${O}/write?p=${hubId}`);
+await bodyText(closing).getByText(TEXT.intro.slice(0, 30)).first().waitFor({ timeout: 20000 });
+await clickInto(closing, TEXT.intro);
+await closing.keyboard.type("Q");
+await closing.close({ runBeforeUnload: true });
+check("closing the tab right after typing asks first", await eventually(async () => asked, 3000));
 
 check(`no page errors, no request bodies, nothing off our origin${problems.length ? `: ${problems.slice(0, 5).join(" | ")}` : ""}`, problems.length === 0);
 await context.close();

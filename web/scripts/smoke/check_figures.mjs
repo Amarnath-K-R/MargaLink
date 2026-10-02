@@ -41,7 +41,7 @@ const account = await mockAccount(context, { balance: 5 });
   await w.click('[data-template="article"]');
   await w.waitForSelector('[data-testid="workspace"]');
   await w.click("text=← All projects");
-  await w.setInputFiles('input[aria-label="Import a .zip, .tex or .docx file"]', { name: "Word paper.docx", mimeType: "application/octet-stream", buffer: Buffer.from(await paperDocx()) });
+  await w.setInputFiles('input[aria-label="Import a .zip, .tex or Word file"]', { name: "Word paper.docx", mimeType: "application/octet-stream", buffer: Buffer.from(await paperDocx()) });
   await w.waitForSelector('[data-testid="doc-workspace"]');
   await w.close();
 }

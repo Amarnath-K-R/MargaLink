@@ -10,7 +10,8 @@ export const LOCKED_OUT = "This project is open in another tab, so it can't be c
 // work), whether there are unsaved edits (the browser asks before the tab
 // closes), and saving what's pending when the page is hidden or the project
 // closes. `flush` writes what's pending; it may change between renders.
-export function useProjectSession(projectId: string, flush: () => Promise<void>, setError: (message: string | null) => void) {
+// `unsaved` asks the editor itself, for an edit it hasn't reported yet.
+export function useProjectSession(projectId: string, flush: () => Promise<void>, setError: (message: string | null) => void, unsaved: () => boolean = () => false) {
   const [lockedOut, setLockedOut] = useState(false);
   const mayWrite = useRef<Promise<boolean>>(Promise.resolve(true));
   const [dirty, setDirty] = useState(false);
@@ -20,8 +21,10 @@ export function useProjectSession(projectId: string, flush: () => Promise<void>,
   }, [dirty]);
   const editSeq = useRef(0); // bumped per edit; a save marks clean only if nothing was edited meanwhile
   const flushRef = useRef(flush);
+  const unsavedRef = useRef(unsaved);
   useEffect(() => {
     flushRef.current = flush;
+    unsavedRef.current = unsaved;
   });
 
   const edited = useCallback(() => {
@@ -68,7 +71,7 @@ export function useProjectSession(projectId: string, flush: () => Promise<void>,
     }
     // Unsaved edits: the browser asks before the tab closes (a save started on pagehide may not finish).
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (dirtyRef.current) e.preventDefault();
+      if (dirtyRef.current || unsavedRef.current()) e.preventDefault();
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     const onHide = () => void flushRef.current().catch(() => {}); // a failure is shown by the saver's onError

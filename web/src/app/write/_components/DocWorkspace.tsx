@@ -20,7 +20,7 @@ import type { DocHandle } from "./DocEditor.tsx";
 // The Word editor is most of a megabyte: it loads when a Word project opens.
 const DocEditor = dynamic(() => import("./DocEditor.tsx"), { ssr: false, loading: () => <p className="p-6 text-sm text-ink-soft">Opening the document…</p> });
 
-const SAVE_FAILED = "Couldn't save your last edit (is the disk full?). It will be retried; download the document to be safe.";
+const SAVE_FAILED = "Couldn't save your last edit (is the disk full?). It's tried again as you edit; download the document to keep a copy.";
 
 // One open Word project: the toolbar, the document (its own formatting bar
 // and outline, from the editor), a status line, and the same windows as a
@@ -52,29 +52,35 @@ export default function DocWorkspace({
   const editor = useRef<DocHandle | null>(null);
   const wordsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Saved by asking the editor for the document when the save runs, so a save
-  // always writes the latest edits, whatever queued it.
-  const saverRef = useRef<ReturnType<typeof autosaver<null>> | null>(null);
+  // A save asks the editor for the document when it runs, so it always
+  // writes the latest edits, whatever queued it. The queue holds the editor
+  // itself: a save queued as the project closes still reaches it.
+  const saverRef = useRef<ReturnType<typeof autosaver<DocHandle>> | null>(null);
   // Saving now (leaving, a window opening, a download, the tab hidden) asks
   // the editor itself what's unsaved: it reports a change a moment after the
   // keystroke, and a save that waited for that report could miss the last words.
   const saveNowRef = useRef<() => Promise<void>>(async () => {});
-  const { lockedOut, mayWrite, guarded, dirty, edited, seq, saved: savedAt } = useProjectSession(project.id, () => saveNowRef.current(), setError);
-  const write = useCallback(async () => {
-    if (!(await mayWrite.current)) return; // read-only here: another tab has the project
-    const handle = editor.current;
-    if (!handle) return; // the editor has closed: nothing more to take from it
-    const at = seq();
-    const bytes = await handle.save();
-    await store.write(project.id, DOCX_MAIN, bytes);
-    setSaved(bytes);
-    savedAt(at);
-  }, [mayWrite, seq, savedAt, store, project.id]);
-  const saver = useCallback(() => (saverRef.current ??= autosaver<null>(() => write(), 2000, undefined, undefined, () => setError(SAVE_FAILED))), [write]);
+  const { lockedOut, mayWrite, guarded, dirty, edited, seq, saved: savedAt } = useProjectSession(project.id, () => saveNowRef.current(), setError, () => editor.current?.pending() ?? false);
+  const write = useCallback(
+    async (handle: DocHandle) => {
+      if (!(await mayWrite.current)) return; // read-only here: another tab has the project
+      const at = seq();
+      if (!handle.pending()) return savedAt(at); // queued by an edit an earlier save already stored
+      const { bytes, written } = await handle.save();
+      await store.write(project.id, DOCX_MAIN, bytes);
+      written();
+      setSaved(bytes);
+      savedAt(at);
+      setError((e) => (e === SAVE_FAILED ? null : e));
+    },
+    [mayWrite, seq, savedAt, store, project.id],
+  );
+  const saver = useCallback(() => (saverRef.current ??= autosaver<DocHandle>((_id, _path, handle) => write(handle), 2000, undefined, undefined, () => setError(SAVE_FAILED))), [write]);
   const flush = useCallback(async () => {
-    if (editor.current?.pending()) {
+    const handle = editor.current;
+    if (handle?.pending()) {
       edited();
-      saver()(project.id, DOCX_MAIN, null);
+      saver()(project.id, DOCX_MAIN, handle);
     }
     await saver().flush();
   }, [saver, edited, project.id]);
@@ -108,9 +114,20 @@ export default function DocWorkspace({
   }, []);
   const onEdit = useCallback(() => {
     edited();
-    saver()(project.id, DOCX_MAIN, null);
+    if (editor.current) saver()(project.id, DOCX_MAIN, editor.current);
     countLater();
   }, [edited, saver, project.id, countLater]);
+  // ⌘S / Ctrl+S saves now (it saves on its own two seconds after typing stops).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void flush().catch(() => {});
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [flush]);
 
   // A window reads the saved document: save first, then open it.
   const openTool = useCallback(
@@ -131,9 +148,14 @@ export default function DocWorkspace({
   );
   const download = useCallback(async () => {
     setError(null);
-    await flush().catch(() => {});
+    const stored = await flush().then(
+      () => true,
+      () => false,
+    );
     try {
-      downloadBytes(`${safeName(project.name)}.docx`, await store.read(project.id, DOCX_MAIN), DOCX_MIME);
+      // Stored: the file as kept. Not (a full disk): the document as it is in the editor.
+      const bytes = stored || !editor.current ? await store.read(project.id, DOCX_MAIN) : (await editor.current.save()).bytes;
+      downloadBytes(`${safeName(project.name)}.docx`, bytes, DOCX_MIME);
     } catch (err) {
       setError(`The document couldn't be downloaded: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -180,6 +202,7 @@ export default function DocWorkspace({
         project={project}
         onBack={() => void leave(onClose)}
         onHome={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; // a new tab or window: this one stays
           e.preventDefault();
           void leave(() => router.push("/"));
         }}
@@ -202,7 +225,7 @@ export default function DocWorkspace({
             </p>
           )}
           <div data-testid="doc-editor" className="sheet min-h-0 flex-1 overflow-hidden">
-            {opened && editable !== null && <DocEditor bytes={opened} readOnly={!editable} onEdit={onEdit} onDocument={countLater} onSaveNow={() => void flush().catch(() => {})} handleRef={editor} />}
+            {opened && editable !== null && <DocEditor bytes={opened} readOnly={!editable} onEdit={onEdit} onDocument={countLater} handleRef={editor} />}
           </div>
           {(error ?? pageError) && <ErrorText>{error ?? pageError}</ErrorText>}
         </section>

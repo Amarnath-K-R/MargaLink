@@ -262,7 +262,7 @@ export default function WritePage() {
             ref={upload}
             type="file"
             accept=".zip,application/zip,.tex,.docx,.dotx,.doc,.docm,.dotm"
-            aria-label="Import a .zip, .tex or .docx file"
+            aria-label="Import a .zip, .tex or Word file"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
