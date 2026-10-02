@@ -14,8 +14,9 @@ import type { Journal } from "../page.tsx";
 const SHOWN = 20;
 
 // The Journal window: the project's target journal — its details, its
-// hand-verified rules where they exist, its publisher's template — and a
-// search to change it. The index is the same public file /journals reads.
+// hand-verified rules where they exist, its publisher's LaTeX template (not
+// for a Word project: no `templates`) — and a search to change it. The index
+// is the same public file /journals reads.
 export default function JournalWindow({
   journalId,
   journalName,
@@ -27,10 +28,10 @@ export default function JournalWindow({
 }: {
   journalId: string | null;
   journalName: string | null;
-  templates: Template[];
+  templates?: Template[];
   currentTemplateId: string | null;
   onChange: (journal: Journal | null) => void;
-  onNewFromTemplate: (t: Template, journal: Journal) => void;
+  onNewFromTemplate?: (t: Template, journal: Journal) => void;
   onOpenMatch: () => void;
 }) {
   const [all, setAll] = useState<JournalMeta[] | null>(null);
@@ -45,7 +46,7 @@ export default function JournalWindow({
 
   const journal = useMemo(() => (journalId && all ? all.find((m) => shortId(m.id) === shortId(journalId)) ?? null : null), [journalId, all]);
   const rules = journalId ? findJournalRules(journalId) : undefined;
-  const template = journal ? templateForJournal(journal.host_organization_name ?? null, templates) : null;
+  const template = journal && templates ? templateForJournal(journal.host_organization_name ?? null, templates) : null;
   const asJournal = (m: JournalMeta): Journal => ({ id: m.id, display_name: m.display_name, host: m.host_organization_name ?? null });
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -96,6 +97,7 @@ export default function JournalWindow({
             )}
           </section>
 
+          {templates && (
           <section className="mt-8 border-t border-line pt-6">
             <h4 className="font-medium">Template</h4>
             {!journal ? (
@@ -107,7 +109,7 @@ export default function JournalWindow({
             ) : template.bundled ? (
               <p className="mt-1 text-ink-soft">
                 This publisher&apos;s template is {template.name}.{" "}
-                <button type="button" onClick={() => onNewFromTemplate(template, asJournal(journal))} className="text-accent hover:underline">
+                <button type="button" onClick={() => onNewFromTemplate?.(template, asJournal(journal))} className="text-accent hover:underline">
                   Start a new paper from it
                 </button>
                 <span> (this one stays as it is).</span>
@@ -126,6 +128,7 @@ export default function JournalWindow({
               </p>
             )}
           </section>
+          )}
         </>
       ) : (
         <p className="text-ink-soft">

@@ -1,18 +1,15 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { BarChart3, Command as CommandIcon, FileText, Quote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { NotUtf8Error, autosaver, type ProjectMeta, type ProjectStore } from "@/lib/write/projectStore";
 import { compileProject, stopTex, TexCompileError, type TexStage } from "@/lib/write/texRunner";
 import { packsFor } from "@/lib/write/texEngine";
 import type { TexDiagnostic } from "@/lib/write/texLog";
-import { findJournalRules } from "@/lib/journals/journalRules";
 import type { Template } from "@/lib/write/templateCatalog";
-import { bibEntries, paperFiles, texOutline, citeSnippet, figureSnippet, nextFigurePath, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/write/texSource";
+import { bibEntries, paperFiles, texOutline, citeSnippet, figureSnippet, findQuoteInTex, nextFigurePath, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/write/texSource";
 import type { Recipe } from "@/app/figures/_components/RecipeImportExport";
 import type { NetworkCall } from "@/app/write/_components/useNetworkTrace";
-import Dialog from "@/components/ui/Dialog";
 import ErrorText from "@/components/ui/ErrorText";
 import type { Journal } from "../page.tsx";
 import FileTree from "./FileTree.tsx";
@@ -20,27 +17,14 @@ import LatexEditor, { type EditorHandle, type LineMark } from "./LatexEditor.tsx
 import PdfPane from "./PdfPane.tsx";
 import Diagnostics from "./Diagnostics.tsx";
 import StorageBanner from "./StorageBanner.tsx";
-import Toolbar, { type Tool, type View } from "./Toolbar.tsx";
+import Toolbar, { LatexActions, type View } from "./Toolbar.tsx";
 import StatusBar from "./StatusBar.tsx";
 import EditorFormatBar from "./EditorFormatBar.tsx";
 import Outline from "./Outline.tsx";
-import Shortcuts from "./Shortcuts.tsx";
-import CommandPalette, { type Command } from "./CommandPalette.tsx";
-import { useChecks } from "./useChecks.ts";
-import { useMatch } from "@/app/match/_components/useMatch";
-import { useReview } from "@/app/review/_components/useReview";
-import { useFigures } from "@/app/figures/_components/useFigures";
+import type { Command } from "./CommandPalette.tsx";
+import { HubWindows, hubCommands, useHub } from "./Hub.tsx";
 import { downloadBytes, safeName } from "./download.ts";
 import { LOCKED_OUT, useProjectSession } from "./useProjectSession.ts";
-
-// Each window's body loads only when it opens, so the tools' code (pdf.js,
-// the matching model, the figure studio) stays out of the page until asked for.
-const loading = () => <p className="text-sm text-ink-soft">Loading…</p>;
-const ChecksWindow = dynamic(() => import("./ChecksWindow.tsx"), { ssr: false, loading });
-const JournalWindow = dynamic(() => import("./JournalWindow.tsx"), { ssr: false, loading });
-const MatchWindow = dynamic(() => import("./MatchWindow.tsx"), { ssr: false, loading });
-const ReviewWindow = dynamic(() => import("./ReviewWindow.tsx"), { ssr: false, loading });
-const FiguresWindow = dynamic(() => import("./FiguresWindow.tsx"), { ssr: false, loading });
 
 const TEXT = /\.(tex|bib|cls|sty|bst|txt|md|def|cfg|json)$/i;
 const IMAGE = /\.(png|jpe?g|pdf|eps)$/i;
@@ -91,14 +75,6 @@ const STAGE_TEXT: Record<TexStage, (d?: string) => string> = {
   "loading-package": (d) => (d === "all" ? "This template needs more of TeX Live: loading it (about 110 MB, once)…" : "Loading TeX packages…"),
   running: (d) => `Running ${d ?? "TeX"}…`,
 };
-
-const WINDOWS: { tool: Exclude<Tool, "palette" | "shortcuts">; title: string; size: "lg" | "full" }[] = [
-  { tool: "match", title: "Match", size: "lg" },
-  { tool: "review", title: "Review", size: "lg" },
-  { tool: "figures", title: "Figures", size: "full" },
-  { tool: "checks", title: "Checks", size: "lg" },
-  { tool: "journal", title: "Journal", size: "lg" },
-];
 
 // One open project: the toolbar, files on the left, the source editor and
 // the PDF side by side (the split drags), the compiler's diagnostics under
@@ -154,7 +130,6 @@ export default function Workspace({
       return true;
     }
   });
-  const [tool, setTool] = useState<Tool | null>(null);
   const [pendingRecipe, setPendingRecipe] = useState<string | null>(null);
   const [leftTab, setLeftTab] = useState<"files" | "outline">("files");
   const [view, setView] = useStored<View>(VIEW_KEY, "split", ["source", "split", "pdf"]);
@@ -256,18 +231,6 @@ export default function Workspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per project
   }, [project.id]);
 
-  // ⌘K / Ctrl+K toggles the command palette from anywhere in the workspace.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setTool((t) => (t === "palette" ? null : "palette"));
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
-
   useEffect(() => {
     try {
       localStorage.setItem(SPLIT_KEY, String(split));
@@ -281,34 +244,10 @@ export default function Workspace({
   useEffect(() => () => void (pdfUrl && URL.revokeObjectURL(pdfUrl)), [pdfUrl]);
   const pdfFile = useMemo(() => (pdfBytes ? new File([pdfBytes.slice()], "paper.pdf", { type: "application/pdf" }) : null), [pdfBytes]);
 
-  // The tools' state lives here, so a window keeps its results when closed.
-  const checks = useChecks();
-  const match = useMatch();
-  const review = useReview();
-  const studio = useFigures();
-  const rules = project.journalId ? findJournalRules(project.journalId) : undefined;
-  const setTarget = guarded(async (j: Journal | null) => {
-    await store.setMeta(project.id, { journalId: j?.id ?? null, journalName: j?.display_name ?? null });
-    onMeta(await store.meta(project.id));
-  });
-  // From a match result: the Review window, loaded with this PDF against that
-  // journal — unless a review is running, which changing the journal would
-  // abort (and it's paid for): then just show it.
-  const openReview = (journalId: string) => {
-    if (review.reviewLoading) {
-      // keep the run
-    } else if (pdfFile && review.source !== pdfFile) void review.onFile(pdfFile, { journalId });
-    else review.selectJournal(journalId);
-    setTool("review");
-  };
-  // A tool still working after its window was closed: shown on the status bar, click to reopen.
-  const running = review.reviewLoading
-    ? { label: review.progress ? `Reviewing ${review.progress.done} of ${review.progress.total}…` : "Reviewing…", onOpen: () => setTool("review") }
-    : match.busy
-      ? { label: "Matching…", onOpen: () => setTool("match") }
-      : studio.preview.busy
-        ? { label: "Drawing the figure…", onOpen: () => setTool("figures") }
-        : null;
+  // The windows and the tools' state (shared with the Word workspace).
+  const focusEditor = useCallback(() => editor.current?.focus(), []);
+  const hub = useHub({ store, project, onMeta, guarded, paperFile: pdfFile, focusEditor });
+  const { setTool, closeTool, confirmLeave, running, wordLimit } = hub;
 
   const compile = useCallback(async () => {
     if (busyRef.current) return;
@@ -388,23 +327,7 @@ export default function Workspace({
     await store.setMeta(project.id, { main: path });
     onMeta(await store.meta(project.id));
   });
-  // Leaving the project while a paid review runs stops it; ask first.
-  const { reviewLoading, cancel: cancelReview } = review;
-  const confirmLeave = useCallback(() => {
-    if (!reviewLoading) return true;
-    if (!window.confirm("A review is still running. Leaving this project stops it: the sections it already reviewed stay paid, and the rest is refunded automatically. Leave anyway?")) return false;
-    cancelReview();
-    return true;
-  }, [reviewLoading, cancelReview]);
-
   const backup = async () => downloadBytes(`${safeName(project.name)}.zip`, await store.exportZip(project.id), "application/zip");
-
-  // Closing a window hands focus back to the editor (the dialog restores it
-  // to the opener; after ⌘K that was the editor too).
-  const closeTool = useCallback(() => {
-    setTool(null);
-    setTimeout(() => editor.current?.focus(), 0);
-  }, []);
 
   // Open a file at a line: the diagnostics' and the review's "jump to source".
   const goto = useCallback(
@@ -438,7 +361,6 @@ export default function Workspace({
     if (inPaper.length === 0) return words;
     return inPaper.reduce((n, f) => n + (f === active && words !== null ? words : texWordCount(sources[f])), 0);
   }, [project.main, sources, active, words]);
-  const wordLimit = rules?.wordLimit ? { limit: rules.wordLimit, journal: rules.journalName } : null;
 
   const insert = useCallback(
     (value: string) => {
@@ -457,10 +379,8 @@ export default function Workspace({
   const commands = useCallback(
     (): Command[] => [
       { id: "compile", label: "Compile", hint: "⌘S", run: () => void compile(), disabled: busy },
-      ...WINDOWS.map((w) => ({ id: w.tool, label: `Open ${w.title}`, run: () => setTool(w.tool) })),
       ...(["table", "equation", "section"] as const).map((s) => ({ id: `snip-${s}`, label: `Insert ${s}`, run: () => insert(`snip:${s}`), disabled: !texOpen })),
       ...figures.map((f) => ({ id: `fig-${f}`, label: `Insert figure ${f.replace(/^figures\//, "")}`, run: () => insert(`fig:${f}`), disabled: !texOpen })),
-      { id: "backup", label: "Download backup", run: () => void backup() },
       { id: "pdf", label: "Download PDF", run: () => pdfBytes && downloadBytes(`${safeName(project.name)}.pdf`, pdfBytes, "application/pdf"), disabled: !pdfBytes },
       { id: "pdftex", label: "Switch to pdfLaTeX", run: () => void setEngine("pdftex"), disabled: project.engine === "pdftex" },
       { id: "xetex", label: "Switch to XeLaTeX", run: () => void setEngine("xetex"), disabled: project.engine === "xetex" },
@@ -469,18 +389,18 @@ export default function Workspace({
       { id: "view-pdf", label: "Show the PDF only", run: () => setView("pdf"), disabled: view === "pdf" },
       { id: "files", label: filesPanel === "open" ? "Hide the files" : "Show the files", run: () => setFilesPanel(filesPanel === "open" ? "closed" : "open") },
       { id: "auto", label: auto === "on" ? "Turn auto-compile off" : "Turn auto-compile on", run: () => setAuto(auto === "on" ? "off" : "on") },
-      { id: "shortcuts", label: "Keyboard shortcuts", run: () => setTool("shortcuts") },
-      { id: "projects", label: "All projects", run: () => void (confirmLeave() && onClose()) },
+      ...hubCommands(hub, { onBackup: () => void backup(), onProjects: () => void (confirmLeave() && onClose()) }),
     ],
-    [compile, busy, insert, texOpen, figures, backup, pdfBytes, project.name, project.engine, setEngine, onClose, confirmLeave, view, setView, filesPanel, setFilesPanel, auto, setAuto],
+    [compile, busy, insert, texOpen, figures, backup, pdfBytes, project.name, project.engine, setEngine, onClose, confirmLeave, view, setView, filesPanel, setFilesPanel, auto, setAuto, hub],
   );
 
   const journalLabel = project.journalName ?? (project.journalId ? "Target journal" : "No target journal");
 
   // A figure from the window: its PDF and recipe into figures/, the tree
   // refreshed, a figure block at the cursor (or on the clipboard when no
-  // .tex is open).
+  // .tex is open). Errors (another tab holds the project) show in the window.
   const insertFigure = async (pdf: Uint8Array, recipe: Recipe) => {
+    if (!(await mayWrite.current)) throw new Error(LOCKED_OUT);
     const path = nextFigurePath(files);
     await store.write(project.id, path, pdf);
     await store.write(project.id, path.replace(/\.pdf$/, ".figure.json"), JSON.stringify(recipe, null, 2));
@@ -493,72 +413,18 @@ export default function Workspace({
     }
   };
 
-  const windowBody = (t: Tool) => {
-    switch (t) {
-      case "figures":
-        return (
-          <FiguresWindow
-            figures={studio}
-            pendingRecipe={pendingRecipe}
-            onRecipeApplied={(note) => {
-              setPendingRecipe(null);
-              if (note) setStatus(note);
-            }}
-            compiling={busy}
-            onInsert={insertFigure}
-          />
-        );
-      case "match":
-        return (
-          <MatchWindow
-            match={match}
-            pdfFile={pdfFile}
-            compiling={busy}
-            onCompile={() => void compile()}
-            targetJournalId={project.journalId}
-            onSetTarget={(id, name) => void setTarget({ id, display_name: name, host: null })}
-            onReview={openReview}
-          />
-        );
-      case "review":
-        return (
-          <ReviewWindow
-            review={review}
-            pdfFile={pdfFile}
-            compiling={busy}
-            onCompile={() => void compile()}
-            pilotId={rules ? project.journalId : null}
-            targetName={project.journalName ?? null}
-            texFiles={[project.main, active, ...Object.keys(sources)]
-              .filter((p, i, all) => /\.tex$/i.test(p) && p in sources && all.indexOf(p) === i)
-              .map((path) => ({ path, text: sources[path] }))}
-            onGoto={(path, line) => {
-              closeTool();
-              void goto(path, line);
-            }}
-          />
-        );
-      case "checks":
-        return <ChecksWindow checks={checks} pdfFile={pdfFile} compiling={busy} onCompile={() => void compile()} rules={rules} targetName={project.journalName ?? null} />;
-      case "journal":
-        return (
-          <JournalWindow
-            journalId={project.journalId}
-            journalName={project.journalName ?? null}
-            templates={templates}
-            currentTemplateId={project.templateId}
-            onChange={(j) => void setTarget(j)}
-            onNewFromTemplate={(tmpl, j) => {
-              if (!confirmLeave()) return;
-              setTool(null);
-              onCreateFromTemplate(tmpl, j);
-            }}
-            onOpenMatch={() => setTool("match")}
-          />
-        );
-      default:
-        return <p className="text-sm text-ink-soft">This window is on its way.</p>;
+  // A review's quoted passage: its line in the LaTeX (the open file and the main one first).
+  const jumpToQuote = (quote: string) => {
+    const texFiles = [project.main, active, ...Object.keys(sources)].filter((p, i, all) => /\.tex$/i.test(p) && p in sources && all.indexOf(p) === i);
+    for (const path of texFiles) {
+      const line = findQuoteInTex(sources[path], quote);
+      if (line) {
+        closeTool();
+        void goto(path, line);
+        return true;
+      }
     }
+    return false;
   };
 
   return (
@@ -570,16 +436,20 @@ export default function Workspace({
         onHome={(e) => {
           if (!confirmLeave()) e.preventDefault();
         }}
-        onStop={stopTex}
         onRename={(name) => void rename(name)}
         journalLabel={journalLabel}
         onTool={setTool}
-        view={view}
-        onView={setView}
-        filesOpen={filesPanel === "open"}
-        onToggleFiles={() => setFilesPanel(filesPanel === "open" ? "closed" : "open")}
-        busy={busy}
-        onCompile={() => void compile()}
+        actions={
+          <LatexActions
+            view={view}
+            onView={setView}
+            filesOpen={filesPanel === "open"}
+            onToggleFiles={() => setFilesPanel(filesPanel === "open" ? "closed" : "open")}
+            busy={busy}
+            onCompile={() => void compile()}
+            onStop={stopTex}
+          />
+        }
       />
       <p className="px-2 text-sm text-ink-soft md:hidden">Editing needs a larger screen. Here is this project&apos;s last compiled PDF.</p>
       <div
@@ -811,15 +681,24 @@ export default function Workspace({
         busy={busy}
       />
 
-      {WINDOWS.map((w) => (
-        <Dialog key={w.tool} open={tool === w.tool} onClose={closeTool} title={w.title} size={w.size}>
-          {tool === w.tool && windowBody(w.tool)}
-        </Dialog>
-      ))}
-      <CommandPalette open={tool === "palette"} onClose={closeTool} commands={commands} />
-      <Dialog open={tool === "shortcuts"} onClose={closeTool} title="Keyboard shortcuts" size="md">
-        {tool === "shortcuts" && <Shortcuts />}
-      </Dialog>
+      <HubWindows
+        hub={hub}
+        project={project}
+        paperFile={pdfFile}
+        compiling={busy}
+        onCompile={() => void compile()}
+        figureFormat="pdf"
+        onInsertFigure={insertFigure}
+        onJump={jumpToQuote}
+        templates={templates}
+        onNewFromTemplate={onCreateFromTemplate}
+        pendingRecipe={pendingRecipe}
+        onRecipeApplied={(note) => {
+          setPendingRecipe(null);
+          if (note) setStatus(note);
+        }}
+        commands={commands}
+      />
     </div>
   );
 }

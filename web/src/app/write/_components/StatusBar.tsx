@@ -6,12 +6,12 @@ import type { ProjectMeta } from "@/lib/write/projectStore";
 // element the smoke reads), what the last compile found, how long the paper
 // is (against the target journal's limit, when a pilot journal states
 // one), whether the last edit is saved, a tool still working; on the right
-// the engine, the auto-compile switch, and whether anything from this paper
-// has left the device.
+// the engine and the auto-compile switch (LaTeX only), and whether anything
+// from this paper has left the device.
 export default function StatusBar({
   status,
-  errors,
-  warnings,
+  errors = 0,
+  warnings = 0,
   words,
   dirty,
   running,
@@ -25,18 +25,18 @@ export default function StatusBar({
   onShortcuts,
 }: {
   status: string | null;
-  errors: number;
-  warnings: number;
+  errors?: number;
+  warnings?: number;
   words: number | null;
   dirty: boolean;
   running: { label: string; onOpen: () => void } | null;
   sent: number;
   busy: boolean;
   wordLimit: { limit: number; journal: string } | null;
-  engine: ProjectMeta["engine"];
-  onEngine: (engine: ProjectMeta["engine"]) => void;
-  auto: boolean;
-  onAuto: (on: boolean) => void;
+  engine?: ProjectMeta["engine"];
+  onEngine?: (engine: ProjectMeta["engine"]) => void;
+  auto?: boolean;
+  onAuto?: (on: boolean) => void;
   onShortcuts: () => void;
 }) {
   return (
@@ -76,16 +76,20 @@ export default function StatusBar({
         </button>
       )}
       <span className="ml-auto flex items-center gap-3">
+        {engine && onEngine && (
         <select aria-label="TeX engine" title="TeX engine" value={engine} onChange={(e) => onEngine(e.target.value as ProjectMeta["engine"])} className="clay-field h-6 text-xs">
           <option value="pdftex">pdfLaTeX</option>
           <option value="xetex">XeLaTeX</option>
         </select>
+        )}
+        {onAuto && (
         <button type="button" role="switch" aria-checked={auto} onClick={() => onAuto(!auto)} title="Compile 2 seconds after you stop typing" className="flex items-center gap-1.5 hover:text-ink">
           <span aria-hidden className={`relative h-4 w-7 rounded-full transition-colors ${auto ? "bg-accent" : "bg-[#dcd8ce] shadow-[inset_0_1px_2px_rgba(58,44,28,.18)]"}`}>
             <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-[0_1px_2px_rgba(58,44,28,.3)] transition-[left] ${auto ? "left-3.5" : "left-0.5"}`} />
           </span>
           Auto-compile
         </button>
+        )}
       </span>
       <span className={sent > 0 ? "text-away" : ""}>
         {sent === 0 ? "Nothing from this paper has been sent." : `${sent} request${sent === 1 ? "" : "s"} carried text you agreed to send.`}
