@@ -31,6 +31,7 @@ import { useMatch } from "@/app/match/_components/useMatch";
 import { useReview } from "@/app/review/_components/useReview";
 import { useFigures } from "@/app/figures/_components/useFigures";
 import { downloadBytes, safeName } from "./download.ts";
+import { LOCKED_OUT, useProjectSession } from "./useProjectSession.ts";
 
 // Each window's body loads only when it opens, so the tools' code (pdf.js,
 // the matching model, the figure studio) stays out of the page until asked for.
@@ -114,8 +115,6 @@ function includedByBareName(name: string, sources: Record<string, string>): bool
   return Object.entries(sources).some(([p, t]) => p.endsWith(".tex") && re.test(t));
 }
 
-const LOCKED_OUT = "This project is open in another tab, so it can't be changed here. Close it there, then reload this tab to edit here.";
-
 export default function Workspace({
   store,
   project,
@@ -142,10 +141,6 @@ export default function Workspace({
   // why it can't be edited here (a file that isn't UTF-8).
   const [doc, setDoc] = useState<{ path: string; text: string; rev: number; readOnly?: string } | null>(null);
   const revRef = useRef(0);
-  // One tab edits a project at a time (a Web Lock per project): another tab
-  // opens it read-only, so a stale copy can't save over newer work.
-  const [lockedOut, setLockedOut] = useState(false);
-  const mayWrite = useRef<Promise<boolean>>(Promise.resolve(true));
   const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
   const [diagnostics, setDiagnostics] = useState<TexDiagnostic[]>([]);
   const [log, setLog] = useState("");
@@ -171,11 +166,6 @@ export default function Workspace({
   // come from these); refreshed on load, on save, after a compile.
   const [sources, setSources] = useState<Record<string, string>>({});
   const [words, setWords] = useState<number | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const dirtyRef = useRef(false);
-  useEffect(() => {
-    dirtyRef.current = dirty;
-  }, [dirty]);
   const [split, setSplit] = useState(() => {
     try {
       const v = Number(localStorage.getItem(SPLIT_KEY));
@@ -187,39 +177,30 @@ export default function Workspace({
   const editor = useRef<EditorHandle | null>(null);
   const busyRef = useRef(false); // Ctrl+S bypasses the disabled button: one compile at a time
   const wantedRef = useRef(project.main); // the file most recently asked for; slower reads of others are dropped
-  const editSeq = useRef(0); // bumped per keystroke; a save marks clean only if nothing was typed meanwhile
   const wordsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorCol = useRef<HTMLDivElement>(null);
   const pdfCol = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
-  const write = useCallback(
-    async (id: string, path: string, t: string) => {
-      if (!(await mayWrite.current)) return; // read-only here: another tab has the project
-      const seq = editSeq.current;
-      await store.write(id, path, t);
-      setSources((s) => ({ ...s, [path]: t }));
-      if (editSeq.current === seq) setDirty(false);
-    },
-    [store],
-  );
   // Created on first use (from a handler or the mount effect, never in
   // render); one per project, since Workspace remounts per project.
   const saverRef = useRef<ReturnType<typeof autosaver<string>> | null>(null);
+  // The lock, unsaved edits and saving on the way out (shared with the Word workspace).
+  // No saver yet means nothing was typed, so nothing to save.
+  const { lockedOut, mayWrite, guarded, dirty, edited, seq, saved } = useProjectSession(project.id, async () => saverRef.current?.flush(), setError);
+  const write = useCallback(
+    async (id: string, path: string, t: string) => {
+      if (!(await mayWrite.current)) return; // read-only here: another tab has the project
+      const at = seq();
+      await store.write(id, path, t);
+      setSources((s) => ({ ...s, [path]: t }));
+      saved(at);
+    },
+    [store, mayWrite, seq, saved],
+  );
   const saver = useCallback(
     () => (saverRef.current ??= autosaver(write, undefined, undefined, undefined, () => setError("Couldn't save your last edit (is the disk full?). It will be retried; download a backup to be safe."))),
     [write],
   );
-  // File operations report what went wrong instead of failing silently.
-  const guarded = <A extends unknown[]>(fn: (...args: A) => Promise<void>) => async (...args: A) => {
-    setError(null);
-    if (!(await mayWrite.current)) return setError(LOCKED_OUT);
-    try {
-      await fn(...args);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
   const loadSources = useCallback(
     async (paths: string[]) => {
       // A file that isn't UTF-8 is left out of the outline and suggestions, not a failure.
@@ -267,44 +248,11 @@ export default function Workspace({
     void open(project.main).catch((err) =>
       setError(`${project.main} couldn't be opened (${err instanceof Error ? err.message : String(err)}). Open another file, or make one the main file in the file list.`),
     );
-    // This mount's own release (not a shared ref: a remount must not release this one's lock, or leave it held).
-    let releaseLock = () => {};
-    if ("locks" in navigator) {
-      const held = new Promise<void>((r) => (releaseLock = r));
-      mayWrite.current = new Promise<boolean>((decide) => {
-        // Waits briefly rather than giving up at once: a remount (or a reload) releases its lock a moment later.
-        navigator.locks
-          .request(`margalink-project-${project.id}`, { signal: AbortSignal.timeout(1500) }, () => {
-            decide(true);
-            return held;
-          })
-          .catch(() => {
-            decide(false);
-            setLockedOut(true);
-          });
-      });
-    }
-    // Unsaved edits: the browser asks before the tab closes (a save started on pagehide may not finish).
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (dirtyRef.current) e.preventDefault();
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
     void store.lastPdf(project.id).then((pdf) => pdf && setPdfBytes(pdf));
     // A figure added from the figure studio shows up when the page regains focus.
     const onFocus = () => void refresh().catch(() => {});
     window.addEventListener("focus", onFocus);
-    const onHide = () => void saver().flush().catch(() => {}); // a failure is shown by onError
-    window.addEventListener("pagehide", onHide);
-    // Hidden fires earlier than pagehide (and reliably on phones): save then.
-    const onVisibility = () => document.visibilityState === "hidden" && onHide();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("pagehide", onHide);
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("beforeunload", onBeforeUnload);
-      void saver().flush().catch(() => {}).finally(releaseLock);
-    };
+    return () => window.removeEventListener("focus", onFocus);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per project
   }, [project.id]);
 
@@ -406,8 +354,7 @@ export default function Workspace({
   }, [saver, store, project]);
 
   const onEdit = (path: string, t: string) => {
-    editSeq.current++;
-    setDirty(true);
+    edited();
     saver()(project.id, path, t);
     // The outline, suggestions and word count follow the text as it's typed (after a
     // 300 ms pause), not only once it's saved.
