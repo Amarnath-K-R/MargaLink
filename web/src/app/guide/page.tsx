@@ -81,7 +81,7 @@ export default function GuidePage() {
               </>,
               <>
                 <strong>Your M coins</strong>, once you&apos;re signed in: the balance, and a click to your account. Signed out, it says{" "}
-                <em>Sign in</em>; only the AI review and Ask Claude need an account. Privacy, the terms and the other site links are at the
+                <em>Sign in</em>; only the AI review, Ask Claude and Rewrite need an account. Privacy, the terms and the other site links are at the
                 bottom of your dashboard.
               </>,
             ]}
@@ -89,11 +89,11 @@ export default function GuidePage() {
           <Aside title="What stays on your device">
             <p>
               Reading your paper, matching it to journals, the format and journal-rules checks, drawing figures from your spreadsheet, writing and
-              compiling LaTeX, and editing Word documents all run in your browser. What it downloads is public (the journal index, the matching model, the TeX engine, the figure
+              compiling LaTeX, editing Word documents and checking their spelling and grammar all run in your browser. What it downloads is public (the journal index, the matching model, the TeX engine, the figure
               engine), and none of those requests carries anything of yours.
             </p>
           </Aside>
-          <Aside tone="away" title="The two things that can leave it, only when you confirm">
+          <Aside tone="away" title="The three things that can leave it, only when you confirm">
             <p>
               <strong>The AI review</strong> sends your paper&apos;s text to Claude, in short requests, after a notice that says exactly that. It needs an
               account and costs M coins; the price is on the button, and any part of a review that doesn&apos;t come back is refunded.
@@ -101,6 +101,10 @@ export default function GuidePage() {
             <p>
               <strong>Ask Claude</strong> in the figure studio sends a description of your data: column names and types, the row count, your request;
               never a value from a cell. Group labels go only if you tick a box. 1 M coin a request, refunded if it fails.
+            </p>
+            <p>
+              <strong>Rewrite</strong> in the writing workspace sends only the passage you select, once you&apos;ve turned it on for that paper.
+              Citations, equations and pictures in it stay here. 1 M coin per 500 words, refunded if it fails.
             </p>
             <p>Anywhere in MargaLink, this colour marks something that would leave your device.</p>
           </Aside>
@@ -868,6 +872,55 @@ export default function GuidePage() {
               },
             ]}
           />
+          <DocPart id="rewrite" title="Rewrite">
+            <p>
+              Select a passage, then choose <strong>Rewrite</strong> in the formatting bar (LaTeX), or in the editor&apos;s own bar or right-click menu
+              (Word); Commands has it too. The menu shows the selection&apos;s price before you pick a tool. The first time in a paper, a notice says
+              what&apos;s sent: tick its box and <strong>Turn on for this paper</strong>. The rewrite comes back as a word diff, removed words struck
+              through and added ones underlined, in the paper&apos;s English.
+            </p>
+          </DocPart>
+          <Shot
+            name="write-rewrite"
+            alt="The Rewrite menu over a selected sentence"
+            notes={[
+              <>
+                <strong>The price</strong> of the selection, before anything is sent: 1 M coin per 500 words.
+              </>,
+              <>
+                <strong>Paraphrase</strong>, and the tools below it.
+              </>,
+              <>
+                <strong>Change tone</strong>: academic, concise, confident or plain.
+              </>,
+              <>
+                <strong>Clarity and flow</strong>: a clearer version, with up to 3 notes.
+              </>,
+            ]}
+          />
+          <OptionTable
+            rows={[
+              { name: "Paraphrase", what: "The same meaning in different words, at about the same length." },
+              { name: "Change tone", what: "Academic, concise, confident or plain." },
+              { name: "Shorten", what: "About two thirds of the words, asked to keep every claim and number." },
+              { name: "Expand", what: "Develops what's already there, making the reasoning explicit. It's asked to add no facts, and a rewrite with a new number or citation is refused." },
+              { name: "Clarity and flow", what: "A clearer version, with up to 3 notes on the main changes or what still needs work." },
+              {
+                name: "Replace · Try again · Discard",
+                what: "Replace puts the rewrite in as one undo step. Try again asks for another and costs the same again. If the text changed while you waited, the rewrite isn't put in: copy it and place it yourself.",
+              },
+            ]}
+          />
+          <Aside tone="away" title="What Rewrite sends">
+            <p>
+              Only the passage you select, the tool, and the paper&apos;s English, to Anthropic&apos;s Claude API, through our server, which keeps none of
+              it. Citations, references, labels, equations, pictures, footnote marks and LaTeX comments stay here: Claude sees a numbered marker in
+              their place. It costs 1 M coin per 500 words selected (at least 1, up to 2,000 words at a time); a rewrite that fails, or that our checks
+              refuse, is refunded at once. It&apos;s turned on once per paper, in this browser (never in a backup), and turned off with Commands
+              (<Keys>⌘+K</Keys>), &ldquo;Turn off Rewrite for this paper&rdquo;. Rewrites are generated by AI and can shift your meaning: read each one before you
+              replace your text, and disclose AI assistance where your journal asks.
+            </p>
+          </Aside>
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
@@ -878,7 +931,7 @@ export default function GuidePage() {
           icon={icon(Coins)}
           lead={
             <>
-              Only the AI review and Ask Claude need an account, because each run costs money. They&apos;re paid in M coins; everything else stays
+              Only the AI review, Ask Claude and Rewrite need an account, because each run costs money. They&apos;re paid in M coins; everything else stays
               free, with no account.{BETA.on && " While the closed beta runs, every tool needs an invited account."}
             </>
           }
@@ -925,12 +978,13 @@ export default function GuidePage() {
           <DocPart title="What things cost">
             <p>
               A review&apos;s price depends on its depth and on how much text it sends, counting only the sections it actually reviews. You see it on
-              the button and in the notice, before anything is sent.
+              the button and in the notice, before anything is sent. A rewrite costs 1 M coin per 500 words you select, shown on the Rewrite menu;
+              Try again costs the same again.
             </p>
           </DocPart>
           <Shot
             name="coins-costs"
-            alt="The price table: review depth against length, and Ask Claude at 1 M coin"
+            alt="The price table: review depth against length, then Ask Claude at 1 M coin and Rewrite at 1 M coin per 500 words"
             notes={[
               <>
                 <strong>Depth</strong>: quick, standard or thorough, as chosen on the review page.
@@ -942,12 +996,15 @@ export default function GuidePage() {
               <>
                 <strong>Ask Claude</strong>: 1 M coin a request.
               </>,
+              <>
+                <strong>Rewrite</strong>: 1 M coin per 500 words you select.
+              </>,
             ]}
           />
           <Aside title="Coins come back on their own">
             <p>
               A review&apos;s price is shared among its sections, by length, and the final cross-check; any part that doesn&apos;t come back is
-              refunded about two hours after the review started. An Ask Claude request that fails is refunded at once. Your history on the account
+              refunded about two hours after the review started. An Ask Claude request or a rewrite that fails is refunded at once. Your history on the account
               page shows each refund.
             </p>
           </Aside>

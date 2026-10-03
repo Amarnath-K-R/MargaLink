@@ -3,21 +3,21 @@ import Link from "next/link";
 import { BarChart3, BookOpen, PenLine, ScanSearch } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import { Coin } from "@/components/account/AccountButton";
-import { FIGURE_PRICE, WELCOME_COINS, reviewPrice } from "@/lib/accounts/coins";
+import { FIGURE_PRICE, REWRITE_MAX_WORDS, REWRITE_WORDS_PER_COIN, WELCOME_COINS, reviewPrice } from "@/lib/accounts/coins";
 import { REVIEW_TIERS } from "@/lib/review/reviewTypes";
 import { Packs, ProPlans } from "./_components/Packs";
 import { PADDLE_RESELLER } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Pricing | MargaLink",
-  description: "Most of MargaLink is free. The AI review and Ask Claude cost M coins: what they cost, and what coins cost.",
+  description: "Most of MargaLink is free. The AI review, Ask Claude and Rewrite cost M coins: what they cost, and what coins cost.",
 };
 
 const FREE = [
   { Icon: ScanSearch, bead: "#cfe0e1", text: "Matching your paper to journals, on your device" },
   { Icon: BookOpen, bead: "#efe3cf", text: "Browsing journals, and the format and journal-rules checks" },
   { Icon: BarChart3, bead: "#f1d2c2", text: "Figures from your spreadsheet: templates, editing, statistics, exports" },
-  { Icon: PenLine, bead: "#dde6e6", text: "Writing and compiling your paper in the LaTeX workspace" },
+  { Icon: PenLine, bead: "#dde6e6", text: "Writing your paper in LaTeX or Word, with spelling and grammar checks" },
 ];
 const LENGTHS = [50_000, 100_000, 150_000, 400_000];
 const words = (chars: number) => `about ${(Math.round(chars / 6 / 1000) * 1000).toLocaleString("en")} words`;
@@ -25,7 +25,7 @@ const words = (chars: number) => `about ${(Math.round(chars / 6 / 1000) * 1000).
 export default function PricingPage() {
   return (
     <main className="mx-auto w-full max-w-4xl px-6 pt-3 pb-20">
-      <PageHeader width="3xl" title="Pricing" subtitle={<p className="mt-3 text-lg text-ink-soft">Most of MargaLink is free. The two AI features cost M coins.</p>} />
+      <PageHeader width="3xl" title="Pricing" subtitle={<p className="mt-3 text-lg text-ink-soft">Most of MargaLink is free. The three AI features cost M coins.</p>} />
 
       <section aria-labelledby="free" className="mt-10">
         <h2 id="free" className="font-serif text-2xl font-medium">Free, with no account</h2>
@@ -80,13 +80,20 @@ export default function PricingPage() {
           <p className="border-t border-line/70 px-5 py-3 text-xs leading-relaxed text-ink-soft">
             Priced by what&apos;s actually sent: sections you mark &ldquo;Don&apos;t send&rdquo;, and the ones a depth skips, don&apos;t count; a section
             shorter than 2,000 characters counts as 2,000. Resuming or retrying a review costs nothing more. Each account can make up to 150 review
-            passes and 50 Ask Claude requests a day.
+            passes, 50 Ask Claude requests and 100 rewrites a day.
           </p>
         </div>
         <p className="clay-well mt-4 flex items-center gap-3 rounded-2xl px-5 py-3 text-sm">
           <Coin />
           <span>
             <strong className="font-medium">Ask Claude</strong> in the figure studio: {FIGURE_PRICE} M coin a request, refunded if it fails.
+          </span>
+        </p>
+        <p className="clay-well mt-3 flex items-center gap-3 rounded-2xl px-5 py-3 text-sm">
+          <Coin />
+          <span>
+            <strong className="font-medium">Rewrite</strong> in the writing workspace: 1 M coin per {REWRITE_WORDS_PER_COIN} words you select, rounded
+            up, up to {REWRITE_MAX_WORDS.toLocaleString("en")} at a time, refunded if it fails. Try again costs the same again.
           </span>
         </p>
       </section>

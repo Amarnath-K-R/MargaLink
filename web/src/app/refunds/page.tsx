@@ -5,7 +5,7 @@ import LegalSection from "@/components/layout/LegalSection";
 import { ContactEmail } from "@/components/layout/ContactDetails";
 import { PADDLE_RESELLER } from "@/lib/site";
 
-const UPDATED = "Last updated 28 September 2026";
+const UPDATED = "Last updated 3 October 2026";
 
 export const metadata: Metadata = {
   title: "Refunds | MargaLink",
@@ -32,7 +32,9 @@ export default function RefundsPage() {
             A review&apos;s price is shared among its parts: each section it sends, weighed by its length, and the final cross-check, counted like an
             average section. Any part that doesn&apos;t come back is refunded (rounded up to whole coins), whether or not the rest of the review
             finished, about two hours after the review started. An Ask Claude request that fails, or
-            whose answer can&apos;t be used, is refunded at once. You don&apos;t need to ask; your coin history on{" "}
+            whose answer can&apos;t be used, is refunded at once, and so is a rewrite that fails or that our checks refuse. A rewrite that came back
+            but wasn&apos;t put in because your text changed first isn&apos;t refunded, since it was delivered (you can copy it), and Try again is
+            charged as a new rewrite. You don&apos;t need to ask; your coin history on{" "}
             <Link href="/account" className="text-accent hover:underline">
               your account page
             </Link>{" "}

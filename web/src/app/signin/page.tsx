@@ -15,7 +15,7 @@ export default function SignInPage() {
     <main className="mx-auto w-full max-w-2xl px-6 pt-3 pb-20">
       <PageHeader width="2xl" title="Sign in" subtitle={
           <p className="mt-3 text-lg text-ink-soft">
-            {BETA.on ? "During the beta, every tool needs an invited account." : "Only the AI review and Ask Claude need an account. Everything else works without one."}
+            {BETA.on ? "During the beta, every tool needs an invited account." : "Only the AI review, Ask Claude and Rewrite need an account. Everything else works without one."}
           </p>
         }
       />

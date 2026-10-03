@@ -83,7 +83,7 @@ const STAGE_TEXT: Record<TexStage, (d?: string) => string> = {
 // the PDF side by side (the split drags), the compiler's diagnostics under
 // the editor, a status line, and the other tools as windows over it all.
 // `calls` is the page's network trace, for the status line's "sent" count
-// (only the review and Ask Claude requests carry text you agreed to send:
+// (only the review, Ask Claude and Rewrite requests carry text you agreed to send:
 // starting a paid review or signing out doesn't);
 // `onCreateFromTemplate` starts a new project (the Journal window offers
 // the target's template that way — this project is never rewritten).

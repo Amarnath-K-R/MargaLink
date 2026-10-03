@@ -43,7 +43,7 @@ export default function ReviewConsent({
         guidelines, at {tier} depth. We try to remove author names and email addresses first; this is automatic and can miss some, so check. The
         paper&apos;s content itself is sent as it is. MargaLink doesn&apos;t store it. Anthropic doesn&apos;t use it to train models and deletes it
         within 30 days; it may keep it longer only to enforce its Usage Policy or where the law requires. This is the one feature in MargaLink that
-        sends your paper&apos;s text off your device.
+        sends your whole paper&apos;s text off your device; Rewrite sends only a passage you select.
         {excludedCount > 0 &&
           ` The ${excludedCount} section${excludedCount === 1 ? "" : "s"} you marked "Don't send" won't be sent at all.`}
       </p>

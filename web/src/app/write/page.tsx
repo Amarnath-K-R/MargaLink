@@ -28,7 +28,7 @@ const WORD = /\.(docx|dotx|doc|docm|dotm)$/i;
 // Word, download the .docx) — and reach the other tools from windows over
 // the workspace. Projects
 // live in this browser's own storage; nothing from a paper is sent unless
-// you ask for one of the two disclosed AI features. `?p=<id>` reopens a
+// you ask for one of the three disclosed AI features. `?p=<id>` reopens a
 // project; `?journal=<id>` preselects a template for a new one.
 export default function WritePage() {
   const [store, setStore] = useState<ProjectStore | null>(null);
@@ -177,7 +177,7 @@ export default function WritePage() {
         subtitle={
           <p className="mt-3 max-w-xl text-lg text-ink-soft">
             Start from your journal&apos;s LaTeX template and compile to PDF, or bring your Word document and edit it as Word. Everything
-            runs in your browser, and your manuscript never leaves this device.
+            runs in your browser, and your manuscript stays on this device unless you send text to an AI feature, after its notice.
           </p>
         }
       />

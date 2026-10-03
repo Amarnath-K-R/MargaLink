@@ -3,7 +3,7 @@
 # for working on the UI. CLAUDE.md's "Environment variables" table explains
 # each one. Never commit real values.
 
-# The two AI features (review, Ask Claude). Without it they return an error.
+# The three AI features (review, Ask Claude, Rewrite). Without it they return an error.
 ANTHROPIC_API_KEY=
 
 # Sign-in. On localhost, DEV_EMAIL_LOG=1 prints email sign-in links to the

@@ -24,7 +24,7 @@ export default function TeamPage() {
               one place.
             </p>
             <p>
-              We build it so your manuscript stays yours. Matching, the checks, figures and writing run in your browser, and the two features that
+              We build it so your manuscript stays yours. Matching, the checks, figures and writing run in your browser, and the three features that
               need an AI model send only what you approve, after telling you exactly what.
             </p>
           </Part>

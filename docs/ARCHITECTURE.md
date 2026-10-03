@@ -150,9 +150,10 @@ instead of a local one for exactly this reason (see its comment); the
 bundler still copies a local copy into the export regardless.
 
 The exceptions to "no backend": Cloudflare Pages Functions in
-`web/functions/api/`. Two, `review.ts` and `figure.ts`, exist because
-their feature needs somewhere to hold the Anthropic API key that the
-browser must never see — see `CLAUDE.md`'s "two disclosed exceptions."
+`web/functions/api/`. Three, `review.ts`, `figure.ts` and `rewrite.ts`,
+exist because their feature needs somewhere to hold the Anthropic API key
+that the browser must never see — see `CLAUDE.md`'s "three disclosed
+exceptions."
 The rest run accounts, M coins and payments (see "Accounts, M coins and
 payments" below) on a D1 database; none of them ever receives anything
 from a paper. Everything else in `web/` is static files served from
@@ -339,12 +340,62 @@ The worker's own fetches (Pyodide from jsDelivr, `figurelib.py`, fonts) happen
 off the main thread. They are bodyless GETs for public, versioned assets —
 never anything from the dataset.
 
+### Rewrite: a selected passage, and nothing around it
+
+Rewrite (`/write`, in both editors) applies one editing tool to the
+passage the person selects: Paraphrase, Change tone (academic, concise,
+confident, plain), Shorten, Expand (develops what's there) or Clarity and
+flow (a clearer version plus up to 3 notes). It's the third rule-3
+exception (`functions/api/rewrite.ts`, `claude-sonnet-5`), and the
+narrowest in what it may change: it rewrites, it never adds.
+
+- **Placeholders.** The selection is read as a passage in the browser:
+  `toPassage` (`latexText.ts`) for LaTeX, `docPassage` (`docText.ts`) for
+  Word. Everything that isn't prose (a citation, a reference or label,
+  maths, a picture, a footnote mark, a LaTeX comment) becomes a numbered
+  placeholder `⟦n⟧` and stays on the device; the answer goes back in with
+  each placeholder's source restored (`fromPassage`, `applyDocRewrite`).
+- **What's sent.** `parseRewriteRequest` (`src/lib/writing/rewrite.ts`)
+  accepts exactly `{ tool, tone, format, dialect, passage, coins }`: the
+  passage, the tool and tone, LaTeX or Word text, and the paper's English
+  (US, UK, Australian, Canadian or Indian). At most 2,000 words, and
+  `coins` must equal `rewritePrice(words)`. The browser runs it before
+  sending; the Function runs it again before reserving or charging.
+- **Checks.** `checkRewrite` holds every answer to the rules the prompt
+  states (`rewritePrompt.ts`): each placeholder once, in order, in its
+  paragraph, with its spacing; the same number of paragraphs; no number
+  the passage didn't have; in LaTeX, the same commands and `{ } $ % &`;
+  Shorten shorter and Expand longer. A refused answer gets one more try
+  with the reason, charged once. The browser checks the answer again
+  before it offers Replace.
+- **Coins.** 1 M coin per 500 words, rounded up, at least 1
+  (`rewritePrice`, shown on the menu before a tool is chosen). The
+  Function reserves the daily limits (`DAILY.rewrite`: 1,000 a day in
+  all, 400 of them for accounts that never bought coins, 100 per
+  account), debits, calls Claude, and refunds (`rewrite_refund`) whenever
+  no checked answer goes out. Try again is a new rewrite, charged again.
+  If the text changed before Replace, the rewrite isn't put in (the card
+  offers Copy) and isn't refunded: it was delivered.
+- **Consent and the card.** `RewriteConsent.tsx`, once per paper, after
+  an unticked box: kept as `rewriteConsent` in the project's
+  `project.json` (OPFS), never in a backup zip, and withdrawn with the
+  command "Turn off Rewrite for this paper". The answer shows as a word
+  diff (`RewriteCard.tsx`) with Replace (one undo step), Try again and
+  Discard.
+
+`rewriteEndpoint.selfcheck.ts` drives the real handler with a stubbed
+upstream (refusals before any charge, every failure refunded once, no
+passage in the logs); `scripts/smoke/check_rewrite.mjs` covers both
+editors against a stubbed Function; `scripts/eval/rewrite_live.ts` is the
+manual check against the real Claude, before a merge.
+
 ### The writing workspace: LaTeX or Word in the browser
 
 `/write` is a single-author LaTeX workspace: start from a journal's
 template (or import a zip), edit in CodeMirror, compile to PDF, back up
 as a zip. A Word document is the other kind of project (see **Word
-documents** below). No server; no AI in the editor. It is also the hub:
+documents** below). No server; the only AI in the editor is Rewrite,
+opt-in per paper (above). It is also the hub:
 the other tools open as windows over it (see **Windows** below).
 
 - **Engine.** TeX Live 2023 compiled to WebAssembly by the BusyTeX
@@ -424,6 +475,15 @@ the other tools open as windows over it (see **Windows** below).
   the last six). Auto-compile (off by default) compiles 2 s after the
   last keystroke unless a compile is running. File names are edited in
   place (`FileTree.tsx`); dropping files on the list uploads them.
+- **Spelling and grammar.** Harper (`harper.js`, Apache-2.0), a
+  rule-based checker compiled to WebAssembly, runs in a Web Worker
+  (`grammar.ts`); the engine is downloaded once from our own site and
+  nothing is sent. LaTeX is read as prose by `proseMask` (`latexText.ts`:
+  citations, references, labels, maths, code and comments blanked); a Word
+  document by `docProse` (`docText.ts`), its marks painted with Folio's
+  suggestion layer, a transaction that's never saved (`useDocSpelling.tsx`).
+  A paper's English (or off) and its dictionary are kept in its
+  `project.json` (`spelling.ts`).
 - **Figures.** "Insert into paper" writes the 300 dpi PDF and a data-free
   recipe (`figures/<name>.figure.json`, the same shape `RecipeImportExport`
   saves) into the project and drops a figure block at the cursor; opening
@@ -461,12 +521,13 @@ the other tools open as windows over it (see **Windows** below).
 
 Nothing in the workspace shows a network trace any more (the tool pages
 lost theirs too); the status line says whether a request carried text
-you agreed to send (a review or Ask Claude).
+you agreed to send (a review, Ask Claude or a rewrite).
 
 ### Accounts, M coins and payments
 
-The two AI features cost real money per run (a review ~$0.12–0.32, up to
-~$1.7 for a 400k-character thorough one; an Ask Claude call ~$0.03), so
+The three AI features cost real money per run (a review ~$0.12–0.32, up to
+~$1.7 for a 400k-character thorough one; an Ask Claude call ~$0.03; a
+rewrite at most about $0.13, the largest Expand), so
 they're paid in M coins and need an account. Nothing else does. Plan and
 reasoning: `docs/plans/2026-09-28-accounts-coins-payments.md`.
 
@@ -536,7 +597,7 @@ today's capacity is refused before it spends one of the ticket's. A
 cancel pressed while a review is being paid for takes effect once the
 charge has landed on the run's state, and any error that stops a paid run
 leaves it resumable. Ask Claude debits 1 coin per call and gives it back
-unless an answer goes out.
+unless an answer goes out; Rewrite does the same at 1 coin per 500 words.
 
 **Payments.** Paddle Billing is the merchant of record. The browser loads
 Paddle.js only when Buy is clicked and names the account in `custom_data`
@@ -646,6 +707,8 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `write/_components/EditorFormatBar.tsx`, `latexCompletions.ts`, `Outline.tsx` | The formatting bar over the source (wrap or insert; Cite/Ref/Figure lists, a table-size grid); the suggestions inside `\cite{`, `\ref{`, `\begin{` and after `\`; the Outline tab. |
 | `write/_components/MatchWindow.tsx`, `ReviewWindow.tsx`, `FiguresWindow.tsx`, `ChecksWindow.tsx`, `JournalWindow.tsx`, `useChecks.ts` | The windows' bodies (dynamic imports) over the shared hooks; `useChecks` runs the format and rules checks over the PDF text. |
 | `write/_components/LatexEditor.tsx`, `FileTree.tsx`, `PdfPane.tsx`, `Diagnostics.tsx`, `TemplatePicker.tsx`, `StorageBanner.tsx`, `download.ts` | The workspace's pieces. `LatexEditor`'s handle: goto (mid-screen), insert, wrap, insertBlock, comment, focus. |
+| `write/_components/useRewrite.tsx`, `RewriteCard.tsx`, `RewriteMenu.tsx` | Rewrite in both editors: the selection's price on the menu, the paper's consent, the request, and the card (a word diff with Replace / Try again / Discard, Clarity's notes, or Copy when the text changed). The formatting bar's Rewrite in LaTeX; the editor bar's button and right-click item in Word. |
+| `write/_components/useDocSpelling.tsx`, `SpellingCard.tsx` | Spelling and grammar in a Word document: marks painted with Folio's suggestion layer (never saved) and their fixes in a card under the caret. LaTeX shows them as CodeMirror diagnostics in `LatexEditor.tsx`. |
 | `write/_components/useNetworkTrace.ts` | `useNetworkTrace()` — patches `fetch` for the page's lifetime; `/write` uses it to count requests that carried a body (the status line's "sent"). The on-page request list it once fed was removed on 2026-09-27. |
 | `write/layout.tsx` | Route metadata shim. |
 
@@ -691,6 +754,7 @@ features, and `ui/` holds generic primitives even when one route uses them.
 | `checks/FormatCheckPanel.tsx` | The 9-row structural check (match, and the workspace's Checks window). |
 | `review/ReviewConsent.tsx` | The review's consent notice: exactly what is sent, the price, the explicit-consent box. |
 | `figures/FigureConsent.tsx` | Ask Claude's consent notice. A deliberately separate sibling of `ReviewConsent.tsx`, not a shared generalization: see `CLAUDE.md`'s exceptions paragraph for why each notice stays independently readable. |
+| `writing/RewriteConsent.tsx` | Rewrite's consent notice, given once per paper; a separate sibling of the other two for the same reason. |
 | `docs/Doc.tsx`, `docs/Art.tsx`, `docs/Diagrams.tsx` | The documentation pages' blocks (contents list, sections, screenshots with markers, option tables, asides), their clay illustrations (inline SVG) and diagrams. |
 
 **`src/app/_landing/three/`**: the landing's 3D scenes (three.js), built
@@ -780,11 +844,23 @@ checks.
 | `templateCatalog.ts` | `loadTexTemplates()`, `templateForJournal()`, `starterProject()`. |
 | `zip.ts` | `zipFiles()`, `unzipFiles()`, `flattenSingleRoot()` over fflate. |
 
+*`src/lib/writing/`*: spelling, grammar and Rewrite, in both editors.
+
+| File | What |
+|---|---|
+| `spelling.ts` | A paper's spelling settings (its English, or off, and its words), read from `project.json`. Pure. |
+| `grammar.ts` | Harper in a Web Worker: `checkProse` over a paper's text, on the device. |
+| `latexText.ts` | LaTeX as prose: `proseMask` for the checker; `toPassage` / `fromPassage` for Rewrite (non-prose as placeholders, and back). |
+| `docText.ts` | A Word document as prose: `docProse` for the checker; `docPassage` / `applyDocRewrite` for Rewrite. |
+| `rewrite.ts` | Rewrite's rules, shared by the Function and the browser: `parseRewriteRequest` (exact shape, caps, the price), `checkRewrite` (the answer against the passage), `rewriteWords`. |
+| `rewritePrompt.ts` | What Claude is told: the system prompt, `buildRewritePrompt`, the strict tool. Imported by `functions/api/rewrite.ts`. |
+| `rewriteClient.ts` | Client: `requestRewrite()`, the answer checked again before it's offered. |
+
 *`src/lib/accounts/`*: accounts, M coins and payments (mostly server-side).
 
 | File | What |
 |---|---|
-| `coins.ts` | The prices (`reviewPrice`, `FIGURE_PRICE`, packs, Pro), `proCoinsLeft`, `dueProGrants`, email canonicalisation, ledger labels, and the two errors the client throws. Shared by client and server. |
+| `coins.ts` | The prices (`reviewPrice`, `FIGURE_PRICE`, `rewritePrice`, packs, Pro), `proCoinsLeft`, `dueProGrants`, email canonicalisation, ledger labels, and the two errors the client throws. Shared by client and server. |
 | `auth.ts`, `safeNext.ts` | Server: sessions and cookies, Google claims and PKCE, account linking, rate limits, the Origin check; `safeNext` is shared with the sign-in pages. |
 | `ledger.ts` | Server: the coin ledger's SQL: balance, debit, credit, welcome, the ticket sweep and pass claims, Pro grants, history. |
 | `dailyCaps.ts` | The AI features' daily limits (service-wide and per account), counted in D1's `rate_limits`. |
@@ -813,7 +889,7 @@ checks.
 |---|---|
 | `stats.ts` | Server: the overview, AI usage by day, feature and person, the users table, the activity log's pages, and `aiCost` from `PRICES` ($ per million tokens). |
 
-*`src/lib/ai/`*: the Anthropic transport the two AI Functions share.
+*`src/lib/ai/`*: the Anthropic transport the three AI Functions share.
 
 | File | What |
 |---|---|
@@ -834,7 +910,7 @@ relative paths) and only genuinely server-specific code stays here.
 
 | File | What |
 |---|---|
-| `api/review.ts` | One of the two AI Functions: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the daily pass limits (`dailyCaps.ts`: 1,500 a day in all, 150 per account), one `callAnthropicTool`, grounding/validation. |
+| `api/review.ts` | One of the three AI Functions: a stateless dispatcher for the review's `extract`/`synthesize` passes — body-size guard, `parsePassRequest`, the daily pass limits (`dailyCaps.ts`: 1,500 a day in all, 150 per account), one `callAnthropicTool`, grounding/validation. |
 | `_middleware.ts` | The beta's page gate, on every request but the static assets (`public/_routes.json`): sign-in for the signed out, a refusal for the uninvited, `/admin` for developers only, every spelling of a path read as one; the pages it serves get the `_headers` security headers. |
 | `api/_middleware.ts` | Old deployments refused, the Origin check on every non-GET (not the Paddle webhook), the beta's API gate, `Cache-Control: no-store`, housekeeping, and the activity log row after each answer. |
 | `api/admin/*` | The console: `stats`, `users` (and coin grants), `access` (the lists), `events` (the log). Developers only. |
@@ -842,12 +918,13 @@ relative paths) and only genuinely server-specific code stays here.
 | `api/auth/google/*`, `api/auth/email/*`, `api/auth/logout.ts` | Signing in and out. |
 | `api/review/start.ts` | Charges a review and issues its ticket. |
 | `api/pay/webhook.ts`, `api/pay/portal.ts` | Paddle's events; the customer-portal link. |
-| `api/figure.ts` | The other AI Function: body-size guard, `isValidFigurePayload`, the daily limits (`dailyCaps.ts`), one `callAnthropicTool` with a strict tool, then the output gates (`validateFigureSpec`, `checkSpecAgainstColumns`, `checkLabels`, or the hook denylist). |
+| `api/figure.ts` | The second AI Function: body-size guard, `isValidFigurePayload`, the daily limits (`dailyCaps.ts`), one `callAnthropicTool` with a strict tool, then the output gates (`validateFigureSpec`, `checkSpecAgainstColumns`, `checkLabels`, or the hook denylist). |
+| `api/rewrite.ts` | The third AI Function: body-size guard, `parseRewriteRequest`, the daily limits (`dailyCaps.ts`), the debit, one `callAnthropicTool` with a strict tool and one more try if `checkRewrite` refuses the answer, a refund whenever no checked answer goes out. |
 
 ## `lib/` conventions
 
 - **One folder per feature** (`paper/`, `match/`, `journals/`, `checks/`,
-  `review/`, `figures/`, `write/`, `accounts/`, `ai/`, `access/`,
+  `review/`, `figures/`, `write/`, `writing/`, `accounts/`, `ai/`, `access/`,
   `telemetry/`, `admin/`), with only the
   genuinely shared helpers (`errorMessage.ts`, `site.ts`) at
   the root. Files keep their full names (`reviewPrompt.ts`, not
@@ -877,9 +954,10 @@ If you're new to this codebase, in this order:
 2. `src/lib/match/rank.ts` — the ranker (with `match.ts` loading the index).
 3. `pipeline/build_index.py` — how the static index those rankings run
    against gets built.
-4. `functions/api/review.ts` — one of the two exceptions to "nothing
+4. `functions/api/review.ts` — one of the three exceptions to "nothing
    leaves the browser," and why it's built the way it is (see above).
-   `functions/api/figure.ts` is the other, narrower one.
+   `functions/api/figure.ts` and `functions/api/rewrite.ts` are the
+   other, narrower ones.
 5. `src/app/page.tsx` and `src/app/_landing/` — the homepage. One scroll-driven
    narrative split into one file per section; `useScrollProgress.ts` is
    the single source of every value the sections animate against.

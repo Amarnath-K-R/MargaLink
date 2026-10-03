@@ -18,16 +18,18 @@ version, including how each is checkable):
 3. Any feature that sends text out of the browser is opt-in, with a plain
    language notice first.
 
-Two disclosed exceptions: an opt-in AI review sends paper text to
-Anthropic's API, and the figure studio's opt-in "Ask Claude" sends a
+Three disclosed exceptions: an opt-in AI review sends paper text to
+Anthropic's API, the figure studio's opt-in "Ask Claude" sends a
 spreadsheet's schema and your request (never its values; category labels
-only if you tick a box). Figures themselves are drawn on your device, and the LaTeX writing
-workspace compiles and stores papers on your device too, and opens the other tools from inside
-it (matching and the checks read the compiled PDF, on-device; the two opt-in AI features sit
-behind their notices). Both AI features sit behind an explicit consent step that names exactly
+only if you tick a box), and the writing workspace's opt-in Rewrite sends
+only a passage you select (citations, equations and pictures in it become
+numbered placeholders and stay on the device). Figures themselves are drawn on your device, and the LaTeX writing
+workspace compiles and stores papers on your device too, checks their spelling and grammar there, and opens the other tools from inside
+it (matching and the checks read the compiled PDF, on-device; the opt-in AI features sit
+behind their notices). Each AI feature sits behind an explicit consent step that names exactly
 what happens before anything is sent. See `docs/ARCHITECTURE.md`.
 
-Those two features cost money per run, so they're paid in M coins and need
+Those three features cost money per run, so they're paid in M coins and need
 an account (Google or an email link; only an email address is kept, never
 anything from a paper). Everything else is free, with no account. Coins
 come from a welcome bonus, packs, or Pro, sold through Paddle as the
@@ -40,8 +42,8 @@ merchant of record.
 | `web/` | The Next.js app (static export) and its Cloudflare Pages Functions. See `web/README.md`. |
 | `web/src/app/` | Routes, one folder per URL. Each tool's pieces sit in its `_components/`; the homepage's sections and 3D scenes in `_landing/`. |
 | `web/src/components/` | Shared UI by concern: `layout/` (header, footer, logo), `ui/` (dialog, steps, drop zone), `account/`, `journals/`, `checks/`, `review/`, `figures/`, `docs/`. |
-| `web/src/lib/` | Framework-agnostic logic by feature: `paper/`, `match/`, `journals/`, `checks/`, `review/`, `figures/`, `write/`, `accounts/`, `ai/`. Each `*.selfcheck.ts` sits beside the file it tests. |
-| `web/functions/api/` | The server code: the two AI Functions (`review.ts`, `figure.ts`, holding the Anthropic key) and the account, sign-in and payment Functions. None of it ever receives paper content except the two opt-in AI features. |
+| `web/src/lib/` | Framework-agnostic logic by feature: `paper/`, `match/`, `journals/`, `checks/`, `review/`, `figures/`, `write/`, `writing/`, `accounts/`, `ai/`. Each `*.selfcheck.ts` sits beside the file it tests. |
+| `web/functions/api/` | The server code: the three AI Functions (`review.ts`, `figure.ts`, `rewrite.ts`, holding the Anthropic key) and the account, sign-in and payment Functions. None of it ever receives paper content except the opt-in AI features. |
 | `web/migrations/` | The D1 (SQLite) schema for accounts and the coin ledger. |
 | `web/public/` | Static assets: the TeX and figure workers, `figurelib.py`, templates, the figure gallery, fonts, the guide's screenshots. The journal index (`public/index/`) is generated, not committed. |
 | `web/scripts/` | `smoke/` (Playwright checks against a dev server), `e2e/` (the account Functions on a local D1), `eval/` (the ranker's evaluation), `docs/` (the guide's screenshots), `ops/` (index download, TeX engine upload, templates), `fixtures/`. |
