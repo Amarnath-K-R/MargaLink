@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { diffWordSegments } from "@stll/folio-core/ai-edits/word-diff";
 import { placeCard, type Box } from "./placeCard.ts";
 
@@ -27,16 +27,27 @@ export default function RewriteCard({
   children: ReactNode;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  // Its height with nothing cut off, so beside the selection it can rise to show all of it.
+  const [natural, setNatural] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- measured after every render (its content changes); the 1px guard ends it
+  useLayoutEffect(() => {
+    const card = box.current;
+    const inner = body.current;
+    if (!card || !inner) return;
+    const h = card.offsetHeight - inner.clientHeight + inner.scrollHeight;
+    if (Math.abs(h - natural) > 1) setNatural(h);
+  });
   useEffect(() => {
     const first = box.current?.querySelector<HTMLElement>("input, [role=menuitem]:not([disabled]), [data-primary], a[href]");
-    (first ?? box.current)?.focus();
+    (first ?? box.current)?.focus({ preventScroll: true }); // the step's opening stays in view
   }, [focusKey]);
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
-  const { left, width, top, bottom, maxHeight } = placeCard(sel, editor, { width: window.innerWidth, height: window.innerHeight });
+  const { left, width, top, bottom, maxHeight } = placeCard(sel, editor, { width: window.innerWidth, height: window.innerHeight }, natural || undefined);
   return (
     <div
       ref={box}
@@ -53,7 +64,9 @@ export default function RewriteCard({
           ×
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">{children}</div>
+      <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
+        {children}
+      </div>
       {footer && <div className="flex flex-wrap items-center gap-2 border-t border-line/60 px-5 py-3">{footer}</div>}
     </div>
   );

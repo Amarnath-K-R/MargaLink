@@ -15,7 +15,7 @@ const ROOM = 240; // the least height worth opening below or above it
  * a toolbar), never over the selection unless nothing else fits; taller
  * than the room, it scrolls inside. Pure; placeCard.selfcheck.ts runs it.
  */
-export function placeCard(sel: Box, editor: Box, view: { width: number; height: number }): Place {
+export function placeCard(sel: Box, editor: Box, view: { width: number; height: number }, natural = ROOM): Place {
   const top = Math.max(GAP, editor.top + GAP);
   const bottom = Math.min(view.height - GAP, editor.bottom - GAP);
   const right = view.width - GAP - sel.right - GAP;
@@ -23,7 +23,7 @@ export function placeCard(sel: Box, editor: Box, view: { width: number; height: 
   if (Math.max(right, left) >= SIDE) {
     const onRight = right >= left;
     const width = Math.min(640, onRight ? right : left);
-    const y = Math.max(top, Math.min(sel.top, bottom - ROOM));
+    const y = Math.max(top, Math.min(sel.top, bottom - Math.max(natural, ROOM))); // at the selection's height, or as high as its content needs
     return { left: onRight ? sel.right + GAP : sel.left - GAP - width, width, top: y, maxHeight: bottom - y };
   }
   const width = Math.min(760, editor.right - editor.left - 2 * GAP, view.width - 2 * GAP);

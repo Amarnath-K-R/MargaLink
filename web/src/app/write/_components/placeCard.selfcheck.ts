@@ -26,6 +26,12 @@ const low = placeCard({ left: 300, right: 700, top: 820, bottom: 850 }, editor, 
 assert.ok(low.top! <= 820 - 0 && low.maxHeight >= 240);
 inside(low);
 
+// beside it, a card taller than the room below the selection's top rises as far as it needs (it can't cover the selection there)
+const tall = placeCard({ left: 300, right: 700, top: 400, bottom: 440 }, editor, view, 600);
+assert.deepEqual([tall.top, tall.maxHeight], [view.height - 12 - 600 - (view.height - editor.bottom), 600]);
+const taller = placeCard({ left: 300, right: 700, top: 400, bottom: 440 }, editor, view, 2000);
+assert.equal(taller.top, editor.top + 12, "but no higher than the editor's top, scrolling inside");
+
 // a selection across the page (no room beside it): across the editor, below it when there's room
 const wide = { left: 260, right: 1110 };
 const below = placeCard({ ...wide, top: 200, bottom: 320 }, editor, view);
