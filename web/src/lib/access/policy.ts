@@ -41,14 +41,14 @@ export function pageNeeds(raw: string): Need {
   return GATED.some((p) => under(path, p)) ? "approved" : "public";
 }
 
-// The API: the two AI features need an invited account, the console a
+// The API: the AI features need an invited account, the console a
 // developer. Everything else needs only what its handler asks (usually a
 // session), so export, deletion and sign-out never depend on the list.
 export function apiNeeds(raw: string): Need {
   const path = canonical(raw);
   if (path.startsWith("/api/admin/")) return "developer";
   if (!BETA.on) return "public";
-  return path === "/api/review" || path.startsWith("/api/review/") || path === "/api/figure" ? "approved" : "public";
+  return path === "/api/review" || path.startsWith("/api/review/") || path === "/api/figure" || path === "/api/rewrite" ? "approved" : "public";
 }
 
 // The static files no page is made of, which never need a Function: the

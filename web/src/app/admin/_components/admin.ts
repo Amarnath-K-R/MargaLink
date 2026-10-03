@@ -12,7 +12,7 @@ export const when = (t: number) => new Date(t).toLocaleString("en-GB", { day: "n
 export const date = (t: number) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 // What each AI route is, in the words the site uses.
-export const FEATURES: Record<string, string> = { "/api/review": "AI review", "/api/figure": "Ask Claude" };
+export const FEATURES: Record<string, string> = { "/api/review": "AI review", "/api/figure": "Ask Claude", "/api/rewrite": "Rewrite" };
 
 export type Totals = { calls: number; input: number; output: number; cost: number | null };
 export type Stats = {

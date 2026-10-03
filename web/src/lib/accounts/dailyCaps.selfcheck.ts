@@ -10,6 +10,10 @@ import { credit } from "./ledger.ts";
 const db = testD1();
 const now = Date.UTC(2026, 8, 29, 12);
 
+// Rewrite's limits (about $130 a day at most; raise after the beta), and each feature counts on its own
+assert.deepEqual(DAILY.rewrite, { all: 1000, user: 100, free: 400 });
+assert.notEqual(capKeys("rewrite", "u1", now).user, capKeys("figure", "u1", now).user);
+
 // nothing used yet: an account that never bought coins has the free share and its own limit
 assert.deepEqual(await leftToday(db, "figure", "u1", now), { all: DAILY.figure.free, user: DAILY.figure.user });
 

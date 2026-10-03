@@ -28,6 +28,11 @@ const race = await Promise.all([debit(db, u.id, 4, "figure", "f3", now), debit(d
 assert.deepEqual(race.sort(), [false, true]);
 assert.equal(await balance(db, u.id), 2);
 assert.equal(await debit(db, u.id, 1, "figure", "f3", now), false, "a ref is charged once");
+// a rewrite and its refund (the table's kinds, migration 0011)
+assert.equal(await debit(db, u.id, 2, "rewrite", "w1", now), true);
+assert.equal(await credit(db, u.id, 2, "rewrite_refund", "w1", now), true);
+assert.equal(await credit(db, u.id, 2, "rewrite_refund", "w1", now), false, "refunded once");
+assert.equal(await balance(db, u.id), 2);
 
 // credits are idempotent too
 assert.equal(await credit(db, u.id, 50, "pack", "txn_1", now), true);
