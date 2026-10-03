@@ -75,6 +75,7 @@ export default function DocEditor({
 }) {
   const ref = useRef<DocxEditorRef>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const frame = useRef<HTMLDivElement>(null); // Folio's own box, for placing Rewrite's card
   const onEditRef = useRef(onEdit);
   useEffect(() => {
     onEditRef.current = onEdit;
@@ -110,7 +111,11 @@ export default function DocEditor({
         },
         anchor: () => {
           const r = getFolioSelectionViewportRect(v);
-          return r ? { left: r.left, top: r.bottom + 8, above: r.top - 8 } : null;
+          const area = frame.current?.getBoundingClientRect();
+          if (!r || !area) return null;
+          // The editor's area below its own bar, so the card never slides under the bar.
+          const bar = frame.current?.querySelector('[role="toolbar"]')?.getBoundingClientRect();
+          return { sel: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, editor: { left: area.left, right: area.right, top: bar ? bar.bottom : area.top, bottom: area.bottom } };
         },
         focus: () => ref.current?.focus(),
       };
@@ -228,6 +233,7 @@ export default function DocEditor({
 
   return (
     <IntlProvider locale="en" messages={MESSAGES} timeZone="UTC">
+      <div ref={frame} className="h-full">
       <DocxEditor
         ref={ref}
         documentBuffer={bytes}
@@ -260,6 +266,7 @@ export default function DocEditor({
         }}
         className="h-full"
       />
+      </div>
       {spellingMarks.element}
       {rewrite.element}
       <input

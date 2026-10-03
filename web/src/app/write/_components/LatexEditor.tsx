@@ -12,6 +12,7 @@ import { forEachDiagnostic, forceLinting, lintGutter, linter, setDiagnostics, ty
 import { checkProse, grammarEngine, type Issue } from "@/lib/writing/grammar";
 import { proseMask } from "@/lib/writing/latexText";
 import type { Spelling } from "@/lib/writing/spelling";
+import type { Box } from "./placeCard.ts";
 
 export type EditorHandle = {
   // Puts the cursor on a line mid-screen; with `near`, on the closest line
@@ -31,7 +32,7 @@ export type EditorHandle = {
   hold(from: number, to: number): void;
   heldText(): string | null;
   replaceHeld(original: string, text: string): boolean;
-  around(): { left: number; top: number; above: number } | null;
+  around(): { sel: Box; editor: Box } | null;
 };
 
 // The range Rewrite is working on, mapped through every edit made meanwhile.
@@ -283,7 +284,15 @@ export default function LatexEditor({
         const range = sel.empty ? (v.state.field(heldRange) ?? sel) : sel; // by the selection; else by the rewrite it's working on
         const start = v.coordsAtPos(range.from);
         const end = v.coordsAtPos(range.to) ?? start;
-        return start && end ? { left: start.left, top: end.bottom + 8, above: start.top - 8 } : null;
+        if (!start || !end) return null;
+        // One line: the words themselves; more: the width of the lines they run across.
+        const lines = v.contentDOM.getBoundingClientRect();
+        const oneLine = Math.abs(start.top - end.top) < 2;
+        const area = v.scrollDOM.getBoundingClientRect();
+        return {
+          sel: { left: oneLine ? start.left : lines.left, right: oneLine ? end.right : lines.right, top: start.top, bottom: end.bottom },
+          editor: { left: area.left, right: area.right, top: area.top, bottom: area.bottom },
+        };
       },
     };
     return () => {
