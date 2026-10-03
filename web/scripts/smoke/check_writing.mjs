@@ -4,9 +4,14 @@
 //   LaTeX: a misspelling in the prose is marked, a citation key isn't; a fix
 //   replaces it; Add to dictionary is kept with the paper (and survives a
 //   reload); UK English accepts "colour"; Off clears the marks.
+//   Word: misspellings in a document are marked without changing the stored
+//   file; clicking into one opens its fixes; a fix is saved; Add to
+//   dictionary is kept with the paper; Off clears the marks.
 //   node scripts/smoke/check_writing.mjs
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
+import { Document, Packer, Paragraph } from "docx";
+import { docText } from "../fixtures/docx_fixtures.mjs";
 
 const O = process.env.ORIGIN ?? "http://localhost:3000";
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../../.smoke/", import.meta.url).pathname;
@@ -100,6 +105,67 @@ check("and the choice is kept with the paper", (await projectMeta())?.spelling?.
 await page.keyboard.type(" Anotherr.");
 await page.selectOption('select[aria-label="Spelling"]', "off");
 check("Off clears every mark", await eventually(async () => (await page.locator('[data-testid="latex-editor"] .cm-spell, [data-testid="latex-editor"] .cm-grammar').count()) === 0));
+
+// --- Word: the same checker, marks painted on the page ---
+const wordFile = Buffer.from(
+  await Packer.toBuffer(new Document({ sections: [{ children: [new Paragraph("Sleep after surgery was studyed in older patients."), new Paragraph("We used actigraphy for the measurments.")] }] })),
+);
+await page.click("text=← All projects");
+await page.waitForSelector("text=Write your paper.");
+await page.setInputFiles('input[aria-label="Import a .zip, .tex or Word file"]', { name: "Spelling doc.docx", mimeType: "application/octet-stream", buffer: wordFile });
+await page.waitForSelector('[data-testid="doc-workspace"]');
+const docId = new URL(page.url()).searchParams.get("p");
+// Retried: a save swaps the file into place, and a read in that instant finds nothing.
+const storedDoc = async () => {
+  for (let i = 0; ; i++) {
+    try {
+      return await storedDocOnce();
+    } catch (err) {
+      if (i >= 5 || !/NotFoundError/.test(String(err))) throw err;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+};
+const storedDocOnce = () =>
+  page.evaluate(async (id) => {
+    const dir = await (await (await navigator.storage.getDirectory()).getDirectoryHandle("margalink-write")).getDirectoryHandle(id);
+    const bytes = new Uint8Array(await (await (await dir.getFileHandle("paper.docx")).getFile()).arrayBuffer());
+    return { b64: btoa(Array.from(bytes, (c) => String.fromCharCode(c)).join("")), meta: JSON.parse(await (await (await dir.getFileHandle("project.json")).getFile()).text()) };
+  }, docId);
+const wordMarks = () => page.locator('[data-testid="doc-editor"] .folio-ai-suggestion').count();
+check("Word: misspellings are marked on the page", await eventually(async () => (await wordMarks()) >= 2, 30000));
+const untouched = await storedDoc();
+check("marking changes nothing in the stored document", untouched.b64 === wordFile.toString("base64") && (await page.locator('[data-testid="save-state"]').textContent()) === "Saved");
+// Click inside a word as drawn on the page.
+const clickWord = async (word) => {
+  const box = await page.evaluate((word) => {
+    for (const el of document.querySelectorAll('[data-testid="doc-editor"] .layout-page span')) {
+      const node = [...el.childNodes].find((n) => n.nodeType === 3 && n.textContent.includes(word));
+      if (!node) continue;
+      const r = document.createRange();
+      const i = node.textContent.indexOf(word);
+      r.setStart(node, i + 2);
+      r.setEnd(node, i + 3);
+      const b = r.getBoundingClientRect();
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+    }
+    return null;
+  }, word);
+  await page.mouse.click(box.x, box.y);
+};
+const card = page.locator('[data-testid="spelling-card"]');
+await clickWord("studyed");
+check("clicking into a marked word opens its fixes", await card.waitFor({ timeout: 5000 }).then(() => true, () => false));
+await card.getByRole("button", { name: "studied" }).click();
+check("a fix is saved in the document", await eventually(async () => docText(Buffer.from((await storedDoc()).b64, "base64")).includes("was studied in"), 10000));
+await page.waitForTimeout(1500);
+await clickWord("actigraphy");
+await card.getByRole("button", { name: "Add to dictionary" }).click();
+check("Add to dictionary is kept with the Word paper", await eventually(async () => (await storedDoc()).meta.spelling?.words?.includes("actigraphy"), 10000));
+const unmarked = await eventually(async () => (await page.locator('[data-testid="spelling-count"]').innerText().catch(() => "")) === "1 to check", 10000);
+check(`and the word is no longer marked (${await page.locator('[data-testid="spelling-count"]').innerText().catch(() => "?")}, ${await wordMarks()} drawn)`, unmarked);
+await page.selectOption('select[aria-label="Spelling"]', "off");
+check("Off clears the Word marks", await eventually(async () => (await wordMarks()) === 0));
 
 check(`the engine was downloaded with GETs only (${engineGets.length})`, engineGets.length >= 1 && engineGets.every((m) => m === "GET"));
 check(`no page errors, no request bodies, nothing off our origin${problems.length ? `: ${problems.slice(0, 5).join(" | ")}` : ""}`, problems.length === 0);
