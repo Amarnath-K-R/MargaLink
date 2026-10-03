@@ -22,9 +22,10 @@ export function reviewPrice(tier: ReviewTier, chars: number): number {
 }
 
 // Rewrite: a coin per 500 words of the passage sent, rounded up (at least
-// one), up to 2,000 words an action.
+// one), up to 2,000 words an action (1,000 to expand).
 export const REWRITE_WORDS_PER_COIN = 500;
 export const REWRITE_MAX_WORDS = 2000;
+export const REWRITE_MAX_WORDS_EXPAND = 1000; // Expand writes about twice what it reads
 export const rewritePrice = (words: number) => Math.max(1, Math.ceil(words / REWRITE_WORDS_PER_COIN));
 
 export const PACKS = [

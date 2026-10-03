@@ -9,13 +9,14 @@
 // English variant, and the price shown on the button. What goes back: the
 // rewritten passage, checked against the passage (src/lib/writing/rewrite.ts)
 // before it's charged for or returned. Nothing is stored; the coins come
-// back whenever no answer goes out. Logs carry error names and statuses,
+// back whenever no answer goes out (a pending charge covers a request the
+// browser abandoned). Logs carry error names and statuses,
 // never the passage or the answer.
 import { checkRewrite, parseRewriteRequest, type RewriteRequest, type Rewritten } from "../../src/lib/writing/rewrite.ts";
 import { REWRITE_SYSTEM_PROMPT, REWRITE_TOOL, buildRewritePrompt, rewriteMaxTokens } from "../../src/lib/writing/rewritePrompt.ts";
 import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/ai/anthropicStream.ts";
 import { getSession, randomToken, text, type AccountEnv } from "../../src/lib/accounts/auth.ts";
-import { balance, credit, debit } from "../../src/lib/accounts/ledger.ts";
+import { balance, holdCharge, refundCharge, settleCharge } from "../../src/lib/accounts/ledger.ts";
 import { DAILY, reserveUse } from "../../src/lib/accounts/dailyCaps.ts";
 import { usageSink } from "../../src/lib/telemetry/apiEvents.ts";
 
@@ -24,7 +25,10 @@ type Env = AccountEnv & { ANTHROPIC_API_KEY: string };
 const MODEL = "claude-sonnet-5";
 // 20,000 characters of passage as JSON, with room to spare: anything bigger isn't a real request.
 const MAX_BODY_BYTES = 100_000;
-const UPSTREAM_TIMEOUT_MS = 45_000;
+// A rewrite of 1,500 words took 27 s (Expand of the same, 35 s) in the live check: room for the largest.
+const UPSTREAM_TIMEOUT_MS = 90_000;
+// A charge still pending this long after it was taken was never answered (two tries, with time to spare): the sweep refunds it.
+const PENDING_MS = 5 * 60 * 1000;
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) => {
   if (Number(request.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) return text("Request body too large", 413);
@@ -48,23 +52,25 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) 
   if (!held.ok && held.full === "user") return text(`This account has reached today's limit of ${DAILY.rewrite.user} rewrites. It resets at midnight UTC; nothing was charged.`, 429);
   if (!held.ok) return text("Rewrite is fully booked for today. Try again tomorrow; nothing was charged.", 429);
   const ref = randomToken(12);
-  if (!(await debit(env.DB, s.userId, req.coins, "rewrite", ref, now))) {
+  if (!(await holdCharge(env.DB, s.userId, req.coins, "rewrite", "rewrite_refund", ref, now, PENDING_MS))) {
     await held.release();
     return Response.json({ coins: req.coins, balance: await balance(env.DB, s.userId) }, { status: 402 });
   }
-  // From here the coins come back unless an answer goes out, whatever happens
-  // (the Worker itself being stopped midway is the one case this can't cover).
-  let answer: Rewritten | null = null;
+  // From here the coins come back unless an answer goes out: at once when the request fails, and from
+  // the pending charge (sweepCharges) if it never finishes, the browser having gone away mid-call.
+  let answered = false;
   try {
     const out = await askClaude(req, env.ANTHROPIC_API_KEY, usageSink(data, MODEL));
     if (out instanceof Response) return out;
-    answer = out;
-    return Response.json({ ...out, coins: req.coins, balance: await balance(env.DB, s.userId) });
+    const res = Response.json({ ...out, coins: req.coins, balance: await balance(env.DB, s.userId) });
+    answered = true;
+    return res;
   } catch (err) {
     console.error(`rewrite failed: ${err instanceof Error ? err.name : "unknown"}`);
     return text(`The rewrite failed. ${refunded(req)} Try again in a moment.`, 502);
   } finally {
-    if (answer === null) await credit(env.DB, s.userId, req.coins, "rewrite_refund", ref, Date.now());
+    if (answered) await settleCharge(env.DB, ref);
+    else await refundCharge(env.DB, ref, Date.now());
   }
 };
 

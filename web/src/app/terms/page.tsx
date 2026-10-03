@@ -3,7 +3,7 @@ import Link from "next/link";
 import PageHeader from "@/components/layout/PageHeader";
 import LegalSection from "@/components/layout/LegalSection";
 import { ContactEmail, OperatorDetails, operatorName } from "@/components/layout/ContactDetails";
-import { PRO, REWRITE_MAX_WORDS, REWRITE_WORDS_PER_COIN, WELCOME_COINS } from "@/lib/accounts/coins";
+import { PRO, REWRITE_MAX_WORDS, REWRITE_MAX_WORDS_EXPAND, REWRITE_WORDS_PER_COIN, WELCOME_COINS } from "@/lib/accounts/coins";
 import { PADDLE_RESELLER } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -95,7 +95,7 @@ export default function TermsPage() {
             </li>
             <li>
               A rewrite costs 1 M coin per {REWRITE_WORDS_PER_COIN} words you select, rounded up (at least 1), for up to{" "}
-              {REWRITE_MAX_WORDS.toLocaleString("en")} words at a time. Try again is a new rewrite and costs the same again. A rewrite that fails, or
+              {REWRITE_MAX_WORDS.toLocaleString("en")} words at a time ({REWRITE_MAX_WORDS_EXPAND.toLocaleString("en")} to expand). Try again is a new rewrite and costs the same again. A rewrite that fails, or
               that our checks refuse, is refunded in coins at once. A rewrite that came back but wasn&apos;t put in because the text changed first
               isn&apos;t refunded: it was delivered, and you can copy it.
             </li>

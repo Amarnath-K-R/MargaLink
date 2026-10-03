@@ -22,8 +22,11 @@ const session = `__Host-ml_session=${await createSession(env.DB, user.id, Date.n
 type Answer = { tool?: unknown; stop?: string; status?: number };
 let answers: Answer[] = [];
 const upstream: Record<string, unknown>[] = [];
+const pendingDuringCall: number[] = [];
+const pendingNow = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM pending_charges").first<{ n: number }>())!.n;
 globalThis.fetch = (async (_u: string, init?: RequestInit) => {
   upstream.push(JSON.parse(init!.body as string));
+  pendingDuringCall.push(await pendingNow());
   const a = answers.shift() ?? { status: 500 };
   if (a.status) return new Response("overloaded", { status: a.status });
   const sse = [
@@ -94,7 +97,7 @@ assert.deepEqual(sent.output_config, { effort: "low" });
 assert.ok(!("temperature" in sent));
 assert.equal(sent.tools.length, 1);
 assert.equal(sent.tools[0].strict, true);
-assert.equal(sent.max_tokens, Math.min(12000, 1000 + Math.ceil((passage.length * 1.3) / 3)));
+assert.equal(sent.max_tokens, Math.min(12000, 1000 + Math.ceil((passage.length * 1.6) / 3)));
 assert.equal(sent.messages.length, 1);
 assert.ok(sent.messages[0].content.includes(passage), "the passage, as selected");
 assert.match(sent.messages[0].content, /British English/);
@@ -159,6 +162,11 @@ assert.equal(await refunds(), 3);
 // --- the logs name what failed, never the passage or the answer
 assert.ok(logs.length > 0);
 for (const line of logs) assert.ok(!line.includes("Sleep") && !line.includes("cardiac"), `no paper in the log: ${line}`);
+
+// --- while Claude works the charge is pending (so a request that never finishes is refunded by the
+// sweep); once answered or refunded, nothing is left pending
+assert.ok(pendingDuringCall.length > 0 && pendingDuringCall.every((n) => n === 1), `pending during each call: ${pendingDuringCall.join(",")}`);
+assert.equal(await pendingNow(), 0);
 
 // --- the account's daily limit: refused before anything is charged or sent
 await env.DB.prepare("UPDATE rate_limits SET count = ? WHERE key = ?").bind(DAILY.rewrite.user, capKeys("rewrite", user.id, Date.now()).user).run();

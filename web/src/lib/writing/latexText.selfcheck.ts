@@ -50,6 +50,14 @@ assert.equal(
   visible("\\Citet{smth} and \\textcite{x} \\citenum{y} \\subref{fig:slep} \\bibitem{zhang} \\gls{psg} \\Glspl{psg} \\acrshort{osa} \\ac{osa} \\definecolor{mygren}{rgb}{0,1,0} \\newtheorem{thm}{Theorem} \\lstinline|x = y| \\lstinline{y} \\href{https://x.org}{the link}"),
   "and the link",
 );
+// drawings (TikZ, pgfplots, picture) are code, not prose; range references and index entries are keys
+assert.equal(visible("A \\begin{tikzpicture}\\draw (0,0) -- node{labl} (1,1);\\end{tikzpicture} B \\begin{axis}[xlabel=tme]\\end{axis} C"), "A B C");
+assert.equal(visible("See \\crefrange{fig:a}{fig:b} and \\Crefrange{tab:a}{tab:b}\\index{slep} here."), "See and here.");
+{
+  const drawn = "Drawn: \\begin{picture}(10,10)\\put(0,0){x}\\end{picture} done.";
+  assert.equal((toPassage(drawn, 0, drawn.length) as Passage).passage, "Drawn: \u27e61\u27e7 done.", "a drawing travels whole");
+}
+
 // a word with an accent command is one word, read whole or not at all
 assert.equal(visible("Schr\\\"odinger and M\\\"uller met in Ko\\v{s}ice at a caf\\'e."), "and met in at a .");
 same("caf\\'e \\\"");

@@ -110,6 +110,7 @@ export function docPassage(doc: Node, from: number, to: number): WordPassage | s
   const labels = collectNoteReferenceLabels(doc);
   const snapshot = createFolioAIEditSnapshot(doc);
   const { insertion, deletion } = doc.type.schema.marks;
+  const goBack = goBackIds(doc);
   const blocks: WordPassage["blocks"] = [];
   const paragraphs: string[] = [];
   const shown: string[] = [];
@@ -120,39 +121,43 @@ export function docPassage(doc: Node, from: number, to: number): WordPassage | s
     if (!node.isTextblock) return true;
     const clean = buildCleanBlockText(node, pos, { fieldResults: "text", noteReferences: labels });
     const { text, offsets } = clean;
-    const spans = clean.structuralBoundaries.flatMap((b) => (b.type === "field" || b.type === "noteReference" ? [[b.offset, b.offset + b.length]] : []));
-    const inSpan = (k: number) => spans.some(([a, b]) => a <= k && k < b);
+    // Its objects, in clean-text offsets: every inline node that isn't text, taken whole with any text it
+    // shows (a field's result, even one character; a content control's text), or where it sits if it shows
+    // none (a picture); and every footnote mark. Word's own marks it rewrites anyway are left in the words.
+    const objects: [number, number][] = [];
+    node.forEach((child, offset) => {
+      if (child.isText || regenerated(child, goBack)) return;
+      const [start, end] = [pos + 1 + offset, pos + 1 + offset + child.nodeSize];
+      const inside = offsets.flatMap((o, i) => (i < text.length && o >= start && o < end ? [i] : []));
+      if (inside.length) objects.push([inside[0], inside[inside.length - 1] + 1]);
+      else objects.push([offsets.findIndex((o, i) => i === text.length || o >= end), -1]);
+    });
+    for (const b of clean.structuralBoundaries) if (b.type === "noteReference") objects.push([b.offset, b.offset + b.length]);
+    for (const o of objects) if (o[1] < 0) o[1] = o[0]; // takes no character
     // The selection's part of the paragraph, an object it starts or ends in taken whole, its whitespace left out.
     let s = 0;
     while (s < text.length && offsets[s] < from) s++;
     let e = text.length;
     while (e > s && offsets[e - 1] >= to) e--;
-    for (const [a, b] of spans) {
+    while (s < e && /\s/.test(text[s])) s++;
+    while (e > s && /\s/.test(text[e - 1])) e--;
+    for (const [a, b] of objects) {
       if (a < s && s < b) s = a;
       if (a < e && e < b) e = b;
     }
-    while (s < e && /\s/.test(text[s])) s++;
-    while (e > s && /\s/.test(text[e - 1])) e--;
     if (s >= e) return false;
     if (snapshot.blocks.find((b) => snapshot.anchors[b.id]?.from === pos)?.text !== text) refusal = "This paragraph can't be rewritten here: Folio reads it differently.";
     else if (/[⟦⟧]/.test(text.slice(s, e))) refusal = "This selection holds ⟦ or ⟧, which Rewrite uses itself.";
     else if (doc.rangeHasMark(offsets[s], offsets[e - 1] + 1, insertion) || doc.rangeHasMark(offsets[s], offsets[e - 1] + 1, deletion))
       refusal = "This selection has tracked changes. Accept or reject them first.";
     if (refusal) return false;
-    // The objects inside: fields and footnote marks, tabs and line breaks, and what takes no character (a jump in position).
-    const objects: [number, number][] = [];
-    for (const b of clean.structuralBoundaries) {
-      if (b.type === "field" || b.type === "noteReference") {
-        if (s <= b.offset && b.offset + b.length <= e) objects.push([b.offset, b.offset + b.length]);
-      } else if (s < b.offset && b.offset < e) objects.push([b.offset, b.offset]);
-    }
-    for (let k = s; k < e; k++) if ((text[k] === "\t" || text[k] === "\n") && !inSpan(k)) objects.push([k, k + 1]);
-    for (let k = s + 1; k < e; k++) if (offsets[k] > offsets[k - 1] + 1 && !inSpan(k - 1) && !inSpan(k)) objects.push([k, k]);
-    objects.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+    // The ones inside: a whole object, or one taking no character strictly between the ends.
+    const within = objects.filter(([a, b]) => (a < b ? s <= a && b <= e : s < a && a < e));
+    within.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
     const gaps: { start: number; end: number }[] = [];
     let at = s;
     let paragraph = "";
-    for (const [a, b] of objects) {
+    for (const [a, b] of within) {
       gaps.push({ start: at, end: a });
       paragraph += `${text.slice(at, a)}⟦${++n}⟧`;
       shown.push(text.slice(a, b));
@@ -169,14 +174,32 @@ export function docPassage(doc: Node, from: number, to: number): WordPassage | s
   return { passage: paragraphs.join("\n\n"), objects: shown, blocks };
 }
 
-// The document's objects in order (pictures, fields, footnote marks...), to see that an edit kept them all.
+// Word's "_GoBack" bookmark (its last edit), as ids: both its ends.
+const goBackIds = (doc: Node) => {
+  const ids = new Set<unknown>();
+  doc.descendants((n) => void (n.type.name === "bookmarkBoundary" && n.attrs.name === "_GoBack" && ids.add(n.attrs.id)));
+  return ids;
+};
+// Marks Word writes and rewrites on its own (spelling-check spans, where it last broke the page, its
+// last edit): not part of the paper. A replaced stretch of words keeps them, moved within it.
+function regenerated(n: Node, goBack: Set<unknown>): boolean {
+  const t = n.type.name;
+  return t === "renderedPageBreak" || (t === "preservedXml" && /^<w:proofErr\b/.test(String(n.attrs.xml))) || (t === "bookmarkBoundary" && goBack.has(n.attrs.id));
+}
+
+// The document's objects in order, each whole (a field's or content control's text and settings, a
+// footnote mark), to see that an edit kept every one exactly.
 function objectsOf(doc: Node): string {
+  const goBack = goBackIds(doc);
   const seen: string[] = [];
   doc.descendants((n) => {
-    if (n.isInline && !n.isText) seen.push(n.type.name);
-    else if (n.isText && n.marks.some((m) => m.type.name === "footnoteRef")) seen.push("footnoteRef");
+    if (n.isInline && !n.isText) {
+      if (!regenerated(n, goBack)) seen.push(JSON.stringify(n.toJSON()));
+      return false;
+    }
+    if (n.isText && n.marks.some((m) => m.type.name === "footnoteRef")) seen.push(JSON.stringify(n.toJSON()));
   });
-  return seen.join(" ");
+  return seen.join("\n");
 }
 
 /**
@@ -193,10 +216,16 @@ export function applyDocRewrite(view: { state: EditorState; dispatch: (tr: Trans
   const snapshot = createFolioAIEditSnapshot(doc);
   const operations: FolioAIEditOperation[] = [];
   let n = 0;
+  let after = -1;
   for (let k = 0; k < p.blocks.length; k++) {
     const b = p.blocks[k];
-    const block = snapshot.blocks.find((x) => snapshot.anchors[x.id]?.from === b.pos);
-    if (!block || block.text !== b.text) return "stale";
+    // The paragraph as it was, found where it now is (an edit elsewhere moves it), in order.
+    const at = (id: string) => snapshot.anchors[id]?.from ?? -1;
+    const block = snapshot.blocks
+      .filter((x) => x.text === b.text && at(x.id) > after)
+      .sort((x, y) => Math.abs(at(x.id) - b.pos) - Math.abs(at(y.id) - b.pos))[0];
+    if (!block) return "stale";
+    after = at(block.id);
     const parts = paragraphs[k].split(PLACEHOLDER).filter((_, i) => i % 2 === 0);
     const marks = [...paragraphs[k].matchAll(PLACEHOLDER)].map((m) => Number(m[1]));
     if (parts.length !== b.gaps.length || marks.some((m) => m !== ++n)) return "refused";

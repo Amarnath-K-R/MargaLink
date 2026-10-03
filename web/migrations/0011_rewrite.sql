@@ -15,3 +15,18 @@ INSERT INTO coin_ledger_new (id, user_id, delta, kind, ref, created_at) SELECT i
 DROP TABLE coin_ledger;
 ALTER TABLE coin_ledger_new RENAME TO coin_ledger;
 CREATE INDEX coin_ledger_user ON coin_ledger(user_id, created_at);
+
+-- A charge for an AI request in flight (Rewrite, Ask Claude): taken with the
+-- debit, settled (deleted) when the answer goes out, refunded at once when
+-- the request fails, and refunded by housekeeping once past `expires_at` if
+-- the request never finished (the browser went away mid-call and the
+-- Function was stopped before its own refund ran). The charge's ref and
+-- amount only, nothing of the request.
+CREATE TABLE pending_charges (
+  ref TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  coins INTEGER NOT NULL,
+  refund_kind TEXT NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX pending_charges_expiry ON pending_charges(expires_at);

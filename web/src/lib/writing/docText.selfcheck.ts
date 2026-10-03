@@ -170,6 +170,33 @@ edited.dispatch(edited.state.tr.insertText("X", inner(before, 0).from));
 const was = edited.state.doc;
 assert.equal(applyDocRewrite(edited, whole, answer), "stale");
 assert.equal(edited.state.doc, was, "the document is as it was");
+// what real Word documents hold: a one-character citation (Vancouver's superscript), a field holding
+// more than text, a content control (where Mendeley keeps citations) are objects, whole; the marks
+// Word regenerates itself (spelling marks, rendered page breaks, _GoBack) aren't placeholders at all
+const real = () =>
+  N.doc.create(null, [
+    N.paragraph.create(null, [t("An earlier paragraph.")]),
+    N.paragraph.create(null, [
+      t("Sleep was short after "), N.preservedXml.create({ xml: '<w:proofErr w:type="spellStart"/>', text: "", level: "inline" }), t("surgery"),
+      N.field.create({ fieldType: "UNKNOWN", fieldKind: "complex", instruction: " ADDIN ZOTERO_ITEM ", displayText: "2" }), t(" in older "), N.renderedPageBreak.create(),
+      t("adults, as shown "), N.structuredField.create({ fieldType: "UNKNOWN", fieldKind: "complex", instruction: " ADDIN ZOTERO_ITEM ", displayText: "(Smith, 2019)" }, [t("(Smith, 2019)")]),
+      t(" and "), N.sdt.create({ sdtType: "richText", tag: "MENDELEY" }, [t("(Lee et al., 2020)")]), t(" in "), N.bookmarkBoundary.create({ type: "start", id: "0", name: "_GoBack" }), t("all."),
+    ]),
+  ]);
+const realDoc = real();
+const rp = passageOf(realDoc, inner(realDoc, 1).from, inner(realDoc, 1).to);
+assert.equal(rp.passage, `Sleep was short after surgery${P(1)} in older adults, as shown ${P(2)} and ${P(3)} in all.`, "objects whole, Word's own marks left out");
+assert.deepEqual(rp.objects, ["2", "(Smith, 2019)", "(Lee et al., 2020)"], "and none of their text is sent");
+const realEd = editor(realDoc);
+// typed in an earlier paragraph while Claude worked: the passage is found where it now is
+realEd.dispatch(realEd.state.tr.insertText("Very ", inner(realDoc, 0).from));
+assert.equal(applyDocRewrite(realEd, rp, `Sleep seemed brief after surgery${P(1)} in older adults, as shown ${P(2)} and ${P(3)} in all.`), "applied", "an edit elsewhere isn't a change to the passage");
+const fieldsOf = (d: Node) => { const f: string[] = []; d.descendants((n) => void (["field", "structuredField", "sdt"].includes(n.type.name) && f.push(JSON.stringify(n.toJSON())))); return f; };
+assert.deepEqual(fieldsOf(realEd.state.doc), fieldsOf(realDoc), "every citation exactly as it was");
+const kept = (d: Node) => { const k: string[] = []; d.descendants((n) => void (["preservedXml", "renderedPageBreak", "bookmarkBoundary"].includes(n.type.name) && k.push(n.type.name))); return k.sort(); };
+assert.deepEqual(kept(realEd.state.doc), kept(realDoc), "Word's own marks are kept too");
+assert.ok(realEd.state.doc.textContent.includes("Sleep seemed brief after surgery2 in older adults"));
+
 // an answer that doesn't fit the passage's shape isn't applied either
 assert.equal(applyDocRewrite(editor(before), whole, answer.replace(`${P(6)} `, "")), "refused");
 

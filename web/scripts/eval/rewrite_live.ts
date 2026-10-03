@@ -5,6 +5,7 @@
 // Spends real money (about $0.20 a run). Reads ANTHROPIC_API_KEY from the
 // environment or web/.dev.vars, and never prints it.
 //   node scripts/eval/rewrite_live.ts > rewrite-live.md
+//   node scripts/eval/rewrite_live.ts --long   # time Paraphrase and Expand on a passage near the 2,000-word limit
 import { readFileSync } from "node:fs";
 import { schema } from "@stll/folio-core/prosemirror/schema";
 import { EditorState } from "prosemirror-state";
@@ -71,6 +72,25 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   });
   return new Response(theirs, { status: res.status, headers: res.headers });
 }) as typeof fetch;
+
+// --- the longest passage allowed: how long Claude takes, against the Function's timeout
+if (process.argv.includes("--long")) {
+  const { callAnthropicTool } = await import("../../src/lib/ai/anthropicStream.ts");
+  const { REWRITE_SYSTEM_PROMPT, REWRITE_TOOL, buildRewritePrompt, rewriteMaxTokens } = await import("../../src/lib/writing/rewritePrompt.ts");
+  const long = toPassage(Array.from({ length: 19 }, () => tex).join("\n\n"), 0, 19 * (tex.length + 2) - 2) as Passage;
+  for (const tool of ["paraphrase", "expand"] as const) {
+    const req = { tool, tone: null, format: "latex" as const, dialect: "gb" as const, passage: long.passage, coins: rewritePrice(rewriteWords(long.passage)) };
+    const started = Date.now();
+    let usage = { input: 0, output: 0 };
+    const { stopReason } = await callAnthropicTool(
+      key,
+      { model: "claude-sonnet-5", max_tokens: rewriteMaxTokens(req), thinking: { type: "disabled" }, output_config: { effort: "low" }, system: REWRITE_SYSTEM_PROMPT, tools: [REWRITE_TOOL], tool_choice: { type: "tool", name: REWRITE_TOOL.name }, messages: [{ role: "user", content: buildRewritePrompt(req) }] },
+      { toolName: REWRITE_TOOL.name, timeoutMs: 300_000, onUsage: (u) => (usage = u) },
+    ).catch((err: Error) => ({ stopReason: err.name }));
+    console.log(`${tool}: ${rewriteWords(long.passage)} words, ${req.coins} coins, max_tokens ${rewriteMaxTokens(req)}, ${((Date.now() - started) / 1000).toFixed(1)} s, ${usage.input} in / ${usage.output} out, ${stopReason}, $${(aiCost("claude-sonnet-5", usage.input, usage.output) ?? 0).toFixed(4)}`);
+  }
+  process.exit(0);
+}
 
 // --- each tool, each format
 const call = async (req: Omit<RewriteRequest, "coins">) => {

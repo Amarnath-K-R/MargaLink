@@ -3,7 +3,7 @@ import Link from "next/link";
 import { BarChart3, BookOpen, PenLine, ScanSearch } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import { Coin } from "@/components/account/AccountButton";
-import { FIGURE_PRICE, REWRITE_MAX_WORDS, REWRITE_WORDS_PER_COIN, WELCOME_COINS, reviewPrice } from "@/lib/accounts/coins";
+import { FIGURE_PRICE, REWRITE_MAX_WORDS, REWRITE_MAX_WORDS_EXPAND, REWRITE_WORDS_PER_COIN, WELCOME_COINS, reviewPrice } from "@/lib/accounts/coins";
 import { REVIEW_TIERS } from "@/lib/review/reviewTypes";
 import { Packs, ProPlans } from "./_components/Packs";
 import { PADDLE_RESELLER } from "@/lib/site";
@@ -93,7 +93,7 @@ export default function PricingPage() {
           <Coin />
           <span>
             <strong className="font-medium">Rewrite</strong> in the writing workspace: 1 M coin per {REWRITE_WORDS_PER_COIN} words you select, rounded
-            up, up to {REWRITE_MAX_WORDS.toLocaleString("en")} at a time, refunded if it fails. Try again costs the same again.
+            up, up to {REWRITE_MAX_WORDS.toLocaleString("en")} at a time ({REWRITE_MAX_WORDS_EXPAND.toLocaleString("en")} to expand), refunded if it fails. Try again costs the same again.
           </span>
         </p>
       </section>

@@ -33,6 +33,48 @@ export async function credit(db: D1Database, userId: string, coins: number, kind
   return r.meta.changes === 1;
 }
 
+/**
+ * A charge for an AI request in flight: taken if the balance covers it, and
+ * recorded as pending in the same transaction, so a request that never
+ * finishes is still refunded (sweepCharges). False when the balance is short.
+ */
+export async function holdCharge(db: D1Database, userId: string, coins: number, kind: LedgerKind, refundKind: LedgerKind, ref: string, now: number, ttlMs: number): Promise<boolean> {
+  const [taken] = await db.batch([
+    debitStatement(db, userId, coins, kind, ref, now),
+    db
+      .prepare("INSERT INTO pending_charges (ref, user_id, coins, refund_kind, expires_at) SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM coin_ledger WHERE kind = ?6 AND ref = ?1)")
+      .bind(ref, userId, coins, refundKind, now + ttlMs, kind),
+  ]);
+  return taken.meta.changes === 1;
+}
+
+/** The request answered: its charge stands. */
+export async function settleCharge(db: D1Database, ref: string): Promise<void> {
+  await db.prepare("DELETE FROM pending_charges WHERE ref = ?").bind(ref).run();
+}
+
+// Refunds the pending charges a condition picks, once each (the refund's ref is the charge's).
+const refundPending = (db: D1Database, where: string, value: string | number, now: number) =>
+  db.batch([
+    db
+      .prepare(
+        `INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at)
+         SELECT p.user_id, p.coins, p.refund_kind, p.ref, ?2 FROM pending_charges p WHERE ${where} ON CONFLICT DO NOTHING`,
+      )
+      .bind(value, now),
+    db.prepare(`DELETE FROM pending_charges WHERE ${where.replaceAll("p.", "")}`).bind(value),
+  ]);
+
+/** The request failed: its charge comes back, once. */
+export async function refundCharge(db: D1Database, ref: string, now: number): Promise<void> {
+  await refundPending(db, "p.ref = ?1", ref, now);
+}
+
+/** Requests that never finished, past their time: refunded, once. Anyone's request can run it. */
+export async function sweepCharges(db: D1Database, now: number): Promise<void> {
+  await refundPending(db, "p.expires_at <= ?1", now, now);
+}
+
 /** The welcome bonus, once per canonical address (its keyed fingerprint outlives account deletion by WELCOME_RELEASE_DAYS). */
 export async function grantWelcome(db: D1Database, userId: string, email: string, now: number, secret: string): Promise<boolean> {
   const hash = await fingerprint(secret, canonicalEmail(email));
@@ -110,6 +152,7 @@ export const releaseWelcomeStatement = (db: D1Database, userId: string, now: num
  */
 export async function housekeeping(db: D1Database, now: number) {
   await sweepTickets(db, now);
+  await sweepCharges(db, now);
   await db.batch([
     db.prepare("DELETE FROM magic_links WHERE expires_at <= ?").bind(now),
     db.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(now),

@@ -358,7 +358,8 @@ narrowest in what it may change: it rewrites, it never adds.
 - **What's sent.** `parseRewriteRequest` (`src/lib/writing/rewrite.ts`)
   accepts exactly `{ tool, tone, format, dialect, passage, coins }`: the
   passage, the tool and tone, LaTeX or Word text, and the paper's English
-  (US, UK, Australian, Canadian or Indian). At most 2,000 words, and
+  (US, UK, Australian, Canadian or Indian). At most 2,000 words (1,000 to
+  expand, which writes about twice what it reads), and
   `coins` must equal `rewritePrice(words)`. The browser runs it before
   sending; the Function runs it again before reserving or charging.
 - **Checks.** `checkRewrite` holds every answer to the rules the prompt

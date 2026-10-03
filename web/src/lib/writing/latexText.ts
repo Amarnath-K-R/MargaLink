@@ -9,15 +9,15 @@ const NOT_PROSE = new Set([
   "url", "includegraphics", "input", "include", "includeonly", "bibliography", "bibliographystyle", "addbibresource", "printbibliography",
   "usepackage", "documentclass", "graphicspath", "hypersetup", "newcommand", "renewcommand", "providecommand", "def", "let",
   "setlength", "addtolength", "setcounter", "vspace", "hspace", "includepdf", "lstinputlisting", "newenvironment", "renewenvironment",
-  "bibitem", "definecolor", "newtheorem", "lstinline",
+  "bibitem", "definecolor", "newtheorem", "lstinline", "index",
 ]);
 // ... and any citation or reference command (\Citet, \citenum, \subref), and glossary and acronym entries (\gls, \acrshort, \ac).
-const notProse = (name: string) => NOT_PROSE.has(name) || (/cite|ref$/i.test(name) && name !== "href") || /^(gls\w*|acr\w*|ac[slf]?p?)$/i.test(name);
+const notProse = (name: string) => NOT_PROSE.has(name) || (/cite|ref$|refrange$/i.test(name) && name !== "href") || /^(gls\w*|acr\w*|ac[slf]?p?)$/i.test(name);
 // Accent commands: a word with one in it (Schr\"odinger, Ko\v{s}ice) is read whole or not at all.
 const ACCENT = /^\\(?:["'`^~=.]|(?:[vuHcdbtrk]|ss|o|O|ae|AE|oe|OE|aa|AA|l|L|i|j)(?![A-Za-z]))/;
-// Environments whose contents aren't prose: maths and code. Blanked whole.
+// Environments whose contents aren't prose: maths, code and drawings. Blanked whole.
 const MATH = /^(equation|align|alignat|flalign|gather|multline|eqnarray|displaymath|math|split)\*?$/;
-const CODE = /^(verbatim|Verbatim|lstlisting|minted|comment)\*?$/;
+const CODE = /^(verbatim|Verbatim|lstlisting|minted|comment|tikzpicture|pgfpicture|picture|axis|semilogxaxis|semilogyaxis|loglogaxis|polaraxis)\*?$/;
 // Environments with a set-up argument (a column spec, a width) after \begin{…}.
 const SPEC_ARGS: Record<string, number> = { tabular: 1, "tabular*": 2, tabularx: 2, array: 1, longtable: 1, minipage: 1, wrapfigure: 2 };
 

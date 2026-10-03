@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { REWRITE_MAX_WORDS, REWRITE_WORDS_PER_COIN } from "@/lib/accounts/coins";
+import { REWRITE_MAX_WORDS, REWRITE_MAX_WORDS_EXPAND, REWRITE_WORDS_PER_COIN } from "@/lib/accounts/coins";
 import { Coin } from "../account/AccountButton";
 
 // Rewrite's notice (CLAUDE.md rule 3: anything that sends text off the
@@ -39,7 +39,7 @@ export default function RewriteConsent({ onConfirm, onCancel }: { onConfirm: () 
         <Coin className="mt-0.5" />
         <span>
           Each rewrite costs <strong className="font-medium">1 M coin per {REWRITE_WORDS_PER_COIN} words</strong> you select (up to{" "}
-          {REWRITE_MAX_WORDS.toLocaleString("en")} at a time), shown before you choose. Try again costs the same again; a rewrite that fails is
+          {REWRITE_MAX_WORDS.toLocaleString("en")} at a time, {REWRITE_MAX_WORDS_EXPAND.toLocaleString("en")} to expand), shown before you choose. Try again costs the same again; a rewrite that fails is
           refunded automatically.
         </span>
       </p>

@@ -289,7 +289,7 @@ export default function ArchitecturePage() {
               { name: "Ask Claude", what: "1 coin per call, refunded on any answer that isn't usable." },
               {
                 name: "Rewrite",
-                what: "1 coin per 500 words selected (rounded up, up to 2,000), charged before Claude is called and refunded when no checked answer goes out. Try again is a new charge; a rewrite not put in because the text changed is delivered, so not refunded.",
+                what: "1 coin per 500 words selected (rounded up, up to 2,000, or 1,000 to expand), charged before Claude is called and refunded when no checked answer goes out. Try again is a new charge; a rewrite not put in because the text changed is delivered, so not refunded.",
               },
               {
                 name: "Payments",

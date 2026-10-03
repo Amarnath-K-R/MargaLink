@@ -27,6 +27,9 @@ const refused = (body: unknown, why: string) => assert.equal(typeof parseRewrite
 assert.equal(rewriteWords(`We used \\emph{actigraphy} ${P(1)} in 2019.`), 5);
 assert.equal(rewriteWords("Sleep, it's well-known, helps."), 4);
 assert.equal(rewriteWords(`${P(1)} ${P(2)}`), 0);
+// a long unbroken run counts a word for every 8 characters, so it can't be priced as one word
+assert.equal(rewriteWords("word-".repeat(800)), 500);
+refused(req("word-".repeat(4000)), "20,000 characters of one hyphen chain is over 2,000 words");
 
 // --- the request
 const base = ok(req(`Sleep was shorter ${P(1)} after surgery.\n\nIt recovered ${P(2)} by day 90.`));
@@ -48,6 +51,9 @@ refused(req(`${P(1)}\n\n${P(2)}`), "only objects selected: nothing to rewrite");
 refused(req(`A ${"x".repeat(20_000)}.`), "over 20,000 characters");
 refused(req(Array.from({ length: 61 }, (_, i) => `Paragraph ${i}.`).join("\n\n")), "over 60 paragraphs");
 refused(req("word ".repeat(2001)), "over 2,000 words");
+// Expand writes about twice what it reads: half as much at a time (measured live)
+refused(req("word ".repeat(1001), { tool: "expand" }), "over 1,000 words to expand");
+ok(req("word ".repeat(1000), { tool: "expand" }));
 ok(req(`${"word ".repeat(1990)}${"\\emph{} ".repeat(50)}`, { format: "latex" })); // commands aren't counted
 refused(req(`First ${P(2)} then ${P(1)}.`), "placeholders out of order");
 refused(req(`First ${P(1)} and ${P(1)}.`), "a placeholder twice");
@@ -94,6 +100,9 @@ const tied = ok(req(`Shown before~${P(1)}, and tonight. ${P(2)}\nNext line.`, { 
 good(tied, `Reported before ${P(1)}, and tonight.~${P(2)}\nNext line.`);
 bad(tied, `Reported before${P(1)}, and tonight. ${P(2)}\nNext line.`, "but not glued to the word");
 
+// nor a word glued onto the end of a placeholder that had a space after it
+bad(base, `Sleep was briefer ${P(1)}following surgery.\n\nIt came back ${P(2)} by day 90.`, "a word glued after a placeholder");
+
 // gaps between objects: empty stays empty, words stay words
 const cites = ok(req(`Shown before ${P(1)}${P(2)} in adults.`));
 good(cites, `Reported earlier ${P(1)}${P(2)} in adults.`);
@@ -103,7 +112,9 @@ bad(ok(req(`Before ${P(1)} between ${P(2)} after.`)), `Prior ${P(1)} ${P(2)} lat
 // numbers: none made up, none repeated more often than in the passage
 const nums = ok(req("Of 412 adults, 31 of 118 were readmitted within 30 days."));
 good(nums, "31 of 118 were readmitted within 30 days, among 412 adults.");
-good(nums, "Of 412 adults, 31 of 118 returned to hospital within a month."); // dropping one is allowed
+bad(nums, "Of 412 adults, 31 of 118 returned to hospital within a month.", "a number dropped");
+bad(ok(req("Mortality fell by 12% (95% CI 8 to 16) in 412 adults.")), "Mortality fell in adults.", "a whole statistic dropped");
+good(ok(req("Of 412 adults, 31 of 118 were readmitted within 30 days.", { tool: "shorten" })), "31 of 118 adults were readmitted within 30 days."); // Shorten may drop one
 bad(nums, "Of 412 adults, 31 of 118 (26%) were readmitted within 30 days.", "a new number");
 bad(nums, "Of 412 adults, 31 of 118 were readmitted within 30 days, 30 days after surgery.", "a number repeated");
 bad(nums, "Of 412.5 adults, 31 of 118 were readmitted within 30 days.", "a number changed");
@@ -117,6 +128,9 @@ bad(tex, "We observed a \\textbf{large effect in 5\\% of cases, and \\emph{fewer
 bad(tex, "We observed a \\textbf{large} effect in 5\\% of cases, and \\emph{fewer} wakings {}.", "braces added");
 bad(tex, "We observed a \\textbf{large} effect in 5\\% of cases, and \\emph{fewer} wakings $.", "a dollar sign added");
 bad(tex, "We observed a \\textbf{large} effect in 5\\% of cases % a comment\n, and \\emph{fewer} wakings.", "a percent sign added");
+bad(tex, "We observed a \\textbf{large} effect, ^^5c5\\% of cases, and \\emph{fewer} wakings.", "TeX's ^^ notation (a hidden command)");
+bad(tex, "We observed a \\textbf{large} effect in 5\\% of cases, and \\emph{fewer} wakings #1.", "a stray #");
+bad(tex, "We observed a \\textbf{large} effect in 5\\% of cases, and \\emph{fewer} wak_ings.", "a stray _");
 const cells = ok(req("Short sleep & 31 of 118 \\\\\nLong sleep & 12 of 294", { format: "latex" }));
 bad(cells, "Short sleep 31 of 118 \\\\\nLong sleep & 12 of 294", "a table's & dropped");
 

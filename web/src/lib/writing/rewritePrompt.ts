@@ -56,7 +56,8 @@ export function buildRewritePrompt(req: RewriteRequest, problem: string | null =
 
 /** Room for the answer: the passage's length times what the tool does to it, plus the tool call's own tokens. */
 export function rewriteMaxTokens(req: RewriteRequest): number {
-  const f = req.tool === "shorten" ? 1.0 : req.tool === "expand" ? 2.0 : 1.3;
+  // Tokens per character of passage, from the live check: Paraphrase used 0.45 and Expand 0.6.
+  const f = req.tool === "shorten" ? 1.0 : req.tool === "expand" ? 2.0 : 1.6;
   return Math.min(12000, 1000 + Math.ceil((req.passage.length * f) / 3));
 }
 

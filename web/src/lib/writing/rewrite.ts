@@ -8,7 +8,7 @@
 // object that isn't prose (a citation, a footnote mark, maths, a picture; in
 // LaTeX, \cite, \ref, maths and the like) replaced by a numbered placeholder
 // ⟦1⟧…⟦k⟧ in order, which the answer must keep as they were.
-import { REWRITE_MAX_WORDS, rewritePrice } from "../accounts/coins.ts";
+import { REWRITE_MAX_WORDS, REWRITE_MAX_WORDS_EXPAND, rewritePrice } from "../accounts/coins.ts";
 import { DIALECTS, type Dialect } from "./spelling.ts";
 
 export const TOOLS = ["paraphrase", "tone", "shorten", "expand", "clarity"] as const;
@@ -27,10 +27,16 @@ const MAX_NOTE_CHARS = 240;
 const PLACEHOLDER = /⟦(\d+)⟧/g;
 const KEYS = ["coins", "dialect", "format", "passage", "tone", "tool"];
 
-/** The passage's words, as charged: placeholders and LaTeX commands aren't words. */
+/**
+ * The passage's words, as charged: placeholders and LaTeX commands aren't
+ * words, and a long unbroken run counts a word for every 8 characters (so
+ * 20,000 characters of one hyphen chain, or of a script written without
+ * spaces, isn't priced as one word). Ordinary prose counts its words.
+ */
 export function rewriteWords(passage: string): number {
   const bare = passage.replace(PLACEHOLDER, " ").replace(/\\[a-zA-Z@]+\*?/g, " ");
-  return bare.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
+  const words = bare.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
+  return Math.max(words, Math.ceil(bare.replace(/\s+/g, "").length / 8));
 }
 
 const paragraphs = (text: string) => text.split(/(?:[ \t]*\n){2,}/).filter((p) => p.trim());
@@ -59,7 +65,8 @@ export function parseRewriteRequest(body: unknown): RewriteRequest | string {
   if (marks.length > MAX_PLACEHOLDERS) return "The selection holds too many citations, notes and objects to rewrite at once.";
   const words = rewriteWords(passage);
   if (!words) return "Select some text to rewrite.";
-  if (words > REWRITE_MAX_WORDS) return `Select at most ${REWRITE_MAX_WORDS.toLocaleString("en")} words.`;
+  const most = b.tool === "expand" ? REWRITE_MAX_WORDS_EXPAND : REWRITE_MAX_WORDS;
+  if (words > most) return `Select at most ${most.toLocaleString("en")} words${b.tool === "expand" ? " to expand" : ""}.`;
   if (b.coins !== rewritePrice(words)) return "The price changed. Try again.";
   return { tool: b.tool as Tool, tone: b.tone as Tone | null, format: b.format, dialect: b.dialect as Dialect, passage, coins: b.coins };
 }
@@ -91,6 +98,10 @@ export function checkRewrite(req: RewriteRequest, answer: { text: unknown; notes
   const space = req.format === "latex" ? /[\s~]/ : /\s/;
   const spacing = (t: string) => [...t.matchAll(PLACEHOLDER)].map((m) => (m.index === 0 || space.test(t[m.index - 1]) ? "s" : "-")).join("");
   if (spacing(text) !== spacing(req.passage)) return "Keep the spacing in front of each placeholder as it was: a space where there was one, none where there was none.";
+  // ... and no word glued onto a placeholder's end where the passage had a space or a mark.
+  const glued = (t: string) => [...t.matchAll(PLACEHOLDER)].map((m) => /[\p{L}\p{N}]/u.test(t[m.index + m[0].length] ?? ""));
+  const wasGlued = glued(req.passage);
+  if (glued(text).some((g, i) => g && !wasGlued[i])) return "Keep a space after each placeholder that had one.";
   const gaps = text.split(PLACEHOLDER).filter((_, i) => i % 2 === 0);
   const wantGaps = req.passage.split(PLACEHOLDER).filter((_, i) => i % 2 === 0);
   for (let i = 0; i < wantGaps.length; i++) {
@@ -99,11 +110,14 @@ export function checkRewrite(req: RewriteRequest, answer: { text: unknown; notes
   }
 
   const have = count(numbers(req.passage));
-  for (const [n, times] of count(numbers(text))) if (times > (have.get(n) ?? 0)) return `The number ${n} isn't in the passage (or not that often): add no numbers.`;
+  const got = count(numbers(text));
+  for (const [n, times] of got) if (times > (have.get(n) ?? 0)) return `The number ${n} isn't in the passage (or not that often): add no numbers.`;
+  // Every number stays (Shorten may leave one out): a dropped statistic is easy to miss in a diff.
+  if (req.tool !== "shorten") for (const [n, times] of have) if ((got.get(n) ?? 0) < times) return `Keep every number of the passage: ${n} is missing.`;
 
   if (req.format === "latex") {
     if (commands(text) !== commands(req.passage)) return "Keep every LaTeX command exactly as often as the passage has it.";
-    for (const ch of ["{", "}", "$", "%", "&"]) if (tally(text, ch) !== tally(req.passage, ch)) return `Keep the passage's ${ch} characters exactly as they are.`;
+    for (const ch of ["{", "}", "$", "%", "&", "^", "#", "_"]) if (tally(text, ch) !== tally(req.passage, ch)) return `Keep the passage's ${ch} characters exactly as they are.`;
   }
 
   const before = rewriteWords(req.passage);
