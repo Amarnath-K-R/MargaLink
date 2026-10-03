@@ -139,6 +139,10 @@ export function proseMask(tex: string): string {
       out[i] = '"';
       out[i + 1] = " ";
       i += 2;
+    } else if (c === "-" && tex[i + 1] === "-") {
+      const to = tex[i + 2] === "-" ? i + 3 : i + 2; // -- and ---: LaTeX's dashes, not text
+      blank(i, to);
+      i = to;
     } else {
       if (c === "{" || c === "}" || c === "~" || c === "&") out[i] = " ";
       i++;

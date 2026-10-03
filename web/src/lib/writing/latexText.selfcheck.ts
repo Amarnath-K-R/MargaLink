@@ -45,6 +45,9 @@ at("\\caption{Readmisson by group.}", "Readmisson");
 // maths, inline and displayed, and maths environments: blanked whole
 assert.equal(visible("Where $x = teh$ and $$y$$ and \\(z\\) and \\[w\\] hold."), "Where and and and hold.");
 assert.equal(visible("\\begin{equation}\nE = mc^2\n\\end{equation}\nAfter."), "After.");
+// LaTeX's dashes are markup for the typeset dash; a hyphen is text
+assert.equal(visible("Pages 1--8 were read---twice, a well-known rule."), "Pages 1 8 were read twice, a well-known rule.");
+same("a--b---c");
 assert.equal(visible("\\begin{align*}\na &= b \\\\\nc &= d\n\\end{align*}"), "");
 
 // verbatim stays out: code isn't prose

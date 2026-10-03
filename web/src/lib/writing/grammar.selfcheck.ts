@@ -39,6 +39,9 @@ const colours = "The colour and the color.";
 assert.deepEqual(words(await checkProse(linter, colours, colours, uk), colours), ["color"]);
 // ... and switching back is honoured
 assert.deepEqual(words(await checkProse(linter, colours, colours, us), colours), ["colour"]);
+// ... and keeps the rules that are off (Harper resets them with the dialect)
+const spaced = "Text   continues.";
+assert.deepEqual(await checkProse(linter, spaced, spaced, us), [], "no spacing marks after a switch");
 
 // the paper's own words aren't misspellings, and leaving them out brings the mark back
 const jargon = "We used actigraphy.";
@@ -50,6 +53,13 @@ assert.equal((await checkProse(linter, jargon, jargon, us)).length, 1, "words ar
 assert.equal(plainMessage("Did you mean to spell `thiss` this way?"), "Did you mean to spell “thiss” this way?");
 assert.equal(plainMessage("Use a comma — or a full stop."), "Use a comma, or a full stop.");
 assert.ok(found.every((i) => !/[`—]/.test(i.message)), "the marks carry it");
+
+// a reference list: an author's initial isn't a misspelling, nor is a page range marked
+const refs = "Smith J. and Lee K. Sleep after surgery. Heart. 2019;105:1-8.";
+assert.deepEqual(words(await checkProse(linter, refs, refs, us), refs), []);
+// LaTeX writes its dashes as -- and ---: not marked
+const dashes = "Pages 1--8 were read---twice.";
+assert.deepEqual(words(await checkProse(linter, proseMask(dashes), dashes, us), dashes), []);
 
 // off: nothing
 assert.deepEqual(await checkProse(linter, plain, plain, { dialect: "off", words: [] }), []);

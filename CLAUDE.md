@@ -27,7 +27,10 @@ one `paper.docx`) is kept the same way and edited in Folio
 (`@stll/folio-react`, `DocEditor.tsx`), which runs in the page and makes no
 requests; it saves with full saves only (its selective save lost edits:
 `docs/word-editor-known-issues.md`), and `check_docx_fidelity.mjs` is the
-gate for any Folio upgrade. The workspace is also the hub: match, review,
+gate for any Folio upgrade. Spelling and grammar (`src/lib/writing/`:
+Harper's WASM in a Web Worker, served from our own origin) run on the
+device in both editors; a paper's English variant and dictionary are kept
+in its project settings. The workspace is also the hub: match, review,
 figures, checks and journal open as windows over it. Matching and the
 checks read the compiled PDF, or the saved Word document, on-device (rule 1
 unchanged); the two

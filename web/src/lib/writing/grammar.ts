@@ -15,8 +15,9 @@ export type Issue = {
 };
 
 // Rules that misfire on prose read out of LaTeX or a Word document: the
-// blanks left where markup was look like extra spaces.
-const RULES_OFF = { Spaces: false, QuoteSpacing: false, NoFrenchSpaces: false, TransposedSpace: false };
+// blanks left where markup was look like extra spaces, and en dashes in page
+// ranges would mark every reference in a list.
+const RULES_OFF = { Spaces: false, QuoteSpacing: false, NoFrenchSpaces: false, TransposedSpace: false, NumericRangeEnDash: false };
 const DIALECT = { us: 0, gb: 1, au: 2, ca: 3, in: 4 } as const; // harper.js's Dialect
 const REMOVE = 1;
 const INSERT_AFTER = 2; // harper.js's SuggestionKind
@@ -34,13 +35,13 @@ export async function checkProse(linter: Linter, prose: string, source: string, 
   if (spelling.dialect === "off" || !prose.trim()) return [];
   let state = configured.get(linter);
   if (!state) {
-    await linter.setLintConfig(RULES_OFF);
     state = { words: "" };
     configured.set(linter, state);
   }
   const dialect = DIALECT[spelling.dialect];
   if (state.dialect !== dialect) {
     await linter.setDialect(dialect);
+    await linter.setLintConfig(RULES_OFF); // a new dialect brings back every rule
     state.dialect = dialect;
   }
   const words = spelling.words.join("\n");
@@ -54,8 +55,9 @@ export async function checkProse(linter: Linter, prose: string, source: string, 
     const span = lint.span();
     const [from, to] = [span.start, span.end];
     const marked = prose.slice(from, to);
-    if (to > from && marked === source.slice(from, to)) {
-      const kind = lint.lint_kind();
+    const kind = lint.lint_kind();
+    const initial = kind === "Spelling" && /^\p{L}\.?$/u.test(marked); // "Smith J.": an author's initial
+    if (to > from && marked === source.slice(from, to) && !initial) {
       issues.push({
         from,
         to,
