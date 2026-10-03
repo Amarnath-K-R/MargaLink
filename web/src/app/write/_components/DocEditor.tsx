@@ -115,7 +115,12 @@ export default function DocEditor({
           if (!r || !area) return null;
           // The editor's area below its own bar, so the card never slides under the bar.
           const bar = frame.current?.querySelector('[role="toolbar"]')?.getBoundingClientRect();
-          return { sel: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, editor: { left: area.left, right: area.right, top: bar ? bar.bottom : area.top, bottom: area.bottom } };
+          // Across, the page the selection is on (so a card beside it sits off the page, never on text); down, the selection.
+          const page = document.elementFromPoint(r.left + 2, r.top + 2)?.closest(".layout-page")?.getBoundingClientRect();
+          return {
+            sel: { left: page?.left ?? r.left, right: page?.right ?? r.right, top: r.top, bottom: r.bottom },
+            editor: { left: area.left, right: area.right, top: bar ? bar.bottom : area.top, bottom: area.bottom },
+          };
         },
         focus: () => ref.current?.focus(),
       };

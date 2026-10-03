@@ -32,6 +32,23 @@ assert.deepEqual([tall.top, tall.maxHeight], [view.height - 12 - 600 - (view.hei
 const taller = placeCard({ left: 300, right: 700, top: 400, bottom: 440 }, editor, view, 2000);
 assert.equal(taller.top, editor.top + 12, "but no higher than the editor's top, scrolling inside");
 
+// each step its own width: the tools are a narrow list, not a 640px panel
+const menu = placeCard({ left: 300, right: 700, top: 400, bottom: 440 }, editor, view, undefined, 300);
+assert.equal(menu.width, 300);
+// a narrow window with a 389px pane beside a narrow editor: beside, in the pane, not squeezed into the editor
+const pane = placeCard({ left: 248, right: 611, top: 560, bottom: 700 }, { left: 236, right: 611, top: 216, bottom: 718 }, { width: 1024, height: 768 });
+assert.deepEqual([pane.left, pane.width], [623, 1024 - 12 - 611 - 12]);
+// no room beside a narrow editor: across the window, not the editor's width
+const squeezed = placeCard({ left: 248, right: 900, top: 560, bottom: 700 }, { left: 236, right: 611, top: 216, bottom: 718 }, { width: 1024, height: 768 });
+assert.equal(squeezed.width, 760);
+
+// a small laptop's Word page leaves 331px beside it: a rewrite fits there (not over the next paragraph); the long consent doesn't
+const laptop = { width: 1280, height: 720 };
+const page = { left: 131, right: 925, top: 350, bottom: 365 };
+const wordEditor = { left: 12, right: 1044, top: 122, bottom: 672 };
+assert.equal(placeCard(page, wordEditor, laptop, undefined, 640, 320).left, 925 + 12, "a rewrite beside the page");
+assert.equal(placeCard(page, wordEditor, laptop, undefined, 560, 420).top, 365 + 12, "the consent below it");
+
 // a selection across the page (no room beside it): across the editor, below it when there's room
 const wide = { left: 260, right: 1110 };
 const below = placeCard({ ...wide, top: 200, bottom: 320 }, editor, view);

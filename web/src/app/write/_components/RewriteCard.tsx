@@ -14,6 +14,7 @@ import { placeCard, type Box } from "./placeCard.ts";
 export default function RewriteCard({
   sel,
   editor,
+  want,
   focusKey,
   onClose,
   footer,
@@ -21,6 +22,7 @@ export default function RewriteCard({
 }: {
   sel: Box; // the selection, in the viewport
   editor: Box; // the editor's visible area
+  want: [number, number]; // the step's width, and the least it reads well at beside the selection
   focusKey: string; // a new step: the keyboard moves into it
   onClose: () => void;
   footer?: ReactNode; // the step's buttons, kept in view
@@ -47,7 +49,7 @@ export default function RewriteCard({
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
-  const { left, width, top, bottom, maxHeight } = placeCard(sel, editor, { width: window.innerWidth, height: window.innerHeight }, natural || undefined);
+  const { left, width, top, bottom, maxHeight } = placeCard(sel, editor, { width: window.innerWidth, height: window.innerHeight }, natural || undefined, want[0], want[1]);
   return (
     <div
       ref={box}
@@ -64,7 +66,7 @@ export default function RewriteCard({
           ×
         </button>
       </div>
-      <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
+      <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-5 pb-4 [mask-image:linear-gradient(to_bottom,black_calc(100%-14px),transparent)]">
         {children}
       </div>
       {footer && <div className="flex flex-wrap items-center gap-2 border-t border-line/60 px-5 py-3">{footer}</div>}
@@ -80,7 +82,7 @@ export function RewriteDiff({ before, after }: { before: string; after: string }
         s.type === "equal" ? (
           <span key={i}>{s.text}</span>
         ) : s.type === "del" ? (
-          <del key={i} className="text-ink-soft decoration-away/70">
+          <del key={i} className="mr-1 text-ink-soft decoration-away/70">
             <span className="sr-only">removed: </span>
             {s.text}
           </del>

@@ -285,12 +285,11 @@ export default function LatexEditor({
         const start = v.coordsAtPos(range.from);
         const end = v.coordsAtPos(range.to) ?? start;
         if (!start || !end) return null;
-        // One line: the words themselves; more: the width of the lines they run across.
+        // Across, the editor's lines (so a card beside it is never on text); down, the selection.
         const lines = v.contentDOM.getBoundingClientRect();
-        const oneLine = Math.abs(start.top - end.top) < 2;
         const area = v.scrollDOM.getBoundingClientRect();
         return {
-          sel: { left: oneLine ? start.left : lines.left, right: oneLine ? end.right : lines.right, top: start.top, bottom: end.bottom },
+          sel: { left: lines.left, right: lines.right, top: start.top, bottom: end.bottom },
           editor: { left: area.left, right: area.right, top: area.top, bottom: area.bottom },
         };
       },

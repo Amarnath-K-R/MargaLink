@@ -41,6 +41,9 @@ type Stage =
 
 const LABEL: Record<Tool, string> = { paraphrase: "Paraphrase", tone: "Change tone", shorten: "Shorten", expand: "Expand", clarity: "Clarity and flow" };
 const coinsLabel = (n: number) => `${n} M coin${n === 1 ? "" : "s"}`;
+// Each step's width, and the least it reads well at beside the selection: a list of tools is narrow, a notice
+// needs room, a rewrite is wide but reads at 320.
+const WIDTH: Record<Stage["kind"], [number, number]> = { menu: [300, 260], consent: [560, 420], running: [420, 300], done: [640, 320], stale: [640, 320], error: [440, 300] };
 
 /**
  * Rewrite with Claude for one editor: its menu's price, the consent (once
@@ -167,7 +170,7 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
     ) : null;
 
   const element = stage && (
-    <RewriteCard sel={at.sel} editor={at.editor} onClose={close} focusKey={stage.kind} footer={footer}>
+    <RewriteCard sel={at.sel} editor={at.editor} want={WIDTH[stage.kind === "error" && stage.signIn ? "consent" : stage.kind]} onClose={close} focusKey={stage.kind} footer={footer}>
       {stage.kind === "menu" && (
         <div role="menu" aria-label="Rewrite">
           <RewriteMenuItems offer={stage.offer} onTool={run} />
