@@ -164,7 +164,7 @@ try {
   // taken off the list (still signed in): the AI features refuse, however the path is spelled
   sql("DELETE FROM access_list WHERE email_key = 'e2e@example.org'");
   const aiVariants = await page.evaluate(() =>
-    Promise.all(["/api/figure", "/api/Figure", "/api/figure/", "/api/Review/start", "/api/review/start/"].map((p) => fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).then((r) => `${p} ${r.status}`))),
+    Promise.all(["/api/figure", "/api/Figure", "/api/figure/", "/api/Review/start", "/api/review/start/", "/api/rewrite", "/api/Rewrite/"].map((p) => fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).then((r) => `${p} ${r.status}`))),
   );
   check(`off the list, every spelling of the AI routes is refused (${aiVariants.join(", ")})`, aiVariants.every((v) => v.endsWith(" 403")));
   sql("INSERT INTO access_list (email_key, email, role, added_at) VALUES ('e2e@example.org', 'e2e@example.org', 'beta', 0)");
@@ -217,6 +217,20 @@ try {
     return { status: r.status, body: await r.json() };
   }, JOURNAL_ID);
   check(`a review costing more than the balance is refused (${big.status})`, big.status === 402 && big.body.balance === afterReview.balance && big.body.coins > big.body.balance);
+
+  // Rewrite, refused before Claude: at a price that isn't the price (nothing taken), and with no coins left (402, its price and the balance)
+  const rewrite = (coins) =>
+    page.evaluate(async (coins) => {
+      const body = { tool: "paraphrase", tone: null, format: "text", dialect: "us", passage: "Sleep was short after surgery in older adults.", coins };
+      const r = await fetch("/api/rewrite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      return { status: r.status, body: await r.text() };
+    }, coins);
+  const mispriced = await rewrite(3);
+  check(`a rewrite at the wrong price is refused, nothing taken (${mispriced.status})`, mispriced.status === 400 && (await page.evaluate(() => fetch("/api/me").then((r) => r.json()))).balance === afterReview.balance);
+  sql("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) SELECT user_id, -SUM(delta), 'admin', 'e2e-drain', 0 FROM coin_ledger WHERE user_id = (SELECT id FROM users WHERE email = 'e2e@example.org')");
+  const broke = await rewrite(1);
+  check(`a rewrite with no coins left: 402 with its price and the balance (${broke.status} ${broke.body})`, broke.status === 402 && broke.body === JSON.stringify({ coins: 1, balance: 0 }));
+  sql("INSERT INTO coin_ledger (user_id, delta, kind, ref, created_at) SELECT user_id, -delta, 'admin', 'e2e-refill', 0 FROM coin_ledger WHERE ref = 'e2e-drain'");
 
   // a paid review that never ran: once its ticket expires, the sweep (real D1, json_each) refunds all of it
 const unused = await page.evaluate(async (journalId) => {
