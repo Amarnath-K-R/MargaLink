@@ -85,6 +85,8 @@ export function checkRewrite(req: RewriteRequest, answer: { text: unknown; notes
   const want = placeholders(req.passage) ?? [];
   if (!marks || marks.join() !== want.join()) return `Keep every placeholder (${want.map((n) => `⟦${n}⟧`).join(" ") || "none"}) exactly once, in the same order.`;
   if (paragraphs(text).length !== paragraphs(req.passage).length) return `Keep the same number of paragraphs (${paragraphs(req.passage).length}).`;
+  const where = (t: string) => paragraphs(t).map((p) => (placeholders(p) ?? []).join()).join("|");
+  if (where(text) !== where(req.passage)) return "Keep each placeholder in the paragraph it was in.";
   const gaps = text.split(PLACEHOLDER).filter((_, i) => i % 2 === 0);
   const wantGaps = req.passage.split(PLACEHOLDER).filter((_, i) => i % 2 === 0);
   for (let i = 0; i < wantGaps.length; i++) {

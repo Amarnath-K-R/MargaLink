@@ -9,8 +9,10 @@ import { schema } from "@stll/folio-core/prosemirror/schema";
 import { LocalLinter } from "harper.js";
 import { binaryInlined } from "harper.js/binaryInlined";
 import { checkProse } from "./grammar.ts";
-import { docProse, docRange, fixWord } from "./docText.ts";
-import { EditorState } from "prosemirror-state";
+import { applyDocRewrite, docPassage, docProse, docRange, fixWord, type WordPassage } from "./docText.ts";
+import { EditorState, type Transaction } from "prosemirror-state";
+import type { Node } from "prosemirror-model";
+import { buildCleanBlockText } from "@stll/folio-core/ai-edits/clean-text";
 import { DEFAULT_SPELLING } from "./spelling.ts";
 
 const t = (text: string, marks: ReturnType<typeof schema.mark>[] = []) => schema.text(text, marks);
@@ -92,5 +94,82 @@ const cited = schema.nodes.doc.create(null, [
 ]);
 const citedProse = docProse(cited);
 assert.deepEqual(await checkProse(linter, citedProse.prose, citedProse.source, DEFAULT_SPELLING), [], "no mark around a citation");
+
+// --- Rewrite's passage in a Word document: every object that isn't prose
+// travels as a numbered placeholder and stays where it is; only the words
+// between objects are replaced, all at once or not at all.
+const P = (n: number) => `⟦${n}⟧`;
+const bold = schema.marks.bold.create();
+const fn = (id: string) => t("1", [schema.marks.footnoteRef.create({ id, noteType: "footnote" })]);
+const paper = () =>
+  N.doc.create(null, [
+    N.paragraph.create(null, [t("Adults wre enrolled "), citation, t(" and followed"), fn("1"), t(" for ninety days.")]),
+    N.paragraph.create(null, [
+      t("Sleep was "), t("short", [bold]), t(" after "), N.math.create({ display: false, ommlXml: "<m:oMath/>", plainText: "x" }), t(" surgery"),
+      N.tab.create(), t("in older"), N.hardBreak.create(), t("adults "), N.image.create({ src: "x", width: 9, height: 9 }), t(" overall"),
+      N.bookmarkBoundary.create({ type: "start", id: "1", name: "_Ref1" }), t(" too."),
+    ]),
+    N.paragraph.create(),
+    N.paragraph.create(null, [t("Readmission was "), t("rarre ", [deleted]), t("uncommon.")]),
+    N.paragraph.create(null, [t("A bracket ⟦ here.")]),
+  ]);
+// The editor, as Folio's apply code sees it: a state and a dispatch.
+const editor = (doc: Node) => {
+  const view = { state: EditorState.create({ schema, doc }), dispatched: 0, dispatch(tr: Transaction) { view.dispatched++; view.state = view.state.apply(tr); } };
+  return view;
+};
+const objects = (doc: Node) => {
+  const seen: string[] = [];
+  doc.descendants((n) => void (n.isInline && (!n.isText ? seen.push(n.type.name) : n.marks.some((m) => m.type.name === "footnoteRef") && seen.push("footnoteRef"))));
+  return seen;
+};
+const inner = (doc: Node, i: number) => { let at = 0; doc.forEach((n, off, idx) => void (idx === i && (at = off))); return { from: at + 1, to: at + doc.child(i).nodeSize - 1 }; };
+const passageOf = (doc: Node, from: number, to: number) => {
+  const p = docPassage(doc, from, to);
+  assert.ok(typeof p !== "string", `a passage: ${p}`);
+  return p as WordPassage;
+};
+
+const before = paper();
+const whole = passageOf(before, inner(before, 0).from, inner(before, 1).to);
+assert.equal(
+  whole.passage,
+  `Adults wre enrolled ${P(1)} and followed${P(2)} for ninety days.\n\nSleep was short after ${P(3)} surgery${P(4)}in older${P(5)}adults ${P(6)} overall${P(7)} too.`,
+  "fields, footnote marks, maths, tabs, line breaks, pictures and bookmarks are placeholders",
+);
+// a partial selection; one starting inside a citation takes the whole citation
+const mid = passageOf(before, inner(before, 0).from + "Adults wre ".length, inner(before, 1).from + "Sleep was short".length);
+assert.equal(mid.passage, `enrolled ${P(1)} and followed${P(2)} for ninety days.\n\nSleep was short`);
+const cite = inner(before, 0).from + "Adults wre enrolled ".length;
+assert.equal(passageOf(before, cite, inner(before, 0).to).passage, `${P(1)} and followed${P(2)} for ninety days.`);
+// a blank paragraph in the selection isn't a paragraph of the passage
+assert.equal(passageOf(before, inner(before, 1).from, inner(before, 2).to).passage.split("\n\n").length, 1);
+
+// refused: tracked changes, Rewrite's own brackets, nothing to rewrite
+assert.equal(typeof docPassage(before, inner(before, 3).from, inner(before, 3).to), "string", "a tracked change in the selection");
+assert.equal(typeof docPassage(before, inner(before, 4).from, inner(before, 4).to), "string", "⟦ in the selection");
+assert.equal(typeof docPassage(before, inner(before, 2).from, inner(before, 2).to), "string", "only a blank paragraph");
+
+// applied: the words change, every object stays, in its place, in one step
+const answer = `Adults were enrolled ${P(1)} and then followed${P(2)} for ninety days.\n\nSleep was brief after ${P(3)} surgery${P(4)}in elderly${P(5)}people ${P(6)} in all${P(7)} as well.`;
+const ed = editor(before);
+assert.equal(applyDocRewrite(ed, whole, answer), "applied");
+assert.equal(ed.dispatched, 1, "one transaction: one undo step");
+assert.deepEqual(objects(ed.state.doc), objects(before), "every object kept, in order");
+assert.equal(ed.state.doc.child(0).textContent, "Adults were enrolled (Smiht, 2019) and then followed1 for ninety days.", "a field reads as its text");
+let field = null as Node | null;
+ed.state.doc.descendants((n) => void (n.type.name === "field" && (field = n)));
+assert.equal(field!.attrs.displayText, "(Smiht, 2019)", "the citation is still a citation");
+const secondText = buildCleanBlockText(ed.state.doc.child(1), inner(ed.state.doc, 1).from - 1, { fieldResults: "text" }).text;
+assert.equal(secondText, "Sleep was brief after  surgery\tin elderly\npeople  in all as well.");
+
+// stale: the passage changed since it was sent; nothing is applied
+const edited = editor(before);
+edited.dispatch(edited.state.tr.insertText("X", inner(before, 0).from));
+const was = edited.state.doc;
+assert.equal(applyDocRewrite(edited, whole, answer), "stale");
+assert.equal(edited.state.doc, was, "the document is as it was");
+// an answer that doesn't fit the passage's shape isn't applied either
+assert.equal(applyDocRewrite(editor(before), whole, answer.replace(`${P(6)} `, "")), "refused");
 
 console.log("docText.selfcheck: OK");

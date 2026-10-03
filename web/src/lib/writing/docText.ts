@@ -1,7 +1,9 @@
 // A Word document (Folio's ProseMirror document) read as prose for the
 // spelling checker, and the checker's marks mapped back to the document.
 // Pure; docText.selfcheck.ts runs it on Folio's own schema.
+import { applyFolioDocumentOperations, createFolioAIEditSnapshot, createFolioAITextRangeHandle, type FolioAIEditOperation } from "@stll/folio-core/ai-edits";
 import { buildCleanBlockText, type CleanBlockText } from "@stll/folio-core/ai-edits/clean-text";
+import { collectNoteReferenceLabels } from "@stll/folio-core/ai-edits/snapshot";
 import type { Node } from "prosemirror-model";
 import type { EditorState, Transaction } from "prosemirror-state";
 
@@ -82,4 +84,132 @@ export function fixWord(state: EditorState, m: { from: number; to: number; word:
   if (!mid) return state.tr.delete(from, to);
   const marks = state.doc.nodeAt(from < to || a === 0 ? from : from - 1)?.marks ?? [];
   return state.tr.replaceWith(from, to, state.schema.text(mid, marks));
+}
+
+// --- Rewrite (rewrite.ts): a Word selection as a passage, and the answer put back.
+
+export type WordPassage = {
+  passage: string; // the paragraphs joined by blank lines, every object a numbered placeholder ⟦n⟧
+  // Each paragraph: where it is, its text when read (as Folio's own edits read it), and the stretches of
+  // words between its objects, in that text's offsets (the stretch between two touching objects is empty).
+  blocks: { pos: number; text: string; gaps: { start: number; end: number }[] }[];
+};
+const PLACEHOLDER = /⟦(\d+)⟧/g;
+
+/**
+ * Rewrite's passage for the selection [from, to): each paragraph's words,
+ * with everything that isn't prose (a citation or other field, a footnote
+ * mark, an equation, a picture, a shape, a symbol, a bookmark, a comment's
+ * anchor, a tab, a line break) as a placeholder that stays where it is. A
+ * paragraph's whitespace at either end stays out. Refused, before anything
+ * is sent, over tracked changes, text holding ⟦ or ⟧, or a paragraph Folio
+ * reads differently.
+ */
+export function docPassage(doc: Node, from: number, to: number): WordPassage | string {
+  const labels = collectNoteReferenceLabels(doc);
+  const snapshot = createFolioAIEditSnapshot(doc);
+  const { insertion, deletion } = doc.type.schema.marks;
+  const blocks: WordPassage["blocks"] = [];
+  const paragraphs: string[] = [];
+  let n = 0;
+  let refusal: string | null = null;
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (refusal) return false;
+    if (!node.isTextblock) return true;
+    const clean = buildCleanBlockText(node, pos, { fieldResults: "text", noteReferences: labels });
+    const { text, offsets } = clean;
+    const spans = clean.structuralBoundaries.flatMap((b) => (b.type === "field" || b.type === "noteReference" ? [[b.offset, b.offset + b.length]] : []));
+    const inSpan = (k: number) => spans.some(([a, b]) => a <= k && k < b);
+    // The selection's part of the paragraph, an object it starts or ends in taken whole, its whitespace left out.
+    let s = 0;
+    while (s < text.length && offsets[s] < from) s++;
+    let e = text.length;
+    while (e > s && offsets[e - 1] >= to) e--;
+    for (const [a, b] of spans) {
+      if (a < s && s < b) s = a;
+      if (a < e && e < b) e = b;
+    }
+    while (s < e && /\s/.test(text[s])) s++;
+    while (e > s && /\s/.test(text[e - 1])) e--;
+    if (s >= e) return false;
+    if (snapshot.blocks.find((b) => snapshot.anchors[b.id]?.from === pos)?.text !== text) refusal = "This paragraph can't be rewritten here: Folio reads it differently.";
+    else if (/[⟦⟧]/.test(text.slice(s, e))) refusal = "This selection holds ⟦ or ⟧, which Rewrite uses itself.";
+    else if (doc.rangeHasMark(offsets[s], offsets[e - 1] + 1, insertion) || doc.rangeHasMark(offsets[s], offsets[e - 1] + 1, deletion))
+      refusal = "This selection has tracked changes. Accept or reject them first.";
+    if (refusal) return false;
+    // The objects inside: fields and footnote marks, tabs and line breaks, and what takes no character (a jump in position).
+    const objects: [number, number][] = [];
+    for (const b of clean.structuralBoundaries) {
+      if (b.type === "field" || b.type === "noteReference") {
+        if (s <= b.offset && b.offset + b.length <= e) objects.push([b.offset, b.offset + b.length]);
+      } else if (s < b.offset && b.offset < e) objects.push([b.offset, b.offset]);
+    }
+    for (let k = s; k < e; k++) if ((text[k] === "\t" || text[k] === "\n") && !inSpan(k)) objects.push([k, k + 1]);
+    for (let k = s + 1; k < e; k++) if (offsets[k] > offsets[k - 1] + 1 && !inSpan(k - 1) && !inSpan(k)) objects.push([k, k]);
+    objects.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+    const gaps: { start: number; end: number }[] = [];
+    let at = s;
+    let paragraph = "";
+    for (const [a, b] of objects) {
+      gaps.push({ start: at, end: a });
+      paragraph += `${text.slice(at, a)}⟦${++n}⟧`;
+      at = b;
+    }
+    gaps.push({ start: at, end: e });
+    paragraph += text.slice(at, e);
+    blocks.push({ pos, text, gaps });
+    paragraphs.push(paragraph);
+    return false;
+  });
+  if (refusal) return refusal;
+  if (!blocks.length) return "Select some text to rewrite.";
+  return { passage: paragraphs.join("\n\n"), blocks };
+}
+
+// The document's objects in order (pictures, fields, footnote marks...), to see that an edit kept them all.
+function objectsOf(doc: Node): string {
+  const seen: string[] = [];
+  doc.descendants((n) => {
+    if (n.isInline && !n.isText) seen.push(n.type.name);
+    else if (n.isText && n.marks.some((m) => m.type.name === "footnoteRef")) seen.push("footnoteRef");
+  });
+  return seen.join(" ");
+}
+
+/**
+ * A checked answer (rewrite.ts) put back as one edit, one undo step: each
+ * stretch of words that changed is replaced in place, the objects between
+ * them untouched, all at once or not at all. "stale" when a paragraph
+ * changed since it was sent; "refused" when the answer doesn't fit the
+ * passage or Folio couldn't place it without moving an object.
+ */
+export function applyDocRewrite(view: { state: EditorState; dispatch: (tr: Transaction) => void }, p: WordPassage, text: string): "applied" | "stale" | "refused" {
+  const doc = view.state.doc;
+  const paragraphs = text.split("\n\n");
+  if (paragraphs.length !== p.blocks.length) return "refused";
+  const snapshot = createFolioAIEditSnapshot(doc);
+  const operations: FolioAIEditOperation[] = [];
+  let n = 0;
+  for (let k = 0; k < p.blocks.length; k++) {
+    const b = p.blocks[k];
+    const block = snapshot.blocks.find((x) => snapshot.anchors[x.id]?.from === b.pos);
+    if (!block || block.text !== b.text) return "stale";
+    const parts = paragraphs[k].split(PLACEHOLDER).filter((_, i) => i % 2 === 0);
+    const marks = [...paragraphs[k].matchAll(PLACEHOLDER)].map((m) => Number(m[1]));
+    if (parts.length !== b.gaps.length || marks.some((m) => m !== ++n)) return "refused";
+    for (let j = 0; j < b.gaps.length; j++) {
+      const { start, end } = b.gaps[j];
+      if (parts[j] === b.text.slice(start, end)) continue;
+      const range = start < end ? createFolioAITextRangeHandle({ blockId: block.id, text: block.text, startOffset: start, endOffset: end }) : null;
+      if (!range || !parts[j]) return "refused";
+      operations.push({ id: `rewrite-${operations.length + 1}`, type: "replaceRange", range, replace: parts[j] });
+    }
+  }
+  if (!operations.length) return "refused";
+  let held = null as Transaction | null;
+  const result = applyFolioDocumentOperations({ view: { state: view.state, dispatch: (tr) => void (held = tr) }, snapshot, batch: { version: 1, mode: "direct", atomic: true, operations } });
+  if (result.status !== "committed" || !held) return result.skipped.some((x) => x.reason === "changedBlock" || x.reason === "staleRange") ? "stale" : "refused";
+  if (objectsOf(held.doc) !== objectsOf(doc)) return "refused"; // Folio widened an edit over an object
+  view.dispatch(held);
+  return "applied";
 }

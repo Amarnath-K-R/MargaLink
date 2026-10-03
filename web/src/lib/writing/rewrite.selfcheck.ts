@@ -82,6 +82,7 @@ bad(base, `Sleep was briefer ${P(1)} following surgery.\n\nIt came back ${P(2)} 
 bad(base, `Sleep was briefer ${P(1)} following ⟧ surgery.\n\nIt came back ${P(2)} by day 90.`, "a stray bracket");
 bad(base, `Sleep was briefer ${P(1)} following surgery. It came back ${P(2)} by day 90.`, "paragraphs joined");
 bad(base, `Sleep was briefer ${P(1)}.\n\nFollowing surgery.\n\nIt came back ${P(2)} by day 90.`, "a paragraph added");
+bad(base, `Sleep was briefer following surgery.\n\nIt came ${P(1)} back ${P(2)} by day 90.`, "a placeholder moved to another paragraph");
 
 // gaps between objects: empty stays empty, words stay words
 const cites = ok(req(`Shown before ${P(1)}${P(2)} in adults.`));
