@@ -16,6 +16,7 @@ import { HubWindows, hubCommands, useHub } from "./Hub.tsx";
 import { LOCKED_OUT, useProjectSession } from "./useProjectSession.ts";
 import { downloadBytes, safeName } from "./download.ts";
 import type { DocHandle } from "./DocEditor.tsx";
+import { addWord, DEFAULT_SPELLING, removeWord, type Spelling } from "@/lib/writing/spelling";
 
 // The Word editor is most of a megabyte: it loads when a Word project opens.
 const DocEditor = dynamic(() => import("./DocEditor.tsx"), { ssr: false, loading: () => <p className="p-6 text-sm text-ink-soft">Opening the document…</p> });
@@ -164,6 +165,13 @@ export default function DocWorkspace({
     await flush().catch(() => {});
     downloadBytes(`${safeName(project.name)}.zip`, await store.exportZip(project.id), "application/zip");
   }, [flush, store, project.id, project.name]);
+  // The paper's spelling settings (US English until changed), kept in its project.json.
+  const spelling = project.spelling ?? DEFAULT_SPELLING;
+  const [spellMarks, setSpellMarks] = useState<number | "failed" | null>(null);
+  const setSpelling = guarded(async (next: Spelling) => {
+    await store.setMeta(project.id, { spelling: next });
+    onMeta(await store.meta(project.id));
+  });
   const rename = guarded(async (name: string) => {
     await store.setMeta(project.id, { name });
     onMeta(await store.meta(project.id));
@@ -225,7 +233,16 @@ export default function DocWorkspace({
             </p>
           )}
           <div data-testid="doc-editor" className="sheet min-h-0 flex-1 overflow-hidden">
-            {opened && editable !== null && <DocEditor bytes={opened} readOnly={!editable} onEdit={onEdit} onDocument={countLater} handleRef={editor} />}
+            {opened && editable !== null && <DocEditor
+                bytes={opened}
+                readOnly={!editable}
+                onEdit={onEdit}
+                onDocument={countLater}
+                handleRef={editor}
+                spelling={spelling}
+                onAddWord={(w) => void setSpelling(addWord(spelling, w))}
+                onSpellCount={setSpellMarks}
+              />}
           </div>
           {(error ?? pageError) && <ErrorText>{error ?? pageError}</ErrorText>}
         </section>
@@ -239,6 +256,7 @@ export default function DocWorkspace({
         words={words}
         wordLimit={wordLimit}
         onShortcuts={() => setTool("shortcuts")}
+        spelling={{ ...spelling, marks: spellMarks, onDialect: (dialect) => void setSpelling({ ...spelling, dialect }), onRemoveWord: (w) => void setSpelling(removeWord(spelling, w)) }}
         dirty={dirty}
         running={running}
         sent={calls.filter((c) => c.hadBody && /\/api\/(review|figure)(\?|$)/.test(c.url)).length}

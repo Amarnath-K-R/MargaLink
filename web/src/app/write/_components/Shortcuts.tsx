@@ -25,6 +25,7 @@ const DOCX: Group[] = [
       { combo: ["Mod", "Z"], what: "Undo" },
       { combo: ["Mod", "Shift", "Z"], what: "Redo" },
       { combo: ["Mod", "F"], what: "Find and replace" },
+      { combo: ["Alt", "Enter"], what: "The fixes for a spelling or grammar mark, with the caret in the marked word" },
     ],
   },
 ];
@@ -50,6 +51,13 @@ const LATEX: Group[] = [
       { combo: ["Mod", "G"], what: "Next match" },
       { combo: ["Mod", "D"], what: "Select the next occurrence too" },
       { combo: ["Mod", "Alt", "G"], what: "Go to line" },
+    ],
+  },
+  {
+    title: "Marks",
+    keys: [
+      { combo: ["F8"], what: "Next spelling, grammar or compiler mark" },
+      { combo: ["Mod", "Shift", "M"], what: "All the marks in a list, with their fixes" },
     ],
   },
 ];

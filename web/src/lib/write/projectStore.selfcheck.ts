@@ -356,4 +356,27 @@ await assert.rejects(store.meta(copy.id));
   for (const m of [p, dotx, back, forged, latex]) await store.remove(m.id);
 }
 
+// 6k. a paper's spelling settings (its English, its own words) travel with its backup, LaTeX and Word alike;
+// a backup's are untrusted, so malformed ones aren't used
+{
+  const tex = await store.importTex("Spelt", enc(MAIN));
+  await store.setMeta(tex.id, { spelling: { dialect: "gb", words: ["actigraphy"] } });
+  const texBack = await store.importZip("Spelt again", await store.exportZip(tex.id));
+  assert.deepEqual(texBack.spelling, { dialect: "gb", words: ["actigraphy"] }, "a LaTeX project's spelling comes back");
+  const DOC = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
+  const docx = zipFiles([
+    { path: "[Content_Types].xml", data: enc(`<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/word/document.xml" ContentType="${DOC}"/></Types>`) },
+    { path: "word/document.xml", data: enc("<w:document/>") },
+  ]);
+  const word = await store.importDocx("Spelt doc", docx);
+  await store.setMeta(word.id, { spelling: { dialect: "off", words: [] } });
+  const wordBack = await store.importZip("Spelt doc again", await store.exportZip(word.id));
+  assert.deepEqual([wordBack.kind, wordBack.spelling], ["docx", { dialect: "off", words: [] }], "a Word project's too");
+  const forged = await store.importZip("Forged spelling", zipFiles([{ path: "project.json", data: enc(JSON.stringify({ spelling: { dialect: "klingon", words: ["x"] } })) }, { path: "main.tex", data: enc(MAIN) }]));
+  assert.equal(forged.spelling, undefined, "a malformed setting isn't used");
+  const dirty = await store.importZip("Dirty words", zipFiles([{ path: "project.json", data: enc(JSON.stringify({ spelling: { dialect: "us", words: ["fine", "<script>", 42] } })) }, { path: "main.tex", data: enc(MAIN) }]));
+  assert.deepEqual(dirty.spelling, { dialect: "us", words: ["fine"] }, "only real words are kept");
+  for (const m of [tex, texBack, word, wordBack, forged, dirty]) await store.remove(m.id);
+}
+
 console.log("projectStore.selfcheck: OK");

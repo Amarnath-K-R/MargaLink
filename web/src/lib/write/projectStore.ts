@@ -2,6 +2,7 @@
 // this device only; nothing is uploaded. One folder per project, holding its
 // files and a project.json. The directory handles are passed in, so the
 // selfcheck drives this with an in-memory fake.
+import { spellingFrom, type Spelling } from "../writing/spelling.ts";
 import { flattenSingleRoot, unzipFiles, zipFiles, type ZipEntry } from "./zip.ts";
 
 export type FileHandle = {
@@ -27,6 +28,7 @@ export type ProjectMeta = {
   journalName?: string | null; // the target journal's name, so the workspace needn't load the whole index to show it
   templateId: string | null;
   packs?: string[]; // data packs the template needs up front (["all"] for classes like IEEEtran)
+  spelling?: Spelling; // the paper's English and its own words (absent: US English, none); carried in backups
   createdAt: string;
   updatedAt: string;
 };
@@ -278,13 +280,22 @@ export class ProjectStore {
     const decoder = new TextDecoder();
     const saved = backupSettings(all.find((e) => e.path === META)?.data);
     const doc = saved.kind === "docx" ? entries.find((e) => e.path === DOCX_MAIN) : undefined;
-    if (doc) return this.importDocx(name, doc.data, journalId ?? saved.journalId ?? null, journalId ? journalName : (saved.journalName ?? null));
+    if (doc) return this.importDocx(name, doc.data, journalId ?? saved.journalId ?? null, journalId ? journalName : (saved.journalName ?? null), saved.spelling);
     const main =
       saved.main && entries.some((e) => e.path === saved.main) ? saved.main : findMainTex(entries.map((e) => ({ path: e.path, text: TEXT_EXT.test(e.path) ? decoder.decode(e.data) : null })));
     if (!main) throw new Error("That zip has no .tex file with a \\documentclass line, so there's nothing to compile.");
     const engine = saved.engine ?? (entries.some((e) => FONTSPEC.test(TEXT_EXT.test(e.path) ? decoder.decode(e.data) : "")) ? "xetex" : "pdftex");
     return this.create(
-      { name, main, engine, journalId: journalId ?? saved.journalId ?? null, journalName: journalId ? journalName : (saved.journalName ?? null), templateId: saved.templateId ?? null, ...(saved.packs ? { packs: saved.packs } : {}) },
+      {
+        name,
+        main,
+        engine,
+        journalId: journalId ?? saved.journalId ?? null,
+        journalName: journalId ? journalName : (saved.journalName ?? null),
+        templateId: saved.templateId ?? null,
+        ...(saved.packs ? { packs: saved.packs } : {}),
+        ...(saved.spelling ? { spelling: saved.spelling } : {}),
+      },
       entries,
     );
   }
@@ -299,14 +310,14 @@ export class ProjectStore {
 
   // A Word document or template (DocWorkspace edits it). The engine is a LaTeX
   // setting and unused here; the type requires one.
-  async importDocx(name: string, bytes: Uint8Array, journalId: string | null = null, journalName: string | null = null): Promise<ProjectMeta> {
-    return this.create({ name, kind: "docx", main: DOCX_MAIN, engine: "pdftex", journalId, journalName, templateId: null }, [{ path: DOCX_MAIN, data: toDocx(bytes) }]);
+  async importDocx(name: string, bytes: Uint8Array, journalId: string | null = null, journalName: string | null = null, spelling?: Spelling): Promise<ProjectMeta> {
+    return this.create({ name, kind: "docx", main: DOCX_MAIN, engine: "pdftex", journalId, journalName, templateId: null, ...(spelling ? { spelling } : {}) }, [{ path: DOCX_MAIN, data: toDocx(bytes) }]);
   }
 }
 
 // The settings a MargaLink backup carries (its project.json), each checked:
 // a zip is untrusted input, so anything malformed is simply not used.
-function backupSettings(data: Uint8Array | undefined): Partial<Pick<ProjectMeta, "kind" | "main" | "engine" | "journalId" | "journalName" | "templateId" | "packs">> {
+function backupSettings(data: Uint8Array | undefined): Partial<Pick<ProjectMeta, "kind" | "main" | "engine" | "journalId" | "journalName" | "templateId" | "packs" | "spelling">> {
   if (!data) return {};
   let m: Record<string, unknown>;
   try {
@@ -324,6 +335,7 @@ function backupSettings(data: Uint8Array | undefined): Partial<Pick<ProjectMeta,
     journalName: str(m.journalName),
     templateId: str(m.templateId),
     packs: Array.isArray(m.packs) && m.packs.every((p) => typeof p === "string") ? (m.packs as string[]) : undefined,
+    spelling: spellingFrom(m.spelling),
   };
 }
 

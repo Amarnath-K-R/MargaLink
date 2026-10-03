@@ -14,6 +14,7 @@ import ErrorText from "@/components/ui/ErrorText";
 import type { Journal } from "../page.tsx";
 import FileTree from "./FileTree.tsx";
 import LatexEditor, { type EditorHandle, type LineMark } from "./LatexEditor.tsx";
+import { addWord, DEFAULT_SPELLING, removeWord, type Spelling } from "@/lib/writing/spelling";
 import PdfPane from "./PdfPane.tsx";
 import Diagnostics from "./Diagnostics.tsx";
 import StorageBanner from "./StorageBanner.tsx";
@@ -315,6 +316,14 @@ export default function Workspace({
   const figures = files.filter((f) => f.startsWith("figures/") && IMAGE.test(f));
   const texOpen = doc?.path === active && /\.tex$/i.test(active);
 
+  // The paper's spelling settings (US English until changed), kept in its project.json.
+  const spelling = project.spelling ?? DEFAULT_SPELLING;
+  const [spellMarks, setSpellMarks] = useState<number | "failed" | null>(null);
+  const [ignoredSpelling] = useState(() => new Set<string>()); // "Ignore": for this session, across the paper's files
+  const setSpelling = guarded(async (next: Spelling) => {
+    await store.setMeta(project.id, { spelling: next });
+    onMeta(await store.meta(project.id));
+  });
   const setEngine = guarded(async (engine: ProjectMeta["engine"]) => {
     await store.setMeta(project.id, { engine });
     onMeta(await store.meta(project.id));
@@ -586,6 +595,10 @@ export default function Workspace({
                   onSave={() => void compile()}
                   handleRef={editor}
                   completions={completionData}
+                  spelling={texOpen ? spelling : null}
+                  onAddWord={(w) => void setSpelling(addWord(spelling, w))}
+                  onSpellCount={setSpellMarks}
+                  ignored={ignoredSpelling}
                 />
               </>
             ) : null}
@@ -669,6 +682,11 @@ export default function Workspace({
         wordLimit={wordLimit}
         engine={project.engine}
         onEngine={(e) => void setEngine(e)}
+        spelling={
+          texOpen
+            ? { ...spelling, marks: spellMarks, onDialect: (dialect) => void setSpelling({ ...spelling, dialect }), onRemoveWord: (w) => void setSpelling(removeWord(spelling, w)) }
+            : undefined
+        }
         auto={auto === "on"}
         onAuto={(on) => {
           setAuto(on ? "on" : "off");

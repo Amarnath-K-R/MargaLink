@@ -9,6 +9,8 @@ import { getFolioMessages } from "@stll/folio-react/messages";
 import "@stll/folio-react/standalone.css";
 import { findQuoteInText } from "@/lib/write/texSource";
 import { docSaveState } from "@/lib/write/docSaveState";
+import type { Spelling } from "@/lib/writing/spelling";
+import { useDocSpelling } from "./useDocSpelling.tsx";
 
 // The Word editor: Folio (Apache-2.0, a fork of Eigenpal's docx-editor),
 // which edits the .docx itself: a save rewrites the document's text from the
@@ -44,12 +46,18 @@ export default function DocEditor({
   onEdit,
   onDocument,
   handleRef,
+  spelling = null,
+  onAddWord,
+  onSpellCount,
 }: {
   bytes: Uint8Array; // the document as opened; never fed back while editing
   readOnly: boolean; // another tab holds the project
   onEdit: () => void; // the document changed (not just the selection)
   onDocument: () => void; // the document is laid out, or changed in any way (the word count follows it)
   handleRef: React.MutableRefObject<DocHandle | null>;
+  spelling?: Spelling | null; // the paper's spelling settings
+  onAddWord?: (word: string) => void; // "Add to dictionary"
+  onSpellCount?: (marks: number | "failed" | null) => void; // how many spelling and grammar marks are showing (null: none checked)
 }) {
   const ref = useRef<DocxEditorRef>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -61,6 +69,7 @@ export default function DocEditor({
     ref.current?.ensureEditorView();
     return ref.current?.getEditorRef()?.getView() ?? null;
   };
+  const spellingMarks = useDocSpelling(() => ref.current?.getEditorRef()?.getView() ?? null, { spelling, readOnly, onAddWord, onSpellCount });
   // What's stored: Folio's own record of edits doesn't survive its saves (docSaveState.ts).
   const stored = useRef(docSaveState<unknown>()).current;
   const doc = () => ref.current?.getEditorRef()?.getView()?.state.doc;
@@ -158,6 +167,7 @@ export default function DocEditor({
       if (view() || ++tries > 100) {
         clearInterval(ready);
         onDocument();
+        spellingMarks.onDocumentChange(); // the first check
       }
     }, 100);
     return () => {
@@ -180,11 +190,13 @@ export default function DocEditor({
         // Only real edits count: Folio also reports changes that need no save.
         onChange={() => {
           onDocument();
+          spellingMarks.onDocumentChange();
           if (changed()) {
             stored.edited();
             onEdit();
           }
         }}
+        onSelectionTextChange={spellingMarks.onCaret}
         onInsertImage={() => picker.current?.click()}
         onInsertTable={(rows, columns) => {
           const v = view();
@@ -196,6 +208,7 @@ export default function DocEditor({
         }}
         className="h-full"
       />
+      {spellingMarks.element}
       <input
         ref={picker}
         type="file"

@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 // and bump the version (accounts/notice.ts) and the date below.
 // users.notice_version records which version each account agreed to; new
 // accounts get NOTICE_VERSION (access/access.ts admitUser).
-const VERSION = `Version ${NOTICE_VERSION}, last updated 2 October 2026`;
+const VERSION = `Version ${NOTICE_VERSION}, last updated 3 October 2026`;
 
 const TOC: TocItem[] = [
   { id: "summary", label: "In short" },
@@ -141,6 +141,7 @@ export default function PrivacyPage() {
                 { name: "The matching model", what: "The embedding model's weights, from Hugging Face." },
                 { name: "Runtimes", what: "The ONNX runtime (for the model) and Pyodide with its Python packages (for figures), from the jsDelivr CDN." },
                 { name: "The TeX engine", what: "TeX Live and its packages for the writing workspace, from our file storage (Cloudflare R2)." },
+                { name: "The spelling checker", what: "Its English dictionaries and grammar rules for the writing workspace, from our site." },
               ]}
             />
             <p>
@@ -153,7 +154,8 @@ export default function PrivacyPage() {
             <p>
               <strong>Your drafts live in your browser.</strong> Writing projects, LaTeX and Word documents alike, are kept in your browser&apos;s own storage on your device, never on
               a server. Clearing this site&apos;s data in your browser deletes them, so use &ldquo;Download backup&rdquo; to keep a copy or move to
-              another computer.
+              another computer. Spelling and grammar are checked in your browser too, and the words you add to a paper&apos;s dictionary are kept with
+              that paper.
             </p>
           </Section>
 
@@ -356,7 +358,7 @@ export default function PrivacyPage() {
             />
             <p>
               The site also keeps a few things in your browser&apos;s own storage, on your device, which it never sends anywhere: your writing projects
-              and their settings (layout, open files, whether to compile automatically), cached copies of the downloads listed above so they
+              and their settings (layout, open files, whether to compile automatically, the spelling checker&apos;s English and dictionary), cached copies of the downloads listed above so they
               aren&apos;t fetched again, whether you&apos;ve seen the introduction, and, for this browser session, that you&apos;ve read the Ask Claude
               notice. When you buy coins, Paddle&apos;s checkout runs its own script, and where it&apos;s switched on so does Cloudflare&apos;s
               Turnstile check; each follows its own cookie and privacy terms. You can clear everything this site keeps in your browser with

@@ -783,6 +783,11 @@ export default function GuidePage() {
                 <strong>Saved</strong>: every edit is saved in this browser within a second
               </>,
               <>
+                <strong>Spelling</strong>: misspellings and grammar are underlined in your text, checked in this browser; hover one for its fixes,
+                Add to dictionary or Ignore (F8 goes to the next). The words you add are listed here to take out again; choose the paper&apos;s
+                English here, or turn it off
+              </>,
+              <>
                 <strong>Engine</strong>: pdfLaTeX or XeLaTeX (for Unicode fonts)
               </>,
               <>
@@ -845,6 +850,10 @@ export default function GuidePage() {
               </>,
               <>
                 <strong>Saved</strong>: every edit is saved in this browser two seconds after you stop typing, and before any window opens.
+              </>,
+              <>
+                <strong>Spelling</strong>: underlined in your text, checked in this browser. Click into a marked word for its fixes (Alt+Enter
+                reaches them from the keyboard); the paper&apos;s English is chosen here.
               </>,
             ]}
             caption="Tracked changes and comments already in the document are shown and kept; there is no suggesting mode here."

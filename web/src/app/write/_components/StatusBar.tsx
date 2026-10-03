@@ -1,13 +1,16 @@
 "use client";
 
 import type { ProjectMeta } from "@/lib/write/projectStore";
+import { DIALECTS, type Spelling } from "@/lib/writing/spelling";
 
 // The line under the editor: the compile's status (the only content of the
 // element the smoke reads), what the last compile found, how long the paper
 // is (against the target journal's limit, when a pilot journal states
 // one), whether the last edit is saved, a tool still working; on the right
-// the engine and the auto-compile switch (LaTeX only), and whether anything
-// from this paper has left the device.
+// the spelling check (how many marks, the paper's own words, its English or
+// off), the engine
+// and the auto-compile switch (LaTeX only), and whether anything from this
+// paper has left the device.
 export default function StatusBar({
   status,
   errors = 0,
@@ -22,6 +25,7 @@ export default function StatusBar({
   onEngine,
   auto,
   onAuto,
+  spelling,
   onShortcuts,
 }: {
   status: string | null;
@@ -37,6 +41,7 @@ export default function StatusBar({
   onEngine?: (engine: ProjectMeta["engine"]) => void;
   auto?: boolean;
   onAuto?: (on: boolean) => void;
+  spelling?: Spelling & { marks: number | "failed" | null; onDialect: (dialect: Spelling["dialect"]) => void; onRemoveWord: (word: string) => void };
   onShortcuts: () => void;
 }) {
   return (
@@ -76,6 +81,48 @@ export default function StatusBar({
         </button>
       )}
       <span className="ml-auto flex items-center gap-3">
+        {spelling && (
+          <span className="flex items-center gap-2">
+            {spelling.dialect !== "off" && spelling.marks !== null && (
+              <span data-testid="spelling-count" title={spelling.marks === "failed" ? "The spelling checker didn't load. It tries again after your next edit." : undefined}>
+                {spelling.marks === "failed" ? "Spelling unavailable" : spelling.marks === 0 ? "Nothing to check" : `${spelling.marks} to check`}
+              </span>
+            )}
+            {spelling.words.length > 0 && (
+              <details className="relative">
+                <summary className="cursor-pointer list-none hover:text-ink" title="Words this paper uses that the dictionary didn't know">
+                  {spelling.words.length} added word{spelling.words.length === 1 ? "" : "s"}
+                </summary>
+                <div className="clay absolute right-0 bottom-full z-30 mb-2 max-h-64 w-56 overflow-y-auto rounded-xl p-2">
+                  <ul aria-label="Added words">
+                    {spelling.words.map((w) => (
+                      <li key={w} className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-ink hover:bg-ink/5">
+                        <span className="truncate">{w}</span>
+                        <button type="button" onClick={() => spelling.onRemoveWord(w)} aria-label={`Remove ${w}`} title="Take it out of this paper's dictionary" className="text-ink-soft hover:text-ink">
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </details>
+            )}
+            <select
+              aria-label="Spelling"
+              title="Spelling and grammar, checked on this device"
+              value={spelling.dialect}
+              onChange={(e) => spelling.onDialect(e.target.value as Spelling["dialect"])}
+              className="clay-field h-6 text-xs"
+            >
+              {DIALECTS.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+              <option value="off">Spelling off</option>
+            </select>
+          </span>
+        )}
         {engine && onEngine && (
         <select aria-label="TeX engine" title="TeX engine" value={engine} onChange={(e) => onEngine(e.target.value as ProjectMeta["engine"])} className="clay-field h-6 text-xs">
           <option value="pdftex">pdfLaTeX</option>
