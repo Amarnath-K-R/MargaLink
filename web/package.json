@@ -26,6 +26,7 @@
     "@stll/folio-react": "0.24.1",
     "codemirror": "^6.0.2",
     "fflate": "^0.8.3",
+    "harper.js": "2.10.0",
     "lucide-react": "^1.47.0",
     "mammoth": "^1.12.3",
     "n8ao": "^2.0.1",
