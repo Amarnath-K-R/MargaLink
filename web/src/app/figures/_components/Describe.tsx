@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import ErrorText from "@/components/ErrorText";
-import FigureConsent from "@/components/FigureConsent";
-import SignInPanel from "@/components/SignInPanel";
-import { refreshAccount, setBalance, useAccount } from "@/components/useAccount";
-import { FIGURE_PRICE, NotEnoughCoinsError, SignInRequiredError, WELCOME_COINS } from "@/lib/coins";
-import { askClaude, figureConsentGiven, recordFigureConsent, type ClaudeResult } from "@/lib/figure";
-import { REQUEST_MAX_CHARS, buildFigurePayload, levelsToSend, type FigureMode } from "@/lib/figureSchema";
-import type { FigureSpec } from "@/lib/figureSpec";
-import type { Dataset } from "@/lib/spreadsheet";
+import { useEffect, useRef, useState } from "react";
+import ErrorText from "@/components/ui/ErrorText";
+import FigureConsent from "@/components/figures/FigureConsent";
+import SignInPanel from "@/components/account/SignInPanel";
+import { refreshAccount, setBalance, useAccount } from "@/components/account/useAccount";
+import { FIGURE_PRICE, NotEnoughCoinsError, SignInRequiredError, WELCOME_COINS } from "@/lib/accounts/coins";
+import { askClaude, figureConsentGiven, recordFigureConsent, type ClaudeResult } from "@/lib/figures/figure";
+import { REQUEST_MAX_CHARS, buildFigurePayload, levelsToSend, type FigureMode } from "@/lib/figures/figureSchema";
+import type { FigureSpec } from "@/lib/figures/figureSpec";
+import type { Dataset } from "@/lib/figures/spreadsheet";
 
 // "Describe it" → Claude returns a figure description (or a code tweak),
 // drawn locally like everything else. The exact request is shown before
@@ -36,13 +36,23 @@ export default function Describe({
   const labels = levelsToSend(dataset);
   const payload = buildFigurePayload(dataset, spec, request, { sendLevels, mode: "spec" });
 
+  // Remounted for a new file (FigureStudio keys it): an answer for the old one is dropped, not applied.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
   async function run(mode: FigureMode) {
     setBusy(mode);
     setError(null);
     setSummary(null);
     try {
       const r = await askClaude(dataset, spec, request, { sendLevels, mode });
-      if (r.balance !== null) setBalance(r.balance);
+      if (r.balance !== null) setBalance(r.balance); // the coin was spent either way
+      if (!alive.current) return;
       setSummary(r.summary || null);
       onResult(r);
     } catch (err) {

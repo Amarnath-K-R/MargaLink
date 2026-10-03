@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { extractFromFile } from "@/lib/extract";
-import { checkFormat, type FormatCheckResult } from "@/lib/formatCheck";
-import type { JournalRules } from "@/lib/journalRules";
-import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
+import { extractFromFile } from "@/lib/paper/extract";
+import { checkFormat, type FormatCheckResult } from "@/lib/checks/formatCheck";
+import type { JournalRules } from "@/lib/journals/journalRules";
+import { checkRules, type RulesCheckResult } from "@/lib/checks/rulesCheck";
 import { errorMessage } from "@/lib/errorMessage";
 
 // The instant, on-device checks over the compiled paper: the general

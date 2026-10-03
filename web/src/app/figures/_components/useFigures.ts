@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { prepareDataset, readWorkbook, suggestPrepOptions, type Dataset, type PrepOptions, type Workbook } from "@/lib/spreadsheet";
-import { cancelPreviews, exportFigure, renderFigure, warmUp, FigureRenderError, type ImageFormat, type RenderRequest } from "@/lib/figureRunner";
-import { LIMITS, checkSpecAgainstColumns, validateFigureSpec, type FigureSpec, type Panel } from "@/lib/figureSpec";
-import { bindTemplate, loadTemplates, type Template } from "@/lib/figureTemplates";
+import { prepareDataset, readWorkbook, suggestPrepOptions, type Dataset, type PrepOptions, type Workbook } from "@/lib/figures/spreadsheet";
+import { cancelPreviews, exportFigure, renderFigure, warmUp, FigureRenderError, type ImageFormat, type RenderRequest } from "@/lib/figures/figureRunner";
+import { LIMITS, checkSpecAgainstColumns, validateFigureSpec, type FigureSpec, type Panel } from "@/lib/figures/figureSpec";
+import { bindTemplate, loadFigureTemplates, type Template } from "@/lib/figures/figureTemplates";
 import { errorMessage } from "@/lib/errorMessage";
-import type { ClaudeResult } from "@/lib/figure";
+import type { ClaudeResult } from "@/lib/figures/figure";
 import type { PreviewState } from "./FigurePreview";
 import type { Recipe } from "./RecipeImportExport";
 
@@ -31,6 +31,7 @@ function prepare(workbook: Workbook | null, options: PrepOptions | null): { data
 // request carries your data. Pyodide loads only once a spreadsheet is attached.
 export function useFigures() {
   const [workbook, setWorkbook] = useState<Workbook | null>(null);
+  const [uploadId, setUploadId] = useState(0); // a new file: anything still in flight for the old one is dropped
   const [prep, setPrep] = useState<PrepOptions | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -48,7 +49,7 @@ export function useFigures() {
   const [hookApproved, setHookApproved] = useState(false);
 
   useEffect(() => {
-    loadTemplates().then(setTemplates, (err) => setUploadError(errorMessage(err)));
+    loadFigureTemplates().then(setTemplates, (err) => setUploadError(errorMessage(err)));
   }, []);
 
   const { dataset, error: prepError } = useMemo(() => prepare(workbook, prep), [workbook, prep]);
@@ -86,7 +87,14 @@ export function useFigures() {
           if (result) setPreview({ png: result.images.png ?? null, meta: result.meta, error: null, stage: null, busy: false, hookWarning: result.hookWarning });
         },
         (err: unknown) => {
-          const error = err instanceof FigureRenderError ? { message: err.message, traceback: err.traceback } : { message: errorMessage(err), traceback: "" };
+          // A tweak that runs forever would time out on every change (each one restarting the engine): turn it off and say so.
+          const tweakHung = err instanceof FigureRenderError && err.code === "timeout" && !!req.hook;
+          if (tweakHung) setHookApproved(false);
+          const error = tweakHung
+            ? { message: "The custom tweak ran too long and was stopped, so it's turned off and the figure is drawn without it. Edit the tweak, then run it again.", traceback: "" }
+            : err instanceof FigureRenderError
+              ? { message: err.message, traceback: err.traceback }
+              : { message: errorMessage(err), traceback: "" };
           setPreview((p) => ({ ...p, error, stage: null, busy: false }));
         },
       );
@@ -105,6 +113,7 @@ export function useFigures() {
     try {
       const wb = await readWorkbook(file);
       setWorkbook(wb);
+      setUploadId((n) => n + 1);
       setPrep(suggestPrepOptions(wb));
       // Start loading Pyodide now, so it's usually ready by the first pick.
       void warmUp({ fonts: true }).catch(() => {});
@@ -177,6 +186,7 @@ export function useFigures() {
 
   return {
     workbook,
+    uploadId,
     prep,
     setPrep,
     uploadError,

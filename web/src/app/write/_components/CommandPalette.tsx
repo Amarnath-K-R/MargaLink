@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Dialog from "@/components/Dialog";
+import Dialog from "@/components/ui/Dialog";
 
 export type Command = { id: string; label: string; hint?: string; run: () => void; disabled?: boolean };
 

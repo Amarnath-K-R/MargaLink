@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import ErrorText from "@/components/ErrorText";
-import type { ImageFormat } from "@/lib/figureRunner";
+import ErrorText from "@/components/ui/ErrorText";
+import type { ImageFormat } from "@/lib/figures/figureRunner";
 
 const FORMATS: { value: ImageFormat; label: string; mime: string }[] = [
   { value: "png", label: "PNG", mime: "image/png" },

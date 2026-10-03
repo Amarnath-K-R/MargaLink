@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { NO_EDITS } from "@/lib/reviewSections";
-import { WELCOME_COINS } from "@/lib/coins";
-import { Coin } from "@/components/AccountButton";
-import SignInPanel from "@/components/SignInPanel";
-import { useAccount } from "@/components/useAccount";
-import type { Citation, SectionKind } from "@/lib/reviewTypes";
-import ErrorText from "@/components/ErrorText";
-import ReviewConsent from "@/components/ReviewConsent";
-import ReviewResultPanel from "@/components/ReviewResultPanel";
+import { NO_EDITS } from "@/lib/review/reviewSections";
+import { WELCOME_COINS } from "@/lib/accounts/coins";
+import { Coin } from "@/components/account/AccountButton";
+import SignInPanel from "@/components/account/SignInPanel";
+import { useAccount } from "@/components/account/useAccount";
+import type { Citation, SectionKind } from "@/lib/review/reviewTypes";
+import ErrorText from "@/components/ui/ErrorText";
+import ReviewConsent from "@/components/review/ReviewConsent";
+import ReviewResultPanel from "@/app/review/_components/ReviewResultPanel";
 import TierPicker from "./TierPicker.tsx";
 import OutlineEditor from "./OutlineEditor.tsx";
 import type { ReviewApi } from "./useReview.ts";
@@ -25,19 +25,20 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
   if (!r.selectedRules) return null;
   return (
     <>
-      <TierPicker tier={r.tier} onSelect={r.selectTier} />
-
-      {r.outline && (
-        <OutlineEditor
-          rows={r.outlineRows}
-          unmatchedHeadings={r.outline.unmatchedHeadings}
-          edited={r.edits !== NO_EDITS}
-          onKind={(charStart, kind: SectionKind | "excluded") => r.editOutline((e) => ({ ...e, kinds: { ...e.kinds, [charStart]: kind } }))}
-          onMerge={(charStart) => r.editOutline((e) => ({ ...e, merged: [...e.merged, charStart] }))}
-          onAddHeading={(h) => r.editOutline((e) => ({ ...e, addedHeadings: [...e.addedHeadings, h] }))}
-          onReset={() => r.editOutline(() => NO_EDITS)}
-        />
-      )}
+      <fieldset disabled={r.reviewLoading} className="m-0 min-w-0 border-0 p-0">
+        <TierPicker tier={r.tier} onSelect={r.selectTier} />
+        {r.outline && (
+          <OutlineEditor
+            rows={r.outlineRows}
+            unmatchedHeadings={r.outline.unmatchedHeadings}
+            edited={r.edits !== NO_EDITS}
+            onKind={(charStart, kind: SectionKind | "excluded") => r.editOutline((e) => ({ ...e, kinds: { ...e.kinds, [charStart]: kind } }))}
+            onMerge={(charStart) => r.editOutline((e) => ({ ...e, merged: [...e.merged, charStart] }))}
+            onAddHeading={(h) => r.editOutline((e) => ({ ...e, addedHeadings: [...e.addedHeadings, h] }))}
+            onReset={() => r.editOutline(() => NO_EDITS)}
+          />
+        )}
+      </fieldset>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         {account.status === "out" ? (
@@ -48,7 +49,7 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
           <button
             type="button"
             onClick={() => r.setConsentOpen(true)}
-            disabled={r.reviewLoading || account.status === "unknown"}
+            disabled={r.reviewLoading || account.status === "unknown" || r.runProblem !== null}
             className="clay-btn clay-primary h-11 px-6 text-sm font-medium"
           >
             {r.reviewLoading ? (
@@ -72,10 +73,11 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
         )}
         {r.canRetry && r.resumeState && (
           <button type="button" onClick={() => void r.startReview(r.resumeState ?? undefined)} className="clay-btn h-11 px-5 text-sm text-accent">
-            {r.unfinished ? "Resume review" : "Retry failed sections"}
+            {r.unfinished ? "Resume review" : (r.reviewResult?.coverage.failed.length ?? 0) > 0 ? "Retry failed sections" : "Retry the cross-check"}
           </button>
         )}
       </div>
+      {r.runProblem && !r.reviewLoading && <p className="mt-3 max-w-xl text-sm text-ink-soft">{r.runProblem}</p>}
       {account.status === "out" && signingIn && (
         <div className="sheet mt-4 max-w-md p-5 sm:p-6">
           <SignInPanel

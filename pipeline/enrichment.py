@@ -98,6 +98,17 @@ def top_field(topics: list[dict]) -> str | None:
     return topics[0].get("field", {}).get("display_name")
 
 
+def apc_usd(source: dict | None, doaj: dict | None) -> float | None:
+    """The fee in USD (OpenAlex's figure), or 0 when DOAJ says the journal
+    charges none: DOAJ always gives a price for a fee, so a DOAJ record without
+    one is a no-fee journal, not an unknown (older records lack has_apc)."""
+    if source and source.get("apc_usd") is not None:
+        return source["apc_usd"]
+    if doaj and doaj.get("apc_amount") is None and doaj.get("has_apc") is not True:
+        return 0
+    return None
+
+
 def build_meta_entry(
     journal_id: str,
     display_name: str,
@@ -118,7 +129,7 @@ def build_meta_entry(
         # *filter* (a threshold comparison needs one consistent currency).
         # DOAJ's own (possibly non-USD) figure is a separate display-only
         # field below — don't mix them into one number.
-        "apc_usd": s.get("apc_usd") if s else None,
+        "apc_usd": apc_usd(s, d),
         "country_code": s.get("country_code") if s else None,
         "medline_indexed": n.get("medline_indexed") if n else None,
         "publication_time_weeks": d.get("publication_time_weeks") if d else None,
@@ -236,6 +247,13 @@ def _self_check() -> None:
     assert entry["doaj_apc_currency"] == "EUR"
     assert entry["medline_indexed"] is True
     assert entry["publication_time_weeks"] == 12
+
+    # DOAJ says there's no fee: free (0), not unknown, so "Free only" keeps it; an explicit has_apc wins
+    nofee = build_meta_entry("j2", "Two", {"j2": {"topics": [], "apc_usd": None}}, {"j2": {"apc_amount": None}}, {})
+    assert nofee["apc_usd"] == 0, nofee["apc_usd"]
+    feeunknown = build_meta_entry("j3", "Three", {"j3": {"topics": [], "apc_usd": None}}, {"j3": {"has_apc": True, "apc_amount": None}}, {})
+    assert feeunknown["apc_usd"] is None
+    assert build_meta_entry("j4", "Four", {"j4": {"topics": [], "apc_usd": None}}, {}, {})["apc_usd"] is None, "not in DOAJ: unknown"
 
     missing = build_meta_entry("unknown", "Unknown Journal", sources, doaj, nlm)
     assert missing["field"] is None

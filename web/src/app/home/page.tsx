@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowRight, House } from "lucide-react";
-import PageHeader from "@/components/PageHeader";
-import SiteFooter from "@/components/SiteFooter";
+import PageHeader from "@/components/layout/PageHeader";
+import SiteFooter from "@/components/layout/SiteFooter";
 import { GuideArt, WriteArt } from "@/components/docs/Art";
-import NewsRail from "./NewsRail.tsx";
-import AccountStrip from "./AccountStrip.tsx";
+import NewsRail from "./_components/NewsRail.tsx";
+import AccountStrip from "./_components/AccountStrip.tsx";
 import { UPDATES } from "./updates.ts";
 
 export const metadata: Metadata = {
@@ -41,7 +41,7 @@ export default function HomeDashboard() {
             href="/write"
             art={<WriteArt bare />}
             title="Write your paper"
-            text="Your journal's LaTeX template, compiled in your browser, with matching, review, figures and checks a window away."
+            text="Your journal's LaTeX template or your Word document, in your browser, with matching, review, figures and checks a window away."
             cta="Open the workspace"
             primary
           />

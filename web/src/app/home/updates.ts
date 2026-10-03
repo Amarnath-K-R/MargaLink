@@ -2,6 +2,8 @@
 // something, add an entry at the top: the date (YYYY-MM-DD), which part of
 // MargaLink it's about, a title, a sentence or two, optional highlights, and
 // where to try it. Entries on the same date are grouped under it.
+import { CONTACT_EMAIL } from "@/lib/site";
+
 export type UpdateTag = "Write" | "Match" | "Review" | "Figures" | "Journals" | "Guide" | "Design" | "Accounts";
 
 export type Update = {
@@ -27,6 +29,28 @@ export const TAG_TINT: Record<UpdateTag, string> = {
 };
 
 export const UPDATES: Update[] = [
+  {
+    date: "2026-10-02",
+    tag: "Write",
+    title: "Word documents in the workspace",
+    summary: "Import a .docx, your paper or a journal's Word template, and edit it in the browser with the same tools around it. What you download is a Word document, the template's styles intact.",
+    points: [
+      "Formatting, pictures and tables in a Word editor, saved in this browser as you type",
+      "Match, Checks and the AI review read the document; Jump to source selects the passage",
+      "Figures from the studio go in at the cursor, at the size they were drawn",
+    ],
+    href: "/write",
+    cta: "Open the workspace",
+  },
+  {
+    date: "2026-10-02",
+    tag: "Accounts",
+    title: "The closed beta",
+    summary: "MargaLink is open to invited testers for now, to hear what works before it opens to everyone. Testers sign in with Google and start with 50 M coins.",
+    points: ["Every tool needs an invited account until the beta ends", "50 M coins to try the AI review and Ask Claude", `Tell us what to fix: ${CONTACT_EMAIL}`],
+    href: "/account",
+    cta: "Your account",
+  },
   {
     date: "2026-09-28",
     tag: "Accounts",

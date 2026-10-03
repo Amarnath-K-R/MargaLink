@@ -324,6 +324,10 @@ broken = fl.run_request(bar_spec, df, ["svg"], 72, "def customize(fig, axes, df)
 assert "KeyError" in broken["hookWarning"] and "nope" not in broken["hookWarning"]
 assert "HALF" not in base64.b64decode(broken["images"]["svg"]).decode(), "a failed hook's partial edits are discarded"
 assert "customize" in fl.run_request(bar_spec, df, ["png"], 72, "x = 1")["hookWarning"]
+# a tweak that changes df changes its own copy: the worker's cached frame (every later render) stays as loaded
+before = df.copy()
+fl.run_request(bar_spec, df, ["png"], 72, "def customize(fig, axes, df):\n    df['change'] = df['change'] * 100\n    df.sort_values('arm', inplace=True)\n")
+assert df.equals(before), "a hook can't change the data later renders draw"
 err = fl.run_request(spec([panel("bar", x="nope", y="change")]), df, ["png"], 72)["error"]
 assert err["code"] == "missing_column" and err["detail"] == {"role": "x", "column": "nope"} and err["traceback"], err
 json.dumps(out), json.dumps(err)  # both cross the worker boundary as JSON

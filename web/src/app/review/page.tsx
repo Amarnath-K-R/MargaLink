@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import ErrorText from "@/components/ErrorText";
-import PageHeader from "@/components/PageHeader";
-import PaperDropzone from "@/components/PaperDropzone";
-import Step from "@/components/Step";
+import ErrorText from "@/components/ui/ErrorText";
+import PageHeader from "@/components/layout/PageHeader";
+import PaperDropzone from "@/components/ui/PaperDropzone";
+import Step from "@/components/ui/Step";
 import { Check } from "lucide-react";
-import RulesCheckPanel from "@/components/RulesCheckPanel";
+import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
 import JournalPicker from "./_components/JournalPicker.tsx";
 import ReviewRunner from "./_components/ReviewRunner.tsx";
 import { useReview } from "./_components/useReview.ts";
@@ -49,7 +49,9 @@ export default function ReviewPage() {
 
         {r.paperText && (
           <Step n={2} tint={TINT} title="Choose a journal">
-            <JournalPicker selectedJournalId={r.selectedJournalId} onSelect={r.selectJournal} />
+            <fieldset disabled={r.reviewLoading} className="m-0 min-w-0 border-0 p-0">
+              <JournalPicker selectedJournalId={r.selectedJournalId} onSelect={r.selectJournal} />
+            </fieldset>
             {r.selectedRules && r.rulesResult && (
               <div className="mt-8">
                 <h3 className="font-serif text-lg font-medium">Structural check</h3>

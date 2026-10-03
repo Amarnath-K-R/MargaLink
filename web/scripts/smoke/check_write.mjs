@@ -1,0 +1,449 @@
+// Dev-only: verify /write end to end against a running dev server.
+//   New project from the IEEEtran template → compile → a PDF in the preview;
+//   an undefined command gets a gutter marker and a diagnostics entry; removing
+//   it compiles clean; the backup zip imports as a new project with the same
+//   files; the storage banner is shown; no request carries a body.
+//
+// First run downloads the TeX engine (~140 MB, plus ~110 MB of packs for
+// IEEEtran) from our R2 bucket into this profile's HTTP cache — later runs
+// reuse it. That's why this uses a persistent context.
+import { chromium } from "playwright";
+import { mkdirSync } from "node:fs";
+import { mockAccount } from "./mock_account.mjs";
+
+const SCRATCH = process.env.SMOKE_OUT ?? new URL("../../.smoke/", import.meta.url).pathname;
+mkdirSync(SCRATCH, { recursive: true });
+
+const context = await chromium.launchPersistentContext(`${SCRATCH}/write-profile`, { viewport: { width: 1400, height: 900 } });
+const page = context.pages()[0] ?? (await context.newPage());
+const account = await mockAccount(context); // the Review window's review is paid for
+const consoleErrors = [];
+page.on("pageerror", (err) => {
+  consoleErrors.push(`pageerror: ${err.message}`);
+  if (process.env.STACKS) console.log("  pageerror here:", err.message.slice(0, 60));
+});
+const bodyRequests = [];
+page.on("request", (r) => {
+  if (r.postData()) bodyRequests.push(`${r.method()} ${r.url()}`);
+});
+page.on("dialog", (d) => void d.accept()); // a project's delete still confirms in the browser
+
+// The Review window's passes go to a mocked /api/review (the shape check_review.mjs
+// uses): every extract quotes its chunk's first sentence (skipping the all-caps
+// running head IEEEtran prints, which no source line spells the same way), the
+// cross-check cites the first two. Never a real Anthropic call.
+const firstSentence = (t) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12 && l !== l.toUpperCase()) ?? t.trim()).split(". ")[0];
+await page.route("**/api/review", async (route) => {
+  const req = route.request().postDataJSON();
+  if (req.pass === "extract") {
+    const q = firstSentence(req.chunk.text);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        claims: [{ quote: q, measure: `count in ${req.chunk.id}`, values: [{ value: 1, unit: null }] }],
+        statisticalReporting: [{ description: `Result reported without a confidence interval in ${req.chunk.title}`, severity: "minor", quote: q }],
+        notes: [],
+      }),
+    });
+  }
+  const ids = req.ledger.slice(0, 2).map((e) => e.id);
+  return route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      journalFit: { assessment: "possible", explanation: "Scope overlaps the journal's remit." },
+      inconsistencies: ids.length === 2 ? [{ description: "The sample size is stated differently in two places.", claimIds: ids }] : [],
+      summary: [{ text: "Reconcile the sample size across sections.", severity: "major", refs: ids }],
+      otherObservations: ["Consider adding a limitations paragraph."],
+    }),
+  });
+});
+
+let failed = false;
+function check(label, ok) {
+  console.log(`${ok ? "ok  " : "FAIL"} ${label}`);
+  if (!ok) failed = true;
+}
+
+const COMPILE_TIMEOUT = Number(process.env.COMPILE_TIMEOUT ?? 300_000); // a cold cache downloads ~250 MB
+const pdfBytes = () =>
+  page.locator('[data-testid="pdf-frame"]').evaluate(async (f) => (f.src.startsWith("blob:") ? (await (await fetch(f.src)).arrayBuffer()).byteLength : 0));
+const compiled = () =>
+  page.waitForSelector('[data-testid="compile-status"]:has-text("Compiled.")', { timeout: COMPILE_TIMEOUT }).catch(async (err) => {
+    await page.screenshot({ path: `${SCRATCH}/write-failed.png` });
+    console.log("diagnostics:", (await page.locator('[data-testid="diagnostics"]').textContent())?.slice(0, 600));
+    console.log("editor head:", (await page.locator('[data-testid="latex-editor"] .cm-content').textContent())?.slice(0, 300));
+    throw err;
+  });
+const fileList = async () => (await page.locator('[data-testid="file-tree"] li > button:first-child').allTextContents()).map((s) => s.replace(" ★", "")).sort();
+
+// Start from an empty project list (OPFS survives in the persistent profile) —
+// cleared from a plain same-origin file, so the app isn't reading it meanwhile.
+await page.goto("http://localhost:3000/templates/templates.json");
+await page.evaluate(async () => {
+  const root = await navigator.storage.getDirectory();
+  await root.removeEntry("margalink-write", { recursive: true }).catch(() => {});
+});
+await page.goto("http://localhost:3000/write");
+await page.waitForSelector("text=Write your paper.");
+check("storage banner on the project list", (await page.locator('[data-testid="storage-banner"]').count()) === 1);
+
+// --- new project, first compile ---
+await page.click('[data-template="ieeetran"]');
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+check("editor opens main.tex's source", (await page.locator('[data-testid="latex-editor"] .cm-content').textContent()).includes("bare_jrnl.tex")); // line 2; CodeMirror renders only visible lines
+await page.click("button:has-text('Compile')");
+await compiled();
+const size = await pdfBytes();
+check(`PDF in the preview (${size} bytes > 10 KB)`, size > 10_000);
+
+// --- an error on line 1 ---
+await page.click('[data-testid="latex-editor"] .cm-content');
+await page.keyboard.press("ControlOrMeta+Home");
+await page.keyboard.type("\\undefinedcommand\n");
+await page.keyboard.press("ControlOrMeta+s");
+await page.waitForSelector('[data-testid="diagnostics"] button:has-text("Undefined control sequence")', { timeout: COMPILE_TIMEOUT });
+check("gutter marker on the broken line", (await page.locator('[data-testid="latex-editor"] .cm-lint-marker-error').count()) >= 1);
+check("diagnostics entry names it", (await page.locator('[data-testid="diagnostics"]').textContent()).includes("Undefined control sequence"));
+
+// --- remove it, recompile clean ---
+await page.keyboard.press("ControlOrMeta+Home");
+await page.keyboard.press("Shift+ArrowDown");
+await page.keyboard.press("Backspace");
+await page.keyboard.press("ControlOrMeta+s");
+await page.waitForFunction(() => !document.querySelector('[data-testid="diagnostics"]')?.textContent?.includes("Undefined control sequence"), null, { timeout: COMPILE_TIMEOUT });
+await compiled();
+check("clean again: no error markers", (await page.locator('[data-testid="latex-editor"] .cm-lint-marker-error').count()) === 0);
+check("storage banner in the workspace", (await page.locator('[data-testid="storage-banner"]').count()) === 1);
+
+// --- backup → import as a new project ---
+const originalFiles = await fileList();
+const [download] = await Promise.all([page.waitForEvent("download"), page.click('[data-testid="storage-banner"] button:has-text("Download backup")')]);
+const zipPath = await download.path();
+await page.click("text=← All projects");
+await page.setInputFiles('input[aria-label="Import a .zip, .tex or Word file"]', { name: "backup.zip", mimeType: "application/zip", buffer: (await import("node:fs")).readFileSync(zipPath) });
+await page.waitForSelector('[data-testid="workspace"] h2:has-text("backup")');
+await page.waitForFunction((n) => document.querySelectorAll('[data-testid="file-tree"] li').length === n, originalFiles.length);
+check(`imported copy has the same files (${originalFiles.length})`, JSON.stringify(await fileList()) === JSON.stringify(originalFiles));
+await page.click("text=← All projects");
+check("two projects listed", (await page.locator('[data-testid="project-list"] li').count()) === 2);
+
+// --- the imported copy compiles in a fresh session: a backup carries no pack
+// list, so IEEEtran's missing fonts must trigger the all-packs retry ---
+await page.reload();
+await page.click('[data-testid="project-list"] button:text-is("backup")');
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+await page.click("button:has-text('Compile')");
+await compiled();
+check("imported copy compiles (retried with every pack)", (await pdfBytes()) > 10_000);
+
+// --- a single .tex file imports as a project of its own (as main.tex) and compiles ---
+await page.goto("http://localhost:3000/write");
+const singleTex = "\\documentclass{article}\n\\begin{document}\nA single file.\n\\end{document}\n";
+await page.setInputFiles('input[aria-label="Import a .zip, .tex or Word file"]', { name: "single paper.tex", mimeType: "text/x-tex", buffer: Buffer.from(singleTex) });
+await page.waitForSelector('[data-testid="workspace"] h2:has-text("single paper")');
+await page.waitForFunction(() => document.querySelectorAll('[data-testid="file-tree"] li').length === 1);
+check("a .tex import is one file, main.tex", JSON.stringify(await fileList()) === JSON.stringify(["main.tex"]));
+await page.click("button:has-text('Compile')");
+await compiled();
+check("the imported .tex compiles", (await pdfBytes()) > 1_000);
+
+// --- a template that needs every pack, after a plain paper already started the engine ---
+await page.goto("http://localhost:3000/write"); // a plain reload would reopen the project the URL names
+await page.click('[data-template="article"]');
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+await page.click("button:has-text('Compile')");
+await compiled();
+await page.click("text=← All projects");
+await page.click('[data-testid="project-list"] button:text-is("New IEEE Transactions (IEEEtran) paper")');
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+await page.click("button:has-text('Compile')");
+await compiled();
+check("IEEEtran compiles after a plain article in the same session", (await pdfBytes()) > 10_000);
+
+// --- file operations don't lose or clobber anything ---
+const tree = page.locator('[data-testid="file-tree"]');
+const newFile = async (name) => {
+  await tree.getByRole("button", { name: "New file" }).click();
+  await tree.getByLabel("New file name").fill(name);
+  await tree.getByLabel("New file name").press("Enter");
+};
+await newFile("IEEEtran.bst");
+await page.waitForSelector("text=IEEEtran.bst already exists");
+check("New file refuses an existing name", true);
+
+await newFile("notes.tex");
+await page.waitForSelector('[data-testid="file-tree"] button[title="notes.tex"]');
+await page.click('[data-testid="latex-editor"] .cm-content');
+await page.keyboard.type("unsaved words");
+await tree.getByRole("button", { name: "Delete notes.tex" }).click();
+await tree.getByRole("button", { name: "Confirm delete notes.tex" }).click();
+await page.waitForTimeout(1500); // past the autosave delay
+await page.click("text=← All projects");
+await page.click('[data-testid="project-list"] button:text-is("New IEEE Transactions (IEEEtran) paper")');
+await page.waitForSelector('[data-testid="file-tree"] button[title="main.tex"]');
+check("a deleted file stays deleted", (await page.locator('[data-testid="file-tree"] button[title="notes.tex"]').count()) === 0);
+
+await tree.getByRole("button", { name: "Rename main.tex" }).click();
+await tree.getByLabel("New name for main.tex").fill("paper.tex");
+await tree.getByLabel("New name for main.tex").press("Enter");
+await page.waitForSelector('[data-testid="file-tree"] button[title="paper.tex"]');
+await page.click("button:has-text('Compile')");
+await compiled();
+check("renaming the main file keeps the project compiling", (await pdfBytes()) > 10_000);
+
+// --- an upload over the file that's open shows the new version, and the old text isn't saved back over it ---
+const source = page.locator('[data-testid="latex-editor"] .cm-content');
+await newFile("extra.bib");
+await page.waitForSelector('[data-testid="file-tree"] button[title="extra.bib"]');
+await source.click();
+await page.keyboard.type("@misc{old,}");
+await page.waitForTimeout(1500); // saved
+await page.setInputFiles('input[aria-label="Upload files to this project"]', { name: "extra.bib", mimeType: "text/plain", buffer: Buffer.from("@misc{fresh,}\n") });
+await page.waitForFunction(() => document.querySelector('[data-testid="latex-editor"] .cm-content')?.textContent?.includes("fresh"), null, { timeout: 10000 });
+await page.waitForTimeout(1500); // past another autosave
+check("an upload over the open file shows the new version, and keeps it", !(await source.innerText()).includes("old"));
+
+// --- any .tex file can be made the main one ---
+await tree.getByRole("button", { name: "Make paper.tex the main file" }).waitFor({ state: "detached" }).catch(() => {});
+await newFile("draft.tex");
+await page.waitForSelector('[data-testid="file-tree"] button[title="draft.tex"]');
+await tree.getByRole("button", { name: "Make draft.tex the main file" }).click();
+await page.waitForFunction(() => document.querySelector('[data-testid="file-tree"] button[title="draft.tex"]')?.textContent?.includes("★"));
+check("Set as main moves the star", !(await tree.locator('button[title="paper.tex"]').innerText()).includes("★"));
+await tree.getByRole("button", { name: "Make paper.tex the main file" }).click();
+await page.waitForFunction(() => document.querySelector('[data-testid="file-tree"] button[title="paper.tex"]')?.textContent?.includes("★"));
+await tree.locator('button[title="paper.tex"]').click(); // back to the main file for what follows
+await page.waitForFunction(() => document.querySelector('section[aria-label="Source"] .font-mono')?.textContent === "paper.tex");
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+
+// --- the same project in a second tab opens read-only, so a stale copy can't save over this one ---
+const second = await page.context().newPage();
+await second.goto(page.url());
+await second.waitForSelector("text=open in another tab", { timeout: 15000 });
+const before2 = await second.locator('[data-testid="latex-editor"] .cm-content').innerText();
+await second.click('[data-testid="latex-editor"] .cm-content');
+await second.keyboard.type("stale words");
+check("a second tab on the same project is read-only", (await second.locator('[data-testid="latex-editor"] .cm-content').innerText()) === before2);
+await second.close();
+
+// --- Ctrl+S pressed repeatedly: one compile, and Compile stays disabled while TeX runs ---
+await page.evaluate(() => {
+  window.__enabledWhileRunning = false;
+  const status = document.querySelector('[data-testid="compile-status"]');
+  new MutationObserver(() => {
+    const btn = [...document.querySelectorAll("button")].find((b) => /^(Compile|Compiling…)$/.test(b.textContent.trim()));
+    if (status.textContent.startsWith("Running") && btn && !btn.disabled) window.__enabledWhileRunning = true;
+  }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+});
+await page.click('[data-testid="latex-editor"] .cm-content');
+for (let i = 0; i < 3; i++) await page.keyboard.press("ControlOrMeta+s");
+await page.waitForFunction(() => document.querySelector('[data-testid="compile-status"]')?.textContent !== "Compiled.", null, { timeout: 10_000 }).catch(() => {});
+await compiled();
+await page.waitForTimeout(3000); // any queued second compile would start running here
+check("repeated Ctrl+S never re-enables Compile mid-run", !(await page.evaluate(() => window.__enabledWhileRunning)));
+
+// --- hiding the tab saves at once (no 1 s wait) ---
+await page.click('[data-testid="latex-editor"] .cm-content');
+await page.keyboard.press("ControlOrMeta+Home");
+await page.keyboard.type("% saved on hide\n");
+await page.evaluate(() => {
+  Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+});
+await page.waitForTimeout(300);
+const savedOnHide = await page.evaluate(async () => {
+  const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("margalink-write");
+  for await (const [, dir] of root.entries()) {
+    const meta = JSON.parse(await (await (await dir.getFileHandle("project.json")).getFile()).text());
+    if (meta.main === "paper.tex") return (await (await dir.getFileHandle("paper.tex")).getFile()).text();
+  }
+  return "";
+});
+await page.evaluate(() => Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true }));
+check("hiding the tab saves the latest edit", savedOnHide.startsWith("% saved on hide"));
+
+// --- the formatting bar is there for a .tex file only ---
+await page.setInputFiles('input[aria-label="Upload files to this project"]', { name: "plot.png", mimeType: "image/png", buffer: Buffer.from("not really a png") });
+await page.click('[data-testid="file-tree"] button[title="figures/plot.png"]');
+check("no formatting bar with a binary file open", (await page.locator('[role="toolbar"][aria-label="Formatting"]').count()) === 0);
+
+// --- the hub shell: the project's URL, the command palette, a tool window ---
+check("the URL carries the open project", page.url().includes("?p="));
+const nameBefore = await page.locator('[data-testid="workspace"] h2').textContent();
+await page.reload();
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+check("reloading comes back to the same project", (await page.locator('[data-testid="workspace"] h2').textContent()) === nameBefore);
+await page.click('[data-testid="latex-editor"] .cm-content');
+await page.keyboard.press("ControlOrMeta+k");
+await page.getByRole("dialog", { name: "Commands" }).waitFor();
+check("⌘K opens the command palette with its search focused", (await page.evaluate(() => document.activeElement?.getAttribute("aria-label"))) === "Search commands");
+await page.keyboard.type("checks");
+await page.keyboard.press("Enter");
+await page.getByRole("dialog", { name: "Checks" }).waitFor();
+check("a command opens its window", true);
+await page.waitForSelector('[data-testid="checks"] dl');
+check("Checks reads the compiled PDF on this device", (await page.locator('[data-testid="checks"]').textContent()).includes("Word count"));
+await page.keyboard.press("Escape");
+await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+check(
+  "Escape closes the window and focus returns to the editor",
+  await page.waitForFunction(() => !!document.activeElement?.closest('[data-testid="latex-editor"]'), null, { timeout: 3000 }).then(() => true, () => false),
+);
+
+// --- the Journal window sets the project's target journal (needs the index) ---
+const hasIndex = await page.evaluate(() => fetch("/index/meta.json").then((r) => r.ok, () => false));
+if (hasIndex) {
+  await page.click('button[aria-label="Target journal"]');
+  const journalWindow = page.getByRole("dialog", { name: "Journal" });
+  await journalWindow.getByLabel("Search journals").fill("JAMA Neurology");
+  await journalWindow.getByRole("button", { name: /^JAMA Neurology/ }).click();
+  // the target is written to the project's metadata, then shown on the chip
+  const chipSet = await page
+    .waitForFunction(() => document.querySelector('button[aria-label="Target journal"]')?.textContent?.includes("JAMA Neurology"), null, { timeout: 10_000 })
+    .then(() => true, async () => {
+      await page.screenshot({ path: `${SCRATCH}/write-journal-failed.png` });
+      return false;
+    });
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+  check("the Journal window sets the target journal", chipSet);
+
+  // --- the Match window: the compiled PDF against the index; a result becomes the target; results survive closing ---
+  await page.click('[role="group"][aria-label="Tools"] button:has-text("Match")');
+  const matchWindow = page.getByRole("dialog", { name: "Match" });
+  await matchWindow.getByRole("button", { name: "Find matching journals" }).click();
+  await matchWindow.locator("[data-testid=results] li").first().waitFor({ timeout: 180_000 }); // first run fetches the model into this profile
+  await matchWindow.getByRole("button", { name: "Set as target journal" }).first().click();
+  const targetFromMatch = await page
+    .waitForFunction(() => !document.querySelector('button[aria-label="Target journal"]')?.textContent?.includes("JAMA Neurology"), null, { timeout: 10_000 })
+    .then(() => true, () => false);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+  check("a match result becomes the target journal", targetFromMatch);
+  await page.click('[role="group"][aria-label="Tools"] button:has-text("Match")');
+  check("the Match window keeps its results when reopened", (await page.getByRole("dialog", { name: "Match" }).locator("[data-testid=results] li").count()) > 0);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+} else {
+  console.log("skip the Journal and Match windows (no index built)");
+}
+check(`no request carried a body before the review${bodyRequests.length ? `: ${bodyRequests.join(", ")}` : ""}`, bodyRequests.length === 0);
+
+// --- the Review window: the compiled PDF against a pilot journal, through the consent notice; Jump to source ---
+await page.click('[role="group"][aria-label="Tools"] button:has-text("Review")');
+const reviewWindow = page.getByRole("dialog", { name: "Review" });
+// The window loads the PDF, then either reviews against the target (when it is a pilot journal) or shows the picker.
+await page.waitForFunction(
+  () => {
+    const w = document.querySelector('[data-testid="review-window"]');
+    return !!w && (w.textContent.includes("(your target journal)") || [...w.querySelectorAll("button")].some((b) => b.textContent.startsWith("JAMA")));
+  },
+  null,
+  { timeout: 30_000 },
+);
+// "(your target journal)" is the on-target line; the picker's explanation says "Your target journal, X, isn't…" without the parentheses
+if (!(await reviewWindow.getByText("(your target journal)").count())) await reviewWindow.getByRole("button", { name: /^JAMA/ }).click();
+await reviewWindow.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
+await reviewWindow.locator('[role="alertdialog"]').waitFor();
+check("the consent notice appears inside the window", /in \d+ short requests/.test(await reviewWindow.locator('[role="alertdialog"]').innerText()));
+await reviewWindow.getByLabel(/I agree to send this text to Anthropic/).check();
+await reviewWindow.getByText("Send it and review").click();
+await reviewWindow.locator('[data-testid="review-coverage"]').waitFor({ timeout: 60_000 });
+await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });
+const jumps = reviewWindow.getByRole("button", { name: "Jump to source" });
+check("review citations offer Jump to source", (await jumps.count()) >= 1);
+await jumps.first().click();
+await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 }).catch(() => {});
+check(
+  "Jump to source closes the window and lands in the editor",
+  await page.waitForFunction(() => !document.querySelector("dialog[open]") && !!document.activeElement?.closest(".cm-content"), null, { timeout: 5000 }).then(() => true, () => false),
+);
+check("the Review window's review was paid for once", account.starts.length === 1);
+check("the status bar says something was sent", (await page.locator('[data-testid="workspace"]').textContent()).includes("carried text you agreed to send"));
+check(`the review's requests are the only ones with a body (${bodyRequests.length})`, bodyRequests.length > 0 && bodyRequests.every((u) => u.endsWith("/api/review") || u.endsWith("/api/review/start")));
+
+// --- the Figures window: a figure from a spreadsheet, inserted into the paper (the plain article loads graphicx), reopened from its recipe ---
+await page.click("text=← All projects");
+await page.click('[data-testid="project-list"] button:text-is("New Plain article paper")');
+await page.waitForSelector('[data-testid="latex-editor"] .cm-content');
+await page.click('[data-testid="latex-editor"] .cm-content');
+await page.keyboard.press("ControlOrMeta+End"); // the file ends "\end{document}\n": up one line puts the figure inside the document
+await page.keyboard.press("ArrowUp");
+await page.click('[role="group"][aria-label="Tools"] button:has-text("Figures")');
+const figuresWindow = page.getByRole("dialog", { name: "Figures" });
+const [csvChooser] = await Promise.all([page.waitForEvent("filechooser"), figuresWindow.getByText("Drop a CSV or XLSX").click()]);
+await csvChooser.setFiles(new URL("../fixtures/messy.csv", import.meta.url).pathname);
+await figuresWindow.locator('[data-testid="preview-table"]').waitFor({ timeout: 15_000 });
+await figuresWindow.locator('[data-template="box"]').click();
+await figuresWindow.locator('[data-testid="figure-image"]').waitFor({ timeout: 180_000 }); // first run fetches the figure engine into this profile
+await figuresWindow.getByRole("button", { name: "Insert into paper" }).click();
+await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 90_000 });
+await page.waitForSelector('[data-testid="file-tree"] button[title="figures/figure.pdf"]');
+check("the figure and its recipe are in the project", (await page.locator('[data-testid="file-tree"] button[title="figures/figure.figure.json"]').count()) === 1);
+check("the figure block is in the editor", (await page.locator('[data-testid="latex-editor"] .cm-content').textContent()).includes("figures/figure.pdf"));
+await page.click("button:has-text('Compile')");
+await compiled();
+check("the paper compiles with the inserted figure", (await pdfBytes()) > 10_000);
+// change the studio's figure (a second panel), then reopening the saved recipe must bring back the one-panel figure it stored
+await page.click('[role="group"][aria-label="Tools"] button:has-text("Figures")');
+await page.getByRole("dialog", { name: "Figures" }).getByRole("button", { name: "Add panel" }).click();
+await page.getByRole("dialog", { name: "Figures" }).locator('[data-testid="figure-preview"][data-panels="2"]').waitFor({ timeout: 60_000 });
+await page.keyboard.press("Escape");
+await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+await page.click('[data-testid="file-tree"] button[title="figures/figure.figure.json"]');
+await page.getByRole("button", { name: "Edit in the figure studio" }).click();
+await page.getByRole("dialog", { name: "Figures" }).locator('[data-testid="figure-preview"][data-panels="1"]').waitFor({ timeout: 60_000 });
+check("a saved recipe reopens in the figure studio, replacing the changed figure", true);
+await page.keyboard.press("Escape");
+await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+
+// --- writing aids: the formatting bar, suggestions, the outline, the views ---
+await page.click('[data-testid="file-tree"] button[title="main.tex"]');
+await page.click('[data-testid="latex-editor"] .cm-line:has-text("Start here")');
+await page.keyboard.press("End");
+await page.keyboard.press("Enter");
+await page.keyboard.type("Key finding");
+await page.keyboard.press("Shift+Home");
+await page.getByRole("button", { name: "Bold", exact: true }).click();
+check("Bold wraps the selection", (await page.locator('[data-testid="latex-editor"] .cm-content').textContent()).includes("\\textbf{Key finding}"));
+await page.keyboard.press("End");
+await page.keyboard.type(" \\cite{");
+await page.waitForSelector(".cm-tooltip-autocomplete", { timeout: 5000 }).catch(() => {});
+check("\\cite{ suggests the project's .bib keys", (await page.locator(".cm-tooltip-autocomplete li").allTextContents()).some((t) => t.startsWith("knuth1984")));
+await page.keyboard.press("Escape");
+await page.getByRole("tab", { name: /Outline/ }).click();
+await page.locator('[data-testid="outline"] button', { hasText: "Methods" }).click();
+check(
+  "the outline jumps to a section",
+  await page // the jump runs on the next tick after the click
+    .waitForFunction(() => document.querySelector(".cm-activeLine")?.textContent?.includes("\\section{Methods}"), null, { timeout: 3000 })
+    .then(() => true, () => false),
+);
+await page.getByRole("tab", { name: /Files/ }).click();
+await page.getByRole("button", { name: "PDF only" }).click();
+check("the PDF-only view hides the source", !(await page.locator('[data-testid="latex-editor"]').isVisible()));
+await page.getByRole("button", { name: "Source and PDF" }).click();
+check("the split view brings it back", await page.locator('[data-testid="latex-editor"]').isVisible());
+check(`no page errors${consoleErrors.length ? `: ${consoleErrors.join(" | ")}` : ""}`, consoleErrors.length === 0);
+
+await context.close();
+
+// --- the engine download fails (offline, r2.dev throttling): an error, not a
+// forever "Loading TeX…" — in a fresh browser, so nothing is cached ---
+{
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  await ctx.route(/busytex\.wasm$/, (r) => r.abort());
+  const p = await ctx.newPage();
+  await p.goto("http://localhost:3000/write");
+  await p.click('[data-template="article"]');
+  await p.waitForSelector('[data-testid="latex-editor"] .cm-content');
+  await p.click("button:has-text('Compile')");
+  const reported = await p.waitForSelector("text=The TeX engine couldn't load", { timeout: 60_000 }).then(() => true, () => false);
+  check("a failed engine download is reported, and Compile is usable again", reported && (await p.getByRole("button", { name: "Compile", exact: true }).isEnabled()));
+  await browser.close();
+}
+
+process.exit(failed ? 1 : 0);

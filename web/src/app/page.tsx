@@ -3,17 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { between } from "@/lib/easing";
-import { useScrollProgress } from "./_home/useScrollProgress.ts";
-import SiteHeader from "./_home/SiteHeader.tsx";
-import ToolsOverlay from "./_home/ToolsOverlay.tsx";
-import HeroSection from "./_home/HeroSection.tsx";
-import FinalSection from "./_home/FinalSection.tsx";
-import IntroSequence from "@/components/IntroSequence";
-import ClayDesk from "@/components/ClayDesk";
-import { LANDING_DESK, LANDING_DESK_NARROW } from "@/components/three/clayDesk";
-import { SPREADS, spreadAt } from "@/components/three/bookSpreads";
-import "./_home/home.css";
+import { between } from "@/app/_landing/easing";
+import { useScrollProgress } from "./_landing/useScrollProgress.ts";
+import SiteHeader from "./_landing/SiteHeader.tsx";
+import ToolsOverlay from "./_landing/ToolsOverlay.tsx";
+import HeroSection from "./_landing/HeroSection.tsx";
+import FinalSection from "./_landing/FinalSection.tsx";
+import IntroSequence from "@/app/_landing/IntroSequence";
+import ClayDesk from "@/app/_landing/ClayDesk";
+import { LANDING_DESK, LANDING_DESK_NARROW } from "@/app/_landing/three/clayDesk";
+import { SPREADS, spreadAt } from "@/app/_landing/three/bookSpreads";
+import "./_landing/home.css";
 
 // Short beats in the scroll between the landing and the closing section.
 const GAP_BEATS = [

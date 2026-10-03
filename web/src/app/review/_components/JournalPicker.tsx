@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { JOURNAL_RULES } from "@/lib/journalRules";
+import { JOURNAL_RULES } from "@/lib/journals/journalRules";
 
 // The pilot journals as clay cards. The caller supplies the heading.
 // `showMatchLink` false inside the writing workspace, where leaving for

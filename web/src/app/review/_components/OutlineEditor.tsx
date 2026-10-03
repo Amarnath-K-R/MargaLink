@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { countWords } from "@/lib/formatCheck";
-import type { Section, SectionKind } from "@/lib/reviewTypes";
+import { countWords } from "@/lib/checks/formatCheck";
+import type { Section, SectionKind } from "@/lib/review/reviewTypes";
 
 // The detected outline, editable before consent. Everything here is local —
 // the outline decides what is sent (and what never is), it isn't sent itself.

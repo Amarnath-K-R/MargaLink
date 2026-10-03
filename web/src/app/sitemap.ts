@@ -1,21 +1,25 @@
 import type { MetadataRoute } from "next";
-import { getAllJournals } from "@/lib/journalsServer";
-import { journalHref } from "@/lib/journalUrl";
+import { getPrerenderedJournals } from "@/lib/journals/journalsServer";
+import { journalHref } from "@/lib/journals/journalUrl";
 import { SITE_URL } from "@/lib/site";
+import { pageNeeds } from "@/lib/access/policy";
 
 // Required for static export — the built-in sitemap convention still needs
 // this explicit opt-in under output: "export" (verified via a real build:
 // omitting it fails with "force-static not configured").
 export const dynamic = "force-static";
 
+// Only what a visitor can open: while the beta runs, the gated pages would
+// send a crawler to the sign-in page.
 export default function sitemap(): MetadataRoute.Sitemap {
-  const journalUrls = getAllJournals().map((j) => ({
+  // Only the journals with a page of their own (the rest open inline on /journals).
+  const journalUrls = getPrerenderedJournals().map((j) => ({
     url: `${SITE_URL}${journalHref(j.id)}`,
     changeFrequency: "monthly" as const,
     priority: 0.6,
   }));
 
-  return [
+  const all: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "weekly", priority: 1 },
     { url: `${SITE_URL}/home`, changeFrequency: "weekly", priority: 0.8 },
     { url: `${SITE_URL}/match`, changeFrequency: "weekly", priority: 0.9 },
@@ -33,4 +37,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/team`, changeFrequency: "monthly", priority: 0.3 },
     ...journalUrls,
   ];
+  return all.filter((e) => pageNeeds(new URL(e.url).pathname) === "public");
 }

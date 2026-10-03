@@ -1,0 +1,40 @@
+import type { RulesCheckResult } from "@/lib/checks/rulesCheck";
+import CheckRow from "./CheckRow";
+
+export default function RulesCheckPanel({ result }: { result: RulesCheckResult }) {
+  return (
+    <div className="sheet mt-3 p-5">
+      <p className="text-sm font-medium">
+        {result.journalName}: {result.articleTypeLabel}
+      </p>
+      <dl className="mt-1">
+        <CheckRow
+          label="Main text (approx.)"
+          value={
+            result.wordLimit != null
+              ? `${result.wordCount.toLocaleString()} words / ${result.wordLimit.toLocaleString()} limit`
+              : `${result.wordCount.toLocaleString()} words (no limit stated)`
+          }
+          detected={result.withinWordLimit ?? undefined}
+        />
+        {result.referenceStyleChecked && (
+          <CheckRow
+            label={`Reference style (${result.referenceStyleChecked === "bracket-numbered" ? "numbered [1]" : "author-year"})`}
+            value={result.referenceStyleDetected ? "Detected" : "Not detected"}
+            detected={result.referenceStyleDetected ?? undefined}
+          />
+        )}
+        {result.statementChecks.map((c) => (
+          <CheckRow key={c.key} label={c.label} value={c.found ? "Detected" : "Not detected"} detected={c.found} />
+        ))}
+      </dl>
+      <p className="mt-3 text-xs text-ink-soft">
+        Rule-based, not a guarantee. Always confirm against the{" "}
+        <a href={result.guidelinesUrl} target="_blank" rel="noopener noreferrer nofollow" className="text-accent hover:underline">
+          journal&apos;s own current guidelines
+        </a>{" "}
+        (as published {result.asOf}).
+      </p>
+    </div>
+  );
+}

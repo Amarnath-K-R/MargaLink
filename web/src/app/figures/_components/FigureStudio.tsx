@@ -1,10 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { LIMITS, validateFigureSpec } from "@/lib/figureSpec";
-import PaperDropzone from "@/components/PaperDropzone";
-import ErrorText from "@/components/ErrorText";
-import Step from "@/components/Step";
+import { LIMITS, validateFigureSpec } from "@/lib/figures/figureSpec";
+import PaperDropzone from "@/components/ui/PaperDropzone";
+import ErrorText from "@/components/ui/ErrorText";
+import Step from "@/components/ui/Step";
 import { Check } from "lucide-react";
 import DataPrep from "./DataPrep";
 import Gallery from "./Gallery";
@@ -50,7 +50,7 @@ export default function FigureStudio({ figures: f, exportExtra }: { figures: Fig
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           <div className="min-w-0 space-y-6">
             <Step n={3} tint={TINT} title="Describe it to Claude…">
-              <Describe dataset={f.dataset} spec={f.spec && typeof validateFigureSpec(f.spec) !== "string" ? f.spec : null} onResult={f.onClaude} />
+              <Describe key={f.uploadId} dataset={f.dataset} spec={f.spec && typeof validateFigureSpec(f.spec) !== "string" ? f.spec : null} onResult={f.onClaude} />
             </Step>
             <section className="clay p-6 sm:p-8">
               <h2 className="mb-5 font-serif text-xl font-medium tracking-[-0.01em]">…or start from a template</h2>

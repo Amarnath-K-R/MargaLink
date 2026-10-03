@@ -5,9 +5,9 @@
 // recorded in the same transaction as its effects, so a retry is only
 // acknowledged. Anything we don't act on is acknowledged too, or Paddle
 // would keep retrying it. Never logs a body.
-import { isPaddleEvent, paddleStatements, parsePriceIds, verifyPaddleSignature } from "../../../src/lib/paddle.ts";
-import { hashSecret, text, type AccountEnv } from "../../../src/lib/auth.ts";
-import { grantDuePro } from "../../../src/lib/ledger.ts";
+import { isPaddleEvent, paddleStatements, parsePriceIds, verifyPaddleSignature } from "../../../src/lib/accounts/paddle.ts";
+import { hashSecret, text, type AccountEnv } from "../../../src/lib/accounts/auth.ts";
+import { grantDuePro } from "../../../src/lib/accounts/ledger.ts";
 
 type Env = AccountEnv & { PADDLE_WEBHOOK_SECRET?: string; PADDLE_PRICE_IDS?: string };
 

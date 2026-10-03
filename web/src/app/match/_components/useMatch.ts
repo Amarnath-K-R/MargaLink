@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { extractFromFile } from "@/lib/extract";
-import { embed } from "@/lib/embed";
-import { loadManifest, type IndexManifest } from "@/lib/manifest";
-import { matchJournals, getAvailableFields, estimatePaperTopics, loadNameIndex, type MatchResult, type MatchInput, type JournalFilters } from "@/lib/match";
-import { buildQuery, queryFromPasted, type PaperQuery } from "@/lib/matchQuery";
-import { countCitedJournals } from "@/lib/references";
-import { loadTopicNames } from "@/lib/topics";
-import type { TopicEstimate } from "@/lib/rank";
-import { checkFormat, type FormatCheckResult } from "@/lib/formatCheck";
-import { findJournalRules } from "@/lib/journalRules";
-import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
+import { extractFromFile } from "@/lib/paper/extract";
+import { embed } from "@/lib/match/embed";
+import { loadManifest, type IndexManifest } from "@/lib/match/manifest";
+import { matchJournals, getAvailableFields, estimatePaperTopics, loadNameIndex, type MatchResult, type MatchInput, type JournalFilters } from "@/lib/match/match";
+import { buildQuery, queryFromPasted, type PaperQuery } from "@/lib/match/matchQuery";
+import { countCitedJournals } from "@/lib/paper/references";
+import { loadTopicNames } from "@/lib/match/topics";
+import type { TopicEstimate } from "@/lib/match/rank";
+import { checkFormat, type FormatCheckResult } from "@/lib/checks/formatCheck";
+import { findJournalRules } from "@/lib/journals/journalRules";
+import { checkRules, type RulesCheckResult } from "@/lib/checks/rulesCheck";
 import { errorMessage } from "@/lib/errorMessage";
 
 export type MatchStage = "idle" | "reading" | "embedding" | "matching" | "done" | "error";
@@ -32,7 +32,13 @@ export function useMatch() {
   const [refs, setRefs] = useState<MatchRefs | null>(null);
   const [paperTopics, setPaperTopics] = useState<TopicEstimate[]>([]);
   const [availableFields, setAvailableFields] = useState<string[]>([]);
-  const [filters, setFilters] = useState<JournalFilters>({});
+  const [filters, setFiltersState] = useState<JournalFilters>({});
+  // The filters as they are now, for a run that ranks after a filter changed under it (a re-run of corrected text).
+  const filtersRef = useRef<JournalFilters>({});
+  const setFilters = useCallback((next: JournalFilters) => {
+    filtersRef.current = next;
+    setFiltersState(next);
+  }, []);
   const [formatResult, setFormatResult] = useState<FormatCheckResult | null>(null);
   const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
   const [openWhyId, setOpenWhyId] = useState<string | null>(null);
@@ -58,7 +64,7 @@ export function useMatch() {
   // query → vector → topics → rank, all on this device. `cited` comes from
   // the file's reference list (none for pasted text).
   const run = useCallback(
-    async (q: PaperQuery, found: MatchRefs | null, activeFilters: JournalFilters) => {
+    async (q: PaperQuery, found: MatchRefs | null) => {
       setQuery(q);
       setRefs(found);
       setStage("embedding");
@@ -73,7 +79,7 @@ export function useMatch() {
       const input: MatchInput = { vector, paperTopics: topics, cited: found?.cited };
       setMatchInput(input);
       const mySeq = ++matchSeq.current;
-      const matches = await matchJournals(input, 10, activeFilters);
+      const matches = await matchJournals(input, 10, filtersRef.current);
       log(`Ranked ${manifest ? manifest.journal_count.toLocaleString() : "all"} journals locally`);
       void getAvailableFields().then(setAvailableFields);
       if (mySeq === matchSeq.current) setResults(matches);
@@ -118,13 +124,13 @@ export function useMatch() {
           found = { entries: r.entries, matched: r.matched, cited: r.counts };
           log(`Read ${r.entries} references; ${r.matched} name a journal in the index`);
         }
-        await run(q, found, {});
+        await run(q, found);
       } catch (err) {
         setErrorMsg(errorMessage(err));
         setStage("error");
       }
     },
-    [log, reset, run],
+    [log, reset, run, setFilters],
   );
 
   // Pasted text: as a first entry (no file), or to correct what we read from
@@ -140,13 +146,13 @@ export function useMatch() {
         setTrace([]);
       }
       try {
-        await run(queryFromPasted(text), kept, keepRefs ? filters : {});
+        await run(queryFromPasted(text), kept);
       } catch (err) {
         setErrorMsg(errorMessage(err));
         setStage("error");
       }
     },
-    [filters, refs, reset, run],
+    [refs, reset, run, setFilters],
   );
 
   const busy = stage === "reading" || stage === "embedding" || stage === "matching";
@@ -168,7 +174,7 @@ export function useMatch() {
           setStage("error");
         });
     },
-    [matchInput],
+    [matchInput, setFilters],
   );
 
   const toggleRulesCheck = useCallback(

@@ -15,3 +15,8 @@ web/.impeccable/
 
 # per-plan execution scratch (superpowers ledgers)
 .superpowers/
+
+# Word documents dropped at the repo root to try in /write (people's own papers): never committed
+/*.docx
+/*.dotx
+/*.doc

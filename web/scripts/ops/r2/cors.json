@@ -1,0 +1,13 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://margalink.com", "https://www.margalink.com", "https://margalink.pages.dev", "https://*.margalink.pages.dev", "http://localhost:3000", "http://localhost:8788"],
+        "methods": ["GET", "HEAD"],
+        "headers": ["*"]
+      },
+      "exposeHeaders": ["Content-Length", "Content-Type", "ETag"],
+      "maxAgeSeconds": 86400
+    }
+  ]
+}

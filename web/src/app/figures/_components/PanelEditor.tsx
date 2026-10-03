@@ -23,8 +23,8 @@ import {
   type LayerKind,
   type Panel,
   type Test,
-} from "@/lib/figureSpec";
-import type { Dataset } from "@/lib/spreadsheet";
+} from "@/lib/figures/figureSpec";
+import type { Dataset } from "@/lib/figures/spreadsheet";
 
 const FAMILY_LABEL: Record<Family, string> = {
   bar: "Bar", box: "Box", violin: "Violin", strip: "Strip", scatter: "Scatter",

@@ -2,28 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { errorMessage } from "@/lib/errorMessage";
-import ErrorText from "@/components/ErrorText";
-import FigureStudio from "@/app/figures/_components/FigureStudio.tsx";
-import { readRecipe, type Recipe } from "@/app/figures/_components/RecipeImportExport.tsx";
-import type { FiguresApi } from "@/app/figures/_components/useFigures.ts";
+import ErrorText from "@/components/ui/ErrorText";
+import FigureStudio from "@/app/figures/_components/FigureStudio";
+import { readRecipe, type Recipe } from "@/app/figures/_components/RecipeImportExport";
+import type { FiguresApi } from "@/app/figures/_components/useFigures";
 
 // The Figures window: the whole figure studio (over the same useFigures as
 // /figures), with "Insert into paper" in place of "Add to a paper": the
-// figure goes into the project as a 300 dpi PDF plus its data-free recipe,
-// and a figure block lands at the cursor. `pendingRecipe` (a .figure.json
+// figure is exported at 300 dpi in the workspace's `format` (a PDF and its
+// data-free recipe for LaTeX, a PNG for Word) and lands at the cursor. `pendingRecipe` (a .figure.json
 // opened in the file tree) is applied once a spreadsheet is attached.
 export default function FiguresWindow({
   figures: f,
   pendingRecipe,
   onRecipeApplied,
   compiling,
+  format,
   onInsert,
 }: {
   figures: FiguresApi;
   pendingRecipe: string | null;
   onRecipeApplied: (note: string | null) => void;
   compiling: boolean;
-  onInsert: (pdf: Uint8Array, recipe: Recipe) => Promise<void>;
+  format: "pdf" | "png";
+  onInsert: (image: Uint8Array, recipe: Recipe) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,9 +46,9 @@ export default function FiguresWindow({
     setBusy(true);
     setError(null);
     try {
-      const pdf = (await f.onExport(["pdf"], 300)).pdf;
-      if (!pdf) throw new Error("The PDF export came back empty. Try Export first to see why.");
-      await onInsert(Uint8Array.from(atob(pdf), (c) => c.charCodeAt(0)), { version: 1, spec: f.spec, hook: f.hookApproved ? f.hook : null });
+      const image = (await f.onExport([format], 300))[format];
+      if (!image) throw new Error(`The ${format.toUpperCase()} export came back empty. Try Export first to see why.`);
+      await onInsert(Uint8Array.from(atob(image), (c) => c.charCodeAt(0)), { version: 1, spec: f.spec, hook: f.hookApproved ? f.hook : null });
     } catch (err) {
       setError(errorMessage(err));
     } finally {

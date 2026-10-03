@@ -1,0 +1,31 @@
+# Local secrets for `npm run dev:full` (wrangler pages dev). Copy to
+# .dev.vars (gitignored) and fill in what you need; everything is optional
+# for working on the UI. CLAUDE.md's "Environment variables" table explains
+# each one. Never commit real values.
+
+# The two AI features (review, Ask Claude). Without it they return an error.
+ANTHROPIC_API_KEY=
+
+# Sign-in. On localhost, DEV_EMAIL_LOG=1 prints email sign-in links to the
+# console instead of sending them, so Resend isn't needed.
+DEV_EMAIL_LOG=1
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:8788/api/auth/google/callback
+RESEND_API_KEY=
+EMAIL_FROM=
+
+# Required when deployed, optional here (localhost uses a fixed dev key and
+# skips the Turnstile check).
+# HASH_SECRET=
+# TURNSTILE_SECRET=
+
+# Payments (Paddle sandbox).
+PADDLE_ENV=sandbox
+PADDLE_CLIENT_TOKEN=
+PADDLE_API_KEY=
+PADDLE_WEBHOOK_SECRET=
+PADDLE_PRICE_IDS=
+
+# Build-time values (NEXT_PUBLIC_*: the contact details, the Turnstile site
+# key, the site URL) go in web/.env.local instead, which Next reads.

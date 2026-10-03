@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "include": [
+    "/*"
+  ],
+  "exclude": [
+    "/_next/*",
+    "/index/*",
+    "/fonts/*",
+    "/templates/*",
+    "/figure-gallery/*",
+    "/favicon.ico",
+    "/icon.svg",
+    "/apple-icon.png",
+    "/opengraph-image",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/texWorker.js",
+    "/figureWorker.mjs",
+    "/figurelib.py"
+  ]
+}

@@ -1,4 +1,4 @@
-import ErrorText from "@/components/ErrorText";
+import ErrorText from "@/components/ui/ErrorText";
 
 export default function ProcessingTrace({
   trace,

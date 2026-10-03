@@ -30,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 
-from openalex import BASE, get, reconstruct_abstract, safe_iter_jsonl
+from openalex import BASE, get, open_append, reconstruct_abstract, safe_iter_jsonl
 
 SOURCES_PATH = Path(__file__).parent / "data" / "sources.jsonl"
 OUT_PATH = Path(__file__).parent / "data" / "works_v2.jsonl"
@@ -105,10 +105,19 @@ def main() -> None:
     # while cutting a ~30 h serial run to a few hours. Results are written
     # from this thread only, as they complete, so the file stays one line per journal.
     skipped_too_few = 0
-    with OUT_PATH.open("a") as out, ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        futures = [pool.submit(fetch_paced, sid) for sid in todo]
+    failed = 0
+    with open_append(OUT_PATH) as out, ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        futures = {pool.submit(fetch_paced, sid): sid for sid in todo}
         for i, fut in enumerate(as_completed(futures)):
-            source_id, papers, window = fut.result()
+            # One journal that keeps failing (a 403, retries used up) is left for the
+            # next run; it mustn't stop this one, whose queued journals would still
+            # be fetched on shutdown and then thrown away.
+            try:
+                source_id, papers, window = fut.result()
+            except Exception as err:  # noqa: BLE001
+                failed += 1
+                print(f"skipped {futures[fut]} for now ({type(err).__name__}); the next run retries it", flush=True)
+                continue
             if len(papers) >= MIN_PAPERS_TO_KEEP:
                 out.write(json.dumps({"id": source_id, "window_years": window, "papers": papers}) + "\n")
                 out.flush()
@@ -117,7 +126,7 @@ def main() -> None:
             if (i + 1) % 100 == 0:
                 print(f"processed {i + 1}/{len(todo)} (skipped {skipped_too_few} with <{MIN_PAPERS_TO_KEEP} papers)", flush=True)
 
-    print(f"done. total in {OUT_PATH}: {len(already_fetched_ids())}", flush=True)
+    print(f"done. total in {OUT_PATH}: {len(already_fetched_ids())}; {failed} failed and will be retried next run", flush=True)
 
 
 def _self_check() -> None:

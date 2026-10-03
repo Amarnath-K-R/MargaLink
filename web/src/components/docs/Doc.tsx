@@ -96,7 +96,7 @@ export function DocPart({ id, title, children }: { id?: string; title: string; c
 type ShotData = { w: number; h: number; callouts: ({ x: number; y: number } | null)[] };
 const SHOTS = shots as Record<string, ShotData>;
 
-// A screenshot of the real UI (made by scripts/guide_shots.mjs, which also
+// A screenshot of the real UI (made by scripts/docs/guide_shots.mjs, which also
 // measures where each numbered marker goes), on a paper sheet, with its
 // numbered notes under it. A shot the script hasn't made yet says so.
 // `narrow`: a small region (a card, a panel) shown near its real size
@@ -126,7 +126,7 @@ export function Shot({ name, alt, notes = [], caption, narrow = false }: { name:
             )}
           </div>
         ) : (
-          <p className="p-10 text-center text-sm text-ink-soft">Screenshot not generated yet. Run scripts/guide_shots.mjs.</p>
+          <p className="p-10 text-center text-sm text-ink-soft">Screenshot not generated yet. Run scripts/docs/guide_shots.mjs.</p>
         )}
       </div>
       {(notes.length > 0 || caption) && (

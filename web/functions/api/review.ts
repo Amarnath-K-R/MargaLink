@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
-// Cloudflare Pages Function — one of the project's two server-side files.
-// Every other feature runs entirely in the browser; this one exists only
+// Cloudflare Pages Function — one of the project's two AI Functions. Every
+// other feature runs entirely in the browser; this one exists only
 // because an LLM review needs a place to hold the Anthropic API key that the
 // browser must never see. See CLAUDE.md's privacy rules — this endpoint is a
 // disclosed, opt-in exception, not a quiet expansion of what leaves the device.
@@ -11,13 +11,14 @@
 // requests. Why it's built this way, and what each gate below defends
 // against, is in ../../../docs/ARCHITECTURE.md under "The AI review" — read
 // that before changing a prompt, a cap, or the grounding.
-import { findJournalRules } from "../../src/lib/journalRules.ts";
-import { parsePassRequest, passCallConfig, validateSynthesisOutput } from "../../src/lib/reviewPasses.ts";
-import { DAILY, countUse, leftToday } from "../../src/lib/dailyCaps.ts";
-import { groundExtractOutput } from "../../src/lib/reviewGrounding.ts";
-import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/anthropicStream.ts";
-import { getSession, type AccountEnv } from "../../src/lib/auth.ts";
-import { claimReviewPass, markDelivered, markSynthesized } from "../../src/lib/ledger.ts";
+import { findJournalRules } from "../../src/lib/journals/journalRules.ts";
+import { parsePassRequest, passCallConfig, synthesisOutsideDelivered, validateSynthesisOutput } from "../../src/lib/review/reviewPasses.ts";
+import { DAILY, reserveUse } from "../../src/lib/accounts/dailyCaps.ts";
+import { groundExtractOutput } from "../../src/lib/review/reviewGrounding.ts";
+import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/ai/anthropicStream.ts";
+import { getSession, type AccountEnv } from "../../src/lib/accounts/auth.ts";
+import { claimReviewPass, deliveredChunks, markDelivered, markSynthesized } from "../../src/lib/accounts/ledger.ts";
+import { usageSink } from "../../src/lib/telemetry/apiEvents.ts";
 
 type Env = AccountEnv & { ANTHROPIC_API_KEY: string };
 
@@ -29,16 +30,17 @@ const MODEL = "claude-sonnet-5";
 // and a pass budget. The daily limits (dailyCaps.ts: the service's and each
 // account's) still bound the spend: honest clients average ~$0.03/pass
 // (measured), a tampered one sending maximal thorough synthesis bodies up to
-// ~$0.5/pass, within what its ticket allows. Counted BEFORE the upstream
+// ~$0.5/pass, within what its ticket allows. Reserved BEFORE the upstream
 // call, so failures and retries can't spend money uncounted.
 // A synthesize body carries up to 1,000 ledger entries (~500 KB); an extract
 // body one ≤24k-char chunk. Anything larger can't be a legitimate pass.
 const MAX_BODY_BYTES = 1_000_000;
-// Below the client's 300 s synthesize timeout, so the client sees our 504
-// rather than its own abort.
-const UPSTREAM_TIMEOUT_MS = 290_000;
+// Below the client's own timeouts (120 s for a section, 300 s for the
+// cross-check), so the client sees our 504 rather than aborting and retrying
+// while this call may still finish and be recorded.
+const UPSTREAM_TIMEOUT_MS = { extract: 110_000, synthesize: 290_000 } as const;
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) => {
   if (Number(request.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) {
     return new Response("Request body too large", { status: 413 });
   }
@@ -60,12 +62,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const rules = req.pass === "synthesize" ? findJournalRules(req.journalId) : undefined;
   if (req.pass === "synthesize" && !rules) return new Response("No pilot rules for this journal", { status: 404 });
-
-  // Capacity first, so a pass refused for it doesn't spend one of the ticket's.
-  const left = await leftToday(env.DB, "reviewPass", session.userId, Date.now());
-  if (left.all <= 0) return new Response("Reviews are fully booked for today. Try again tomorrow.", { status: 429 });
-  if (left.user <= 0) return new Response(`This account has reached today's limit of ${DAILY.reviewPass.user} review passes. It resets at midnight UTC.`, { status: 429 });
   const ticket = request.headers.get("x-review-ticket") ?? "";
+  // A cross-check cites only what this ticket's paid passes returned.
+  const delivered = req.pass === "synthesize" ? await deliveredChunks(env.DB, ticket) : null;
+  const outside = req.pass === "synthesize" ? synthesisOutsideDelivered(req, delivered!) : null;
+  if (outside) return new Response(outside, { status: 400 });
+
+  // Today's capacity is reserved first (dailyCaps.ts), so a pass refused for it
+  // spends none of the ticket; a pass the ticket refuses hands it back.
+  const held = await reserveUse(env.DB, "reviewPass", session.userId, Date.now());
+  if (!held.ok && held.full === "user") return new Response(`This account has reached today's limit of ${DAILY.reviewPass.user} review passes. It resets at midnight UTC.`, { status: 429 });
+  if (!held.ok) return new Response("Reviews are fully booked for today. Try again tomorrow.", { status: 429 });
   const refused = await claimReviewPass(
     env.DB,
     ticket,
@@ -73,11 +80,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     req.pass === "extract" ? { pass: "extract", tier: req.tier, chunkId: req.chunk.id, chars: req.chunk.text.length } : { pass: "synthesize", tier: req.tier },
     Date.now(),
   );
-  if (refused) return new Response(refused.message, { status: refused.status });
-
-  // Counted exactly (one atomic upsert each); concurrent passes can overshoot
-  // a limit by at most the few that were already past the check.
-  await countUse(env.DB, "reviewPass", session.userId, Date.now());
+  if (refused) {
+    await held.release();
+    return new Response(refused.message, { status: refused.status });
+  }
 
   const { prompt, tool, maxTokens, effort } = passCallConfig(req, rules);
   let toolInput: unknown;
@@ -94,14 +100,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         // No tool_choice — incompatible with thinking; the prompt's closing line carries it.
         messages: [{ role: "user", content: prompt }],
       },
-      { toolName: tool.name, timeoutMs: UPSTREAM_TIMEOUT_MS }
+      { toolName: tool.name, timeoutMs: UPSTREAM_TIMEOUT_MS[req.pass], onUsage: usageSink(data, MODEL) }
     ));
   } catch (err) {
     if (err instanceof TruncatedOutputError) return new Response("Review model output was truncated for this section", { status: 422 });
     if (err instanceof Error && err.name === "TimeoutError") return new Response("Upstream review request timed out", { status: 504 });
     const status = err instanceof UpstreamError ? err.status : 502;
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`review ${req.pass} upstream failure ${status}: ${message}`);
+    // The name and status only: a message can quote the model's output, which quotes the paper.
+    console.error(`review ${req.pass} upstream failure ${status}: ${err instanceof Error ? err.name : "unknown"}`);
     // The upstream's own error text stays in the log; the reader gets a plain sentence.
     return new Response("Claude didn't answer this time. It's retried automatically.", { status: 502 });
   }
@@ -112,11 +118,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const result =
       req.pass === "extract" ? groundExtractOutput(toolInput, req.chunk.text, req.claimsCap) : validateSynthesisOutput(toolInput, req);
-    if (req.pass === "synthesize") await markSynthesized(env.DB, ticket);
+    if (req.pass === "synthesize") await markSynthesized(env.DB, ticket, delivered!.size);
     else await markDelivered(env.DB, ticket, req.chunk.id);
     return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
-    console.error(`review ${req.pass} malformed output: ${err instanceof Error ? err.stack : String(err)}`);
+    console.error(`review ${req.pass} malformed output: ${err instanceof Error ? err.name : "unknown"}`);
     return new Response("Claude's answer couldn't be read. It's retried automatically.", { status: 502 });
   }
 };

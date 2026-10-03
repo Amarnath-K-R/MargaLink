@@ -1,4 +1,4 @@
-import type { JournalFilters } from "@/lib/match";
+import type { JournalFilters } from "@/lib/match/match";
 
 const FEE_PRESETS = [
   { label: "Any fee", value: undefined },

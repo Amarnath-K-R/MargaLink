@@ -1,12 +1,12 @@
 import Link from "next/link";
-import type { MatchResult } from "@/lib/match";
-import { findJournalRules, type JournalRules } from "@/lib/journalRules";
-import { shortId } from "@/lib/journalUrl";
-import type { RulesCheckResult } from "@/lib/rulesCheck";
-import JournalDetail from "@/components/JournalDetail";
+import type { MatchResult } from "@/lib/match/match";
+import { findJournalRules, type JournalRules } from "@/lib/journals/journalRules";
+import { shortId } from "@/lib/journals/journalUrl";
+import type { RulesCheckResult } from "@/lib/checks/rulesCheck";
+import JournalDetail from "@/components/journals/JournalDetail";
 import WhyThisJournal from "./WhyThisJournal.tsx";
-import { JournalResultTitle, JournalResultChips } from "@/components/JournalResultRow";
-import RulesCheckPanel from "@/components/RulesCheckPanel";
+import { JournalResultTitle, JournalResultChips } from "@/components/journals/JournalResultRow";
+import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
 
 // The ranked list. On /match each row links on to the review and writing
 // pages; inside the writing workspace's Match window the callbacks below

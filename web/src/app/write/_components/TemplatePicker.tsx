@@ -1,6 +1,6 @@
 "use client";
 
-import type { Template } from "@/lib/templateCatalog";
+import type { Template } from "@/lib/write/templateCatalog";
 
 // Start a paper: a bundled template (compiles right away), or — for publishers
 // that only distribute their own — a link to fetch it and upload the zip.

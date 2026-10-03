@@ -21,8 +21,10 @@
 // fail closed, as without HASH_SECRET. `agree: true` is the sign-in form's
 // two boxes (18 or older; the terms and the privacy notice): no link, so no
 // account, without them.
-import { fingerprint, hashSecret, networkKey, randomToken, rateLimit, readJson, safeNext, sha256Hex, text, type AccountEnv } from "../../../../src/lib/auth.ts";
-import { isEmail, normalEmail } from "../../../../src/lib/coins.ts";
+import { fingerprint, hashSecret, networkKey, randomToken, rateLimit, readJson, safeNext, sha256Hex, text, type AccountEnv } from "../../../../src/lib/accounts/auth.ts";
+import { isEmail, normalEmail } from "../../../../src/lib/accounts/coins.ts";
+import { mayEnter } from "../../../../src/lib/access/access.ts";
+import { BETA } from "../../../../src/lib/access/beta.ts";
 
 const LINK_TTL_MS = 15 * 60 * 1000;
 // Providers big enough to police their own sign-ups; everyone else's domain has a daily limit on new accounts.
@@ -49,6 +51,9 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
   const next = safeNext(body?.next);
   const url = new URL(request.url);
   const dev = env.DEV_EMAIL_LOG === "1" && url.hostname === "localhost";
+  // The closed beta signs in with Google only. Off for everyone alike, before
+  // any work, so neither the answer nor its timing says who's invited.
+  if (BETA.on && !dev) return text("Email sign-in is off during the beta. Continue with Google.", 503);
   const secret = hashSecret(env, request);
   if (!secret || (!dev && (!env.RESEND_API_KEY || !env.EMAIL_FROM || !env.TURNSTILE_SECRET))) return text("Email sign-in isn't set up yet. Use Google for now.", 503);
   if (!dev && !(await passesTurnstile(env.TURNSTILE_SECRET!, body?.turnstile, request))) {
@@ -59,6 +64,8 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
   const who = await fingerprint(secret, email);
   const net = await networkKey(secret, request, now);
   if (!(await rateLimit(db, `mailip:${net}`, 10, 60 * MIN, now))) return text("Too many sign-in emails from this network. Try again in an hour.", 429);
+  const wide = await networkKey(secret, request, now, true);
+  if (!(await rateLimit(db, `mailwide:${wide}`, 30, 60 * MIN, now))) return text("Too many sign-in emails from this network. Try again in an hour.", 429);
   // Per address *and* network, so a stranger asking for your links from
   // their network can't lock you out of yours; plus a ceiling per address
   // across all networks, against filling an inbox.
@@ -75,6 +82,10 @@ export const onRequestPost: PagesFunction<AccountEnv> = async ({ request, env })
     }
     if (!(await rateLimit(db, "mail-new", 90, DAY, now))) return text("Email sign-up is busy today. Use Google, or try again tomorrow.", 503);
   }
+  // The closed beta on localhost (DEV_EMAIL_LOG, how the e2e signs in): an
+  // address that isn't invited gets the usual answer, but no link, and
+  // nothing stored.
+  if (!(await mayEnter(db, email))) return Response.json({ ok: true });
   if (!(await rateLimit(db, "mail-all", 95, DAY, now))) return text("Email sign-in is busy today. Use Google, or try again tomorrow.", 503);
 
   const token = randomToken();

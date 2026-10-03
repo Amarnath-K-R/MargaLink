@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
 import Link from "next/link";
-import PageHeader from "@/components/PageHeader";
-import { ContactEmail, OperatorDetails } from "@/components/ContactDetails";
+import PageHeader from "@/components/layout/PageHeader";
+import LegalSection from "@/components/layout/LegalSection";
+import { ContactEmail, OperatorDetails } from "@/components/layout/ContactDetails";
 import { PADDLE_RESELLER } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -18,11 +18,11 @@ export default function ContactPage() {
       <PageHeader width="2xl" title="Contact and support" subtitle={<p className="mt-3 text-lg text-ink-soft">Questions, a problem with a payment, a request about your data, or a complaint.</p>} />
 
       <div className="mt-10 space-y-8 text-ink-soft [&_strong]:font-medium [&_strong]:text-ink">
-        <Part title="Reach us">
+        <LegalSection title="Reach us">
           <OperatorDetails />
-        </Part>
+        </LegalSection>
 
-        <Part title="Payments, receipts and refunds">
+        <LegalSection title="Payments, receipts and refunds">
           <p>
             {PADDLE_RESELLER} For a receipt, a refund or a charge you don&apos;t recognise, use the link in your Paddle receipt email, look up your order at{" "}
             <a href="https://paddle.net" className="text-accent hover:underline">
@@ -38,9 +38,9 @@ export default function ContactPage() {
             </Link>{" "}
             says what comes back and when.
           </p>
-        </Part>
+        </LegalSection>
 
-        <Part title="Your data">
+        <LegalSection title="Your data">
           <p>
             Download or delete everything we hold on your account page. For anything else, such as correcting your email address or asking which
             providers received your data, write to <ContactEmail />; we answer within 30 days. The{" "}
@@ -49,24 +49,15 @@ export default function ContactPage() {
             </Link>{" "}
             explains your rights.
           </p>
-        </Part>
+        </LegalSection>
 
-        <Part title="If you're not satisfied">
+        <LegalSection title="If you're not satisfied">
           <p>
             You can complain to the Data Protection Board of India, to the data protection authority where you live in the EU, or to the UK&apos;s
             Information Commissioner&apos;s Office. Consumers in India can also go to a consumer commission.
           </p>
-        </Part>
+        </LegalSection>
       </div>
     </main>
-  );
-}
-
-function Part({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="border-t border-line pt-5">
-      <h2 className="mb-2 font-serif text-xl font-medium text-ink">{title}</h2>
-      {children}
-    </section>
   );
 }

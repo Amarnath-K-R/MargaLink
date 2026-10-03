@@ -1,6 +1,6 @@
 "use client";
 
-import type { Template } from "@/lib/figureTemplates";
+import type { Template } from "@/lib/figures/figureTemplates";
 
 // Starting points, each drawn from a sample dataset. Picking one rebinds it
 // to your columns (figureTemplates.ts bindTemplate) — no request.

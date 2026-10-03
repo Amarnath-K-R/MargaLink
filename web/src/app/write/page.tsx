@@ -3,23 +3,30 @@
 import Link from "next/link";
 import { Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ProjectStore, type ProjectMeta } from "@/lib/projectStore";
-import { loadTemplates, starterProject, templateForJournal, type Template } from "@/lib/templateCatalog";
-import { loadMeta } from "@/lib/match";
+import { ProjectStore, type ProjectMeta } from "@/lib/write/projectStore";
+import { stopTex } from "@/lib/write/texRunner";
+import { loadTexTemplates, starterProject, templateForJournal, type Template } from "@/lib/write/templateCatalog";
+import { loadMeta } from "@/lib/match/match";
 import { errorMessage } from "@/lib/errorMessage";
-import { useNetworkTrace } from "@/components/NetworkTrace";
-import PageHeader from "@/components/PageHeader";
-import ErrorText from "@/components/ErrorText";
+import { useNetworkTrace } from "@/app/write/_components/useNetworkTrace";
+import PageHeader from "@/components/layout/PageHeader";
+import ErrorText from "@/components/ui/ErrorText";
 import TemplatePicker from "./_components/TemplatePicker.tsx";
 import StorageBanner from "./_components/StorageBanner.tsx";
 import Workspace from "./_components/Workspace.tsx";
+import DocWorkspace from "./_components/DocWorkspace.tsx";
 import { downloadBytes, safeName } from "./_components/download.ts";
 
 export type Journal = { id: string; display_name: string; host: string | null };
 
-// Write a paper in LaTeX, in the browser: start from a journal's template or
+// Word files: imported as a Word project (a .doc or a macro file is refused by the store, with what to do).
+const WORD = /\.(docx|dotx|doc|docm|dotm)$/i;
+
+// Write a paper in the browser: in LaTeX (start from a journal's template or
 // upload one, edit, compile with TeX Live running in a worker, download the
-// PDF — and reach the other tools from windows over the workspace. Projects
+// PDF), or in Word (import a .docx or a journal's Word template, edit it as
+// Word, download the .docx) — and reach the other tools from windows over
+// the workspace. Projects
 // live in this browser's own storage; nothing from a paper is sent unless
 // you ask for one of the two disclosed AI features. `?p=<id>` reopens a
 // project; `?journal=<id>` preselects a template for a new one.
@@ -33,6 +40,9 @@ export default function WritePage() {
   const [busy, setBusy] = useState(false);
   const upload = useRef<HTMLInputElement>(null);
   const { calls } = useNetworkTrace();
+
+  // Leaving /write frees the TeX engine (its memory and data packs) for the next page.
+  useEffect(() => () => stopTex(), []);
 
   const refresh = useCallback(async (s: ProjectStore) => {
     try {
@@ -54,7 +64,7 @@ export default function WritePage() {
       },
       (err) => setError(errorMessage(err)),
     );
-    loadTemplates().then(setTemplates, (err) => setError(errorMessage(err)));
+    loadTexTemplates().then(setTemplates, (err) => setError(errorMessage(err)));
     // ?journal=<OpenAlex id> (from a match result or a journal page) preselects its template.
     const id = params.get("journal");
     if (id) {
@@ -95,7 +105,8 @@ export default function WritePage() {
     [store, journal, refresh],
   );
 
-  // A .zip (a template, an Overleaf download, a backup) or a single .tex file.
+  // A .zip (a template, an Overleaf download, a backup), a single .tex file,
+  // or a Word document or template (a .doc or .docm is refused with what to do).
   const importUpload = useCallback(
     async (file: File) => {
       if (!store) return;
@@ -103,9 +114,12 @@ export default function WritePage() {
       setError(null);
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
+        const [jid, jname] = [journal?.id ?? null, journal?.display_name ?? null];
         const meta = /\.tex$/i.test(file.name)
-          ? await store.importTex(file.name.replace(/\.tex$/i, ""), bytes, journal?.id ?? null)
-          : await store.importZip(file.name.replace(/\.zip$/i, ""), bytes, journal?.id ?? null);
+          ? await store.importTex(file.name.replace(/\.tex$/i, ""), bytes, jid, jname)
+          : WORD.test(file.name)
+            ? await store.importDocx(file.name.replace(WORD, ""), bytes, jid, jname)
+            : await store.importZip(file.name.replace(/\.zip$/i, ""), bytes, jid, jname);
         await refresh(store);
         setOpenProject(meta);
       } catch (err) {
@@ -120,6 +134,22 @@ export default function WritePage() {
   const recommended = journal && templates.length ? templateForJournal(journal.host, templates) : null;
 
   // An open project is a full-screen app: no page header, nothing to scroll past.
+  if (store && openProject?.kind === "docx") {
+    return (
+      <DocWorkspace
+        key={openProject.id}
+        store={store}
+        project={openProject}
+        calls={calls}
+        pageError={error}
+        onMeta={setOpenProject}
+        onClose={() => {
+          setOpenProject(null);
+          void refresh(store);
+        }}
+      />
+    );
+  }
   if (store && openProject) {
     return (
       <Workspace
@@ -129,6 +159,7 @@ export default function WritePage() {
         calls={calls}
         templates={templates}
         onCreateFromTemplate={(t, j) => void create(t, j)}
+        pageError={error}
         onMeta={setOpenProject}
         onClose={() => {
           setOpenProject(null);
@@ -145,8 +176,8 @@ export default function WritePage() {
         title="Write your paper."
         subtitle={
           <p className="mt-3 max-w-xl text-lg text-ink-soft">
-            Start from your journal&apos;s LaTeX template, write, and compile to PDF. TeX runs in your browser, and your manuscript never
-            leaves this device.
+            Start from your journal&apos;s LaTeX template and compile to PDF, or bring your Word document and edit it as Word. Everything
+            runs in your browser, and your manuscript never leaves this device.
           </p>
         }
       />
@@ -163,13 +194,24 @@ export default function WritePage() {
                   <button type="button" onClick={() => setOpenProject(p)} className="text-left font-serif text-lg font-medium leading-snug hover:text-accent">
                     {p.name}
                   </button>
-                  <span className="-mt-2 text-xs text-ink-soft">
-                    {p.journalName ? `${p.journalName} · ` : ""}edited {new Date(p.updatedAt).toLocaleString()}
+                  <span className="-mt-2 flex flex-wrap items-center gap-x-2 text-xs text-ink-soft">
+                    <span className="rounded-full bg-paper-alt px-2 py-0.5 text-[11px] text-ink">{p.kind === "docx" ? "Word" : "LaTeX"}</span>
+                    <span>
+                      {p.journalName ? `${p.journalName} · ` : ""}edited {new Date(p.updatedAt).toLocaleString()}
+                    </span>
                   </span>
                   <span className="mt-auto flex gap-2 pt-1 text-xs">
                     <button
                       type="button"
-                      onClick={async () => store && downloadBytes(`${safeName(p.name)}.zip`, await store.exportZip(p.id), "application/zip")}
+                      onClick={async () => {
+                        if (!store) return;
+                        setError(null);
+                        try {
+                          downloadBytes(`${safeName(p.name)}.zip`, await store.exportZip(p.id), "application/zip");
+                        } catch (err) {
+                          setError(`The backup couldn't be made: ${errorMessage(err)}`);
+                        }
+                      }}
                       className="clay-chip"
                     >
                       Download backup
@@ -178,7 +220,12 @@ export default function WritePage() {
                       type="button"
                       onClick={async () => {
                         if (!store || !window.confirm(`Delete "${p.name}" from this browser? This can't be undone.`)) return;
-                        await store.remove(p.id);
+                        setError(null);
+                        try {
+                          await store.remove(p.id);
+                        } catch (err) {
+                          setError(`"${p.name}" couldn't be deleted: ${errorMessage(err)}`);
+                        }
                         void refresh(store);
                       }}
                       className="clay-chip bg-transparent text-ink-soft hover:bg-[#ebe8df]"
@@ -204,15 +251,18 @@ export default function WritePage() {
           <p className="mt-6 flex flex-wrap items-center gap-3 border-t border-line/70 pt-5 text-sm">
             <button type="button" onClick={() => upload.current?.click()} disabled={!store} className="clay-btn">
               <Upload size={14} strokeWidth={2} />
-              Import a .zip or .tex
+              Import a .zip, .tex or Word file
             </button>
-            <span className="text-ink-soft">A publisher&apos;s template, an Overleaf download, a MargaLink backup, or a single .tex file.</span>
+            <span className="text-ink-soft">
+              A publisher&apos;s template, an Overleaf download, a MargaLink backup or a single .tex file; or a Word document or Word template
+              (.docx, .dotx), which opens in a Word editor.
+            </span>
           </p>
           <input
             ref={upload}
             type="file"
-            accept=".zip,application/zip,.tex"
-            aria-label="Import a .zip or .tex file"
+            accept=".zip,application/zip,.tex,.docx,.dotx,.doc,.docm,.dotm"
+            aria-label="Import a .zip, .tex or Word file"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];

@@ -1,15 +1,16 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { extractFromFile } from "@/lib/extract";
-import { findJournalRules } from "@/lib/journalRules";
-import { checkRules, type RulesCheckResult } from "@/lib/rulesCheck";
-import { MAX_REVIEW_CHARS, prepareForReview } from "@/lib/review";
-import { ReviewEndedError, ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "@/lib/reviewOrchestrator";
-import { NotEnoughCoinsError, SignInRequiredError } from "@/lib/coins";
-import { refreshAccount, setBalance } from "@/components/useAccount";
-import { NO_EDITS, buildOutline, chunkSections, type OutlineEdits } from "@/lib/reviewSections";
-import type { HeadingHint, ReviewProgress, ReviewResult, ReviewTier } from "@/lib/reviewTypes";
+import { extractFromFile } from "@/lib/paper/extract";
+import { findJournalRules } from "@/lib/journals/journalRules";
+import { checkRules, type RulesCheckResult } from "@/lib/checks/rulesCheck";
+import { MAX_REVIEW_CHARS, prepareForReview } from "@/lib/review/review";
+import { MAX_REVIEW_CHUNKS } from "@/lib/review/reviewPasses";
+import { ReviewEndedError, ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "@/lib/review/reviewOrchestrator";
+import { NotEnoughCoinsError, SignInRequiredError } from "@/lib/accounts/coins";
+import { refreshAccount, setBalance } from "@/components/account/useAccount";
+import { NO_EDITS, buildOutline, chunkSections, type OutlineEdits } from "@/lib/review/reviewSections";
+import type { HeadingHint, ReviewProgress, ReviewResult, ReviewTier } from "@/lib/review/reviewTypes";
 import { errorMessage } from "@/lib/errorMessage";
 
 const TOO_LONG = "This paper is over 400,000 characters of text. Split off supplementary material and try again.";
@@ -99,8 +100,12 @@ export function useReview() {
     [busy, resetReview],
   );
 
+  // While a paid run is going, the journal, the tier and the outline stay as
+  // they are (changing one would throw the run away); picking the current
+  // one again is no change at all.
   const selectJournal = useCallback(
     (journalId: string) => {
+      if (reviewLoading || journalId === selectedJournalId) return;
       resetReview();
       setSelectedJournalId(journalId);
       if (paperText) {
@@ -108,21 +113,29 @@ export function useReview() {
         if (rules) setRulesResult(checkRules(paperText, rules));
       }
     },
-    [paperText, resetReview],
+    [paperText, resetReview, reviewLoading, selectedJournalId],
   );
 
   const selectTier = useCallback(
     (next: ReviewTier) => {
+      if (reviewLoading || next === tier) return;
       resetReview();
       setTier(next);
     },
-    [resetReview],
+    [resetReview, reviewLoading, tier],
   );
 
   const outline = useMemo(() => (reviewText ? buildOutline(reviewText, headings, edits) : null), [reviewText, headings, edits]);
   const plannedRun = useMemo(() => (outline ? planChunks(chunkSections(outline.sections, headings), tier).run : []), [outline, headings, tier]);
   // How many requests the consent notice names: one per planned chunk + the cross-check.
   const passCount = plannedRun.length + 1;
+  // What the server would refuse at the start, said before the consent instead of after it.
+  const runProblem =
+    plannedRun.length === 0
+      ? "Every section is marked Don't send, so there's nothing to review."
+      : plannedRun.length > MAX_REVIEW_CHUNKS
+        ? `This outline has ${plannedRun.length} parts to review; a review takes at most ${MAX_REVIEW_CHUNKS}. Merge some sections in the outline.`
+        : null;
   // What it costs, priced from exactly what would be sent (the server charges the same).
   const price = useMemo(() => (reviewText ? quoteReview({ text: reviewText, hints: headings, outline: outline ?? undefined, tier }).coins : 0), [reviewText, headings, outline, tier]);
   const outlineRows = useMemo(() => {
@@ -137,16 +150,17 @@ export function useReview() {
   // Any outline change invalidates a result computed from the old outline.
   const editOutline = useCallback(
     (change: (e: OutlineEdits) => OutlineEdits) => {
+      if (reviewLoading) return;
       resetReview();
       setEdits((e) => change(e));
     },
-    [resetReview],
+    [resetReview, reviewLoading],
   );
 
   const startReview = useCallback(
     async (resume?: ReviewState) => {
       setConsentOpen(false);
-      if (!reviewText || !selectedJournalId) return;
+      if (!reviewText || !selectedJournalId || (!resume && runProblem)) return;
       const ac = new AbortController();
       abortRef.current = ac;
       setReviewLoading(true);
@@ -211,7 +225,7 @@ export function useReview() {
         setProgress(null);
       }
     },
-    [reviewText, headings, outline, selectedJournalId, tier],
+    [reviewText, headings, outline, selectedJournalId, tier, runProblem],
   );
 
   const cancel = useCallback(() => abortRef.current?.abort(), []);
@@ -220,7 +234,9 @@ export function useReview() {
   const coverage = reviewResult?.coverage;
   // Cancelled before any section finished → no partial result yet, but still resumable.
   const unfinished = reviewResult === null || (coverage?.pending.length ?? 0) > 0;
-  const canRetry = !reviewLoading && resumeState !== null && (unfinished || (coverage?.failed.length ?? 0) > 0 || reviewResult?.journalFit === null);
+  // Sections came back since the last cross-check (a Retry, whose cross-check then failed): it can run again.
+  const crossCheckBehind = resumeState !== null && Object.keys(resumeState.extracted).length > resumeState.synthCovers;
+  const canRetry = !reviewLoading && resumeState !== null && (unfinished || (coverage?.failed.length ?? 0) > 0 || reviewResult?.journalFit === null || crossCheckBehind);
 
   return {
     busy,
@@ -252,6 +268,7 @@ export function useReview() {
     resumeState,
     canRetry,
     unfinished,
+    runProblem,
     onFile,
     startReview,
     cancel,

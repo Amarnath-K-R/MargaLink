@@ -1,13 +1,14 @@
 // Single source of truth for site-wide metadata — used by layout.tsx (page
 // title/description/OG tags), opengraph-image.tsx, sitemap.ts, and robots.ts.
-// No domain is registered yet (see journal-finder-plan.md §13) — set
-// NEXT_PUBLIC_SITE_URL once one is.
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://example-placeholder.margalink.invalid";
+// The site's address, for the sitemap, robots.txt and link previews.
+// NEXT_PUBLIC_SITE_URL overrides it (a staging copy at another address).
+export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://margalink.com";
 
-// Where people write about their account or their data (the privacy page
-// and the terms name it). Set NEXT_PUBLIC_CONTACT_EMAIL with the domain;
-// accounts shouldn't open without it.
-export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || null;
+// Where people write about their account, their data, a purchase or a
+// complaint (/contact, the privacy notice, the terms, the refund policy, the
+// sign-in panel). Every address at the domain reaches the owner (Cloudflare
+// Email Routing, catch-all); NEXT_PUBLIC_CONTACT_EMAIL overrides it.
+export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "developer@margalink.com";
 
 // Who runs MargaLink: the sole proprietor's full legal name, as the privacy
 // notice, the terms and /contact give it (also the grievance officer), and

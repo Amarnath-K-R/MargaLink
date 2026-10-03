@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import PageHeader from "@/components/PageHeader";
+import PageHeader from "@/components/layout/PageHeader";
 import AddToPaper from "./_components/AddToPaper";
 import FigureStudio from "./_components/FigureStudio";
 import { useFigures } from "./_components/useFigures.ts";

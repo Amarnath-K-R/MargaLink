@@ -6,12 +6,14 @@
 // only the welcome fingerprint in welcome_claims stays (no address in it),
 // for 12 months once no account holds it (housekeeping deletes it then),
 // and the sign-in counters keyed by the address, until they expire within a
-// day (deleting an account mustn't reset its limits).
+// day (deleting an account mustn't reset its limits). Its activity log goes
+// with it, and so does its place on the beta list (a developer's stays; and
+// one another account shares, as bob and bob+x do, stays until that goes too).
 // Pro is cancelled at Paddle first, so a deleted account is never charged.
-import { getSession, readJson, sessionCookies, text, withCookies, type AccountEnv } from "../../src/lib/auth.ts";
-import { cancelSubscription, type PaddleApiEnv } from "../../src/lib/paddle.ts";
-import { normalEmail } from "../../src/lib/coins.ts";
-import { balance, history, releaseWelcomeStatement } from "../../src/lib/ledger.ts";
+import { getSession, readJson, sessionCookies, text, withCookies, type AccountEnv } from "../../src/lib/accounts/auth.ts";
+import { cancelSubscription, type PaddleApiEnv } from "../../src/lib/accounts/paddle.ts";
+import { normalEmail } from "../../src/lib/accounts/coins.ts";
+import { balance, history, releaseWelcomeStatement } from "../../src/lib/accounts/ledger.ts";
 
 type Env = AccountEnv & PaddleApiEnv;
 
@@ -52,6 +54,18 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .bind(s.userId)
       .all()
   ).results;
+  // The closed beta: its entry on the access list (with any note a developer
+  // wrote), and its activity log (30 days, metadata only).
+  const access = (
+    await env.DB.prepare("SELECT a.role, a.email, a.note, a.added_at AS addedAt FROM access_list a JOIN users u ON u.access_key = a.email_key WHERE u.id = ? ORDER BY a.role")
+      .bind(s.userId)
+      .all()
+  ).results;
+  const activity = (
+    await env.DB.prepare("SELECT at, route, method, status, ms, model, input_tokens AS inputTokens, output_tokens AS outputTokens FROM api_events WHERE user_id = ? ORDER BY id")
+      .bind(s.userId)
+      .all()
+  ).results;
   // Who has received this account's data (the right to know who it was shared with).
   const usedAi = ledger.some((e) => ["review", "figure"].includes(String(e.kind)));
   const sharedWith = [
@@ -66,7 +80,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     },
     ...(usedAi ? [{ name: "Anthropic", what: "Received the text you chose to send for AI reviews or Ask Claude requests, never your account details." }] : []),
   ];
-  const data = { exportedAt: new Date().toISOString(), account, signInWithGoogle: google, identities, sessions, coins: { balance: await balance(env.DB, s.userId), ledger }, purchases, subscriptions, adjustments, reviews, sharedWith };
+  const data = { exportedAt: new Date().toISOString(), account, signInWithGoogle: google, identities, sessions, coins: { balance: await balance(env.DB, s.userId), ledger }, purchases, subscriptions, adjustments, reviews, access, activity, sharedWith };
   return new Response(JSON.stringify(data, null, 2), {
     headers: { "content-type": "application/json", "content-disposition": 'attachment; filename="margalink-account-data.json"' },
   });
@@ -81,10 +95,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   for (const sub of live) {
     if (!(await cancelSubscription(env, sub.id))) return text("We couldn't cancel your Pro subscription, so nothing was deleted. Try again in a minute.", 502);
   }
-  // The welcome fingerprint's release reads the account's row, so it runs first; then the account cascades,
+  // The welcome fingerprint's release and the beta entry read the account's row, so they run first; then the account cascades,
   // and its unused sign-in links go too.
   await env.DB.batch([
     releaseWelcomeStatement(env.DB, s.userId, Date.now()),
+    env.DB.prepare(
+      `DELETE FROM access_list WHERE role = 'beta' AND email_key = (SELECT access_key FROM users WHERE id = ?1)
+         AND NOT EXISTS (SELECT 1 FROM users WHERE access_key = access_list.email_key AND id <> ?1)`,
+    ).bind(s.userId),
     env.DB.prepare("DELETE FROM users WHERE id = ?").bind(s.userId),
     env.DB.prepare("DELETE FROM magic_links WHERE email = ?").bind(s.email),
   ]);

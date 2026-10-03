@@ -1,74 +1,63 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { shortId } from "@/lib/journalUrl";
-import type { Citation } from "@/lib/reviewTypes";
-import { findQuoteInTex } from "@/lib/texSource";
-import ErrorText from "@/components/ErrorText";
-import RulesCheckPanel from "@/components/RulesCheckPanel";
-import JournalPicker from "@/app/review/_components/JournalPicker.tsx";
-import ReviewRunner from "@/app/review/_components/ReviewRunner.tsx";
-import type { ReviewApi } from "@/app/review/_components/useReview.ts";
+import { shortId } from "@/lib/journals/journalUrl";
+import type { Citation } from "@/lib/review/reviewTypes";
+import ErrorText from "@/components/ui/ErrorText";
+import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
+import JournalPicker from "@/app/review/_components/JournalPicker";
+import ReviewRunner from "@/app/review/_components/ReviewRunner";
+import type { ReviewApi } from "@/app/review/_components/useReview";
 import CompileFirst from "./CompileFirst.tsx";
 
-// The Review window: the compiled PDF, against the project's target journal
-// when it is one of the pilot journals (else the picker), through the same
-// consent notice, run and result as /review. Each cited passage can jump
-// to its line in the LaTeX (best effort — a quote is what the PDF showed).
+// The Review window: the paper (the compiled PDF, or the Word document),
+// against the project's target journal when it is one of the pilot journals
+// (else the picker), through the same consent notice, run and result as
+// /review. Each cited passage can jump to where it is in the paper's source
+// (`onJump`, the workspace's own search: best effort, a quote is what the
+// reviewed text showed).
 export default function ReviewWindow({
   review: r,
-  pdfFile,
+  paperFile,
   compiling,
   onCompile,
   pilotId,
   targetName,
-  texFiles,
-  onGoto,
+  onJump,
 }: {
   review: ReviewApi;
-  pdfFile: File | null;
+  paperFile: File | null;
   compiling: boolean;
-  onCompile: () => void;
+  onCompile?: () => void; // absent: a Word document, which needs no compile
   pilotId: string | null; // the project's target journal, when it has hand-verified rules
   targetName: string | null;
-  texFiles: { path: string; text: string }[];
-  onGoto: (path: string, line: number) => void;
+  onJump: (quote: string) => boolean;
 }) {
   const [changing, setChanging] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const { source, busy, onFile } = r;
-  // Load the compiled PDF the first time the window opens.
+  // Load the paper the first time the window opens.
   useEffect(() => {
-    if (pdfFile && source === null && !busy) void onFile(pdfFile, { journalId: pilotId });
-  }, [pdfFile, source, busy, onFile, pilotId]);
+    if (paperFile && source === null && !busy) void onFile(paperFile, { journalId: pilotId });
+  }, [paperFile, source, busy, onFile, pilotId]);
 
-  if (!pdfFile) return <CompileFirst compiling={compiling} onCompile={onCompile} />;
-  const stale = r.source !== null && r.source !== pdfFile && !r.reviewLoading; // loading a new draft would abort a run that costs a review
+  if (!paperFile) return <CompileFirst compiling={compiling} onCompile={onCompile} />;
+  const stale = r.source !== null && r.source !== paperFile && !r.reviewLoading; // loading a new draft would abort a run that costs a review
   const onTarget = !!pilotId && !!r.selectedJournalId && shortId(r.selectedJournalId) === shortId(pilotId);
-  const jump = (c: Citation) => {
-    for (const f of texFiles) {
-      const line = findQuoteInTex(f.text, c.quote);
-      if (line) {
-        setNotFound(false);
-        onGoto(f.path, line);
-        return;
-      }
-    }
-    setNotFound(true);
-  };
+  const jump = (c: Citation) => setNotFound(!onJump(c.quote));
 
   return (
     <div data-testid="review-window" className="text-sm">
       {stale && (
         <p className="mb-4 rounded-sm border border-line bg-paper-alt p-3">
           The draft changed since this review was loaded.{" "}
-          <button type="button" onClick={() => void r.onFile(pdfFile, { journalId: r.selectedJournalId ?? pilotId })} className="text-accent hover:underline">
+          <button type="button" onClick={() => void r.onFile(paperFile, { journalId: r.selectedJournalId ?? pilotId })} className="text-accent hover:underline">
             Load the new draft
           </button>{" "}
           <span className="text-ink-soft">(a finished review stays until you do).</span>
         </p>
       )}
-      {r.busy && <p className="text-ink-soft">Reading the PDF…</p>}
+      {r.busy && <p className="text-ink-soft">Reading the paper…</p>}
       {r.uploadError && <ErrorText>{r.uploadError}</ErrorText>}
 
       {r.paperText && (
@@ -89,7 +78,9 @@ export default function ReviewWindow({
                     : "Pick the journal to review against."}
                 </p>
               )}
-              <JournalPicker selectedJournalId={r.selectedJournalId} onSelect={r.selectJournal} showMatchLink={false} />
+              <fieldset disabled={r.reviewLoading} className="m-0 min-w-0 border-0 p-0">
+                <JournalPicker selectedJournalId={r.selectedJournalId} onSelect={r.selectJournal} showMatchLink={false} />
+              </fieldset>
             </>
           )}
         </section>

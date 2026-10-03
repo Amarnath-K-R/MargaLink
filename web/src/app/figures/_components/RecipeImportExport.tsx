@@ -1,10 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import ErrorText from "@/components/ErrorText";
-import { checkSpecAgainstColumns, validateFigureSpec, type FigureSpec } from "@/lib/figureSpec";
-import { isCodeSafeToRun } from "@/lib/figureRunner";
-import type { ColumnSchema } from "@/lib/spreadsheet";
+import ErrorText from "@/components/ui/ErrorText";
+import { checkSpecAgainstColumns, validateFigureSpec, type FigureSpec } from "@/lib/figures/figureSpec";
+import { isCodeSafeToRun } from "@/lib/figures/figureRunner";
+import type { ColumnSchema } from "@/lib/figures/spreadsheet";
 
 export type Recipe = { version: 1; spec: FigureSpec; hook: string | null };
 

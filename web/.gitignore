@@ -45,5 +45,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# scripts/*.mjs smoke-check output (screenshots etc) — see scripts/*.mjs
+# smoke-check output (screenshots etc), see scripts/smoke/
 /.smoke/

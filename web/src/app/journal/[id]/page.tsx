@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getAllJournals, getPrerenderedJournals, getTopicNames } from "@/lib/journalsServer";
-import { shortId } from "@/lib/journalUrl";
-import type { JournalMeta } from "@/lib/match";
-import JournalDetail from "@/components/JournalDetail";
-import PageHeader from "@/components/PageHeader";
+import { getAllJournals, getPrerenderedJournals, getTopicNames } from "@/lib/journals/journalsServer";
+import { shortId } from "@/lib/journals/journalUrl";
+import type { JournalMeta } from "@/lib/match/match";
+import JournalDetail from "@/components/journals/JournalDetail";
+import PageHeader from "@/components/layout/PageHeader";
 
 export async function generateStaticParams() {
   return getPrerenderedJournals().map((j) => ({ id: shortId(j.id) }));

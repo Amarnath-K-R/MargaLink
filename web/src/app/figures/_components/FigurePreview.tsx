@@ -1,7 +1,7 @@
 "use client";
 
-import ErrorText from "@/components/ErrorText";
-import type { ProgressStage, RenderMeta } from "@/lib/figureRunner";
+import ErrorText from "@/components/ui/ErrorText";
+import type { ProgressStage, RenderMeta } from "@/lib/figures/figureRunner";
 
 export type PreviewState = {
   png: string | null;

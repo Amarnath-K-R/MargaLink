@@ -15,7 +15,7 @@ Usage:
 Writes web/public/index/{manifest.json, index.bin, meta.json, topics.bin, topics.json}
 and pipeline/data/{heldout.bin, heldout.json, heldout_sample.json, drift_sample.json, dropped.txt, coherence.tsv}.
 
-manifest.ranking stays null here: web/scripts/eval_match.ts fits and writes it,
+manifest.ranking stays null here: web/scripts/eval/eval_match.ts fits and writes it,
 so a rebuild can never publish stale accuracy.
 """
 
@@ -46,7 +46,7 @@ from enrichment import (
 )
 from kmeans import cluster_journal
 from openalex import safe_iter_jsonl
-from quality import coherence, field_fit, is_suspect, top_topics
+from quality import coherence, dominant_field, field_fit, is_suspect, top_topics
 
 DATA_DIR = Path(__file__).parent / "data"
 OUT_DIR = Path(__file__).parent.parent / "web" / "public" / "index"
@@ -137,7 +137,7 @@ def centre_labels(labels: np.ndarray, paper_topics: list[list[str]], k: int, top
 
 
 def int8_top10(query: np.ndarray, centres: np.ndarray, spans: list[tuple[int, int]]) -> list[int]:
-    """The exact integer ranking web/src/lib/rank.ts computes for embedding-only
+    """The exact integer ranking web/src/lib/match/rank.ts computes for embedding-only
     weights: best centre per journal by int8 dot, score desc, journal index asc."""
     dots = centres.astype(np.int32) @ query.astype(np.int32)
     best = [int(dots[s : s + c].max()) for s, c in spans]
@@ -255,6 +255,8 @@ def main() -> None:
         entry["centres"] = [sum(len(c) for c in centres_all), len(centres)]
         entry["centre_topics"] = centre_labels(labels, paper_topics, len(centres), topic_name)
         entry["topics"] = top_topics(paper_topics) or source_topic_profile(sources[sid])
+        # The field filter and chips use the papers' own field, not OpenAlex's journal label.
+        entry["field"] = dominant_field(entry["topics"], topic_field) or entry["field"]
         spans.append((entry["centres"][0], len(centres)))
         centres_all.append(centres)
         # The single averaged vector the v1 index used — kept (never deployed)
