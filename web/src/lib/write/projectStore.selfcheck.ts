@@ -379,4 +379,20 @@ await assert.rejects(store.meta(copy.id));
   for (const m of [tex, texBack, word, wordBack, forged, dirty]) await store.remove(m.id);
 }
 
+// 6l. Rewrite's consent is the paper's, in this browser: never in a backup, never taken from one
+{
+  const tex = await store.importTex("Agreed", enc(MAIN));
+  await store.setMeta(tex.id, { rewriteConsent: "2026-10-03T08:00:00.000Z" });
+  assert.equal((await store.meta(tex.id)).rewriteConsent, "2026-10-03T08:00:00.000Z");
+  const zip = await store.exportZip(tex.id);
+  const meta = JSON.parse(new TextDecoder().decode(unzipFiles(zip).find((f) => f.path === "project.json")!.data));
+  assert.equal(meta.rewriteConsent, undefined, "not in the backup");
+  assert.equal((await store.importZip("Agreed again", zip)).rewriteConsent, undefined);
+  const forged = await store.importZip("Forged consent", zipFiles([{ path: "project.json", data: enc(JSON.stringify({ rewriteConsent: "2026-01-01T00:00:00.000Z" })) }, { path: "main.tex", data: enc(MAIN) }]));
+  assert.equal(forged.rewriteConsent, undefined, "nor taken from one");
+  await store.setMeta(tex.id, { rewriteConsent: undefined });
+  assert.equal((await store.meta(tex.id)).rewriteConsent, undefined, "and it can be turned off");
+  for (const m of [tex, forged]) await store.remove(m.id);
+}
+
 console.log("projectStore.selfcheck: OK");

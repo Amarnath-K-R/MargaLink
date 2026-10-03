@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
-// Daily limits on the two AI features, in D1's rate_limits table. Three per
+// Daily limits on the AI features, in D1's rate_limits table. Three per
 // feature: the service's (the owner's Anthropic spend); each account's, so
 // that one account, refunded for every try that fails, can't use up
 // everyone's day; and a share of the service's for accounts that never
@@ -14,6 +14,8 @@ export const DAILY = {
   // a long thorough one about 27, retries included in the budget.
   reviewPass: { all: DAILY_PASS_CAP, user: 150, free: 900 },
   figure: { all: 200, user: 50, free: 120 },
+  // At most about $130 a day of Claude at the largest Expand; raise after the beta.
+  rewrite: { all: 1000, user: 100, free: 400 },
 } as const;
 export type Feature = keyof typeof DAILY;
 

@@ -20,7 +20,7 @@ import { HOOK_SYSTEM_PROMPT, HOOK_TOOL, SPEC_SYSTEM_PROMPT, SPEC_TOOL, buildFigu
 import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/ai/anthropicStream.ts";
 import { getSession, randomToken, text, type AccountEnv } from "../../src/lib/accounts/auth.ts";
 import { FIGURE_PRICE } from "../../src/lib/accounts/coins.ts";
-import { balance, credit, debit } from "../../src/lib/accounts/ledger.ts";
+import { balance, holdCharge, refundCharge, settleCharge } from "../../src/lib/accounts/ledger.ts";
 import type { FigurePayload } from "../../src/lib/figures/figureSchema.ts";
 import { DAILY, reserveUse } from "../../src/lib/accounts/dailyCaps.ts";
 import { usageSink } from "../../src/lib/telemetry/apiEvents.ts";
@@ -34,6 +34,8 @@ const MODEL = "claude-sonnet-5";
 // privacy control as much as a DoS guard.
 const MAX_BODY_BYTES = 200_000;
 const UPSTREAM_TIMEOUT_MS = 60_000;
+// A charge still pending this long after it was taken was never answered: the sweep refunds it.
+const PENDING_MS = 3 * 60 * 1000;
 
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) => {
@@ -65,23 +67,26 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) 
   if (!held.ok && held.full === "user") return text(`This account has reached today's limit of ${DAILY.figure.user} Ask Claude requests. It resets at midnight UTC; nothing was charged.`, 429);
   if (!held.ok) return text("Ask Claude is fully booked for today. Try again tomorrow; nothing was charged.", 429);
   const ref = randomToken(12);
-  if (!(await debit(env.DB, s.userId, FIGURE_PRICE, "figure", ref, now))) {
+  if (!(await holdCharge(env.DB, s.userId, FIGURE_PRICE, "figure", "figure_refund", ref, now, PENDING_MS))) {
     await held.release();
     return Response.json({ coins: FIGURE_PRICE, balance: await balance(env.DB, s.userId) }, { status: 402 });
   }
-  // From here the coin comes back unless an answer goes out, whatever happens
-  // (the Worker itself being stopped midway is the one case this can't cover).
-  let answer: unknown = null;
+  // From here the coin comes back unless an answer goes out: at once when the request fails, and from
+  // the pending charge (sweepCharges) if it never finishes, the browser having gone away mid-call.
+  let answered = false;
   try {
     const res = await askClaude(body, problem, env.ANTHROPIC_API_KEY, usageSink(data, MODEL));
     if (res.status !== 200) return res;
-    answer = await res.json();
-    return Response.json({ ...(answer as object), balance: await balance(env.DB, s.userId) });
+    const answer = await res.json();
+    const out = Response.json({ ...(answer as object), balance: await balance(env.DB, s.userId) });
+    answered = true;
+    return out;
   } catch (err) {
     console.error(`figure request failed: ${err instanceof Error ? err.name : "unknown"}`);
     return text("The figure request failed. Try again in a moment.", 502);
   } finally {
-    if (answer === null) await credit(env.DB, s.userId, FIGURE_PRICE, "figure_refund", ref, Date.now());
+    if (answered) await settleCharge(env.DB, ref);
+    else await refundCharge(env.DB, ref, Date.now());
   }
 };
 

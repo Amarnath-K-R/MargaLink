@@ -4,7 +4,7 @@
 // exactly once.
 //   node src/lib/accounts/ledger.selfcheck.ts
 import assert from "node:assert/strict";
-import { balance, credit, debit, grantWelcome, history, sweepTickets } from "./ledger.ts";
+import { balance, credit, debit, grantWelcome, history, holdCharge, housekeeping, refundCharge, settleCharge, sweepCharges, sweepTickets } from "./ledger.ts";
 import { fingerprint, signInUser } from "./auth.ts";
 import { canonicalEmail, WELCOME_COINS } from "./coins.ts";
 import { testD1 } from "./testD1.ts";
@@ -28,6 +28,11 @@ const race = await Promise.all([debit(db, u.id, 4, "figure", "f3", now), debit(d
 assert.deepEqual(race.sort(), [false, true]);
 assert.equal(await balance(db, u.id), 2);
 assert.equal(await debit(db, u.id, 1, "figure", "f3", now), false, "a ref is charged once");
+// a rewrite and its refund (the table's kinds, migration 0011)
+assert.equal(await debit(db, u.id, 2, "rewrite", "w1", now), true);
+assert.equal(await credit(db, u.id, 2, "rewrite_refund", "w1", now), true);
+assert.equal(await credit(db, u.id, 2, "rewrite_refund", "w1", now), false, "refunded once");
+assert.equal(await balance(db, u.id), 2);
 
 // credits are idempotent too
 assert.equal(await credit(db, u.id, 50, "pack", "txn_1", now), true);
@@ -61,4 +66,27 @@ assert.deepEqual((await db.prepare("SELECT id_hash FROM review_tickets").all<{ i
 const h = await history(db, v.id, 10);
 assert.deepEqual(h.map((e) => [e.kind, e.delta]).slice(0, 1), [["review_refund", 6]], "newest first");
 assert.ok(h.every((e) => typeof e.at === "number" && typeof e.label === "string"));
+// a charge for an AI request in flight: it stands once answered, comes back once if the request failed,
+// and comes back once it's past its time if the request never finished (the browser went away mid-call)
+{
+  const w = await signInUser(db, { email: "wen@x.org" }, now);
+  await credit(db, w.id, 10, "admin", "seed-w", now);
+  const pending = async () => (await db.prepare("SELECT COUNT(*) AS n FROM pending_charges WHERE user_id = ?").bind(w.id).first<{ n: number }>())!.n;
+  assert.equal(await holdCharge(db, w.id, 2, "rewrite", "rewrite_refund", "h1", now, 60_000), true);
+  assert.equal(await balance(db, w.id), 8);
+  await settleCharge(db, "h1");
+  assert.deepEqual([await balance(db, w.id), await pending()], [8, 0], "answered: charged, nothing pending");
+  await holdCharge(db, w.id, 3, "rewrite", "rewrite_refund", "h2", now, 60_000);
+  await refundCharge(db, "h2", now);
+  await refundCharge(db, "h2", now);
+  assert.deepEqual([await balance(db, w.id), await pending()], [8, 0], "failed: refunded once");
+  await holdCharge(db, w.id, 4, "figure", "figure_refund", "h3", now, 60_000);
+  await sweepCharges(db, now + 30_000);
+  assert.equal(await balance(db, w.id), 4, "still in flight: not refunded");
+  await housekeeping(db, now + 61_000);
+  await sweepCharges(db, now + 62_000);
+  assert.deepEqual([await balance(db, w.id), await pending()], [8, 0], "past its time: refunded once, by housekeeping");
+  assert.equal(await holdCharge(db, w.id, 9, "rewrite", "rewrite_refund", "h4", now, 60_000), false, "more than the balance");
+  assert.equal(await pending(), 0, "and nothing pending for it");
+}
 console.log("ledger.selfcheck: OK");

@@ -21,6 +21,13 @@ export function reviewPrice(tier: ReviewTier, chars: number): number {
   return base + step * Math.ceil(Math.max(0, chars - PRICE_STEP) / PRICE_STEP);
 }
 
+// Rewrite: a coin per 500 words of the passage sent, rounded up (at least
+// one), up to 2,000 words an action (1,000 to expand).
+export const REWRITE_WORDS_PER_COIN = 500;
+export const REWRITE_MAX_WORDS = 2000;
+export const REWRITE_MAX_WORDS_EXPAND = 1000; // Expand writes about twice what it reads
+export const rewritePrice = (words: number) => Math.max(1, Math.ceil(words / REWRITE_WORDS_PER_COIN));
+
 export const PACKS = [
   { id: "S", coins: 50, usd: 6, inr: 499 },
   { id: "M", coins: 150, usd: 15, inr: 1249 },
@@ -45,6 +52,8 @@ export type LedgerKind =
   | "review_refund"
   | "figure"
   | "figure_refund"
+  | "rewrite"
+  | "rewrite_refund"
   | "reversal"
   | "reinstated"
   | "admin";
@@ -68,7 +77,7 @@ export function proCoinsLeft(entries: { kind: LedgerKind; delta: number; ref: st
   };
   for (const { kind, delta, ref } of entries) {
     if (kind === "pro_grant" || kind === "pro_expire") pro += delta;
-    else if (kind === "review_refund" || kind === "figure_refund") {
+    else if (kind.endsWith("_refund")) {
       const back = Math.min(delta, paidWithPro.get(ref) ?? 0);
       pro += back;
       other += delta - back;
@@ -135,6 +144,8 @@ const LABELS: Record<LedgerKind, string> = {
   review_refund: "Refund: part of a review that didn't run",
   figure: "Ask Claude (figure)",
   figure_refund: "Refund: figure request failed",
+  rewrite: "Rewrite (Claude)",
+  rewrite_refund: "Refund: rewrite failed",
   reversal: "Payment refunded or reversed",
   pro_reversal: "Pro payment refunded or reversed",
   reinstated: "Disputed payment settled: coins restored",

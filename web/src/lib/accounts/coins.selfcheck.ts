@@ -3,7 +3,7 @@
 // canonicalisation for the once-per-address welcome bonus.
 //   node src/lib/accounts/coins.selfcheck.ts
 import assert from "node:assert/strict";
-import { canonicalEmail, dueProGrants, isEmail, ledgerLabel, normalEmail, proCoinsLeft, reviewPrice, NotEnoughCoinsError, type LedgerKind } from "./coins.ts";
+import { canonicalEmail, dueProGrants, isEmail, ledgerLabel, normalEmail, proCoinsLeft, reviewPrice, rewritePrice, REWRITE_MAX_WORDS, NotEnoughCoinsError, type LedgerKind } from "./coins.ts";
 
 // the pricing table, exactly
 const table: [string, number, number][] = [
@@ -15,6 +15,10 @@ for (const [tier, chars, coins] of table) assert.equal(reviewPrice(tier as "quic
 assert.equal(reviewPrice("quick", 50_000), 4, "the first 50k is the base");
 assert.equal(reviewPrice("quick", 50_001), 6, "a character over starts the next step");
 assert.equal(reviewPrice("quick", 0), 4);
+
+// Rewrite: 1 coin per 500 words, rounded up, at least 1; up to 2,000 words
+for (const [words, coins] of [[0, 1], [1, 1], [500, 1], [501, 2], [1000, 2], [1500, 3], [2000, 4]]) assert.equal(rewritePrice(words), coins, `${words} words`);
+assert.equal(REWRITE_MAX_WORDS, 2000);
 
 // Pro coins are spent first (they're the ones that can lapse); packs never
 // lapse; a refund goes back to the coins it was paid with.
@@ -28,6 +32,7 @@ assert.equal(proCoinsLeft([e("pro_grant", 100), e("pro_expire", -30)]), 70);
 assert.equal(proCoinsLeft([e("pro_grant", 100), e("pack", 50), e("reversal", -50)]), 100, "a reversed pack takes pack coins");
 assert.equal(proCoinsLeft([e("pack", 150), e("pro_grant", 100), e("pro_reversal", -100)]), 0, "a reversed Pro payment takes Pro coins, not the pack's");
 assert.equal(proCoinsLeft([e("pro_grant", 100), e("review", -30, "t1"), e("review_refund", 30, "t1")]), 100, "a refund of Pro coins is Pro coins again (it can still lapse)");
+assert.equal(proCoinsLeft([e("pack", 50), e("pro_grant", 10), e("rewrite", -4, "w1"), e("rewrite_refund", 4, "w1")]), 10, "and a rewrite's too");
 assert.equal(proCoinsLeft([e("pack", 50), e("figure", -1, "f1"), e("pro_grant", 100), e("figure_refund", 1, "f1")]), 100, "a refund of pack coins stays pack coins");
 assert.equal(proCoinsLeft([e("pro_grant", 20), e("review", -30, "t2"), e("pack", 50), e("review_refund", 30, "t2")]), 20, "split payment, split refund");
 // the simulation's sequence: never more Pro coins than coins
@@ -57,7 +62,7 @@ for (const bad of ["ab@gmail.com.", "a\u200bb@gmail.com", "ab@gmail..com", "ab@.
 for (const good of ["ann.lee+tag@gmail.com", "o'brien@uni.ac.uk", "x_y-z@sub.domain.org"]) assert.ok(isEmail(good), good);
 
 // every ledger kind has a label, and none uses an em dash
-for (const k of ["welcome", "pack", "pro_grant", "pro_expire", "pro_reversal", "review", "review_refund", "figure", "figure_refund", "reversal", "reinstated", "admin"] as LedgerKind[]) {
+for (const k of ["welcome", "pack", "pro_grant", "pro_expire", "pro_reversal", "review", "review_refund", "figure", "figure_refund", "rewrite", "rewrite_refund", "reversal", "reinstated", "admin"] as LedgerKind[]) {
   assert.ok(ledgerLabel(k).length > 0 && !ledgerLabel(k).includes("—"), k);
 }
 assert.equal(new NotEnoughCoinsError(1, 0).message, "This costs 1 M coin and you have 0.");

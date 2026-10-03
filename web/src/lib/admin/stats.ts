@@ -51,7 +51,7 @@ export async function overview(db: D1Database, now: number) {
     db.prepare("SELECT model, COUNT(*) AS calls, SUM(input_tokens) AS input, SUM(output_tokens) AS output FROM api_events WHERE model IS NOT NULL AND at > ? GROUP BY model").bind(now - 30 * DAY),
     db
       .prepare(
-        `SELECT COALESCE(-SUM(CASE WHEN kind IN ('review', 'review_refund', 'figure', 'figure_refund') THEN delta END), 0) AS spent,
+        `SELECT COALESCE(-SUM(CASE WHEN kind IN ('review', 'review_refund', 'figure', 'figure_refund', 'rewrite', 'rewrite_refund') THEN delta END), 0) AS spent,
                 COALESCE(SUM(CASE WHEN kind = 'welcome' THEN delta END), 0) AS welcomed, COALESCE(SUM(CASE WHEN kind = 'admin' THEN delta END), 0) AS granted
          FROM coin_ledger WHERE created_at > ?`,
       )

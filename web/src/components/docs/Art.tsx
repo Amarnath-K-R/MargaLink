@@ -245,7 +245,7 @@ export function WriteArt({ bare = false }: { bare?: boolean }) {
 export function PrivacyArt({ bare = false }: { bare?: boolean }) {
   const id = "art-p";
   return (
-    <Frame id={id} bare={bare} label="Your device holds the paper; public files come in, and only two opt-in requests ever go out, each behind a notice">
+    <Frame id={id} bare={bare} label="Your device holds the paper; public files come in, and only three opt-in requests ever go out, each behind a notice">
       <g filter={`url(#${id}-shadow)`}>
         <rect x="70" y="40" width="180" height="128" rx="18" fill={`url(#${id}-clay)`} />
       </g>
@@ -263,9 +263,10 @@ export function PrivacyArt({ bare = false }: { bare?: boolean }) {
       <path d="M20 104 H 62" stroke={C.tealSoft} strokeWidth="2.5" strokeLinecap="round" />
       <path d="M52 96 l10 8 l-10 8" stroke={C.tealSoft} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
       <rect x="14" y="116" width="44" height="4" rx="2" fill={C.line} />
-      <path d="M258 90 H 296" stroke="#a15a3f" strokeWidth="2.5" strokeDasharray="4 5" strokeLinecap="round" />
-      <path d="M258 122 H 296" stroke="#a15a3f" strokeWidth="2.5" strokeDasharray="4 5" strokeLinecap="round" />
-      {[90, 122].map((y) => (
+      {[80, 106, 132].map((y) => (
+        <path key={y} d={`M258 ${y} H 296`} stroke="#a15a3f" strokeWidth="2.5" strokeDasharray="4 5" strokeLinecap="round" />
+      ))}
+      {[80, 106, 132].map((y) => (
         <g key={y} filter={`url(#${id}-soft)`}>
           <circle cx="276" cy={y} r="9" fill={`url(#${id}-clay)`} />
           <circle cx="276" cy={y} r="3.5" fill="#a15a3f" />

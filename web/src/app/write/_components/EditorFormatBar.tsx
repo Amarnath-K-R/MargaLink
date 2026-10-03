@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bold, Hash, Heading, Image as ImageIcon, Italic, List, ListOrdered, Percent, Quote, Sigma, Superscript, Table } from "lucide-react";
+import { Bold, Hash, Heading, Image as ImageIcon, Italic, List, ListOrdered, PenLine, Percent, Quote, Sigma, Superscript, Table } from "lucide-react";
 import { tableSnippet } from "@/lib/write/texSource";
+import type { Tone, Tool } from "@/lib/writing/rewrite";
+import { RewriteMenuItems, type RewriteOffer } from "./RewriteMenu";
 
 // The formatting bar over the source: the LaTeX a writer reaches for most,
 // one click away. Buttons wrap the selection (or insert a placeholder and
 // select it); the ▾ ones open a small list — the project's own .bib keys,
 // labels and figures, a table size. Everything here edits the open file;
-// nothing is fetched.
+// nothing is fetched, except by Rewrite, which sends the selection to Claude
+// once the paper's consent is given (useRewrite).
 const SECTIONS = [
   { cmd: "section", label: "Section" },
   { cmd: "subsection", label: "Subsection" },
@@ -16,7 +19,7 @@ const SECTIONS = [
   { cmd: "paragraph", label: "Paragraph" },
 ] as const;
 
-type Pop = "section" | "cite" | "ref" | "figure" | "table";
+type Pop = "section" | "cite" | "ref" | "figure" | "table" | "rewrite";
 
 const BTN =
   "grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-ink-soft transition-colors hover:bg-white/80 hover:text-ink aria-expanded:bg-accent-soft aria-expanded:text-accent";
@@ -30,6 +33,7 @@ export default function EditorFormatBar({
   labels,
   figures,
   onOpenFigures,
+  rewrite,
 }: {
   onWrap: (before: string, after: string, placeholder: string) => void;
   onBlock: (text: string, select?: string) => void;
@@ -39,8 +43,10 @@ export default function EditorFormatBar({
   labels: string[];
   figures: string[];
   onOpenFigures: () => void;
+  rewrite?: { offer: () => RewriteOffer; onTool: (tool: Tool, tone: Tone | null) => void } | null; // none in a read-only tab
 }) {
   const [open, setOpen] = useState<Pop | null>(null);
+  const [offer, setOffer] = useState<RewriteOffer>("");
   const bar = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -129,6 +135,29 @@ export default function EditorFormatBar({
       <button type="button" className={BTN} aria-label="Comment" title="Comment or uncomment lines (⌘/)" onClick={onComment}>
         <Percent size={13} strokeWidth={2.2} />
       </button>
+      {rewrite && (
+        <>
+          <Divider />
+          <Popover
+            id="rewrite"
+            open={open}
+            onToggle={(p) => {
+              if (open !== "rewrite") setOffer(rewrite.offer()); // the selection's price, as it is now
+              toggle(p);
+            }}
+            label="Rewrite"
+            title="Rewrite the selection with Claude (M coins)"
+            icon={
+              <span className="flex items-center gap-1 px-0.5 text-xs font-medium">
+                <PenLine size={14} strokeWidth={2.2} />
+                Rewrite
+              </span>
+            }
+          >
+            <RewriteMenuItems offer={offer} onTool={(tool, tone) => done(() => rewrite.onTool(tool, tone))()} />
+          </Popover>
+        </>
+      )}
     </div>
   );
 }

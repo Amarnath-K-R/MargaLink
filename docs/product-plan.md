@@ -168,6 +168,12 @@ What it must not do:
 * It must not be described as peer review. Call it a "before submission check".
 * It must not rewrite the paper. Many journals ask authors to disclose AI use, so add a short note about that.
 
+> **Clarified later:** this rule is about the review, and it still holds:
+> the review comments, it never rewrites. Rewrite in `/write` is a
+> separate tool: opt-in per paper behind its own notice, it sends only a
+> passage the author selects, and its prompt and checks forbid new facts,
+> numbers or citations. See `docs/ARCHITECTURE.md`, "Rewrite".
+
 ## 8. Technology
 
 | Part | Choice | Reason |

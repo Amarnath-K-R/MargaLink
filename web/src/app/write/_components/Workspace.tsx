@@ -9,12 +9,14 @@ import type { TexDiagnostic } from "@/lib/write/texLog";
 import type { Template } from "@/lib/write/templateCatalog";
 import { bibEntries, paperFiles, texOutline, citeSnippet, figureSnippet, findQuoteInTex, nextFigurePath, refSnippet, SNIPPETS, texLabels, texWordCount } from "@/lib/write/texSource";
 import type { Recipe } from "@/app/figures/_components/RecipeImportExport";
-import type { NetworkCall } from "@/app/write/_components/useNetworkTrace";
+import { sentCount, type NetworkCall } from "@/app/write/_components/useNetworkTrace";
 import ErrorText from "@/components/ui/ErrorText";
 import type { Journal } from "../page.tsx";
 import FileTree from "./FileTree.tsx";
 import LatexEditor, { type EditorHandle, type LineMark } from "./LatexEditor.tsx";
 import { addWord, DEFAULT_SPELLING, removeWord, type Spelling } from "@/lib/writing/spelling";
+import { fromPassage, toPassage } from "@/lib/writing/latexText";
+import { useRewrite, type RewriteTarget } from "./useRewrite.tsx";
 import PdfPane from "./PdfPane.tsx";
 import Diagnostics from "./Diagnostics.tsx";
 import StorageBanner from "./StorageBanner.tsx";
@@ -81,7 +83,7 @@ const STAGE_TEXT: Record<TexStage, (d?: string) => string> = {
 // the PDF side by side (the split drags), the compiler's diagnostics under
 // the editor, a status line, and the other tools as windows over it all.
 // `calls` is the page's network trace, for the status line's "sent" count
-// (only the review and Ask Claude requests carry text you agreed to send:
+// (only the review, Ask Claude and Rewrite requests carry text you agreed to send:
 // starting a paid review or signing out doesn't);
 // `onCreateFromTemplate` starts a new project (the Journal window offers
 // the target's template that way — this project is never rewritten).
@@ -324,6 +326,40 @@ export default function Workspace({
     await store.setMeta(project.id, { spelling: next });
     onMeta(await store.meta(project.id));
   });
+  // Rewrite (Claude, M coins) on the open .tex file's selection; never in a read-only tab.
+  const rewriteOn = texOpen && !lockedOut && !doc?.readOnly;
+  const setRewriteConsent = guarded(async (given: boolean) => {
+    await store.setMeta(project.id, { rewriteConsent: given ? new Date().toISOString() : undefined });
+    onMeta(await store.meta(project.id));
+  });
+  const rewrite = useRewrite(
+    (): RewriteTarget | null => {
+      const h = editor.current;
+      if (!h) return null;
+      return {
+        format: "latex",
+        read: () => {
+          const s = h.selection();
+          if (!s) return "Select the text to rewrite first.";
+          const p = toPassage(s.doc, s.from, s.to);
+          if (typeof p === "string") return p;
+          const original = s.doc.slice(p.from, p.to);
+          // The editor as it is when it's needed: a file switch (or a reload of it) makes a new one, holding nothing.
+          return {
+            passage: p.passage,
+            before: original,
+            show: (t) => fromPassage(t, p.parts),
+            keep: () => h.hold(p.from, p.to),
+            fresh: () => editor.current?.heldText() === original,
+            place: (t) => (editor.current?.replaceHeld(original, fromPassage(t, p.parts)) ? "applied" : "stale"),
+          };
+        },
+        anchor: () => h.around(),
+        focus: () => editor.current?.focus(),
+      };
+    },
+    { dialect: spelling.dialect, consented: !!project.rewriteConsent, onConsent: () => setRewriteConsent(true), enabled: rewriteOn },
+  );
   const setEngine = guarded(async (engine: ProjectMeta["engine"]) => {
     await store.setMeta(project.id, { engine });
     onMeta(await store.meta(project.id));
@@ -398,9 +434,11 @@ export default function Workspace({
       { id: "view-pdf", label: "Show the PDF only", run: () => setView("pdf"), disabled: view === "pdf" },
       { id: "files", label: filesPanel === "open" ? "Hide the files" : "Show the files", run: () => setFilesPanel(filesPanel === "open" ? "closed" : "open") },
       { id: "auto", label: auto === "on" ? "Turn auto-compile off" : "Turn auto-compile on", run: () => setAuto(auto === "on" ? "off" : "on") },
+      { id: "rewrite", label: "Rewrite the selection with Claude", run: () => rewrite.openMenu(), disabled: !rewriteOn },
+      { id: "rewrite-off", label: "Turn off Rewrite for this paper", run: () => void setRewriteConsent(false), disabled: !project.rewriteConsent || lockedOut },
       ...hubCommands(hub, { onBackup: () => void backup(), onProjects: () => void (confirmLeave() && onClose()) }),
     ],
-    [compile, busy, insert, texOpen, figures, backup, pdfBytes, project.name, project.engine, setEngine, onClose, confirmLeave, view, setView, filesPanel, setFilesPanel, auto, setAuto, hub],
+    [compile, busy, insert, texOpen, figures, backup, pdfBytes, project.name, project.engine, setEngine, onClose, confirmLeave, view, setView, filesPanel, setFilesPanel, auto, setAuto, hub, rewrite, rewriteOn, setRewriteConsent, project.rewriteConsent, lockedOut],
   );
 
   const journalLabel = project.journalName ?? (project.journalId ? "Target journal" : "No target journal");
@@ -555,6 +593,7 @@ export default function Workspace({
                   labels={labels}
                   figures={figures}
                   onOpenFigures={() => setTool("figures")}
+                  rewrite={rewriteOn ? { offer: rewrite.offer, onTool: rewrite.run } : null}
                 />
               </span>
             )}
@@ -695,9 +734,10 @@ export default function Workspace({
         onShortcuts={() => setTool("shortcuts")}
         dirty={dirty}
         running={running}
-        sent={calls.filter((c) => c.hadBody && /\/api\/(review|figure)(\?|$)/.test(c.url)).length}
+        sent={sentCount(calls)}
         busy={busy}
       />
+      {rewrite.element}
 
       <HubWindows
         hub={hub}

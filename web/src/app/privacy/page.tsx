@@ -5,7 +5,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import { Aside, DocBody, OptionTable, type TocItem } from "@/components/docs/Doc";
 import { PADDLE_RESELLER } from "@/lib/site";
 import { ContactEmail as Contact, OperatorDetails } from "@/components/layout/ContactDetails";
-import { FIGURE_PRICE, WELCOME_COINS } from "@/lib/accounts/coins";
+import { FIGURE_PRICE, REWRITE_WORDS_PER_COIN, WELCOME_COINS } from "@/lib/accounts/coins";
 import { NOTICE_VERSION } from "@/lib/accounts/notice";
 
 export const metadata: Metadata = {
@@ -28,7 +28,7 @@ const TOC: TocItem[] = [
   { id: "who", label: "Who runs MargaLink" },
   { id: "papers", label: "Your papers stay with you" },
   { id: "no-account", label: "Without an account" },
-  { id: "ai", label: "The two features that send something", tint: "#f1d2c2" },
+  { id: "ai", label: "The three features that send something", tint: "#f1d2c2" },
   { id: "accounts", label: "Your account" },
   { id: "payments", label: "Buying M coins" },
   { id: "basis", label: "Why we may use it" },
@@ -64,12 +64,12 @@ export default function PrivacyPage() {
                 store it. We store nothing from a paper, for anyone, signed in or not.
               </li>
               <li>
-                <strong>Two optional features send something to Anthropic&apos;s Claude</strong>, and only after you confirm a notice that says
-                exactly what: the AI review (your paper&apos;s text) and Ask Claude in the figure studio (a description of your data, never its
-                values).
+                <strong>Three optional features send something to Anthropic&apos;s Claude</strong>, and only after you confirm a notice that says
+                exactly what: the AI review (your paper&apos;s text), Ask Claude in the figure studio (a description of your data, never its
+                values) and Rewrite in the writing workspace (only the passage you select).
               </li>
               <li>
-                <strong>You need an account only for those two</strong>, except while the closed beta runs, when every tool needs an invited
+                <strong>You need an account only for those three</strong>, except while the closed beta runs, when every tool needs an invited
                 account. It holds your email address, your M coin history and your purchases. Not your name, not your papers.
               </li>
               <li>
@@ -111,7 +111,7 @@ export default function PrivacyPage() {
                 <strong>We store nothing from a paper on our servers</strong>, not even for signed-in users.
               </li>
               <li>
-                <strong>Anything that sends text off your device is opt-in</strong>, behind a plain-language notice. Only the two features below do,
+                <strong>Anything that sends text off your device is opt-in</strong>, behind a plain-language notice. Only the three features below do,
                 and what they send passes through our server to Anthropic without being stored.
               </li>
             </ol>
@@ -155,14 +155,15 @@ export default function PrivacyPage() {
               <strong>Your drafts live in your browser.</strong> Writing projects, LaTeX and Word documents alike, are kept in your browser&apos;s own storage on your device, never on
               a server. Clearing this site&apos;s data in your browser deletes them, so use &ldquo;Download backup&rdquo; to keep a copy or move to
               another computer. Spelling and grammar are checked in your browser too, and the words you add to a paper&apos;s dictionary are kept with
-              that paper.
+              that paper. Two features can send a draft&apos;s text, each only after its notice (below): the AI review, if you run it, sends the
+              paper&apos;s text, and Rewrite, if you turn it on for a paper, a passage you select.
             </p>
           </Section>
 
-          <Section id="ai" title="The two features that send something">
+          <Section id="ai" title="The three features that send something">
             <p>
               Each needs a large language model that can&apos;t run in a browser, so each sends something to Anthropic&apos;s Claude API (in the United
-              States) through our server, which holds the API key and keeps nothing it passes on. Neither starts until you confirm its notice.
+              States) through our server, which holds the API key and keeps nothing it passes on. None starts until you confirm its notice.
             </p>
             <OptionTable
               title="What each one sends"
@@ -189,12 +190,24 @@ export default function PrivacyPage() {
                   ),
                   away: true,
                 },
+                {
+                  name: "Rewrite (writing)",
+                  what: (
+                    <>
+                      Only the passage you select, the tool you choose (and its tone), and the paper&apos;s English (US, UK, Australian, Canadian or
+                      Indian). Citations, references, labels, equations, drawings and pictures in it are never sent, nor are LaTeX comments or a
+                      Word document&apos;s footnote marks: Claude sees a numbered marker in their place.
+                    </>
+                  ),
+                  away: true,
+                },
               ]}
             />
             <p>
               <strong>Please don&apos;t send other people&apos;s data.</strong> Leave out identifiable data about study participants, patients or
-              anyone else, and don&apos;t send a manuscript you received as a reviewer or editor, or work you have no permission to share. Removing
-              author names is automatic and can miss some. The review&apos;s notice says this each time.
+              anyone else, and don&apos;t send a manuscript you received as a reviewer or editor, or work you have no permission to share. The
+              review&apos;s notice asks this each time, and Rewrite&apos;s when you turn it on for a paper. The review removes author names first,
+              automatically, and can miss some; Rewrite sends what you select as it is.
             </p>
             <p>
               <strong>What Anthropic does with it.</strong> Anthropic provides the AI model under its commercial terms. It acts as our service
@@ -208,14 +221,15 @@ export default function PrivacyPage() {
             <p>
               <strong>What we keep.</strong> Nothing of what&apos;s sent, before or after. To charge a review once and refund what didn&apos;t run, we
               keep which sections it covers, their lengths and which came back (never their text), for about two hours. Ask Claude costs{" "}
-              {FIGURE_PRICE} M coin a request; we keep only that coin&apos;s charge or refund. The activity log notes how many tokens each request
+              {FIGURE_PRICE} M coin a request, and Rewrite 1 M coin per {REWRITE_WORDS_PER_COIN} words you select; for each we keep only the
+              charge or refund. The activity log notes how many tokens each request
               used (a count, nothing of the text), for 30 days.
             </p>
           </Section>
 
           <Section id="accounts" title="Your account">
             <p>
-              You need an account only for the two features above, except while the closed beta runs: then every tool needs an account, and only
+              You need an account only for the three features above, except while the closed beta runs: then every tool needs an account, and only
               invited addresses can have one. Sign in with Google (which tells us your verified email address and its id for your account, nothing
               else) or, outside the beta, with a one-time link sent to your email. Here is everything an account involves:
             </p>
@@ -231,7 +245,7 @@ export default function PrivacyPage() {
                 { name: "A running review", what: "Which sections it covers, their lengths, its tries and which came back. Never text.", def: "About 2 hours" },
                 {
                   name: "Abuse limits",
-                  what: "Counters of how many sign-in emails an address, a network or an email domain asked for, keyed by fingerprints made with a secret key (a network's changes daily), never the address or IP itself; and how many AI review passes and Ask Claude requests your account made today. They stay after you delete your account, until they expire.",
+                  what: "Counters of how many sign-in emails an address, a network or an email domain asked for, keyed by fingerprints made with a secret key (a network's changes daily), never the address or IP itself; and how many AI review passes, Ask Claude requests and rewrites your account made today. They stay after you delete your account, until they expire.",
                   def: "Within two days"
                 },
                 {
@@ -291,8 +305,8 @@ export default function PrivacyPage() {
                   what: "To provide the service you signed up for: our contract with you (GDPR Art. 6(1)(b)); under India's law, your consent when you sign up.",
                 },
                 {
-                  name: "The AI review and Ask Claude",
-                  what: "Your consent, given each time you confirm the notice (GDPR Art. 6(1)(a)); and, if a manuscript holds health or other sensitive information about you, your explicit consent, which the review's notice asks for (Art. 9(2)(a)). Not confirming, or simply not using them, is how you withhold it.",
+                  name: "The AI review, Ask Claude and Rewrite",
+                  what: "Your consent, given each time you confirm a notice, which for Rewrite is once for each paper (GDPR Art. 6(1)(a)); and, if a manuscript holds health or other sensitive information about you, your explicit consent, which the review's and Rewrite's notices ask for (Art. 9(2)(a)). Not confirming, or simply not using them, is how you withhold it; for Rewrite, the command Turn off Rewrite for this paper withdraws it.",
                   away: true,
                 },
                 {
@@ -310,10 +324,10 @@ export default function PrivacyPage() {
               ]}
             />
             <p>
-              Giving your email address is needed to have an account; without one you can still use every tool except the two AI features (once
+              Giving your email address is needed to have an account; without one you can still use every tool except the three AI features (once
               the beta is over). We make
-              no decisions about you by automated means that have legal or similar effects: match suggestions and the AI review are aids you read
-              and judge yourself.
+              no decisions about you by automated means that have legal or similar effects: match suggestions, the AI review and rewrites are aids
+              you read and judge yourself.
             </p>
           </Section>
 
@@ -327,7 +341,7 @@ export default function PrivacyPage() {
                   what: "Hosts the site, the account database and our file storage; protects them from attacks; runs the optional Turnstile check on the email sign-in form. The database's main copy is in the Asia Pacific region; Cloudflare may handle requests and temporary copies elsewhere on its global network.",
                   def: "Global network",
                 },
-                { name: "Anthropic", what: "Runs the AI review and Ask Claude, as described above.", def: "United States", away: true },
+                { name: "Anthropic", what: "Runs the AI review, Ask Claude and Rewrite, as described above.", def: "United States", away: true },
                 { name: "Google", what: "Only if you choose Continue with Google: confirms your email address and its id for your account.", def: "United States" },
                 { name: "Resend", what: "Sends your sign-in emails: your address and the link.", def: "United States" },
                 { name: "Paddle", what: "Sells coin packs and Pro as merchant of record.", def: "UK / United States" },
@@ -358,7 +372,7 @@ export default function PrivacyPage() {
             />
             <p>
               The site also keeps a few things in your browser&apos;s own storage, on your device, which it never sends anywhere: your writing projects
-              and their settings (layout, open files, whether to compile automatically, the spelling checker&apos;s English and dictionary), cached copies of the downloads listed above so they
+              and their settings (layout, open files, whether to compile automatically, the spelling checker&apos;s English and dictionary, whether you turned on Rewrite for that paper), cached copies of the downloads listed above so they
               aren&apos;t fetched again, whether you&apos;ve seen the introduction, and, for this browser session, that you&apos;ve read the Ask Claude
               notice. When you buy coins, Paddle&apos;s checkout runs its own script, and where it&apos;s switched on so does Cloudflare&apos;s
               Turnstile check; each follows its own cookie and privacy terms. You can clear everything this site keeps in your browser with
@@ -409,8 +423,9 @@ export default function PrivacyPage() {
                 <strong>Correct it</strong>: write to <Contact /> to change your email address or fix anything else.
               </li>
               <li>
-                <strong>Withdraw consent</strong>: stop using the AI features at any time; each needs your confirmation every time. Deleting your
-                account withdraws consent to everything else, as easily as you gave it.
+                <strong>Withdraw consent</strong>: stop using the AI features at any time. The review asks for your confirmation every time, Ask Claude
+                once a browser session, and Rewrite once for each paper: Commands (Ctrl+K or ⌘K), &ldquo;Turn off Rewrite for this paper&rdquo;, withdraws it. We keep nothing
+                of past requests to withdraw. Deleting your account withdraws consent to everything else, as easily as you gave it.
               </li>
               <li>
                 <strong>Object, or ask us to restrict</strong> what we do with your data, including anything we do on the basis of legitimate interest.

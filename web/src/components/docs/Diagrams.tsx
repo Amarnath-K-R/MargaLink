@@ -39,20 +39,20 @@ export function SystemDiagram() {
   const id = "sys";
   const device: Box[] = [
     { x: 44, y: 70, w: 196, h: 92, title: "The tool pages", lines: ["Next.js static export, React", "Journals · Match · Review", "Figures · Write"], tone: "sheet" },
-    { x: 256, y: 70, w: 196, h: 92, title: "Workers", lines: ["TeX Live (BusyTeX, WASM)", "Pyodide + figurelib.py", "pdf.js"] },
+    { x: 256, y: 70, w: 196, h: 92, title: "Workers", lines: ["TeX Live (BusyTeX, WASM)", "Pyodide + figurelib.py", "pdf.js · Harper"] },
     { x: 44, y: 178, w: 196, h: 92, title: "On-device work", lines: ["read · embed · rank", "format & journal-rules checks", "LaTeX helpers, suggestions"] },
     { x: 256, y: 178, w: 196, h: 92, title: "Browser storage", lines: ["OPFS: projects, last PDF", "caches: index, model, engine", "localStorage: small settings"] },
-    { x: 44, y: 290, w: 408, h: 66, title: "Consent notices: the only way out", lines: ["ReviewConsent · FigureConsent: nothing is sent until a click"], tone: "away" },
+    { x: 44, y: 290, w: 408, h: 72, title: "Consent notices: the only way out", lines: ["ReviewConsent · FigureConsent · RewriteConsent", "nothing is sent until a click"], tone: "away" },
   ];
   const outside: Box[] = [
     { x: 566, y: 30, w: 240, h: 76, title: "Cloudflare Pages", lines: ["the static site, /index, /templates,", "the figure gallery"] },
     { x: 566, y: 124, w: 240, h: 94, title: "Public assets", lines: ["R2: TeX engine and packs", "jsDelivr: Pyodide, ONNX runtime", "Hugging Face: the embedding model"] },
-    { x: 566, y: 250, w: 240, h: 76, title: "Pages Functions", lines: ["/api/review · /api/figure", "hold the key; keep no paper"] },
+    { x: 566, y: 250, w: 240, h: 76, title: "Pages Functions", lines: ["/api/review · figure · rewrite", "hold the key; keep no paper"] },
     { x: 566, y: 352, w: 240, h: 54, title: "Anthropic API", lines: ["Claude"] },
   ];
   return (
     <figure className="clay overflow-x-auto rounded-[22px] p-3">
-      <svg viewBox="0 0 830 430" role="img" aria-label="MargaLink's system: everything runs in the browser on the user's device; public files come in from Cloudflare and CDNs; only the two opt-in features send anything out, through two Pages Functions to Anthropic." className="block h-auto w-full min-w-[640px]">
+      <svg viewBox="0 0 830 430" role="img" aria-label="MargaLink's system: everything runs in the browser on the user's device; public files come in from Cloudflare and CDNs; only the three opt-in features send anything out, through three Pages Functions to Anthropic." className="block h-auto w-full min-w-[640px]">
         <defs>
           <linearGradient id={`${id}-clay`} x1="0" y1="0" x2="0.4" y2="1">
             <stop offset="0" stopColor="#fefdf9" />
@@ -84,8 +84,8 @@ export function SystemDiagram() {
         <Arrow id={id} d="M686 328 L 686 348" label="" lx={0} ly={0} away />
       </svg>
       <figcaption className="px-2 pt-3 text-xs leading-relaxed text-ink-soft">
-        Solid arrows are bodyless GETs for public files. The dashed ones carry something of the user&apos;s, only after a notice, only for the AI review
-        and Ask Claude.
+        Solid arrows are bodyless GETs for public files. The dashed ones carry something of the user&apos;s, only after a notice, only for the AI review,
+        Ask Claude and Rewrite.
       </figcaption>
     </figure>
   );

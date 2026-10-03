@@ -8,7 +8,7 @@
 // account may open while the beta runs (access/access.ts).
 import { hashSecret, HINT_COOKIE, readCookie, rollSession, sessionCookies, withCookies, type AccountEnv } from "../../src/lib/accounts/auth.ts";
 import { checkoutSig } from "../../src/lib/accounts/paddle.ts";
-import { balance, grantDuePro, sweepTickets } from "../../src/lib/accounts/ledger.ts";
+import { balance, grantDuePro, sweepCharges, sweepTickets } from "../../src/lib/accounts/ledger.ts";
 import { accessFor } from "../../src/lib/access/access.ts";
 
 type Env = AccountEnv & { PADDLE_ENV?: string; PADDLE_CLIENT_TOKEN?: string; PADDLE_PRICE_IDS?: string };
@@ -32,6 +32,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   if (!a) return withCookies(Response.json({ user: null }), readCookie(request, HINT_COOKIE) ? sessionCookies(null) : []);
   const s = a.session;
   await sweepTickets(env.DB, now);
+  await sweepCharges(env.DB, now); // an AI request the browser abandoned mid-call, refunded once past its time
   await grantDuePro(env.DB, s.userId, now);
   const rolled = await rollSession(env.DB, s, now);
   const sub = await env.DB.prepare("SELECT interval, status, cancel_at_end AS cancelAtEnd, period_end AS periodEnd FROM subscriptions WHERE user_id = ? AND status != 'canceled' ORDER BY event_at DESC LIMIT 1")

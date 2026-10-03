@@ -95,7 +95,7 @@ export default function SignInPanel({ next, lead, notice, fullPage = false }: { 
       )}
       {lead ?? (
         <p className="text-sm leading-relaxed text-ink-soft">
-          {BETA.on ? `Testers start with ${WELCOME_COINS} M coins for the AI review and Ask Claude.` : `AI reviews and Ask Claude need an account. New accounts get ${WELCOME_COINS} M coins.`}
+          {BETA.on ? `Testers start with ${WELCOME_COINS} M coins for the AI review, Ask Claude and Rewrite.` : `AI reviews, Ask Claude and Rewrite need an account. New accounts get ${WELCOME_COINS} M coins.`}
         </p>
       )}
       <p className="mt-3 text-xs leading-relaxed text-ink-soft">

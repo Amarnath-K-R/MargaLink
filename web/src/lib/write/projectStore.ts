@@ -29,6 +29,7 @@ export type ProjectMeta = {
   templateId: string | null;
   packs?: string[]; // data packs the template needs up front (["all"] for classes like IEEEtran)
   spelling?: Spelling; // the paper's English and its own words (absent: US English, none); carried in backups
+  rewriteConsent?: string; // when Rewrite (Claude) was turned on for this paper, in this browser; never in a backup
   createdAt: string;
   updatedAt: string;
 };
@@ -267,7 +268,9 @@ export class ProjectStore {
   async exportZip(id: string): Promise<Uint8Array> {
     const paths = await this.files(id);
     const files = await Promise.all(paths.map(async (path) => ({ path, data: await this.read(id, path) })));
-    return zipFiles([...files, { path: META, data: new TextEncoder().encode(JSON.stringify(await this.meta(id))) }]);
+    const meta: Partial<ProjectMeta> = { ...(await this.meta(id)) };
+    delete meta.rewriteConsent; // consent is given in this browser, for this copy of the paper
+    return zipFiles([...files, { path: META, data: new TextEncoder().encode(JSON.stringify(meta)) }]);
   }
 
   // A backup, a publisher's template or an Overleaf export: one top-level

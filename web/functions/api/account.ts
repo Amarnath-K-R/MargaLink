@@ -67,7 +67,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .all()
   ).results;
   // Who has received this account's data (the right to know who it was shared with).
-  const usedAi = ledger.some((e) => ["review", "figure"].includes(String(e.kind)));
+  const usedAi = ledger.some((e) => ["review", "figure", "rewrite"].includes(String(e.kind)));
   const sharedWith = [
     { name: "Cloudflare", what: "Hosts the site and this account's database (its main copy in the Asia Pacific region)." },
     ...(google ? [{ name: "Google", what: "Confirmed your email address and gave us its id for you when you signed in with Google." }] : []),
@@ -78,7 +78,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         ? "Sold you coins or Pro as merchant of record; the purchases above are its references."
         : "If you opened a checkout: your email address and account id, to start it.",
     },
-    ...(usedAi ? [{ name: "Anthropic", what: "Received the text you chose to send for AI reviews or Ask Claude requests, never your account details." }] : []),
+    ...(usedAi ? [{ name: "Anthropic", what: "Received the text you chose to send for AI reviews, Ask Claude requests or Rewrite, never your account details." }] : []),
   ];
   const data = { exportedAt: new Date().toISOString(), account, signInWithGoogle: google, identities, sessions, coins: { balance: await balance(env.DB, s.userId), ledger }, purchases, subscriptions, adjustments, reviews, access, activity, sharedWith };
   return new Response(JSON.stringify(data, null, 2), {

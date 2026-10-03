@@ -1,7 +1,9 @@
 // A Word document (Folio's ProseMirror document) read as prose for the
 // spelling checker, and the checker's marks mapped back to the document.
 // Pure; docText.selfcheck.ts runs it on Folio's own schema.
+import { applyFolioDocumentOperations, createFolioAIEditSnapshot, createFolioAITextRangeHandle, type FolioAIEditOperation } from "@stll/folio-core/ai-edits";
 import { buildCleanBlockText, type CleanBlockText } from "@stll/folio-core/ai-edits/clean-text";
+import { collectNoteReferenceLabels } from "@stll/folio-core/ai-edits/snapshot";
 import type { Node } from "prosemirror-model";
 import type { EditorState, Transaction } from "prosemirror-state";
 
@@ -82,4 +84,177 @@ export function fixWord(state: EditorState, m: { from: number; to: number; word:
   if (!mid) return state.tr.delete(from, to);
   const marks = state.doc.nodeAt(from < to || a === 0 ? from : from - 1)?.marks ?? [];
   return state.tr.replaceWith(from, to, state.schema.text(mid, marks));
+}
+
+// --- Rewrite (rewrite.ts): a Word selection as a passage, and the answer put back.
+
+export type WordPassage = {
+  passage: string; // the paragraphs joined by blank lines, every object a numbered placeholder ⟦n⟧
+  objects: string[]; // each placeholder's text as read (a citation's, a footnote mark's; "" for a picture), for showing the rewrite
+  // Each paragraph: where it is, its text when read (as Folio's own edits read it), and the stretches of
+  // words between its objects, in that text's offsets (the stretch between two touching objects is empty).
+  blocks: { pos: number; text: string; gaps: { start: number; end: number }[] }[];
+};
+const PLACEHOLDER = /⟦(\d+)⟧/g;
+
+/**
+ * Rewrite's passage for the selection [from, to): each paragraph's words,
+ * with everything that isn't prose (a citation or other field, a footnote
+ * mark, an equation, a picture, a shape, a symbol, a bookmark, a comment's
+ * anchor, a tab, a line break) as a placeholder that stays where it is. A
+ * paragraph's whitespace at either end stays out. Refused, before anything
+ * is sent, over tracked changes, text holding ⟦ or ⟧, or a paragraph Folio
+ * reads differently.
+ */
+export function docPassage(doc: Node, from: number, to: number): WordPassage | string {
+  const labels = collectNoteReferenceLabels(doc);
+  const snapshot = createFolioAIEditSnapshot(doc);
+  const { insertion, deletion } = doc.type.schema.marks;
+  const goBack = goBackIds(doc);
+  const blocks: WordPassage["blocks"] = [];
+  const paragraphs: string[] = [];
+  const shown: string[] = [];
+  let n = 0;
+  let refusal: string | null = null;
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (refusal) return false;
+    if (!node.isTextblock) return true;
+    const clean = buildCleanBlockText(node, pos, { fieldResults: "text", noteReferences: labels });
+    const { text, offsets } = clean;
+    // Its objects, in clean-text offsets: every inline node that isn't text, taken whole with any text it
+    // shows (a field's result, even one character; a content control's text), or where it sits if it shows
+    // none (a picture); and every footnote mark. Word's own marks it rewrites anyway are left in the words.
+    const objects: [number, number][] = [];
+    node.forEach((child, offset) => {
+      if (child.isText || regenerated(child, goBack)) return;
+      const [start, end] = [pos + 1 + offset, pos + 1 + offset + child.nodeSize];
+      const inside = offsets.flatMap((o, i) => (i < text.length && o >= start && o < end ? [i] : []));
+      if (inside.length) objects.push([inside[0], inside[inside.length - 1] + 1]);
+      else objects.push([offsets.findIndex((o, i) => i === text.length || o >= end), -1]);
+    });
+    for (const b of clean.structuralBoundaries) if (b.type === "noteReference") objects.push([b.offset, b.offset + b.length]);
+    for (const o of objects) if (o[1] < 0) o[1] = o[0]; // takes no character
+    // The selection's part of the paragraph, an object it starts or ends in taken whole, its whitespace left out.
+    let s = 0;
+    while (s < text.length && offsets[s] < from) s++;
+    let e = text.length;
+    while (e > s && offsets[e - 1] >= to) e--;
+    while (s < e && /\s/.test(text[s])) s++;
+    while (e > s && /\s/.test(text[e - 1])) e--;
+    for (const [a, b] of objects) {
+      if (a < s && s < b) s = a;
+      if (a < e && e < b) e = b;
+    }
+    if (s >= e) return false;
+    if (snapshot.blocks.find((b) => snapshot.anchors[b.id]?.from === pos)?.text !== text) refusal = "This paragraph can't be rewritten here: Folio reads it differently.";
+    else if (/[⟦⟧]/.test(text.slice(s, e))) refusal = "This selection holds ⟦ or ⟧, which Rewrite uses itself.";
+    else if (doc.rangeHasMark(offsets[s], offsets[e - 1] + 1, insertion) || doc.rangeHasMark(offsets[s], offsets[e - 1] + 1, deletion))
+      refusal = "This selection has tracked changes. Accept or reject them first.";
+    if (refusal) return false;
+    // The ones inside: a whole object, or one taking no character strictly between the ends.
+    const within = objects.filter(([a, b]) => (a < b ? s <= a && b <= e : s < a && a < e));
+    within.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+    const gaps: { start: number; end: number }[] = [];
+    let at = s;
+    let paragraph = "";
+    for (const [a, b] of within) {
+      gaps.push({ start: at, end: a });
+      paragraph += `${text.slice(at, a)}⟦${++n}⟧`;
+      shown.push(text.slice(a, b));
+      at = b;
+    }
+    gaps.push({ start: at, end: e });
+    paragraph += text.slice(at, e);
+    blocks.push({ pos, text, gaps });
+    paragraphs.push(paragraph);
+    return false;
+  });
+  if (refusal) return refusal;
+  if (!blocks.length) return "Select some text to rewrite.";
+  return { passage: paragraphs.join("\n\n"), objects: shown, blocks };
+}
+
+// Word's "_GoBack" bookmark (its last edit), as ids: both its ends.
+const goBackIds = (doc: Node) => {
+  const ids = new Set<unknown>();
+  doc.descendants((n) => void (n.type.name === "bookmarkBoundary" && n.attrs.name === "_GoBack" && ids.add(n.attrs.id)));
+  return ids;
+};
+// Marks Word writes and rewrites on its own (spelling-check spans, where it last broke the page, its
+// last edit): not part of the paper. A replaced stretch of words keeps them, moved within it.
+function regenerated(n: Node, goBack: Set<unknown>): boolean {
+  const t = n.type.name;
+  return t === "renderedPageBreak" || (t === "preservedXml" && /^<w:proofErr\b/.test(String(n.attrs.xml))) || (t === "bookmarkBoundary" && goBack.has(n.attrs.id));
+}
+
+// The document's objects in order, each whole (a field's or content control's text and settings, a
+// footnote mark), to see that an edit kept every one exactly.
+function objectsOf(doc: Node): string {
+  const goBack = goBackIds(doc);
+  const seen: string[] = [];
+  doc.descendants((n) => {
+    if (n.isInline && !n.isText) {
+      if (!regenerated(n, goBack)) seen.push(JSON.stringify(n.toJSON()));
+      return false;
+    }
+    if (n.isText && n.marks.some((m) => m.type.name === "footnoteRef")) seen.push(JSON.stringify(n.toJSON()));
+  });
+  return seen.join("\n");
+}
+
+// The passage's paragraphs as they were, found where they now are (an edit elsewhere moves them), in
+// order; null when one of them changed.
+function findBlocks(snapshot: ReturnType<typeof createFolioAIEditSnapshot>, p: WordPassage) {
+  const at = (id: string) => snapshot.anchors[id]?.from ?? -1;
+  const found: (typeof snapshot.blocks)[number][] = [];
+  let after = -1;
+  for (const b of p.blocks) {
+    const block = snapshot.blocks.filter((x) => x.text === b.text && at(x.id) > after).sort((x, y) => Math.abs(at(x.id) - b.pos) - Math.abs(at(y.id) - b.pos))[0];
+    if (!block) return null;
+    found.push(block);
+    after = at(block.id);
+  }
+  return found;
+}
+
+/** Whether the passage's paragraphs are still as they were when it was read. */
+export const passageFresh = (doc: Node, p: WordPassage) => findBlocks(createFolioAIEditSnapshot(doc), p) !== null;
+
+/**
+ * A checked answer (rewrite.ts) put back as one edit, one undo step: each
+ * stretch of words that changed is replaced in place, the objects between
+ * them untouched, all at once or not at all. "stale" when a paragraph
+ * changed since it was sent; "refused" when the answer doesn't fit the
+ * passage or Folio couldn't place it without moving an object.
+ */
+export function applyDocRewrite(view: { state: EditorState; dispatch: (tr: Transaction) => void }, p: WordPassage, text: string): "applied" | "stale" | "refused" {
+  const doc = view.state.doc;
+  const paragraphs = text.split("\n\n");
+  if (paragraphs.length !== p.blocks.length) return "refused";
+  const snapshot = createFolioAIEditSnapshot(doc);
+  const operations: FolioAIEditOperation[] = [];
+  const found = findBlocks(snapshot, p);
+  if (!found) return "stale";
+  let n = 0;
+  for (let k = 0; k < p.blocks.length; k++) {
+    const b = p.blocks[k];
+    const block = found[k];
+    const parts = paragraphs[k].split(PLACEHOLDER).filter((_, i) => i % 2 === 0);
+    const marks = [...paragraphs[k].matchAll(PLACEHOLDER)].map((m) => Number(m[1]));
+    if (parts.length !== b.gaps.length || marks.some((m) => m !== ++n)) return "refused";
+    for (let j = 0; j < b.gaps.length; j++) {
+      const { start, end } = b.gaps[j];
+      if (parts[j] === b.text.slice(start, end)) continue;
+      const range = start < end ? createFolioAITextRangeHandle({ blockId: block.id, text: block.text, startOffset: start, endOffset: end }) : null;
+      if (!range || !parts[j]) return "refused";
+      operations.push({ id: `rewrite-${operations.length + 1}`, type: "replaceRange", range, replace: parts[j] });
+    }
+  }
+  if (!operations.length) return "refused";
+  let held = null as Transaction | null;
+  const result = applyFolioDocumentOperations({ view: { state: view.state, dispatch: (tr) => void (held = tr) }, snapshot, batch: { version: 1, mode: "direct", atomic: true, operations } });
+  if (result.status !== "committed" || !held) return result.skipped.some((x) => x.reason === "changedBlock" || x.reason === "staleRange") ? "stale" : "refused";
+  if (objectsOf(held.doc) !== objectsOf(doc)) return "refused"; // Folio widened an edit over an object
+  view.dispatch(held);
+  return "applied";
 }

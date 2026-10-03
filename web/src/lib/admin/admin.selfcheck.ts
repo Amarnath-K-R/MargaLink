@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { testD1 } from "../accounts/testD1.ts";
 import { createSession, sha256Hex, signInUser } from "../accounts/auth.ts";
 import { WELCOME_COINS } from "../accounts/coins.ts";
-import { balance } from "../accounts/ledger.ts";
+import { balance, credit, debit } from "../accounts/ledger.ts";
 import { accessFor, addAccess, admitUser } from "../access/access.ts";
 import { logEvent } from "../telemetry/apiEvents.ts";
 import { aiCost, overview, usage } from "./stats.ts";
@@ -139,5 +139,12 @@ assert.equal(page.events.length, 2);
 const rest = await events(`?limit=2&before=${page.next}`);
 assert.ok(rest.events.every((e) => e.id < page.next!));
 assert.equal((await events("?limit=50")).next, null, "no more pages");
+
+// coins spent on the AI features, refunds taken off: a rewrite counts like the others
+const spentBefore = (await overview(db, now)).coins.spent;
+await debit(db, ann.id, 3, "rewrite", "w1", now);
+await debit(db, ann.id, 2, "rewrite", "w2", now);
+await credit(db, ann.id, 2, "rewrite_refund", "w2", now);
+assert.equal((await overview(db, now)).coins.spent, spentBefore + 3);
 
 console.log("admin.selfcheck: OK");

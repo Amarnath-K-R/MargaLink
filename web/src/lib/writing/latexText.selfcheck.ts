@@ -3,7 +3,7 @@
 // spaces in a copy of the same length, and a mark's position in the copy is its
 // position in the source.
 import assert from "node:assert/strict";
-import { proseMask } from "./latexText.ts";
+import { fromPassage, proseMask, toPassage, type Passage } from "./latexText.ts";
 
 // What's left readable, with the blanked runs squeezed (positions checked separately).
 const visible = (tex: string) => proseMask(tex).replace(/\s+/g, " ").trim();
@@ -50,6 +50,14 @@ assert.equal(
   visible("\\Citet{smth} and \\textcite{x} \\citenum{y} \\subref{fig:slep} \\bibitem{zhang} \\gls{psg} \\Glspl{psg} \\acrshort{osa} \\ac{osa} \\definecolor{mygren}{rgb}{0,1,0} \\newtheorem{thm}{Theorem} \\lstinline|x = y| \\lstinline{y} \\href{https://x.org}{the link}"),
   "and the link",
 );
+// drawings (TikZ, pgfplots, picture) are code, not prose; range references and index entries are keys
+assert.equal(visible("A \\begin{tikzpicture}\\draw (0,0) -- node{labl} (1,1);\\end{tikzpicture} B \\begin{axis}[xlabel=tme]\\end{axis} C"), "A B C");
+assert.equal(visible("See \\crefrange{fig:a}{fig:b} and \\Crefrange{tab:a}{tab:b}\\index{slep} here."), "See and here.");
+{
+  const drawn = "Drawn: \\begin{picture}(10,10)\\put(0,0){x}\\end{picture} done.";
+  assert.equal((toPassage(drawn, 0, drawn.length) as Passage).passage, "Drawn: \u27e61\u27e7 done.", "a drawing travels whole");
+}
+
 // a word with an accent command is one word, read whole or not at all
 assert.equal(visible("Schr\\\"odinger and M\\\"uller met in Ko\\v{s}ice at a caf\\'e."), "and met in at a .");
 same("caf\\'e \\\"");
@@ -76,5 +84,55 @@ assert.equal(visible("\\begin{itemize}\n\\item First pont.\n\\end{itemize}"), "F
 
 // broken LaTeX never throws and keeps its length
 for (const broken of ["\\emph{unclosed", "}{ stray", "$ unclosed maths", "\\", "\\begin{equation} no end", "%"]) same(broken);
+
+// --- Rewrite's passage: what isn't prose travels as numbered placeholders, kept exactly
+const P = (n: number) => `\u27e6${n}\u27e7`;
+const doc = [
+  "\\section{Intro}",
+  "Sleep was \\emph{short}~\\cite[p.~3]{smith2019} after surgery ($n = 412$).",
+  "% a note to self",
+  "See Figure~\\ref{fig:a} and \\href{https://x.org}{the registry}.",
+  "\\begin{equation}",
+  "E = mc^2",
+  "\\end{equation}",
+  "It recovered \\verb|x| by day 90 \\begin{itemize}\\item fast\\end{itemize}",
+].join("\n");
+const passage = (from: number, to: number) => {
+  const p = toPassage(doc, from, to);
+  assert.ok(typeof p !== "string", `a passage: ${p}`);
+  return p as Passage;
+};
+const from = doc.indexOf("Sleep");
+const to = doc.indexOf("registry}.") + "registry}.".length;
+const p = passage(from, to);
+assert.equal(p.passage, `Sleep was \\emph{short}~${P(1)} after surgery (${P(2)}).\n${P(3)}\nSee Figure~${P(4)} and ${P(5)}{the registry}.`, "formatting commands stay in the text");
+assert.deepEqual(p.parts, ["\\cite[p.~3]{smith2019}", "$n = 412$", "% a note to self", "\\ref{fig:a}", "\\href{https://x.org}"]);
+assert.deepEqual([p.from, p.to], [from, to]);
+assert.equal(fromPassage(p.passage, p.parts), doc.slice(from, to), "the round trip is exact");
+assert.equal(fromPassage(`After surgery (${P(2)}) sleep was \\emph{brief}~${P(1)}.\n${P(3)}\nFigure~${P(4)} and ${P(5)}{the registry} show it.`, p.parts),
+  "After surgery ($n = 412$) sleep was \\emph{brief}~\\cite[p.~3]{smith2019}.\n% a note to self\nFigure~\\ref{fig:a} and \\href{https://x.org}{the registry} show it.", "parts go back by number");
+// a comment runs to the end of its line: text an answer put after one goes to the next line (seen live)
+assert.equal(fromPassage(`One. ${P(3)} Two.`, p.parts), "One. % a note to self\nTwo.");
+assert.equal(fromPassage(`One. ${P(3)}\nTwo.`, p.parts), "One. % a note to self\nTwo.");
+assert.equal(fromPassage(`One. ${P(3)}`, p.parts), "One. % a note to self", "nothing added at the end");
+// maths environments, \verb and \begin/\end travel whole
+assert.deepEqual(passage(doc.indexOf("See"), doc.length).parts, ["\\ref{fig:a}", "\\href{https://x.org}", "\\begin{equation}\nE = mc^2\n\\end{equation}", "\\verb|x|", "\\begin{itemize}", "\\end{itemize}"]);
+// the range is narrowed to the text: the blank lines around a selection stay where they are
+const padded = passage(from - 1, to + 1);
+assert.deepEqual([padded.from, padded.to], [from, to]);
+
+// refused: a selection that cuts through markup, or already has Rewrite's brackets
+const refusedAt = (f: number, t: number, why: string, text = doc) => assert.equal(typeof toPassage(text, f, t), "string", why);
+refusedAt(doc.indexOf("emph"), to, "starting inside a command's name");
+refusedAt(from, doc.indexOf("\\emph") + 3, "ending inside a command's name");
+refusedAt(doc.indexOf("smith2019"), to, "starting inside a citation");
+refusedAt(doc.indexOf("n = 412"), to, "starting inside maths");
+refusedAt(from, doc.indexOf("mc^2"), "ending inside an equation");
+refusedAt(doc.indexOf("note to self"), to, "starting inside a comment");
+refusedAt(doc.indexOf("short}"), to, "starting inside an argument");
+refusedAt(from, doc.indexOf("short}") + 2, "ending inside an argument");
+refusedAt(0, 8, "a selection holding Rewrite's brackets", "A \u27e61\u27e7 b.");
+refusedAt(0, 7, "maths left open", "Text $x and more");
+refusedAt(0, 0, "nothing selected");
 
 console.log("latexText.selfcheck: OK");

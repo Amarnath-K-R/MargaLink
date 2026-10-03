@@ -67,8 +67,8 @@ export default function AccountView() {
           {account.balance}
         </p>
         <p className="mt-3 max-w-lg text-sm leading-relaxed text-ink-soft">
-          A review costs 4 to 45 M coins, by depth and length; Ask Claude costs 1. The price is always shown before anything is sent, and any part of
-          a run that doesn&apos;t come back is refunded automatically. Pro coins are spent first and up to {PRO.carryCap} carry over each month; pack
+          A review costs 4 to 45 M coins, by depth and length; Ask Claude costs 1; a rewrite costs 1 per 500 words you select. The price is
+          always shown before anything is sent, and any part of a run that doesn&apos;t come back is refunded automatically. Pro coins are spent first and up to {PRO.carryCap} carry over each month; pack
           coins never expire.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">

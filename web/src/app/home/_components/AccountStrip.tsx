@@ -29,7 +29,7 @@ export default function AccountStrip() {
       ) : (
         <>
           <span className="leading-snug text-ink-soft">
-            For AI reviews and Ask Claude.
+            For AI reviews, Ask Claude and Rewrite.
             <br />
             New accounts get {WELCOME_COINS} M coins.
           </span>

@@ -216,6 +216,14 @@ if (want("write")) {
   await page.getByRole("button", { name: "Cite" }).click();
   await shot("write-formatbar", [bar, '[role="menu"][aria-label="Cite"]'], [page.getByRole("button", { name: "Bold" }), page.getByRole("button", { name: "Section" }), page.getByRole("button", { name: "Bulleted list" }), page.getByRole("button", { name: "Inline maths" }), page.getByRole("button", { name: "Cite" }), '[role="menu"][aria-label="Cite"] input', page.getByRole("button", { name: "Ref", exact: true }), page.getByRole("button", { name: "Figure", exact: true }), page.getByRole("button", { name: "Table" }), page.getByRole("button", { name: "Comment" })], 10);
   await page.keyboard.press("Escape");
+  // Rewrite's menu over a selected sentence: the selection's price, then the tools.
+  await page.click('[data-testid="latex-editor"] .cm-line:has-text("Start here")', { position: { x: 2, y: 6 } });
+  await page.keyboard.press("Home");
+  for (let i = 0; i < "Start here.".length; i++) await page.keyboard.press("Shift+ArrowRight");
+  await page.locator(bar).getByRole("button", { name: "Rewrite" }).click();
+  const rw = '[role="menu"][aria-label="Rewrite"]';
+  await shot("write-rewrite", [bar, rw], [`${rw} [data-testid="rewrite-price"]`, page.getByRole("menuitem", { name: "Paraphrase" }), page.locator(rw).getByText("Change tone"), page.getByRole("menuitem", { name: "Clarity and flow" })]);
+  await page.keyboard.press("Escape");
   // A short line, so End is the line's end (on a wrapped line it's the visual line's).
   await page.click('[data-testid="latex-editor"] .cm-line:has-text("section{Introduction}")');
   await page.keyboard.press("End");
@@ -276,7 +284,8 @@ if (want("coins")) {
   // What things cost, and buying coins.
   await go("/pricing");
   const costs = "main section:has(#costs)";
-  await shot("coins-costs", [`${costs} .sheet`, `${costs} p.clay-well`], [`${costs} tbody tr:nth-child(2) th`, `${costs} tbody tr:first-child td:nth-child(3)`, `${costs} .sheet > p`, `${costs} p.clay-well`]);
+  const prices = page.locator(`${costs} p.clay-well`);
+  await shot("coins-costs", [`${costs} .sheet`, prices.last()], [`${costs} tbody tr:nth-child(2) th`, `${costs} tbody tr:first-child td:nth-child(3)`, `${costs} .sheet > p`, prices.first(), prices.last()]);
   await shot("coins-packs", ['[data-pack="S"]', '[data-pack="L"]'], ['[data-pack="S"] p.text-2xl', '[data-pack="S"] p.text-4xl', '[data-pack="S"] button']);
   await shot("coins-pro", ['[data-testid="pro"]'], ['[data-testid="pro"] p.text-2xl', page.getByRole("button", { name: "Get Pro monthly" }), page.getByRole("button", { name: "Get Pro yearly" })]);
   // The account page.

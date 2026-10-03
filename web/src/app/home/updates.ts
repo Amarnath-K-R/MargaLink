@@ -30,6 +30,32 @@ export const TAG_TINT: Record<UpdateTag, string> = {
 
 export const UPDATES: Update[] = [
   {
+    date: "2026-10-03",
+    tag: "Write",
+    title: "Rewrite with Claude",
+    summary: "Select a passage in LaTeX or Word and have Claude paraphrase it, change its tone, shorten it, expand it, or make it clearer. Only the passage you select is sent, once you turn Rewrite on for that paper.",
+    points: [
+      "The rewrite comes back as a word diff: Replace, Try again or Discard",
+      "Citations, equations and pictures stay on your device, and a rewrite that adds a number or drops a citation is refused",
+      "1 M coin per 500 words, shown before you choose; refunded if it fails",
+    ],
+    href: "/write",
+    cta: "Open the workspace",
+  },
+  {
+    date: "2026-10-03",
+    tag: "Write",
+    title: "Spelling and grammar",
+    summary: "Misspellings and grammar are underlined as you write, in LaTeX and in Word, checked in your browser. Nothing is sent anywhere, and it's free.",
+    points: [
+      "US, UK, Australian, Canadian or Indian English, chosen per paper",
+      "Add to dictionary keeps a word with the paper",
+      "Citation keys and LaTeX commands aren't marked",
+    ],
+    href: "/write",
+    cta: "Open the workspace",
+  },
+  {
     date: "2026-10-02",
     tag: "Write",
     title: "Word documents in the workspace",

@@ -33,22 +33,22 @@ device in both editors; a paper's English variant and dictionary are kept
 in its project settings. The workspace is also the hub: match, review,
 figures, checks and journal open as windows over it. Matching and the
 checks read the compiled PDF, or the saved Word document, on-device (rule 1
-unchanged); the two
-rule-3 exceptions are reachable from there through the same `ReviewConsent`
-/ `FigureConsent` components, and the status bar says when something was
-sent.
+unchanged); the review and figure exceptions are reachable from there
+through the same `ReviewConsent` / `FigureConsent` components, Rewrite
+works on a selection in either editor behind `RewriteConsent`, and the
+status bar says when something was sent.
 
-**The two disclosed exceptions (rule 3):** two features send something to
-Anthropic's Claude API. Both are opt-in, both sit behind an explicit
+**The three disclosed exceptions (rule 3):** three features send something to
+Anthropic's Claude API. All are opt-in, each sits behind an explicit
 consent step that names exactly what happens before anything is sent, and
-neither has a default-on path.
+none has a default-on path.
 
 1. **The LLM pre-submission review** (`functions/api/review.ts`,
    orchestrated by `src/lib/review/reviewOrchestrator.ts`, consent in
    `ReviewConsent.tsx`) sends the paper's text, in several short requests
    — one per section, then one over the extracted numbers. This is the
-   only feature where "never leaves your device" doesn't hold for a
-   paper's content. The server keeps none of it between requests.
+   only feature that sends a whole paper's content (Rewrite sends only a
+   selected passage). The server keeps none of it between requests.
 2. **The figure generator** (`functions/api/figure.ts`, consent in
    `FigureConsent.tsx`). Figures are drawn locally (Pyodide worker running
    `public/figurelib.py`); only "Ask Claude" sends anything: column names,
@@ -61,14 +61,29 @@ neither has a default-on path.
    `figureSchema.selfcheck.ts` proves it with planted sentinels; the
    Function re-validates it and gates Claude's reply (valid spec, columns
    that exist, no label it wasn't given; hooks through the denylist).
+3. **Rewrite** (`functions/api/rewrite.ts`, rules in
+   `src/lib/writing/rewrite.ts`, consent in `RewriteConsent.tsx`, once per
+   paper, kept in the browser: `ProjectMeta.rewriteConsent`, never in a
+   backup; the command "Turn off Rewrite for this paper" withdraws it).
+   Sends only the passage the person selected, the tool (paraphrase, tone,
+   shorten, expand, clarity) and tone, the format and the paper's English
+   variant. Citations, references, labels, maths, drawings, pictures, LaTeX
+   comments and, in Word, fields, content controls and footnote marks are
+   replaced by numbered placeholders in the browser
+   (`latexText.ts` `toPassage`, `docText.ts` `docPassage`) and never sent.
+   `parseRewriteRequest` accepts exactly those fields, on both sides;
+   `checkRewrite` refuses an answer that drops, adds or moves a placeholder,
+   adds a number, or (LaTeX) changes a command, brace, `$`, `%` or `&`,
+   before it's returned, and the browser checks it again before offering it. 1 M coin per 500
+   words selected, refunded whenever no checked answer goes out.
 
-These two Pages Functions are the only server code that ever receives
+These three Pages Functions are the only server code that ever receives
 anything from a paper or a dataset, and they share one credential
 (`ANTHROPIC_API_KEY`). Every other feature keeps rule 1 absolutely; these
-two are rule 3's carve-outs, not quiet exceptions to rule 1.
+three are rule 3's carve-outs, not quiet exceptions to rule 1.
 
 **Accounts, M coins and payments** (`docs/plans/2026-09-28-accounts-coins-payments.md`):
-the two AI features cost M coins, so they need an account; nothing else
+the three AI features cost M coins, so they need an account; nothing else
 does, and a signed-out visitor makes no account request (`useAccount.ts`
 asks `/api/me` only when the `ml_in` hint cookie exists). The account
 Functions (`functions/api/_middleware.ts`, `me.ts`, `account.ts`,
@@ -127,8 +142,8 @@ who signed in through the old code between the migration and the deploy:
   its output (`web/public/index/*`) is static files the browser fetches.
 - `web/` — Next.js app, static export (`output: "export"` in
   `next.config.ts`) — no backend, **except** the Cloudflare Pages
-  Functions in `web/functions/`: `api/review.ts` and `api/figure.ts`,
-  holding the Anthropic API key server-side since the browser must never
+  Functions in `web/functions/`: `api/review.ts`, `api/figure.ts` and
+  `api/rewrite.ts`, holding the Anthropic API key server-side since the browser must never
   see it (see the disclosed exceptions above), the account, payment and
   console Functions beside them (see "Accounts, M coins and payments"),
   and the beta's page gate, `_middleware.ts`.
@@ -170,7 +185,7 @@ Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
 | Variable | Where | Purpose |
 |---|---|---|
 | `OPENALEX_API_KEY` | `pipeline/.env` | Raises OpenAlex's rate limit; the fetchers work without it, just slower. |
-| `ANTHROPIC_API_KEY` | `web/.dev.vars` locally, the Cloudflare Pages dashboard in prod | The credential for both server-side features — `functions/api/review.ts` and `functions/api/figure.ts`. Server-side only. |
+| `ANTHROPIC_API_KEY` | `web/.dev.vars` locally, the Cloudflare Pages dashboard in prod | The credential for the three server-side AI features: `functions/api/review.ts`, `functions/api/figure.ts` and `functions/api/rewrite.ts`. Server-side only. |
 | `DB` | `wrangler.toml` binding (D1) | Accounts, sessions, the coin ledger, review tickets, and the AI features' daily limits (`src/lib/accounts/dailyCaps.ts`). Local: `npm run db:local`. After a new migration: `wrangler d1 migrations apply margalink --remote`. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | `.dev.vars` / dashboard secrets | "Continue with Google" (scope `openid email`). Unset: the Google button explains it's not set up. |
 | `RESEND_API_KEY`, `EMAIL_FROM` | `.dev.vars` / dashboard secrets | Email sign-in links. |
@@ -190,7 +205,7 @@ Cloudflare Pages would otherwise reject — see `docs/ARCHITECTURE.md` — then
   with a pull request into `main`; the owner merges after testing. Never
   commit straight to `main` or merge a PR unasked.
 - Code lives by feature: `web/src/lib/<feature>/` (`paper`, `match`,
-  `journals`, `checks`, `review`, `figures`, `write`, `accounts`, `ai`,
+  `journals`, `checks`, `review`, `figures`, `write`, `writing`, `accounts`, `ai`,
   `access`, `telemetry`, `admin`),
   shared UI in `web/src/components/<concern>/`, single-route pieces in that
   route's `_components/` (the homepage's in `_landing/`). A new

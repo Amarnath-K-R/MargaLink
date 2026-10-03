@@ -48,7 +48,7 @@ export default function ArchitecturePage() {
 
       <DocBody toc={TOC}>
         {/* ---------------------------------------------------------------- */}
-        <DocSection id="overview" title="The shape of it" icon={icon(Boxes)} lead="A static site that does its work in the browser, plus two small functions that exist only to hold an API key.">
+        <DocSection id="overview" title="The shape of it" icon={icon(Boxes)} lead="A static site that does its work in the browser, plus three small functions that exist only to hold an API key.">
           <SystemDiagram />
           <DocPart title="No server for the work">
             <p>
@@ -58,15 +58,15 @@ export default function ArchitecturePage() {
               necessarily sees the paper, so keeping &ldquo;the paper never leaves the device&rdquo; absolute meant taking the server out of the path.
             </p>
             <p>
-              The exceptions are Cloudflare Pages Functions: {code("functions/api/review.ts")} and {code("functions/api/figure.ts")}, for the two
-              features that need a language model (the browser must never hold the Anthropic API key), and the account and payment Functions beside
+              The exceptions are Cloudflare Pages Functions: {code("functions/api/review.ts")}, {code("functions/api/figure.ts")} and{" "}
+              {code("functions/api/rewrite.ts")}, for the three features that need a language model (the browser must never hold the Anthropic API key), and the account and payment Functions beside
               them, on a D1 database that holds accounts and M coins, never anything from a paper.
             </p>
           </DocPart>
           <DocPart title="Heavy things run in workers">
             <p>
               LaTeX compiles in a Web Worker running TeX Live compiled to WebAssembly (BusyTeX). Figures draw in a worker running Python (Pyodide) with{" "}
-              {code("public/figurelib.py")}. PDF text comes from pdf.js, a Word document&apos;s from mammoth. The embedding model runs through transformers.js. Their files are public and
+              {code("public/figurelib.py")}. Spelling and grammar run in a worker too, with Harper compiled to WebAssembly. PDF text comes from pdf.js, a Word document&apos;s from mammoth. The embedding model runs through transformers.js. Their files are public and
               versioned: the TeX engine and packs on an R2 bucket, Pyodide and the ONNX runtime from jsDelivr, the model from Hugging Face.
             </p>
           </DocPart>
@@ -91,7 +91,7 @@ export default function ArchitecturePage() {
                 name: "2 · Nothing from a paper is stored on a server",
                 what: (
                   <>
-                    Both AI Functions keep nothing from a request: they validate, charge, call Claude, gate the answer and return it. Server state, all in D1, is
+                    The AI Functions keep nothing from a request: they validate, charge, call Claude, gate the answer and return it. Server state, all in D1, is
                     the daily limits per feature (for the service and for each account, {code("dailyCaps.ts")}), accounts, the coin ledger and a running
                     review&apos;s ticket (section ids and lengths), the beta&apos;s access list ({code("access.ts")}) and a 30-day activity log of API
                     requests, metadata and token counts only ({code("apiEvents.ts")}). Writing projects live in the browser&apos;s Origin Private File
@@ -104,16 +104,17 @@ export default function ArchitecturePage() {
                 away: true,
                 what: (
                   <>
-                    Two features, each with its own notice: {code("ReviewConsent.tsx")} and {code("FigureConsent.tsx")}. A review starts only from the
-                    notice&apos;s confirm (or Resume/Retry of a run already confirmed). Ask Claude&apos;s payload can only be built by{" "}
-                    {code("buildFigurePayload()")} in {code("figureSchema.ts")}, whose selfcheck plants sentinels in cells and typed text and proves none
-                    leave.
+                    Three features, each with its own notice: {code("ReviewConsent.tsx")}, {code("FigureConsent.tsx")} and {code("RewriteConsent.tsx")}. A
+                    review starts only from the notice&apos;s confirm (or Resume/Retry of a run already confirmed). Ask Claude&apos;s payload can only be
+                    built by {code("buildFigurePayload()")} in {code("figureSchema.ts")}, whose selfcheck plants sentinels in cells and typed text and
+                    proves none leave. Rewrite&apos;s consent is given once per paper, kept in the paper&apos;s {code("project.json")} in the browser
+                    (never in a backup), and turned off from the commands; {code("parseRewriteRequest()")} accepts exactly six fields, on both sides.
                   </>
                 ),
               },
             ]}
           />
-          <Aside tone="away" title="What the two exceptions send">
+          <Aside tone="away" title="What the three exceptions send">
             <p>
               <strong>The review:</strong> the paper&apos;s text (author lines stripped, best effort), one request per section chunk, then one over the
               extracted claims, never the text again. Sections the user marks Don&apos;t send are never in any request.
@@ -121,6 +122,12 @@ export default function ArchitecturePage() {
             <p>
               <strong>Ask Claude:</strong> column names and inferred types, the row count, the request text, the current figure spec with typed text
               blanked and groups as {code("#n")}; category labels only when a separate box is ticked. Never a cell value or a traceback.
+            </p>
+            <p>
+              <strong>Rewrite:</strong> only the passage the user selected, the tool (and tone) and the paper&apos;s English. Citations, references,
+              labels, maths, drawings, pictures, LaTeX comments and, in Word, fields, content controls and footnote marks become numbered placeholders ({code("toPassage()")},{" "}
+              {code("docPassage()")}) and stay on the device; the answer must keep every placeholder where it was and add no number (in LaTeX, no
+              command either) before it&apos;s returned, and the browser checks it again before offering it.
             </p>
           </Aside>
         </DocSection>
@@ -244,7 +251,7 @@ export default function ArchitecturePage() {
           title="Accounts and M coins"
           tint="#f3e4bd"
           icon={icon(Coins)}
-          lead="The two AI features cost money per run, so they're paid in M coins and need an account. Nothing else does, and nothing from a paper is ever part of one."
+          lead="The three AI features cost money per run, so they're paid in M coins and need an account. Nothing else does, and nothing from a paper is ever part of one."
         >
           <OptionTable
             title="How it holds together"
@@ -280,6 +287,10 @@ export default function ArchitecturePage() {
                 away: true,
               },
               { name: "Ask Claude", what: "1 coin per call, refunded on any answer that isn't usable." },
+              {
+                name: "Rewrite",
+                what: "1 coin per 500 words selected (rounded up, up to 2,000, or 1,000 to expand), charged before Claude is called and refunded when no checked answer goes out. Try again is a new charge; a rewrite not put in because the text changed is delivered, so not refunded.",
+              },
               {
                 name: "Payments",
                 what: (
@@ -342,8 +353,8 @@ export default function ArchitecturePage() {
             rows={[
               { name: "web/src/app/", what: "Routes. Each tool's page is JSX over a hook in its _components/ (useMatch, useReview, useFigures) that the workspace reuses. The homepage, its intro and its 3D scenes live in _landing/." },
               { name: "web/src/components/", what: "Shared pieces by concern: layout/ (the tray, footer, logo), ui/ (Dialog, Step, the drop zone), account/, journals/, checks/, review/ and figures/ (the consent notices, result panels), docs/ (these pages' blocks)." },
-              { name: "web/src/lib/", what: "Framework-agnostic logic by feature: paper/, match/, journals/, checks/, review/, figures/, write/, accounts/, ai/. Each selfcheck sits beside its file; a relative lib import carries .ts (Node runs the selfchecks natively)." },
-              { name: "web/functions/api/", what: "review.ts and figure.ts (the AI features), and the account, sign-in and payment Functions. They may import from src/lib/ only modules that are pure or isomorphic (no window, localStorage or fs)." },
+              { name: "web/src/lib/", what: "Framework-agnostic logic by feature: paper/, match/, journals/, checks/, review/, figures/, write/, writing/ (spelling, grammar, Rewrite), accounts/, ai/. Each selfcheck sits beside its file; a relative lib import carries .ts (Node runs the selfchecks natively)." },
+              { name: "web/functions/api/", what: "review.ts, figure.ts and rewrite.ts (the AI features), and the account, sign-in and payment Functions. They may import from src/lib/ only modules that are pure or isomorphic (no window, localStorage or fs)." },
               { name: "web/migrations/", what: "The D1 schema: accounts and the coin ledger, payments, subscriptions. Applied with wrangler d1 migrations apply; the selfchecks apply them to node:sqlite." },
               { name: "web/public/", what: "The index, templates, the figure gallery, the TeX and figure workers, figurelib.py, fonts, the guide's screenshots." },
               { name: "pipeline/", what: "The offline Python (uv) pipeline: fetch from OpenAlex, enrich from DOAJ and NLM, k-means centres, quality filters, build the index." },
@@ -377,6 +388,7 @@ export default function ArchitecturePage() {
               { name: "check_account", what: "No account request while signed out; the email link and its confirm step; Google's popup; the account page; a pack and Pro through a stubbed Paddle.js; the portal." },
               { name: "check_figures · check_figure_sandbox", what: "A messy spreadsheet read right, templates, editors, recipes, a mocked Ask Claude; tweaks that try every way out fail with zero requests." },
               { name: "check_write", what: "Compile, diagnostics, backups, files, the hub windows (a mocked review, the figure window), the formatting bar, suggestions, the outline, views, a failed engine download." },
+              { name: "check_writing · check_rewrite", what: "Spelling and grammar on the device with no request body; Rewrite against a mocked /api/rewrite: nothing sent before a paper's consent, the price, the diff, Replace and one undo, Try again charged, Copy when the text changed, consent never in a backup." },
               { name: "check_write_docx · check_docx_fidelity", what: "Word projects: what's refused, autosave, undo, reload, leaving at once, the download, a second tab, backups, every window, a figure at its size, the editor's styles kept in; a document's contents through edits and saves." },
               { name: "check_keyboard · check_intro · check_homepage", what: "The dropzone by keyboard; the first-visit intro; the homepage." },
               { name: "check_docs", what: "The guide and this page: every screenshot exists, every marker sits on its image, no broken anchors." },
@@ -401,9 +413,9 @@ export default function ArchitecturePage() {
         <DocSection id="checklist" title="Reviewing a change" icon={icon(ClipboardCheck)} lead="What to check before approving anything, in the order it matters.">
           <ol className="grid gap-3 md:grid-cols-2">
             {[
-              ["New requests", "Does anything new call fetch, XHR or a worker import? Every new request must be a bodyless GET for a public file, or go through one of the two notices."],
-              ["Consent paths", "Can the review or Ask Claude start without a click on its notice? Is any new default on? Does the notice still say exactly what's sent?"],
-              ["What's in a payload", "Does anything add a field to what's sent? The review's pass requests and Ask Claude's payload have exact shapes, checked on both sides."],
+              ["New requests", "Does anything new call fetch, XHR or a worker import? Every new request must be a bodyless GET for a public file, or go through one of the three notices."],
+              ["Consent paths", "Can the review, Ask Claude or Rewrite start without a click on its notice? Is any new default on? Does the notice still say exactly what's sent?"],
+              ["What's in a payload", "Does anything add a field to what's sent? The review's pass requests, Ask Claude's payload and Rewrite's request have exact shapes, checked on both sides."],
               ["Server state", "Does a Function now keep anything beyond the daily counters and the account tables? Nothing from a paper, ever, for anyone."],
               ["Coins", "Does anything change a balance outside ledger.ts? Every coin in or out is one ledger row with a unique ref, charged before the upstream call and refunded if it fails."],
               ["Functions' imports", "Anything new imported by functions/ must be pure or isomorphic."],

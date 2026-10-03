@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Coin } from "@/components/account/AccountButton";
 import { currentAccount, refreshAccount, useAccount } from "@/components/account/useAccount";
-import { PACKS, PRO, reviewPrice } from "@/lib/accounts/coins";
+import { PACKS, PRO, REWRITE_WORDS_PER_COIN, reviewPrice } from "@/lib/accounts/coins";
 import { openCheckout, openPortal } from "@/lib/accounts/paddleCheckout";
 import NewTabLink from "@/components/ui/NewTabLink";
 
@@ -120,7 +120,8 @@ export function Packs() {
           <p className="mt-4 font-serif text-4xl font-medium">${p.usd}</p>
           <p className="mt-1 text-sm text-ink-soft">₹{p.inr.toLocaleString("en-IN")} in India</p>
           <p className="mt-4 mb-5 flex-1 text-sm leading-relaxed text-ink-soft">
-            About {Math.floor(p.coins / perReview)} standard reviews of a typical paper, or {p.coins} Ask Claude requests.
+            About {Math.floor(p.coins / perReview)} standard reviews of a typical paper, {p.coins} Ask Claude requests, or {p.coins} rewrites of up
+            to {REWRITE_WORDS_PER_COIN} words.
           </p>
           <BuyButton k={p.id} label={`Buy ${p.coins} M coins`} c={c} />
         </div>
