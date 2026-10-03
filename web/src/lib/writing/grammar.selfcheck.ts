@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { LocalLinter } from "harper.js";
 import { binaryInlined } from "harper.js/binaryInlined";
-import { checkProse } from "./grammar.ts";
+import { checkProse, plainMessage } from "./grammar.ts";
 import { proseMask } from "./latexText.ts";
 import { DEFAULT_SPELLING } from "./spelling.ts";
 
@@ -45,6 +45,11 @@ const jargon = "We used actigraphy.";
 assert.equal((await checkProse(linter, jargon, jargon, us)).length, 1);
 assert.equal((await checkProse(linter, jargon, jargon, { dialect: "us", words: ["actigraphy"] })).length, 0);
 assert.equal((await checkProse(linter, jargon, jargon, us)).length, 1, "words are the paper's, not remembered across papers");
+
+// Harper's wording, as the site writes: quotes, not code backticks; no em dashes
+assert.equal(plainMessage("Did you mean to spell `thiss` this way?"), "Did you mean to spell “thiss” this way?");
+assert.equal(plainMessage("Use a comma — or a full stop."), "Use a comma, or a full stop.");
+assert.ok(found.every((i) => !/[`—]/.test(i.message)), "the marks carry it");
 
 // off: nothing
 assert.deepEqual(await checkProse(linter, plain, plain, { dialect: "off", words: [] }), []);

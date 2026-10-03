@@ -59,7 +59,7 @@ export async function checkProse(linter: Linter, prose: string, source: string, 
       issues.push({
         from,
         to,
-        message: lint.message(),
+        message: plainMessage(lint.message()),
         kind: kind === "Spelling" || kind === "Typo" ? "spelling" : "grammar",
         replacements: lint.suggestions().map((s) => {
           const k = s.kind();
@@ -73,6 +73,11 @@ export async function checkProse(linter: Linter, prose: string, source: string, 
     lint.free();
   }
   return issues;
+}
+
+/** Harper's wording as the site writes: quoted words, not code backticks, and no em dashes. */
+export function plainMessage(message: string): string {
+  return message.replace(/`([^`]*)`/g, "\u201c$1\u201d").replace(/\s*\u2014\s*/g, ", ");
 }
 
 let engine: Promise<Linter> | null = null;

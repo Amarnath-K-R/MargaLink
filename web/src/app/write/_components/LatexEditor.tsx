@@ -2,13 +2,16 @@
 
 import { useEffect, useRef } from "react";
 import { EditorView, basicSetup } from "codemirror";
-import { EditorSelection, EditorState, Prec } from "@codemirror/state";
+import { EditorSelection, EditorState, Prec, StateEffect, type Text } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
 import { toggleComment } from "@codemirror/commands";
 import { latexCompletions, type CompletionData } from "./latexCompletions.ts";
 import { StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
-import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
+import { forEachDiagnostic, forceLinting, lintGutter, linter, setDiagnostics, type Action, type Diagnostic } from "@codemirror/lint";
+import { checkProse, grammarEngine, type Issue } from "@/lib/writing/grammar";
+import { proseMask } from "@/lib/writing/latexText";
+import type { Spelling } from "@/lib/writing/spelling";
 
 export type EditorHandle = {
   // Puts the cursor on a line mid-screen; with `near`, on the closest line
@@ -52,8 +55,20 @@ function blockAt(v: EditorView, text: string, select?: string) {
 }
 export type LineMark = { line: number; message: string; severity: "error" | "warning" };
 
+// "Check again now": new compiler marks or spelling settings change no text,
+// and a forced check only runs when one is pending, so this makes one pending.
+const recheck = StateEffect.define<null>();
+const compilerMarks = (doc: Text, marks: LineMark[]): Diagnostic[] =>
+  marks.filter((m) => m.line >= 1 && m.line <= doc.lines).map((m) => ({ from: doc.line(m.line).from, to: doc.line(m.line).to, severity: m.severity, message: m.message }));
+function checkAgain(v: EditorView) {
+  v.dispatch({ effects: recheck.of(null) });
+  forceLinting(v);
+}
+
 // The LaTeX source editor: CodeMirror 6 with the stex mode, a gutter marker on
-// every line the compiler complained about, Ctrl/Cmd+S to save and compile.
+// every line the compiler complained about, Ctrl/Cmd+S to save and compile,
+// and the prose's spelling and grammar marked (on this device, grammar.ts),
+// each mark with its fixes in its hover card.
 // Mount it once the file's text is loaded, keyed by path: a new file is a new
 // editor (and its own undo history).
 export default function LatexEditor({
@@ -64,6 +79,9 @@ export default function LatexEditor({
   onSave,
   handleRef,
   completions,
+  spelling = null,
+  onAddWord,
+  onSpellCount,
 }: {
   text: string;
   readOnly?: boolean; // shown, selectable and copyable, not editable (set at mount: the editor is keyed on it)
@@ -72,15 +90,60 @@ export default function LatexEditor({
   onSave: () => void;
   handleRef: React.MutableRefObject<EditorHandle | null>;
   completions: CompletionData; // the project's .bib entries and labels, read when a suggestion list opens
+  spelling?: Spelling | null; // the paper's spelling settings; null: not prose (a .bib, a .cls)
+  onAddWord?: (word: string) => void; // "Add to dictionary"
+  onSpellCount?: (marks: number | null) => void; // how many spelling and grammar marks are showing (null: none checked)
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const cbRef = useRef({ onChange, onSave, completions });
+  const cbRef = useRef({ onChange, onSave, completions, marks, spelling, onAddWord, onSpellCount });
   useEffect(() => {
-    cbRef.current = { onChange, onSave, completions };
+    cbRef.current = { onChange, onSave, completions, marks, spelling, onAddWord, onSpellCount };
   });
+  const ignored = useRef(new Set<string>()); // "Ignore", for this session: the word and what was said about it
 
   const extensions = () => {
+    // A spelling or grammar mark, with its fixes (none in a read-only tab but Ignore).
+    const spellingMark = (i: Issue, text: string): Diagnostic => {
+      const word = text.slice(i.from, i.to);
+      const actions: Action[] = [];
+      if (!readOnly) {
+        for (const r of i.replacements.slice(0, 3)) actions.push({ name: r || "Remove", apply: (v, from, to) => v.dispatch({ changes: { from, to, insert: r } }) });
+        if (i.kind === "spelling" && /^[\p{L}\p{M}'’-]+$/u.test(word)) actions.push({ name: "Add to dictionary", apply: () => cbRef.current.onAddWord?.(word) });
+      }
+      actions.push({
+        name: "Ignore",
+        apply: (v) => {
+          ignored.current.add(`${word}\u0000${i.message}`);
+          checkAgain(v);
+        },
+      });
+      return { from: i.from, to: i.to, severity: "info", source: "spelling", markClass: i.kind === "spelling" ? "cm-spell" : "cm-grammar", message: i.message, actions };
+    };
+    // One lint source for both kinds of mark: the compiler's (from props) and
+    // the prose's (checked here). Two would each replace the other's.
+    const marksAndSpelling = linter(
+      async (v) => {
+        const doc = v.state.doc;
+        const { marks: lines, spelling: settings, onSpellCount: count } = cbRef.current;
+        const tex = compilerMarks(doc, lines);
+        if (!settings || settings.dialect === "off") {
+          count?.(null);
+          return tex;
+        }
+        const text = doc.toString();
+        try {
+          const issues = await checkProse(await grammarEngine(), proseMask(text), text, settings);
+          const shown = issues.filter((i) => !ignored.current.has(`${text.slice(i.from, i.to)}\u0000${i.message}`));
+          count?.(shown.length);
+          return [...tex, ...shown.map((i) => spellingMark(i, text))];
+        } catch {
+          count?.(null); // the checker didn't load: the compiler's marks alone
+          return tex;
+        }
+      },
+      { delay: 500, needsRefresh: (u) => u.transactions.some((tr) => tr.effects.some((e) => e.is(recheck))) },
+    );
     // One source for the editor's life: autocompletion tells sources apart by identity, so a
     // fresh function per lookup would restart every query and never show a list.
     const suggest = latexCompletions(() => cbRef.current.completions);
@@ -88,7 +151,8 @@ export default function LatexEditor({
       basicSetup,
       EditorState.readOnly.of(readOnly),
       StreamLanguage.define(stex),
-      lintGutter(),
+      marksAndSpelling,
+      lintGutter({ markerFilter: (diagnostics) => diagnostics.filter((d) => d.source !== "spelling") }), // the gutter: the compiler's marks only
       EditorState.languageData.of(() => [{ autocomplete: suggest }]),
       EditorView.lineWrapping,
       keymap.of([{ key: "Mod-s", preventDefault: true, run: () => (cbRef.current.onSave(), true) }]),
@@ -117,6 +181,12 @@ export default function LatexEditor({
         ".cm-tooltip-autocomplete > ul > li": { padding: "3px 10px" },
         ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "#dde6e6", color: "#2c5f6f" },
         ".cm-completionDetail": { fontStyle: "normal", color: "#565b66", marginLeft: "0.75em", fontFamily: "var(--font-sans)" },
+        // Spelling (clay red) and grammar (teal): a wavy underline, not CodeMirror's info dots.
+        ".cm-lintRange.cm-spell, .cm-lintRange.cm-grammar": { backgroundImage: "none", textDecorationLine: "underline", textDecorationStyle: "wavy", textUnderlineOffset: "3px", textDecorationThickness: "1px" },
+        ".cm-lintRange.cm-spell": { textDecorationColor: "#b5523a" },
+        ".cm-lintRange.cm-grammar": { textDecorationColor: "#2c5f6f" },
+        ".cm-diagnostic-info": { borderLeft: "3px solid #2c5f6f" },
+        ".cm-diagnosticAction": { backgroundColor: "#dde6e6", color: "#2c5f6f", borderRadius: "999px", padding: "1px 10px", marginRight: "6px", fontFamily: "var(--font-sans)" },
       }),
     ];
   };
@@ -169,15 +239,23 @@ export default function LatexEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- created once; `text` is only the initial document
   }, []);
 
+  // New compiler marks show at once, beside the spelling marks as they stand
+  // (where the text has moved them since). Keyed on what they say: the
+  // workspace hands over a new list each render, and re-setting the marks
+  // closes an open hover card.
+  const marksKey = JSON.stringify(marks);
   useEffect(() => {
     const v = view.current;
     if (!v) return;
-    const doc = v.state.doc;
-    const diags: Diagnostic[] = marks
-      .filter((m) => m.line >= 1 && m.line <= doc.lines)
-      .map((m) => ({ from: doc.line(m.line).from, to: doc.line(m.line).to, severity: m.severity, message: m.message }));
-    v.dispatch(setDiagnostics(v.state, diags));
-  }, [marks]);
+    const spellingMarks: Diagnostic[] = [];
+    forEachDiagnostic(v.state, (d, from, to) => void (d.source === "spelling" && spellingMarks.push({ ...d, from, to })));
+    v.dispatch(setDiagnostics(v.state, [...compilerMarks(v.state.doc, cbRef.current.marks), ...spellingMarks]));
+  }, [marksKey]);
+  // New spelling settings (the paper's English, a word added): check again now.
+  const settingsKey = spelling ? `${spelling.dialect}:${spelling.words.join(",")}` : "none";
+  useEffect(() => {
+    if (view.current) checkAgain(view.current);
+  }, [settingsKey]);
 
   return <div ref={host} data-testid="latex-editor" className="h-full overflow-hidden" />;
 }
