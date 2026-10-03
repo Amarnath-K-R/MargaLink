@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 
 export type NetworkCall = { method: string; url: string; hadBody: boolean };
 
+// The requests that carried text the person agreed to send: the AI features'
+// (review, Ask Claude, Rewrite). The review's ticket carries only lengths.
+export const sentCount = (calls: NetworkCall[]) => calls.filter((c) => c.hadBody && /\/api\/(review|figure|rewrite)(\?|$)/.test(c.url)).length;
+
 // Instruments fetch for the page's lifetime, so /write's status line can
 // count the requests that carried a body (what was sent, if anything)
 // whenever they fire, whichever tool window sent them.

@@ -6,7 +6,7 @@ import { Download } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DOCX_MAIN, DOCX_MIME, autosaver, type ProjectMeta, type ProjectStore } from "@/lib/write/projectStore";
 import { countWords } from "@/lib/checks/formatCheck";
-import type { NetworkCall } from "@/app/write/_components/useNetworkTrace";
+import { sentCount, type NetworkCall } from "@/app/write/_components/useNetworkTrace";
 import ErrorText from "@/components/ui/ErrorText";
 import Toolbar, { type Tool } from "./Toolbar.tsx";
 import StatusBar from "./StatusBar.tsx";
@@ -177,14 +177,22 @@ export default function DocWorkspace({
     onMeta(await store.meta(project.id));
   });
 
+  // Rewrite (Claude, M coins): given once per paper, in this browser; never in a read-only tab.
+  const setRewriteConsent = guarded(async (given: boolean) => {
+    await store.setMeta(project.id, { rewriteConsent: given ? new Date().toISOString() : undefined });
+    onMeta(await store.meta(project.id));
+  });
+
   // Built when the palette opens (it calls this), not on every render.
   const commands = useCallback(
     (): Command[] => [
       { id: "download", label: "Download .docx", run: () => void download() },
       { id: "save", label: "Save now", hint: "⌘S", run: () => void flush().catch(() => {}) },
+      { id: "rewrite", label: "Rewrite the selection with Claude", run: () => editor.current?.rewriteMenu(), disabled: !editable },
+      { id: "rewrite-off", label: "Turn off Rewrite for this paper", run: () => void setRewriteConsent(false), disabled: !project.rewriteConsent || !editable },
       ...hubCommands(hub, { onBackup: () => void backup(), onProjects: () => void leave(onClose), open: (t) => void openTool(t) }),
     ],
-    [download, flush, hub, backup, leave, onClose, openTool],
+    [download, flush, hub, backup, leave, onClose, openTool, editable, setRewriteConsent, project.rewriteConsent],
   );
 
   const journalLabel = project.journalName ?? (project.journalId ? "Target journal" : "No target journal");
@@ -242,6 +250,7 @@ export default function DocWorkspace({
                 spelling={spelling}
                 onAddWord={(w) => void setSpelling(addWord(spelling, w))}
                 onSpellCount={setSpellMarks}
+                rewriting={editable ? { dialect: spelling.dialect, consented: !!project.rewriteConsent, onConsent: () => setRewriteConsent(true) } : null}
               />}
           </div>
           {(error ?? pageError) && <ErrorText>{error ?? pageError}</ErrorText>}
@@ -259,7 +268,7 @@ export default function DocWorkspace({
         spelling={{ ...spelling, marks: spellMarks, onDialect: (dialect) => void setSpelling({ ...spelling, dialect }), onRemoveWord: (w) => void setSpelling(removeWord(spelling, w)) }}
         dirty={dirty}
         running={running}
-        sent={calls.filter((c) => c.hadBody && /\/api\/(review|figure)(\?|$)/.test(c.url)).length}
+        sent={sentCount(calls)}
         busy={false}
       />
 

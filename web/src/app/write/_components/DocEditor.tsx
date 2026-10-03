@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { IntlProvider } from "use-intl";
-import { DocxEditor, insertImageFromFile, insertPageBreakInView, insertTableInView, type DocxEditorRef } from "@stll/folio-react";
+import { DocxEditor, getFolioSelectionViewportRect, insertImageFromFile, insertPageBreakInView, insertTableInView, type DocxEditorRef } from "@stll/folio-react";
 import { getFolioMessages } from "@stll/folio-react/messages";
 // Scoped to the editor, but Next keeps a stylesheet once loaded:
 // folioCss.selfcheck.ts proves this one can't restyle the rest of the site.
@@ -11,6 +11,9 @@ import { findQuoteInText } from "@/lib/write/texSource";
 import { docSaveState } from "@/lib/write/docSaveState";
 import type { Spelling } from "@/lib/writing/spelling";
 import { useDocSpelling } from "./useDocSpelling.tsx";
+import { applyDocRewrite, docPassage } from "@/lib/writing/docText";
+import { useRewrite, type RewriteTarget } from "./useRewrite.tsx";
+import { RewriteButton } from "./RewriteMenu.tsx";
 
 // The Word editor: Folio (Apache-2.0, a fork of Eigenpal's docx-editor),
 // which edits the .docx itself: a save rewrites the document's text from the
@@ -29,7 +32,16 @@ export type DocHandle = {
   insertImage(png: Uint8Array, dpi: number): Promise<void>; // at the cursor, at the size it was drawn for
   showQuote(quote: string): boolean; // select and scroll to a passage; false when it isn't found
   focus(): void;
+  rewriteMenu(): void; // Rewrite's tools, by the selection
 };
+
+// Rewrite's item in the editor's right-click menu (with a selection only).
+const REWRITE_ITEM = [{ id: "rewrite", label: "Rewrite with Claude…", requiresSelection: true }] as const;
+// A placeholder's object as the rewrite shows it: a citation as its text, a
+// footnote mark raised as Word shows it, a mark for a picture or an equation.
+const SUPERSCRIPT = "\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079";
+const shownObject = (text: string) =>
+  text === "" ? "\u25aa" : /^\s$/.test(text) ? " " : /^\[\^\d+\]$/.test(text) ? text.replace(/\D/g, "").replace(/\d/g, (d) => SUPERSCRIPT[Number(d)]) : text;
 
 // Folio's English labels, with "a — b" written "a. B" (no em dashes in what the site shows).
 const MESSAGES = (function noDashes<T>(o: T): T {
@@ -49,6 +61,7 @@ export default function DocEditor({
   spelling = null,
   onAddWord,
   onSpellCount,
+  rewriting = null,
 }: {
   bytes: Uint8Array; // the document as opened; never fed back while editing
   readOnly: boolean; // another tab holds the project
@@ -58,6 +71,7 @@ export default function DocEditor({
   spelling?: Spelling | null; // the paper's spelling settings
   onAddWord?: (word: string) => void; // "Add to dictionary"
   onSpellCount?: (marks: number | "failed" | null) => void; // how many spelling and grammar marks are showing (null: none checked)
+  rewriting?: { dialect: Spelling["dialect"]; consented: boolean; onConsent: () => Promise<void> } | null; // Rewrite's settings; none in a read-only tab
 }) {
   const ref = useRef<DocxEditorRef>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -69,6 +83,33 @@ export default function DocEditor({
     ref.current?.ensureEditorView();
     return ref.current?.getEditorRef()?.getView() ?? null;
   };
+  const rewrite = useRewrite(
+    (): RewriteTarget | null => {
+      const v = view();
+      if (!v) return null;
+      return {
+        format: "text",
+        read: () => {
+          const { from, to } = v.state.selection;
+          if (from === to) return "Select the text to rewrite first.";
+          const p = docPassage(v.state.doc, from, to);
+          if (typeof p === "string") return p;
+          const show = (t: string) => t.replace(/\u27e6(\d+)\u27e7/g, (_, n: string) => shownObject(p.objects[Number(n) - 1] ?? ""));
+          const place = (t: string) => {
+            const done = applyDocRewrite(v, p, t);
+            if (done === "applied") ref.current?.focus(); // back in the document, where Undo takes it back
+            return done;
+          };
+          return { passage: p.passage, before: show(p.passage), show, place };
+        },
+        anchor: () => {
+          const r = getFolioSelectionViewportRect(v);
+          return r ? { left: r.left, top: r.bottom + 8, above: r.top - 8 } : null;
+        },
+      };
+    },
+    { dialect: rewriting?.dialect ?? "us", consented: !!rewriting?.consented, onConsent: rewriting?.onConsent ?? (async () => {}), enabled: !!rewriting && !readOnly },
+  );
   const spellingMarks = useDocSpelling(() => ref.current?.getEditorRef()?.getView() ?? null, { spelling, readOnly, onAddWord, onSpellCount });
   // What's stored: Folio's own record of edits doesn't survive its saves (docSaveState.ts).
   const stored = useRef(docSaveState<unknown>()).current;
@@ -160,6 +201,7 @@ export default function DocEditor({
         return true;
       },
       focus: () => ref.current?.focus(),
+      rewriteMenu: () => rewrite.openMenu(),
     };
     // Tell the workspace once the document is laid out (Folio builds its view after parsing).
     let tries = 0;
@@ -197,6 +239,9 @@ export default function DocEditor({
           }
         }}
         onSelectionTextChange={spellingMarks.onCaret}
+        toolbarExtra={rewriting && !readOnly ? <RewriteButton onOpen={rewrite.openMenu} /> : undefined}
+        customContextMenuItems={rewriting && !readOnly ? REWRITE_ITEM : undefined}
+        onCustomContextAction={(id) => id === "rewrite" && rewrite.openMenu()}
         onInsertImage={() => picker.current?.click()}
         onInsertTable={(rows, columns) => {
           const v = view();
@@ -209,6 +254,7 @@ export default function DocEditor({
         className="h-full"
       />
       {spellingMarks.element}
+      {rewrite.element}
       <input
         ref={picker}
         type="file"

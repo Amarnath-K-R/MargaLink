@@ -90,6 +90,7 @@ export function fixWord(state: EditorState, m: { from: number; to: number; word:
 
 export type WordPassage = {
   passage: string; // the paragraphs joined by blank lines, every object a numbered placeholder ⟦n⟧
+  objects: string[]; // each placeholder's text as read (a citation's, a footnote mark's; "" for a picture), for showing the rewrite
   // Each paragraph: where it is, its text when read (as Folio's own edits read it), and the stretches of
   // words between its objects, in that text's offsets (the stretch between two touching objects is empty).
   blocks: { pos: number; text: string; gaps: { start: number; end: number }[] }[];
@@ -111,6 +112,7 @@ export function docPassage(doc: Node, from: number, to: number): WordPassage | s
   const { insertion, deletion } = doc.type.schema.marks;
   const blocks: WordPassage["blocks"] = [];
   const paragraphs: string[] = [];
+  const shown: string[] = [];
   let n = 0;
   let refusal: string | null = null;
   doc.nodesBetween(from, to, (node, pos) => {
@@ -153,6 +155,7 @@ export function docPassage(doc: Node, from: number, to: number): WordPassage | s
     for (const [a, b] of objects) {
       gaps.push({ start: at, end: a });
       paragraph += `${text.slice(at, a)}⟦${++n}⟧`;
+      shown.push(text.slice(a, b));
       at = b;
     }
     gaps.push({ start: at, end: e });
@@ -163,7 +166,7 @@ export function docPassage(doc: Node, from: number, to: number): WordPassage | s
   });
   if (refusal) return refusal;
   if (!blocks.length) return "Select some text to rewrite.";
-  return { passage: paragraphs.join("\n\n"), blocks };
+  return { passage: paragraphs.join("\n\n"), objects: shown, blocks };
 }
 
 // The document's objects in order (pictures, fields, footnote marks...), to see that an edit kept them all.

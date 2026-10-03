@@ -137,6 +137,7 @@ assert.equal(
   `Adults wre enrolled ${P(1)} and followed${P(2)} for ninety days.\n\nSleep was short after ${P(3)} surgery${P(4)}in older${P(5)}adults ${P(6)} overall${P(7)} too.`,
   "fields, footnote marks, maths, tabs, line breaks, pictures and bookmarks are placeholders",
 );
+assert.deepEqual(whole.objects, ["(Smiht, 2019)", "[^1]", "", "\t", "\n", "", ""], "each placeholder's text, for showing the rewrite");
 // a partial selection; one starting inside a citation takes the whole citation
 const mid = passageOf(before, inner(before, 0).from + "Adults wre ".length, inner(before, 1).from + "Sleep was short".length);
 assert.equal(mid.passage, `enrolled ${P(1)} and followed${P(2)} for ninety days.\n\nSleep was short`);

@@ -2,9 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { EditorView, basicSetup } from "codemirror";
-import { EditorSelection, EditorState, Prec, StateEffect, type Text } from "@codemirror/state";
+import { EditorSelection, EditorState, Prec, StateEffect, StateField, type Text } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
-import { toggleComment } from "@codemirror/commands";
+import { isolateHistory, toggleComment } from "@codemirror/commands";
 import { latexCompletions, type CompletionData } from "./latexCompletions.ts";
 import { StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
@@ -24,7 +24,24 @@ export type EditorHandle = {
   // Inserts `text` on lines of its own at the cursor, selecting `select` inside it.
   insertBlock(text: string, select?: string): void;
   comment(): void;
+  // Rewrite: the selection and the whole file; a range held while Claude
+  // works (it moves with edits around it); that range replaced, as one undo
+  // step, only if its text is still `original`; and where it is on screen.
+  selection(): { from: number; to: number; doc: string } | null;
+  hold(from: number, to: number): void;
+  replaceHeld(original: string, text: string): boolean;
+  around(): { left: number; top: number; above: number } | null;
 };
+
+// The range Rewrite is working on, mapped through every edit made meanwhile.
+const holdRange = StateEffect.define<{ from: number; to: number }>();
+const heldRange = StateField.define<{ from: number; to: number } | null>({
+  create: () => null,
+  update(range, tr) {
+    for (const e of tr.effects) if (e.is(holdRange)) return e.value;
+    return range && tr.docChanged ? { from: tr.changes.mapPos(range.from, 1), to: tr.changes.mapPos(range.to, -1) } : range;
+  },
+});
 
 function wrapIn(v: EditorView, before: string, after: string, placeholder: string) {
   v.dispatch(
@@ -163,6 +180,7 @@ export default function LatexEditor({
       EditorState.readOnly.of(readOnly),
       StreamLanguage.define(stex),
       marksAndSpelling,
+      heldRange,
       lintGutter({ markerFilter: (diagnostics) => diagnostics.filter((d) => !isSpelling(d)) }), // the gutter: the compiler's marks only
       EditorState.languageData.of(() => [{ autocomplete: suggest }]),
       EditorView.lineWrapping,
@@ -240,6 +258,26 @@ export default function LatexEditor({
       comment() {
         toggleComment(v);
         v.focus();
+      },
+      selection() {
+        const { from, to } = v.state.selection.main;
+        return from === to ? null : { from, to, doc: v.state.doc.toString() };
+      },
+      hold(from, to) {
+        v.dispatch({ effects: holdRange.of({ from, to }) });
+      },
+      replaceHeld(original, text) {
+        const range = v.state.field(heldRange);
+        if (!range || v.state.sliceDoc(range.from, range.to) !== original) return false;
+        v.dispatch({ changes: { from: range.from, to: range.to, insert: text }, selection: { anchor: range.from, head: range.from + text.length }, annotations: isolateHistory.of("full"), userEvent: "input.rewrite" });
+        v.focus();
+        return true;
+      },
+      around() {
+        const range = v.state.field(heldRange) ?? v.state.selection.main;
+        const start = v.coordsAtPos(range.from);
+        const end = v.coordsAtPos(range.to) ?? start;
+        return start && end ? { left: start.left, top: end.bottom + 8, above: start.top - 8 } : null;
       },
     };
     return () => {
