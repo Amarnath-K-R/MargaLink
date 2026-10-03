@@ -57,7 +57,7 @@ export default function DocEditor({
   handleRef: React.MutableRefObject<DocHandle | null>;
   spelling?: Spelling | null; // the paper's spelling settings
   onAddWord?: (word: string) => void; // "Add to dictionary"
-  onSpellCount?: (marks: number | null) => void; // how many spelling and grammar marks are showing (null: none checked)
+  onSpellCount?: (marks: number | "failed" | null) => void; // how many spelling and grammar marks are showing (null: none checked)
 }) {
   const ref = useRef<DocxEditorRef>(null);
   const picker = useRef<HTMLInputElement>(null);

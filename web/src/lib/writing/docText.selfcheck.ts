@@ -9,7 +9,8 @@ import { schema } from "@stll/folio-core/prosemirror/schema";
 import { LocalLinter } from "harper.js";
 import { binaryInlined } from "harper.js/binaryInlined";
 import { checkProse } from "./grammar.ts";
-import { docProse, docRange } from "./docText.ts";
+import { docProse, docRange, fixWord } from "./docText.ts";
+import { EditorState } from "prosemirror-state";
 import { DEFAULT_SPELLING } from "./spelling.ts";
 
 const t = (text: string, marks: ReturnType<typeof schema.mark>[] = []) => schema.text(text, marks);
@@ -42,5 +43,54 @@ const second = prose.source.indexOf("Readmission");
 assert.equal(docRange(prose, second - 5, second + 3), null, "across a paragraph break: no range");
 const mark = prose.source.indexOf("[^1]");
 assert.equal(docRange(prose, mark + 1, mark + 3), null, "inside a footnote mark: no range");
+const inCitation = prose.source.indexOf("(Smiht, 2019)") + 7;
+assert.equal(prose.source[inCitation], " ");
+assert.equal(docRange(prose, inCitation, inCitation + 1), null, "nor one character of a citation's text");
+
+// --- a fix changes the word and nothing next to it (an object right after a
+// word takes no character of its own, so the mark mustn't grow over it), and
+// keeps a coauthor's comment, a link or a tracked insertion on the word
+const comment = schema.marks.comment.create({ commentId: 4 });
+const link = schema.marks.hyperlink.create({ href: "https://x.org" });
+const N = schema.nodes;
+const near = schema.nodes.doc.create(null, [
+  schema.nodes.paragraph.create(null, [
+    t("It was studyed"), N.commentReference.create({ commentId: 3 }), t(" here, then "), t("misspeled", [comment]), t(" and "), t("recieved", [link]),
+    t(" and folowed"), N.image.create({ src: "x", width: 9, height: 9 }), t(" and wrot"), N.math.create({ display: false, ommlXml: "<m:oMath/>", plainText: "x" }),
+    t(" and bookd"), N.bookmarkBoundary.create({ type: "start", id: "1", name: "_Ref1" }), t(" end."),
+  ]),
+]);
+const objectsOf = (d: typeof near) => { const o: string[] = []; d.descendants((n) => void (n.isInline && !n.isText && o.push(n.type.name))); return o; };
+const nearProse = docProse(near);
+const nearIssues = await checkProse(linter, nearProse.prose, nearProse.source, DEFAULT_SPELLING);
+const marked = new Map(nearIssues.map((i) => [nearProse.source.slice(i.from, i.to), docRange(nearProse, i.from, i.to)]));
+for (const word of ["studyed", "misspeled", "recieved", "folowed", "wrot", "bookd"]) {
+  const at = marked.get(word);
+  assert.ok(at, `"${word}" is marked`);
+  assert.equal(at.to - at.from, word.length, `"${word}": the mark covers the word and nothing after it`);
+}
+const fixes: [string, string][] = [["studyed", "studied"], ["misspeled", "misspelled"], ["recieved", "received"], ["folowed", "followed"], ["wrot", "wrote"], ["bookd", "booked"]];
+let state = EditorState.create({ schema, doc: near });
+for (const [word, fix] of fixes) {
+  const at = docRange(docProse(state.doc), ...((): [number, number] => { const p = docProse(state.doc); const i = p.source.indexOf(word); return [i, i + word.length]; })())!;
+  const tr = fixWord(state, { ...at, word }, fix);
+  assert.ok(tr, `"${word}" fixed`);
+  state = state.apply(tr);
+}
+assert.equal(state.doc.textContent, "It was studied here, then misspelled and received and followed and wrote and booked end.");
+assert.deepEqual(objectsOf(state.doc), objectsOf(near), "the comment, picture, equation and bookmark are all still there");
+const marksOn = (word: string) => { let found: string[] = []; state.doc.descendants((n) => void (n.isText && n.text!.includes(word) && (found = n.marks.map((m) => m.type.name)))); return found; };
+assert.ok(marksOn("misspelled").includes("comment"), "the comment stays on the fixed word");
+assert.ok(marksOn("received").includes("hyperlink"), "and the link");
+assert.equal(fixWord(state, { from: 1, to: 4, word: "Its" }, "It's"), null, "text that changed since it was marked isn't touched");
+
+// --- a citation followed by a comma isn't a "space before a comma"; a
+// citation held in a content control isn't read as prose
+const cited = schema.nodes.doc.create(null, [
+  schema.nodes.paragraph.create(null, [t("Sleep was short after surgery "), citation, t(", and recovered.")]),
+  schema.nodes.paragraph.create(null, [t("As reported by "), N.sdt.create({ sdtType: "richText", tag: "CITATION" }, [t("Smiht and Jnes 2019")]), t(".")]),
+]);
+const citedProse = docProse(cited);
+assert.deepEqual(await checkProse(linter, citedProse.prose, citedProse.source, DEFAULT_SPELLING), [], "no mark around a citation");
 
 console.log("docText.selfcheck: OK");

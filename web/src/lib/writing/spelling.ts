@@ -28,9 +28,17 @@ export function spellingFrom(v: unknown): Spelling | undefined {
   return { dialect: dialect as Spelling["dialect"], words: kept };
 }
 
-/** The settings with one more word of the paper's own (unchanged if it isn't one word, or is there already). */
+/**
+ * The settings with one more word of the paper's own (unchanged if it isn't
+ * one word, or is there already). A word capitalised only because it starts
+ * a sentence is kept in lower case, which the checker accepts either way.
+ */
 export function addWord(s: Spelling, word: string): Spelling {
-  const w = word.trim();
+  const t = word.trim();
+  const w = /^\p{Lu}[^\p{Lu}]*$/u.test(t) ? t[0].toLowerCase() + t.slice(1) : t;
   if (!isWord(w) || s.words.includes(w) || s.words.length >= MAX_WORDS) return s;
   return { ...s, words: [...s.words, w] };
 }
+
+/** The settings without one of the paper's words. */
+export const removeWord = (s: Spelling, word: string): Spelling => ({ ...s, words: s.words.filter((w) => w !== word) });

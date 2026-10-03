@@ -2,7 +2,7 @@
 // A paper's spelling settings: its English and its own words. They come back
 // from a backup zip, which is untrusted, so whatever is malformed is dropped.
 import assert from "node:assert/strict";
-import { addWord, DEFAULT_SPELLING, MAX_WORDS, spellingFrom } from "./spelling.ts";
+import { addWord, DEFAULT_SPELLING, MAX_WORDS, removeWord, spellingFrom } from "./spelling.ts";
 
 assert.deepEqual(DEFAULT_SPELLING, { dialect: "us", words: [] });
 
@@ -26,5 +26,14 @@ assert.equal(spellingFrom({ dialect: "us", words: Array.from({ length: MAX_WORDS
 assert.deepEqual(addWord(DEFAULT_SPELLING, " actigraphy "), { dialect: "us", words: ["actigraphy"] });
 assert.deepEqual(addWord({ dialect: "us", words: ["actigraphy"] }, "actigraphy"), { dialect: "us", words: ["actigraphy"] });
 assert.deepEqual(addWord(DEFAULT_SPELLING, "two words"), DEFAULT_SPELLING);
+
+// a word added where it starts a sentence is kept in lower case (the checker
+// accepts it capitalised anyway); names and acronyms keep their capitals
+assert.deepEqual(addWord(DEFAULT_SPELLING, "Actigraphy").words, ["actigraphy"]);
+assert.deepEqual(addWord(DEFAULT_SPELLING, "NASA").words, ["NASA"]);
+assert.deepEqual(addWord(DEFAULT_SPELLING, "McDonald").words, ["McDonald"]);
+assert.deepEqual(addWord(addWord(DEFAULT_SPELLING, "actigraphy"), "Actigraphy").words, ["actigraphy"], "not twice");
+// and a word can be taken out again
+assert.deepEqual(removeWord({ dialect: "us", words: ["actigraphy", "polysomnography"] }, "actigraphy").words, ["polysomnography"]);
 
 console.log("spelling.selfcheck: OK");

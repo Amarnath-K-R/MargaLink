@@ -9,7 +9,12 @@ const NOT_PROSE = new Set([
   "url", "includegraphics", "input", "include", "includeonly", "bibliography", "bibliographystyle", "addbibresource", "printbibliography",
   "usepackage", "documentclass", "graphicspath", "hypersetup", "newcommand", "renewcommand", "providecommand", "def", "let",
   "setlength", "addtolength", "setcounter", "vspace", "hspace", "includepdf", "lstinputlisting", "newenvironment", "renewenvironment",
+  "bibitem", "definecolor", "newtheorem", "lstinline",
 ]);
+// ... and any citation or reference command (\Citet, \citenum, \subref), and glossary and acronym entries (\gls, \acrshort, \ac).
+const notProse = (name: string) => NOT_PROSE.has(name) || (/cite|ref$/i.test(name) && name !== "href") || /^(gls\w*|acr\w*|ac[slf]?p?)$/i.test(name);
+// Accent commands: a word with one in it (Schr\"odinger, Ko\v{s}ice) is read whole or not at all.
+const ACCENT = /^\\(?:["'`^~=.]|(?:[vuHcdbtrk]|ss|o|O|ae|AE|oe|OE|aa|AA|l|L|i|j)(?![A-Za-z]))/;
 // Environments whose contents aren't prose: maths and code. Blanked whole.
 const MATH = /^(equation|align|alignat|flalign|gather|multline|eqnarray|displaymath|math|split)\*?$/;
 const CODE = /^(verbatim|Verbatim|lstlisting|minted|comment)\*?$/;
@@ -46,6 +51,20 @@ export function proseMask(tex: string): string {
     for (let next = group(j, "[", "]"); next !== j; next = group(j, "[", "]")) j = next;
     return j;
   };
+  // the whole word around an accent command at i (its end)
+  const accented = (i: number) => {
+    let a = i;
+    while (a > 0 && /[A-Za-z{}]/.test(tex[a - 1])) a--;
+    let b = i;
+    for (;;) {
+      const n = ACCENT.exec(tex.slice(b, b + 4))?.[0].length ?? 0;
+      if (n) b += n;
+      else if (/[A-Za-z{}]/.test(tex[b] ?? "")) b++;
+      else break;
+    }
+    blank(a, b);
+    return b;
+  };
   // where `end` next occurs at or after i (its end), or the end of the text
   const until = (i: number, end: string) => {
     const at = tex.indexOf(end, i);
@@ -65,6 +84,8 @@ export function proseMask(tex: string): string {
       const to = eol < 0 ? tex.length : eol;
       blank(i, to);
       i = to;
+    } else if (c === "\\" && ACCENT.test(tex.slice(i, i + 4))) {
+      i = accented(i);
     } else if (c === "\\") {
       const name = /^[A-Za-z@]+\*?/.exec(tex.slice(i + 1, i + 40))?.[0];
       if (!name) {
@@ -99,13 +120,13 @@ export function proseMask(tex: string): string {
         }
         blank(i, to);
         i = to;
-      } else if (name === "verb" || name === "verb*") {
+      } else if (name === "verb" || name === "verb*" || (name === "lstinline" && !"{[".includes(tex[after]))) {
         const delim = tex[after];
         const close = delim ? tex.indexOf(delim, after + 1) : -1;
         const to = close < 0 ? tex.length : close + 1;
         blank(i, to);
         i = to;
-      } else if (NOT_PROSE.has(name.replace(/\*$/, ""))) {
+      } else if (notProse(name.replace(/\*$/, ""))) {
         let to = options(after);
         for (let next = group(to); next !== to; next = options(group(to))) to = next;
         blank(i, to);
