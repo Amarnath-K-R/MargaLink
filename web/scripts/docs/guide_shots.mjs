@@ -232,7 +232,7 @@ if (want("write")) {
   await page.locator('[data-testid="file-tree"]').getByLabel("New file name").fill("sections/intro.tex");
   await shot("write-files", [`${ws} aside`], [page.locator('[data-testid="file-tree"]').getByLabel("New file name"), page.locator('[data-testid="file-tree"]').getByRole("button", { name: "Upload files" }), `${ws} aside [data-testid="storage-banner"] button`], 6);
   await page.keyboard.press("Escape");
-  await shot("write-status", [`${ws} > div:has([data-testid="compile-status"])`], ['[data-testid="compile-status"]', "text=words", "text=Saved", 'select[aria-label="TeX engine"]', '[role="switch"]', 'button[aria-label="Keyboard shortcuts"]'], 8);
+  await shot("write-status", [`${ws} > div:has([data-testid="compile-status"])`], ['[data-testid="compile-status"]', "text=words", "text=Saved", 'select[aria-label="Spelling"]', 'select[aria-label="TeX engine"]', '[role="switch"]', 'button[aria-label="Keyboard shortcuts"]'], 8);
   await page.click('button[aria-label="Target journal"]');
   const jw = page.getByRole("dialog", { name: "Journal" });
   await jw.getByLabel("Search journals").fill("soil");
@@ -259,7 +259,7 @@ if (want("write")) {
   await page.locator(`${dw} .layout-page`).first().waitFor({ timeout: 30_000 });
   await tidy();
   await page.waitForTimeout(1200);
-  await shot("write-word", [dw], ["text=← All projects", '[role="group"][aria-label="Tools"]', page.getByRole("button", { name: "Download .docx" }), `${dw} [role="toolbar"]`, `${dw} .layout-page`, '[data-testid="save-state"]'], 0);
+  await shot("write-word", [dw], ["text=← All projects", '[role="group"][aria-label="Tools"]', page.getByRole("button", { name: "Download .docx" }), `${dw} [role="toolbar"]`, `${dw} .layout-page`, '[data-testid="save-state"]', 'select[aria-label="Spelling"]'], 0);
 }
 
 if (want("coins")) {
