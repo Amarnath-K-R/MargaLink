@@ -46,8 +46,9 @@ Task 0 (the sign-in hotfix, found on the way) is done: merged as PR #3
   pinned exact, one `WorkerLinter` started after a paper opens, the WASM
   emitted as its own file from our origin (CSP already allows
   `wasm-unsafe-eval`, `worker-src 'self' blob:`). `setDialect`,
-  `importWords`; results cached per paragraph text and copied out of WASM
-  objects (then freed). Harper has no LaTeX mode, hence the mask below.
+  `importWords`; results copied out of WASM objects (then freed). No cache:
+  a whole check of 10,000 words takes about 130 ms in the worker (measured
+  in review), the mask 2 ms. Harper has no LaTeX mode, hence the mask below.
 - **LaTeX** (`latexText.ts` `proseMask(tex)`, pure): a same-length copy with
   markup blanked to spaces (commands, maths, comments, preamble, `\cite{…}`
   and friends; the text of `\emph{…}`, `\section{…}` kept; newlines kept), so
@@ -170,7 +171,7 @@ Two branches and PRs: `writing-spelling` (Part A, ships first) and
 |---|---|---|
 | A0 | Spike notes (no test) | Harper under `next build`: worker start, WASM file in `out/` and size, CSP, span units (characters or UTF-16), result objects freed, rule names to filter, time for 10,000 words, no network but the WASM. Fallback: serve the engine from R2 like TeX |
 | A1 | `latexText.selfcheck` (same length, offsets line up, markup blanked, `\emph` text kept) | `proseMask` |
-| A2 | `grammar.selfcheck` (span conversion, marks on blanked markup dropped, cache); `projectStore.selfcheck` (spelling in backups, validated) | Engine wrapper, settings |
+| A2 | `grammar.selfcheck` (span conversion, marks on blanked markup dropped); `projectStore.selfcheck` (spelling in backups, validated) | Engine wrapper, settings |
 | A3 | `check_writing.mjs` LaTeX part (misspelling marked, `\cite{misspeled}` not; fix; dictionary survives reload; UK accepts "colour"; Off clears; only a WASM GET) | Spelling in LaTeX |
 | A4 | `docText.selfcheck` (fields/footnotes blanked, positions map back); smoke Word part | Spelling in Word |
 | A5 | `npm run check`, smokes, build and limits, privacy spelling line | PR 1 |
