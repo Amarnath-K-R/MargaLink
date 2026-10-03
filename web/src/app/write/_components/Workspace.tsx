@@ -343,11 +343,19 @@ export default function Workspace({
           if (!s) return "Select the text to rewrite first.";
           const p = toPassage(s.doc, s.from, s.to);
           if (typeof p === "string") return p;
-          h.hold(p.from, p.to);
           const original = s.doc.slice(p.from, p.to);
-          return { passage: p.passage, before: original, show: (t) => fromPassage(t, p.parts), place: (t) => (h.replaceHeld(original, fromPassage(t, p.parts)) ? "applied" : "stale") };
+          // The editor as it is when it's needed: a file switch (or a reload of it) makes a new one, holding nothing.
+          return {
+            passage: p.passage,
+            before: original,
+            show: (t) => fromPassage(t, p.parts),
+            keep: () => h.hold(p.from, p.to),
+            fresh: () => editor.current?.heldText() === original,
+            place: (t) => (editor.current?.replaceHeld(original, fromPassage(t, p.parts)) ? "applied" : "stale"),
+          };
         },
         anchor: () => h.around(),
+        focus: () => editor.current?.focus(),
       };
     },
     { dialect: spelling.dialect, consented: !!project.rewriteConsent, onConsent: () => setRewriteConsent(true), enabled: rewriteOn },

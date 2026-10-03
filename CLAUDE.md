@@ -67,8 +67,9 @@ none has a default-on path.
    backup; the command "Turn off Rewrite for this paper" withdraws it).
    Sends only the passage the person selected, the tool (paraphrase, tone,
    shorten, expand, clarity) and tone, the format and the paper's English
-   variant. Citations, references, labels, maths, pictures, footnote marks
-   and LaTeX comments are replaced by numbered placeholders in the browser
+   variant. Citations, references, labels, maths, drawings, pictures, LaTeX
+   comments and, in Word, fields, content controls and footnote marks are
+   replaced by numbered placeholders in the browser
    (`latexText.ts` `toPassage`, `docText.ts` `docPassage`) and never sent.
    `parseRewriteRequest` accepts exactly those fields, on both sides;
    `checkRewrite` refuses an answer that drops, adds or moves a placeholder,

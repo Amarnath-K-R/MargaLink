@@ -155,7 +155,8 @@ export default function PrivacyPage() {
               <strong>Your drafts live in your browser.</strong> Writing projects, LaTeX and Word documents alike, are kept in your browser&apos;s own storage on your device, never on
               a server. Clearing this site&apos;s data in your browser deletes them, so use &ldquo;Download backup&rdquo; to keep a copy or move to
               another computer. Spelling and grammar are checked in your browser too, and the words you add to a paper&apos;s dictionary are kept with
-              that paper. Only Rewrite, if you turn it on for a paper, sends a passage you select (below).
+              that paper. Two features can send a draft&apos;s text, each only after its notice (below): the AI review, if you run it, sends the
+              paper&apos;s text, and Rewrite, if you turn it on for a paper, a passage you select.
             </p>
           </Section>
 
@@ -194,8 +195,8 @@ export default function PrivacyPage() {
                   what: (
                     <>
                       Only the passage you select, the tool you choose (and its tone), and the paper&apos;s English (US, UK, Australian, Canadian or
-                      Indian). Citations, references, labels, equations, pictures, footnote marks and LaTeX comments in it are never sent: Claude sees a
-                      numbered marker in their place.
+                      Indian). Citations, references, labels, equations, drawings and pictures in it are never sent, nor are LaTeX comments or a
+                      Word document&apos;s footnote marks: Claude sees a numbered marker in their place.
                     </>
                   ),
                   away: true,

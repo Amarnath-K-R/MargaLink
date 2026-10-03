@@ -18,12 +18,15 @@ export type RewriteSelection = {
   passage: string; // what's sent: the selection with its objects as placeholders
   before: string; // the selection as the person sees it, for the diff
   show: (text: string) => string; // an answer as the person will see it (and copy it)
-  place: (text: string) => "applied" | "stale" | "refused"; // an answer put in, as one undo step
+  keep: () => void; // a tool was chosen: follow the selection through edits made while Claude works
+  fresh: () => boolean; // the selection's text is as it was read (in the editor as it is now)
+  place: (text: string) => "applied" | "stale" | "refused"; // an answer put in, as one undo step, in the editor as it is now
 };
 export type RewriteTarget = {
   format: "latex" | "text";
   read: () => RewriteSelection | string;
   anchor: () => { left: number; top: number; above: number } | null; // the selection's left edge, just under it and just over it, in the viewport
+  focus: () => void; // back to the editor
 };
 
 type Job = { sel: RewriteSelection; format: "latex" | "text"; tool: Tool; tone: Tone | null; coins: number };
@@ -32,7 +35,7 @@ type Stage =
   | { kind: "consent"; job: Job }
   | { kind: "running"; job: Job }
   | { kind: "done"; job: Job; text: string; notes: string[] }
-  | { kind: "stale"; job: Job; text: string }
+  | { kind: "stale"; job: Job; text: string; why: "stale" | "refused" | "locked" }
   | { kind: "error"; job: Job | null; message: string; signIn?: boolean; short?: boolean };
 
 const LABEL: Record<Tool, string> = { paraphrase: "Paraphrase", tone: "Change tone", shorten: "Shorten", expand: "Expand", clarity: "Clarity and flow" };
@@ -47,6 +50,7 @@ const coinsLabel = (n: number) => `${n} M coin${n === 1 ? "" : "s"}`;
 export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: Spelling["dialect"]; consented: boolean; onConsent: () => Promise<void>; enabled: boolean }) {
   const [stage, setStage] = useState<Stage | null>(null);
   const [at, setAt] = useState({ left: 16, top: 96, above: 88 });
+  const inFlight = useRef(false); // a rewrite on its way: no second one meanwhile (each is paid for)
   const optsRef = useRef(opts);
   useEffect(() => {
     optsRef.current = opts;
@@ -61,6 +65,7 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
   const offer = (): RewriteOffer => {
     const t = target();
     if (!t || !optsRef.current.enabled) return "Rewrite isn't available in this tab.";
+    if (inFlight.current) return "A rewrite is on its way.";
     const sel = t.read();
     if (typeof sel === "string") return sel;
     const req = request(t, sel, "paraphrase", null);
@@ -78,6 +83,8 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
   };
 
   const send = async (job: Job) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setStage({ kind: "running", job });
     try {
       const dialect = optsRef.current.dialect === "off" ? "us" : optsRef.current.dialect;
@@ -92,13 +99,22 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
         void refreshAccount();
         setStage({ kind: "error", job, message: "Sign in to use Rewrite.", signIn: true });
       } else setStage({ kind: "error", job, message: err instanceof Error ? err.message : "The rewrite failed. Try again in a moment." });
+    } finally {
+      inFlight.current = false;
     }
+  };
+  /** Try again, or the consent given: the same selection again, if it's still as it was and Rewrite still on. */
+  const again = (job: Job, consentGiven = false) => {
+    if (!optsRef.current.enabled) return setStage({ kind: "error", job: null, message: "Rewrite isn't available in this tab." });
+    if (!job.sel.fresh()) return setStage({ kind: "error", job: null, message: "The text changed since you asked. Select it again to rewrite it; nothing was charged." });
+    if (!consentGiven && !optsRef.current.consented) return setStage({ kind: "consent", job });
+    void send(job);
   };
 
   /** A tool chosen: checked here, then the consent if this paper hasn't given it, then sent. */
   const run = (tool: Tool, tone: Tone | null) => {
     const t = target();
-    if (!t || !optsRef.current.enabled) return;
+    if (!t || !optsRef.current.enabled || inFlight.current) return;
     moveToSelection();
     const sel = t.read();
     if (typeof sel === "string") return setStage({ kind: "error", job: null, message: sel });
@@ -107,19 +123,26 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
     if (typeof refused === "string") return setStage({ kind: "error", job: null, message: refused });
     const job: Job = { sel, format: t.format, tool, tone, coins: req.coins };
     if (currentAccount().status === "out") return setStage({ kind: "error", job, message: "Sign in to use Rewrite.", signIn: true });
+    sel.keep();
     if (!optsRef.current.consented) return setStage({ kind: "consent", job });
     void send(job);
   };
 
-  const close = () => setStage(null);
+  // Closed: the keyboard goes back to the editor.
+  const close = () => {
+    setStage(null);
+    target()?.focus();
+  };
   const replace = (job: Job, text: string) => {
-    if (job.sel.place(text) === "applied") close();
-    else setStage({ kind: "stale", job, text });
+    if (!optsRef.current.enabled) return setStage({ kind: "stale", job, text, why: "locked" }); // the tab became read-only meanwhile
+    const placed = job.sel.place(text);
+    if (placed === "applied") setStage(null);
+    else setStage({ kind: "stale", job, text, why: placed });
   };
   const title = (job: Job) => `${LABEL[job.tool]}${job.tone ? `, ${job.tone}` : ""}`;
 
   const element = stage && (
-    <RewriteCard left={at.left} top={at.top} above={at.above} onClose={close}>
+    <RewriteCard left={at.left} top={at.top} above={at.above} onClose={close} focusKey={stage.kind}>
       {stage.kind === "menu" && (
         <div role="menu" aria-label="Rewrite">
           <RewriteMenuItems offer={stage.offer} onTool={run} />
@@ -129,7 +152,7 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
         <RewriteConsent
           onConfirm={() => {
             const job = stage.job;
-            void optsRef.current.onConsent().then(() => send(job));
+            void optsRef.current.onConsent().then(() => again(job, true));
           }}
           onCancel={close}
         />
@@ -154,7 +177,7 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
             <button type="button" onClick={() => replace(stage.job, stage.text)} className="clay-btn clay-primary h-9 px-4 font-medium">
               Replace
             </button>
-            <button type="button" onClick={() => void send(stage.job)} className="clay-btn h-9 px-4">
+            <button type="button" onClick={() => again(stage.job)} className="clay-btn h-9 px-4">
               Try again · {coinsLabel(stage.job.coins)}
             </button>
             <button type="button" onClick={close} className="h-9 px-3 text-ink-soft hover:text-ink">
@@ -165,7 +188,14 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
       )}
       {stage.kind === "stale" && (
         <>
-          <p className="mb-2 text-ink">The text changed after you asked, so the rewrite wasn&apos;t put in. Copy it and place it yourself:</p>
+          <p className="mb-2 text-ink">
+            {stage.why === "refused"
+              ? "This rewrite couldn't be put in without moving a citation or another object, so it wasn't."
+              : stage.why === "locked"
+                ? "This tab can't change the paper now: another tab has it open."
+                : "The text changed after you asked, so the rewrite wasn't put in."}{" "}
+            Copy it and place it yourself:
+          </p>
           <RewriteDiff before={stage.job.sel.before} after={stage.job.sel.show(stage.text)} />
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => void navigator.clipboard?.writeText(stage.job.sel.show(stage.text)).catch(() => {})} className="clay-btn h-9 px-4">

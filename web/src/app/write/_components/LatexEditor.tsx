@@ -29,6 +29,7 @@ export type EditorHandle = {
   // step, only if its text is still `original`; and where it is on screen.
   selection(): { from: number; to: number; doc: string } | null;
   hold(from: number, to: number): void;
+  heldText(): string | null;
   replaceHeld(original: string, text: string): boolean;
   around(): { left: number; top: number; above: number } | null;
 };
@@ -266,6 +267,10 @@ export default function LatexEditor({
       hold(from, to) {
         v.dispatch({ effects: holdRange.of({ from, to }) });
       },
+      heldText() {
+        const range = v.state.field(heldRange);
+        return range ? v.state.sliceDoc(range.from, range.to) : null;
+      },
       replaceHeld(original, text) {
         const range = v.state.field(heldRange);
         if (!range || v.state.sliceDoc(range.from, range.to) !== original) return false;
@@ -274,7 +279,8 @@ export default function LatexEditor({
         return true;
       },
       around() {
-        const range = v.state.field(heldRange) ?? v.state.selection.main;
+        const sel = v.state.selection.main;
+        const range = sel.empty ? (v.state.field(heldRange) ?? sel) : sel; // by the selection; else by the rewrite it's working on
         const start = v.coordsAtPos(range.from);
         const end = v.coordsAtPos(range.to) ?? start;
         return start && end ? { left: start.left, top: end.bottom + 8, above: start.top - 8 } : null;

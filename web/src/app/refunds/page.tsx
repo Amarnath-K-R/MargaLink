@@ -33,7 +33,8 @@ export default function RefundsPage() {
             average section. Any part that doesn&apos;t come back is refunded (rounded up to whole coins), whether or not the rest of the review
             finished, about two hours after the review started. An Ask Claude request that fails, or
             whose answer can&apos;t be used, is refunded at once, and so is a rewrite that fails or that our checks refuse. A rewrite that came back
-            but wasn&apos;t put in because your text changed first isn&apos;t refunded, since it was delivered (you can copy it), and Try again is
+            but wasn&apos;t put in (your text changed first, or it couldn&apos;t be placed around a citation or another object) isn&apos;t refunded,
+            since it was delivered (you can copy it), and Try again is
             charged as a new rewrite. You don&apos;t need to ask; your coin history on{" "}
             <Link href="/account" className="text-accent hover:underline">
               your account page

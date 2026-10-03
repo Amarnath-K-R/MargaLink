@@ -1,14 +1,34 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { diffWordSegments } from "@stll/folio-core/ai-edits/word-diff";
 
 // Rewrite's card, by the selection: the consent the first time in a paper,
 // then the rewrite as a word diff (removed struck through, added
 // underlined), Clarity's notes, and Replace / Try again / Discard; or what
 // went wrong, with what to do. Non-modal: the editor stays usable, Escape
-// closes it.
-export default function RewriteCard({ left, top, above, onClose, children }: { left: number; top: number; above: number; onClose: () => void; children: ReactNode }) {
+// closes it. Each step takes the keyboard (its first control, or the card),
+// so it's usable without a mouse; closing gives it back to the editor.
+export default function RewriteCard({
+  left,
+  top,
+  above,
+  focusKey,
+  onClose,
+  children,
+}: {
+  left: number;
+  top: number;
+  above: number;
+  focusKey: string; // a new step: the keyboard moves into it
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const first = box.current?.querySelector<HTMLElement>("input, button:not([disabled]), a[href]");
+    (first ?? box.current)?.focus();
+  }, [focusKey]);
   // Under the selection when there's room, over it when there's more room there: never on it, always on screen
   // (scrolling inside when it's taller than the room).
   const roomBelow = window.innerHeight - Math.max(8, top) - 16;
@@ -21,10 +41,12 @@ export default function RewriteCard({ left, top, above, onClose, children }: { l
   }, [onClose]);
   return (
     <div
+      ref={box}
+      tabIndex={-1}
       data-testid="rewrite-card"
       role="dialog"
       aria-label="Rewrite"
-      className="clay fixed z-40 w-[28rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl p-4 text-sm"
+      className="clay fixed z-40 w-[28rem] outline-none max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl p-4 text-sm"
       style={{ left: Math.max(8, Math.min(left, window.innerWidth - 460)), ...place }}
     >
       {children}

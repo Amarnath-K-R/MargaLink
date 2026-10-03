@@ -125,7 +125,7 @@ export default function ArchitecturePage() {
             </p>
             <p>
               <strong>Rewrite:</strong> only the passage the user selected, the tool (and tone) and the paper&apos;s English. Citations, references,
-              labels, maths, pictures, footnote marks and LaTeX comments become numbered placeholders ({code("toPassage()")},{" "}
+              labels, maths, drawings, pictures, LaTeX comments and, in Word, fields, content controls and footnote marks become numbered placeholders ({code("toPassage()")},{" "}
               {code("docPassage()")}) and stay on the device; the answer must keep every placeholder where it was and add no number (in LaTeX, no
               command either) before it&apos;s returned, and the browser checks it again before offering it.
             </p>

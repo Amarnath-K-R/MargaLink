@@ -23,7 +23,7 @@ const O = process.env.ORIGIN ?? "http://localhost:3000";
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../../.smoke/", import.meta.url).pathname;
 mkdirSync(SCRATCH, { recursive: true });
 const context = await chromium.launchPersistentContext(`${SCRATCH}/rewrite-profile`, { viewport: { width: 1400, height: 900 }, acceptDownloads: true });
-const account = await mockAccount(context, { balance: 3, origin: O });
+const account = await mockAccount(context, { balance: 20, origin: O });
 const page = context.pages()[0] ?? (await context.newPage());
 const problems = [];
 page.on("pageerror", (e) => problems.push(`pageerror: ${e.message.slice(0, 160)}`));
@@ -38,9 +38,10 @@ page.on("dialog", (d) => void d.accept());
 const SWAPS = [["was short", "seemed brief"], ["were enrolled", "joined the study"]];
 let mode = "ok";
 const rewrites = [];
-await context.route("**/api/rewrite", (route) => {
+await context.route("**/api/rewrite", async (route) => {
   const body = route.request().postDataJSON();
   rewrites.push(body);
+  if (mode === "slow") await new Promise((r) => setTimeout(r, 2500));
   if (mode === "fail") return route.fulfill({ status: 422, contentType: "text/plain", body: "Claude's rewrite didn't keep your citations, numbers or paragraphs as they were, so it wasn't used. Your coin was refunded." });
   if (body.coins > account.balance) return route.fulfill({ status: 402, json: { coins: body.coins, balance: account.balance } });
   account.balance -= body.coins;
@@ -107,15 +108,19 @@ await menu.getByRole("menuitem", { name: "Paraphrase" }).click();
 check("the first rewrite in a paper asks for consent", await seen(card.getByRole("alertdialog", { name: "Rewrite consent" })));
 check("and nothing is sent before it", rewrites.length === 0);
 check("Turn on waits for the box", await card.getByRole("button", { name: "Turn on for this paper" }).isDisabled());
-await card.getByRole("checkbox").check();
-await card.getByRole("button", { name: "Turn on for this paper" }).click();
+const focusIn = (sel) => page.evaluate((sel) => !!document.activeElement?.closest(sel), sel);
+check("the consent takes the keyboard, at its box", await page.evaluate(() => document.activeElement?.getAttribute("type") === "checkbox" && !!document.activeElement.closest('[data-testid="rewrite-card"]')));
+await page.keyboard.press("Space");
+await page.keyboard.press("Tab");
+await page.keyboard.press("Enter");
 check("then the rewrite shows as a diff", await seen(card.locator('[data-testid="rewrite-diff"] ins', { hasText: "seemed" })));
 check("only the passage went, the citation and the maths as placeholders", rewrites.length === 1 && rewrites[0].passage === "Sleep was short after surgery~⟦1⟧ in ⟦2⟧ adults." && rewrites[0].format === "latex" && rewrites[0].dialect === "us");
 check("consent is kept with the paper", await eventually(async () => typeof (await meta(texId)).rewriteConsent === "string"));
 check(`the status line counts what was sent (${await sentLine()})`, /1 request carried text/.test(await sentLine()));
-await card.getByRole("button", { name: "Replace" }).click();
+check("the result takes the keyboard, at Replace", await page.evaluate(() => document.activeElement?.textContent === "Replace"));
+await page.keyboard.press("Enter");
 check("Replace puts the rewrite in", await eventually(async () => (await source()).includes("Sleep seemed brief after surgery~\\cite{knuth1984} in $n = 12$ adults.")));
-check("and closes the card", (await card.count()) === 0);
+check("and closes the card, the keyboard back in the editor", (await card.count()) === 0 && (await focusIn('[data-testid="latex-editor"]')));
 await cm.click();
 await page.keyboard.press("ControlOrMeta+z");
 check("one undo takes it back", await eventually(async () => (await source()).includes(SENTENCE)));
@@ -130,6 +135,23 @@ check("no second consent in the same paper", (await card.getByRole("alertdialog"
 await card.getByRole("button", { name: /Try again · 1 M coin/ }).click();
 check("Try again sends again, and is charged again", await eventually(async () => rewrites.length === 3 && account.balance === before - 2));
 
+// --- the text changed meanwhile: Try again asks to select it again (nothing sent, nothing charged)
+await seen(card.locator('[data-testid="rewrite-diff"]'));
+await page.click(`[data-testid="latex-editor"] .cm-line:has-text("${SENTENCE.slice(0, 20)}")`, { position: { x: 2, y: 6 } });
+await page.keyboard.press("Home");
+for (let i = 0; i < "Sleep ".length; i++) await page.keyboard.press("ArrowRight");
+await page.keyboard.type("well "); // inside the passage (typing just before it isn't a change to it)
+const sentBeforeAgain = rewrites.length;
+await card.getByRole("button", { name: /Try again/ }).click();
+check("Try again after the text changed asks to select it again, and sends nothing", (await seen(card.getByText(/The text changed since you asked/))) && rewrites.length === sentBeforeAgain);
+await page.keyboard.press("Escape");
+await cm.click();
+await page.keyboard.press("ControlOrMeta+z");
+await eventually(async () => (await source()).includes(SENTENCE));
+await selectText(SENTENCE);
+menu = await rewriteMenu();
+await menu.getByRole("menuitem", { name: "Paraphrase" }).click();
+
 // --- the text changed meanwhile: Copy, not Replace
 await seen(card.locator('[data-testid="rewrite-diff"]'));
 await page.click(`[data-testid="latex-editor"] .cm-line:has-text("${SENTENCE.slice(0, 20)}")`, { position: { x: 2, y: 6 } });
@@ -139,6 +161,26 @@ await page.keyboard.type("well ");
 await card.getByRole("button", { name: "Replace" }).click();
 check("text changed since: the card says so and offers Copy", await seen(card.getByRole("button", { name: "Copy the rewrite" })));
 check("and the paper is as edited", (await source()).includes("Sleep was short well after surgery"));
+await page.keyboard.press("Escape");
+
+// --- a rewrite on its way: no second one meanwhile; the editor remade (a file switch) can't be written blind
+mode = "slow";
+await selectText(SENTENCE.slice(0, 15));
+menu = await rewriteMenu();
+await menu.getByRole("menuitem", { name: "Paraphrase" }).click();
+await page.waitForTimeout(400);
+menu = await rewriteMenu();
+check("while a rewrite is on its way the menu offers no other", /on its way/.test(await menu.locator('[data-testid="rewrite-price"]').innerText()) && (await menu.getByRole("menuitem", { name: "Paraphrase" }).isDisabled()));
+await page.keyboard.press("Escape");
+mode = "ok";
+await seen(card.locator('[data-testid="rewrite-diff"]'));
+await page.click('[data-testid="file-tree"] >> text=refs.bib');
+await page.waitForTimeout(600);
+await page.click('[data-testid="file-tree"] >> text=main.tex');
+await cm.waitFor();
+const beforeSwitch = await source();
+await card.getByRole("button", { name: "Replace" }).click();
+check("Replace after a file switch offers Copy instead of writing nowhere", (await seen(card.getByRole("button", { name: "Copy the rewrite" }))) && (await source()) === beforeSwitch);
 await page.keyboard.press("Escape");
 
 // --- a refused rewrite, and too few coins

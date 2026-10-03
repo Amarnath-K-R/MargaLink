@@ -202,6 +202,24 @@ function objectsOf(doc: Node): string {
   return seen.join("\n");
 }
 
+// The passage's paragraphs as they were, found where they now are (an edit elsewhere moves them), in
+// order; null when one of them changed.
+function findBlocks(snapshot: ReturnType<typeof createFolioAIEditSnapshot>, p: WordPassage) {
+  const at = (id: string) => snapshot.anchors[id]?.from ?? -1;
+  const found: (typeof snapshot.blocks)[number][] = [];
+  let after = -1;
+  for (const b of p.blocks) {
+    const block = snapshot.blocks.filter((x) => x.text === b.text && at(x.id) > after).sort((x, y) => Math.abs(at(x.id) - b.pos) - Math.abs(at(y.id) - b.pos))[0];
+    if (!block) return null;
+    found.push(block);
+    after = at(block.id);
+  }
+  return found;
+}
+
+/** Whether the passage's paragraphs are still as they were when it was read. */
+export const passageFresh = (doc: Node, p: WordPassage) => findBlocks(createFolioAIEditSnapshot(doc), p) !== null;
+
 /**
  * A checked answer (rewrite.ts) put back as one edit, one undo step: each
  * stretch of words that changed is replaced in place, the objects between
@@ -215,17 +233,12 @@ export function applyDocRewrite(view: { state: EditorState; dispatch: (tr: Trans
   if (paragraphs.length !== p.blocks.length) return "refused";
   const snapshot = createFolioAIEditSnapshot(doc);
   const operations: FolioAIEditOperation[] = [];
+  const found = findBlocks(snapshot, p);
+  if (!found) return "stale";
   let n = 0;
-  let after = -1;
   for (let k = 0; k < p.blocks.length; k++) {
     const b = p.blocks[k];
-    // The paragraph as it was, found where it now is (an edit elsewhere moves it), in order.
-    const at = (id: string) => snapshot.anchors[id]?.from ?? -1;
-    const block = snapshot.blocks
-      .filter((x) => x.text === b.text && at(x.id) > after)
-      .sort((x, y) => Math.abs(at(x.id) - b.pos) - Math.abs(at(y.id) - b.pos))[0];
-    if (!block) return "stale";
-    after = at(block.id);
+    const block = found[k];
     const parts = paragraphs[k].split(PLACEHOLDER).filter((_, i) => i % 2 === 0);
     const marks = [...paragraphs[k].matchAll(PLACEHOLDER)].map((m) => Number(m[1]));
     if (parts.length !== b.gaps.length || marks.some((m) => m !== ++n)) return "refused";

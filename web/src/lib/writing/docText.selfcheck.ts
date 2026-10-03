@@ -9,7 +9,7 @@ import { schema } from "@stll/folio-core/prosemirror/schema";
 import { LocalLinter } from "harper.js";
 import { binaryInlined } from "harper.js/binaryInlined";
 import { checkProse } from "./grammar.ts";
-import { applyDocRewrite, docPassage, docProse, docRange, fixWord, type WordPassage } from "./docText.ts";
+import { applyDocRewrite, docPassage, docProse, docRange, fixWord, passageFresh, type WordPassage } from "./docText.ts";
 import { EditorState, type Transaction } from "prosemirror-state";
 import type { Node } from "prosemirror-model";
 import { buildCleanBlockText } from "@stll/folio-core/ai-edits/clean-text";
@@ -168,6 +168,8 @@ assert.equal(secondText, "Sleep was brief after  surgery\tin elderly\npeople  in
 const edited = editor(before);
 edited.dispatch(edited.state.tr.insertText("X", inner(before, 0).from));
 const was = edited.state.doc;
+assert.equal(passageFresh(edited.state.doc, whole), false, "known to be stale before Replace or Try again");
+assert.equal(passageFresh(before, whole), true);
 assert.equal(applyDocRewrite(edited, whole, answer), "stale");
 assert.equal(edited.state.doc, was, "the document is as it was");
 // what real Word documents hold: a one-character citation (Vancouver's superscript), a field holding

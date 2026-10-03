@@ -94,10 +94,11 @@ export default function TermsPage() {
               cross-check) is refunded in coins automatically, and a failed Ask Claude request at once.
             </li>
             <li>
-              A rewrite costs 1 M coin per {REWRITE_WORDS_PER_COIN} words you select, rounded up (at least 1), for up to{" "}
+              A rewrite costs 1 M coin per {REWRITE_WORDS_PER_COIN} words you select (a long unbroken run of characters counts as a word for
+              every 8), rounded up (at least 1), for up to{" "}
               {REWRITE_MAX_WORDS.toLocaleString("en")} words at a time ({REWRITE_MAX_WORDS_EXPAND.toLocaleString("en")} to expand). Try again is a new rewrite and costs the same again. A rewrite that fails, or
-              that our checks refuse, is refunded in coins at once. A rewrite that came back but wasn&apos;t put in because the text changed first
-              isn&apos;t refunded: it was delivered, and you can copy it.
+              that our checks refuse, is refunded in coins at once. A rewrite that came back but wasn&apos;t put in (the text changed first, or it
+              couldn&apos;t be placed around a citation or another object) isn&apos;t refunded: it was delivered, and you can copy it.
             </li>
             <li>We may change what things cost or what coins cost; coins you already have keep working at the prices shown when you use them.</li>
           </ul>

@@ -11,7 +11,7 @@ import { findQuoteInText } from "@/lib/write/texSource";
 import { docSaveState } from "@/lib/write/docSaveState";
 import type { Spelling } from "@/lib/writing/spelling";
 import { useDocSpelling } from "./useDocSpelling.tsx";
-import { applyDocRewrite, docPassage } from "@/lib/writing/docText";
+import { applyDocRewrite, docPassage, passageFresh } from "@/lib/writing/docText";
 import { useRewrite, type RewriteTarget } from "./useRewrite.tsx";
 import { RewriteButton } from "./RewriteMenu.tsx";
 
@@ -95,17 +95,24 @@ export default function DocEditor({
           const p = docPassage(v.state.doc, from, to);
           if (typeof p === "string") return p;
           const show = (t: string) => t.replace(/\u27e6(\d+)\u27e7/g, (_, n: string) => shownObject(p.objects[Number(n) - 1] ?? ""));
+          // The editor's view as it is when it's needed (Folio may have made a new one meanwhile).
           const place = (t: string) => {
-            const done = applyDocRewrite(v, p, t);
+            const now = view();
+            const done = now ? applyDocRewrite(now, p, t) : "stale";
             if (done === "applied") ref.current?.focus(); // back in the document, where Undo takes it back
             return done;
           };
-          return { passage: p.passage, before: show(p.passage), show, place };
+          const fresh = () => {
+            const now = view();
+            return !!now && passageFresh(now.state.doc, p);
+          };
+          return { passage: p.passage, before: show(p.passage), show, keep: () => {}, fresh, place };
         },
         anchor: () => {
           const r = getFolioSelectionViewportRect(v);
           return r ? { left: r.left, top: r.bottom + 8, above: r.top - 8 } : null;
         },
+        focus: () => ref.current?.focus(),
       };
     },
     { dialect: rewriting?.dialect ?? "us", consented: !!rewriting?.consented, onConsent: rewriting?.onConsent ?? (async () => {}), enabled: !!rewriting && !readOnly },
