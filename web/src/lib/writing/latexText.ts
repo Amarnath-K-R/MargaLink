@@ -210,5 +210,14 @@ export function toPassage(doc: string, from: number, to: number): Passage | stri
   return depth ? CUT : { passage, parts, from, to };
 }
 
-/** A checked answer with each placeholder's source put back. */
-export const fromPassage = (text: string, parts: string[]) => text.replace(/⟦(\d+)⟧/g, (_, n: string) => parts[Number(n) - 1]);
+/**
+ * A checked answer with each placeholder's source put back. A comment runs to
+ * the end of its line, so text an answer put after one on the same line
+ * starts the next line instead of being commented out.
+ */
+export function fromPassage(text: string, parts: string[]): string {
+  return text.replace(/\u27e6(\d+)\u27e7([ \t]*)(?=([\s\S]?))/g, (_, n: string, space: string, next: string) => {
+    const part = parts[Number(n) - 1];
+    return part.startsWith("%") && next !== "" && next !== "\n" ? `${part}\n` : part + space;
+  });
+}

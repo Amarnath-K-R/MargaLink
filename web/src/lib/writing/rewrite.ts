@@ -87,6 +87,9 @@ export function checkRewrite(req: RewriteRequest, answer: { text: unknown; notes
   if (paragraphs(text).length !== paragraphs(req.passage).length) return `Keep the same number of paragraphs (${paragraphs(req.passage).length}).`;
   const where = (t: string) => paragraphs(t).map((p) => (placeholders(p) ?? []).join()).join("|");
   if (where(text) !== where(req.passage)) return "Keep each placeholder in the paragraph it was in.";
+  // Whether a space (or a line break) stands in front of each placeholder: a footnote mark sits on its word.
+  const spacing = (t: string) => [...t.matchAll(PLACEHOLDER)].map((m) => (m.index === 0 || /\s/.test(t[m.index - 1]) ? "s" : "-")).join("");
+  if (spacing(text) !== spacing(req.passage)) return "Keep the spacing in front of each placeholder as it was: a space where there was one, none where there was none.";
   const gaps = text.split(PLACEHOLDER).filter((_, i) => i % 2 === 0);
   const wantGaps = req.passage.split(PLACEHOLDER).filter((_, i) => i % 2 === 0);
   for (let i = 0; i < wantGaps.length; i++) {
@@ -109,8 +112,8 @@ export function checkRewrite(req: RewriteRequest, answer: { text: unknown; notes
   if (after > before * 2.5 + 20) return "The rewrite is far longer than the passage.";
 
   if (!Array.isArray(answer.notes) || answer.notes.some((n) => typeof n !== "string")) return "Notes must be a list of short texts.";
-  const notes = (answer.notes as string[]).map((n) => n.trim().replace(/\s*—\s*/g, ", ")).filter(Boolean);
-  if (req.tool !== "clarity" && notes.length) return "Only Clarity and flow gives notes; give none.";
+  // Notes about the writing only: one about the placeholders or the rules tells the author nothing.
+  const notes = (answer.notes as string[]).map((n) => n.trim().replace(/\s*—\s*/g, ", ")).filter((n) => n && !/placeholder|\u27e6/i.test(n));
   if (notes.length > MAX_NOTES || notes.some((n) => n.length > MAX_NOTE_CHARS)) return `Give at most ${MAX_NOTES} notes of up to ${MAX_NOTE_CHARS} characters.`;
-  return { text, notes };
+  return { text, notes: req.tool === "clarity" ? notes : [] }; // only Clarity's notes are shown
 }

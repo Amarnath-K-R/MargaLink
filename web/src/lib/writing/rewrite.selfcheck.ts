@@ -84,6 +84,12 @@ bad(base, `Sleep was briefer ${P(1)} following surgery. It came back ${P(2)} by 
 bad(base, `Sleep was briefer ${P(1)}.\n\nFollowing surgery.\n\nIt came back ${P(2)} by day 90.`, "a paragraph added");
 bad(base, `Sleep was briefer following surgery.\n\nIt came ${P(1)} back ${P(2)} by day 90.`, "a placeholder moved to another paragraph");
 
+// the spacing in front of each placeholder stays: no space before a footnote mark that had none (seen live)
+bad(base, `Sleep was briefer${P(1)} following surgery.\n\nIt came back ${P(2)} by day 90.`, "a space before a placeholder dropped");
+const noted = ok(req(`Recovery was slower${P(1)}. It improved by day 90.`));
+bad(noted, `Recovery was delayed ${P(1)}. It improved by day 90.`, "a space put before a footnote mark");
+good(noted, `Recovery was delayed${P(1)}. It got better by day 90.`);
+
 // gaps between objects: empty stays empty, words stay words
 const cites = ok(req(`Shown before ${P(1)}${P(2)} in adults.`));
 good(cites, `Reported earlier ${P(1)}${P(2)} in adults.`);
@@ -124,9 +130,10 @@ const clarity = ok(req(ten, { tool: "clarity" }));
 const withNotes = good(clarity, "After cardiac surgery, sleep stayed short and broken for weeks.", ["Moved the setting first.", "Cut “many” — it was vague."]);
 assert.deepEqual(withNotes.notes, ["Moved the setting first.", "Cut “many”, it was vague."]);
 bad(clarity, "After cardiac surgery, sleep stayed short and broken for weeks.", "four notes", ["a", "b", "c", "d"]);
+assert.deepEqual(good(clarity, "After cardiac surgery, sleep stayed short and broken for weeks.", ["Kept every placeholder in place.", "Cut a vague word."]).notes, ["Cut a vague word."], "a note about the placeholders is dropped");
 bad(clarity, "After cardiac surgery, sleep stayed short and broken for weeks.", "a long note", ["x".repeat(241)]);
 bad(clarity, "After cardiac surgery, sleep stayed short and broken for weeks.", "notes that aren't text", [1]);
-bad(base, `Sleep was briefer ${P(1)} following surgery.\n\nIt came back ${P(2)} by day 90.`, "notes from a tool without them", ["Changed words."]);
+assert.deepEqual(good(base, `Sleep was briefer ${P(1)} following surgery.\n\nIt came back ${P(2)} by day 90.`, ["Changed words."]).notes, [], "notes from a tool without them are dropped (seen live: refusing them only cost a retry)");
 
 // Word text: a line break inside a paragraph is a space (Word's own breaks travel as placeholders)
 assert.equal(good(base, `Sleep was briefer ${P(1)}\nfollowing surgery.\n\nIt came back ${P(2)} by day 90.`).text, `Sleep was briefer ${P(1)} following surgery.\n\nIt came back ${P(2)} by day 90.`);

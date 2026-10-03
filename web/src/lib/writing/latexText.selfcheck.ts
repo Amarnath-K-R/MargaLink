@@ -103,6 +103,10 @@ assert.deepEqual([p.from, p.to], [from, to]);
 assert.equal(fromPassage(p.passage, p.parts), doc.slice(from, to), "the round trip is exact");
 assert.equal(fromPassage(`After surgery (${P(2)}) sleep was \\emph{brief}~${P(1)}.\n${P(3)}\nFigure~${P(4)} and ${P(5)}{the registry} show it.`, p.parts),
   "After surgery ($n = 412$) sleep was \\emph{brief}~\\cite[p.~3]{smith2019}.\n% a note to self\nFigure~\\ref{fig:a} and \\href{https://x.org}{the registry} show it.", "parts go back by number");
+// a comment runs to the end of its line: text an answer put after one goes to the next line (seen live)
+assert.equal(fromPassage(`One. ${P(3)} Two.`, p.parts), "One. % a note to self\nTwo.");
+assert.equal(fromPassage(`One. ${P(3)}\nTwo.`, p.parts), "One. % a note to self\nTwo.");
+assert.equal(fromPassage(`One. ${P(3)}`, p.parts), "One. % a note to self", "nothing added at the end");
 // maths environments, \verb and \begin/\end travel whole
 assert.deepEqual(passage(doc.indexOf("See"), doc.length).parts, ["\\ref{fig:a}", "\\href{https://x.org}", "\\begin{equation}\nE = mc^2\n\\end{equation}", "\\verb|x|", "\\begin{itemize}", "\\end{itemize}"]);
 // the range is narrowed to the text: the blank lines around a selection stay where they are
