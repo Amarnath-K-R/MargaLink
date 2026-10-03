@@ -108,6 +108,15 @@ try {
   check("the landing page doesn't retry gated prefetches", most <= 2);
   page.removeAllListeners("request");
 
+  // Next checks a link with a HEAD before prefetching it, and remembers where a
+  // redirected one led: a HEAD into the gate gets a bare 401 (a redirect would
+  // teach the router "/home is /signin" until the page reloads); a GET, what a
+  // browser opens a page with, still goes to sign-in
+  const head = await fetch(`${O}/home`, { method: "HEAD", redirect: "manual" });
+  const get = await fetch(`${O}/home`, { redirect: "manual" });
+  check("signed out, a HEAD into the tools is a bare 401", head.status === 401 && head.headers.get("cache-control") === "no-store");
+  check("and a GET still goes to sign-in", get.status === 302 && get.headers.get("location") === "/signin?next=%2Fhome");
+
   // a client-side link into the gate (the tray's Home, from a public page): its payload's 401 makes the router load the page, which redirects
   await page.goto(`${O}/privacy`);
   await page.locator('nav a[href="/home"]').click();
@@ -134,6 +143,13 @@ try {
   await page.waitForSelector("text=You're signed in as e2e@example.org");
   const me = await page.evaluate(() => fetch("/api/me").then((r) => r.json()));
   check(`the new account has the beta's ${WELCOME_COINS} coins`, me.user?.email === "e2e@example.org" && me.balance === WELCOME_COINS && me.access?.approved === true && me.access?.developer === false);
+  // this page loaded signed out, so its tray's links were checked then: once
+  // signed in, they open the tools (not the sign-in page they led to before)
+  await page.locator('nav a[href="/home"]').click();
+  check(
+    "signed in on a page that loaded signed out, the tray's Home opens the dashboard",
+    await page.waitForURL(/\/home$/, { timeout: 15000 }).then(() => true, () => false),
+  );
 
   // a tester: the tools, with their security headers; not the console
   const tool = await page.goto(`${O}/review`);
