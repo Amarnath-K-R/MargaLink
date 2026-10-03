@@ -145,7 +145,7 @@ const storedDoc = async () => {
     try {
       return await storedDocOnce();
     } catch (err) {
-      if (i >= 5 || !/NotFoundError/.test(String(err))) throw err;
+      if (i >= 5 || !/NotFoundError|NotReadableError/.test(String(err))) throw err;
       await new Promise((r) => setTimeout(r, 150));
     }
   }

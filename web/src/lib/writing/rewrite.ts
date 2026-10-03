@@ -77,6 +77,43 @@ const count = (items: string[]) => items.reduce((m, x) => m.set(x, (m.get(x) ?? 
 const commands = (text: string) => (text.match(/\\(?:[a-zA-Z@]+\*?|[\s\S])/g) ?? []).sort().join(" ");
 const tally = (text: string, ch: string) => text.split(ch).length - 1;
 
+// Whitespace (in LaTeX, a tie too) counts as the space beside a placeholder.
+const spaceIn = (format: RewriteRequest["format"]) => (format === "latex" ? /[\s~]/ : /\s/);
+const wordChar = /[\p{L}\p{N}]/u;
+
+/**
+ * The spacing beside each placeholder put back as the passage had it: a
+ * space Claude dropped before one comes back, one it added before a mark
+ * that sat on its word (a footnote mark) goes, and a word it glued onto a
+ * placeholder's end gets its space. Only spaces move, never a word: a slip
+ * here is repaired, not refused (refusing it cost a retry or a refund).
+ * The placeholders are already known to be the passage's, in order.
+ */
+function repairSpacing(text: string, passage: string, format: RewriteRequest["format"]): string {
+  const space = spaceIn(format);
+  const want = [...passage.matchAll(PLACEHOLDER)].map((m) => ({
+    before: m.index === 0 || space.test(passage[m.index - 1]),
+    glued: wordChar.test(passage[m.index + m[0].length] ?? ""),
+  }));
+  const strip = format === "latex" ? /[ \t~]+$/ : /[ \t]+$/;
+  let out = "";
+  let last = 0;
+  let spaceNext = false;
+  [...text.matchAll(PLACEHOLDER)].forEach((m, k) => {
+    let head = text.slice(last, m.index);
+    if (spaceNext && wordChar.test(head[0] ?? "")) head = ` ${head}`;
+    const before = out + head;
+    const spaced = before === "" || space.test(before[before.length - 1]);
+    if (want[k].before && !spaced) head += " ";
+    else if (!want[k].before && spaced) head = head.replace(strip, "");
+    out += head + m[0];
+    last = m.index + m[0].length;
+    spaceNext = !want[k].glued;
+  });
+  const tail = text.slice(last);
+  return out + (spaceNext && wordChar.test(tail[0] ?? "") ? ` ${tail}` : tail);
+}
+
 /**
  * The answer, checked against what was asked: the cleaned text and notes, or
  * the first problem found (said plainly, as it's passed back to Claude for
@@ -85,7 +122,7 @@ const tally = (text: string, ch: string) => text.split(ch).length - 1;
 export function checkRewrite(req: RewriteRequest, answer: { text: unknown; notes: unknown }): Rewritten | string {
   if (typeof answer.text !== "string" || !answer.text.trim()) return "The rewrite came back empty.";
   // Word's own line breaks travel as placeholders, so a line break inside a paragraph is a space.
-  const text = req.format === "text" ? paragraphs(answer.text).map((p) => p.trim().replace(/\s*\n\s*/g, " ")).join("\n\n") : answer.text.trim();
+  let text = req.format === "text" ? paragraphs(answer.text).map((p) => p.trim().replace(/\s*\n\s*/g, " ")).join("\n\n") : answer.text.trim();
   if (text === req.passage.trim()) return "The rewrite is the same as the passage.";
 
   const marks = placeholders(text);
@@ -94,8 +131,9 @@ export function checkRewrite(req: RewriteRequest, answer: { text: unknown; notes
   if (paragraphs(text).length !== paragraphs(req.passage).length) return `Keep the same number of paragraphs (${paragraphs(req.passage).length}).`;
   const where = (t: string) => paragraphs(t).map((p) => (placeholders(p) ?? []).join()).join("|");
   if (where(text) !== where(req.passage)) return "Keep each placeholder in the paragraph it was in.";
+  text = repairSpacing(text, req.passage, req.format);
   // Whether a space (or a line break; in LaTeX, a tie) stands in front of each placeholder: a footnote mark sits on its word.
-  const space = req.format === "latex" ? /[\s~]/ : /\s/;
+  const space = spaceIn(req.format);
   const spacing = (t: string) => [...t.matchAll(PLACEHOLDER)].map((m) => (m.index === 0 || space.test(t[m.index - 1]) ? "s" : "-")).join("");
   if (spacing(text) !== spacing(req.passage)) return "Keep the spacing in front of each placeholder as it was: a space where there was one, none where there was none.";
   // ... and no word glued onto a placeholder's end where the passage had a space or a mark.
@@ -124,7 +162,7 @@ export function checkRewrite(req: RewriteRequest, answer: { text: unknown; notes
   const after = rewriteWords(text);
   if (req.tool === "shorten" && after >= before) return "Shorten must make the passage shorter.";
   if (req.tool === "expand" && after <= before) return "Expand must make the passage longer.";
-  if (after > before * 2.5 + 20) return "The rewrite is far longer than the passage.";
+  if (after > (req.tool === "expand" ? before * 3 + 40 : before * 2.5 + 20)) return "The rewrite is far longer than the passage.";
 
   if (!Array.isArray(answer.notes) || answer.notes.some((n) => typeof n !== "string")) return "Notes must be a list of short texts.";
   // Notes about the writing only: one about the placeholders or the rules tells the author nothing.

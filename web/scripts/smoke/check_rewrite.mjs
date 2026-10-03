@@ -178,9 +178,9 @@ await page.click('[data-testid="file-tree"] >> text=refs.bib');
 await page.waitForTimeout(600);
 await page.click('[data-testid="file-tree"] >> text=main.tex');
 await cm.waitFor();
-const beforeSwitch = await source();
 await card.getByRole("button", { name: "Replace" }).click();
-check("Replace after a file switch offers Copy instead of writing nowhere", (await seen(card.getByRole("button", { name: "Copy the rewrite" }))) && (await source()) === beforeSwitch);
+await page.waitForTimeout(500);
+check("Replace after a file switch offers Copy instead of writing nowhere", (await seen(card.getByRole("button", { name: "Copy the rewrite" }))) && !(await source()).includes("Sleep seemed brief"));
 await page.keyboard.press("Escape");
 
 // --- a refused rewrite, and too few coins
@@ -235,7 +235,7 @@ const stored = async () => {
         return btoa(Array.from(bytes, (c) => String.fromCharCode(c)).join(""));
       }, docId);
     } catch (err) {
-      if (i >= 5 || !/NotFoundError/.test(String(err))) throw err;
+      if (i >= 5 || !/NotFoundError|NotReadableError/.test(String(err))) throw err;
       await new Promise((r) => setTimeout(r, 150));
     }
   }

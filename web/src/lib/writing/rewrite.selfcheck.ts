@@ -90,18 +90,17 @@ bad(base, `Sleep was briefer ${P(1)} following surgery. It came back ${P(2)} by 
 bad(base, `Sleep was briefer ${P(1)}.\n\nFollowing surgery.\n\nIt came back ${P(2)} by day 90.`, "a paragraph added");
 bad(base, `Sleep was briefer following surgery.\n\nIt came ${P(1)} back ${P(2)} by day 90.`, "a placeholder moved to another paragraph");
 
-// the spacing in front of each placeholder stays: no space before a footnote mark that had none (seen live)
-bad(base, `Sleep was briefer${P(1)} following surgery.\n\nIt came back ${P(2)} by day 90.`, "a space before a placeholder dropped");
+// the spacing beside each placeholder is put back as it was, not refused (seen live: refusing it cost refunds)
+assert.equal(good(base, `Sleep was briefer${P(1)} following surgery.\n\nIt came back ${P(2)} by day 90.`).text, `Sleep was briefer ${P(1)} following surgery.\n\nIt came back ${P(2)} by day 90.`, "a dropped space given back");
 const noted = ok(req(`Recovery was slower${P(1)}. It improved by day 90.`));
-bad(noted, `Recovery was delayed ${P(1)}. It improved by day 90.`, "a space put before a footnote mark");
+assert.equal(good(noted, `Recovery was delayed ${P(1)}. It improved by day 90.`).text, `Recovery was delayed${P(1)}. It improved by day 90.`, "a space before a footnote mark taken out");
 good(noted, `Recovery was delayed${P(1)}. It got better by day 90.`);
-// in LaTeX a tie is a space: ~ before a placeholder may become a space and back (seen live)
+// in LaTeX a tie is a space: ~ before a placeholder may become a space and back
 const tied = ok(req(`Shown before~${P(1)}, and tonight. ${P(2)}\nNext line.`, { format: "latex" }));
-good(tied, `Reported before ${P(1)}, and tonight.~${P(2)}\nNext line.`);
-bad(tied, `Reported before${P(1)}, and tonight. ${P(2)}\nNext line.`, "but not glued to the word");
-
-// nor a word glued onto the end of a placeholder that had a space after it
-bad(base, `Sleep was briefer ${P(1)}following surgery.\n\nIt came back ${P(2)} by day 90.`, "a word glued after a placeholder");
+assert.equal(good(tied, `Reported before ${P(1)}, and tonight.~${P(2)}\nNext line.`).text, `Reported before ${P(1)}, and tonight.~${P(2)}\nNext line.`);
+assert.equal(good(tied, `Reported before${P(1)}, and tonight.${P(2)} Next line.`).text, `Reported before ${P(1)}, and tonight. ${P(2)} Next line.`, "a comment glued to the sentence (seen live) given its space");
+// and a word glued onto the end of a placeholder that had a space after it gets it back
+assert.equal(good(base, `Sleep was briefer ${P(1)}following surgery.\n\nIt came back ${P(2)} by day 90.`).text, `Sleep was briefer ${P(1)} following surgery.\n\nIt came back ${P(2)} by day 90.`, "a glued word given its space");
 
 // gaps between objects: empty stays empty, words stay words
 const cites = ok(req(`Shown before ${P(1)}${P(2)} in adults.`));
@@ -140,7 +139,8 @@ good(ok(req(ten, { tool: "shorten" })), "Sleep after cardiac surgery stayed shor
 bad(ok(req(ten, { tool: "shorten" })), "Sleep after cardiac surgery was short and broken for many, many long weeks.", "Shorten made it longer");
 good(ok(req(ten, { tool: "expand" })), `${ten} Patients woke often, and their nights stayed fragmented for weeks.`);
 bad(ok(req(ten, { tool: "expand" })), "Sleep after surgery was short.", "Expand made it shorter");
-bad(ok(req(ten, { tool: "expand" })), `${ten} ${"More words here. ".repeat(15)}`, "Expand ran on");
+good(ok(req(ten, { tool: "expand" })), `${ten} ${"More words here. ".repeat(14)}`); // Expand may run to three times (seen live)
+bad(ok(req(ten, { tool: "expand" })), `${ten} ${"More words here. ".repeat(25)}`, "Expand ran on");
 bad(base, `${base.passage.replace("shorter", "briefer")} ${"Words. ".repeat(60)}`.replace("\n\n", " filler.\n\n"), "a paraphrase ran on");
 
 // notes: Clarity only, at most 3, each short; written as the site writes
