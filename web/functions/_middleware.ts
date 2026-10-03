@@ -8,7 +8,11 @@
 // which comes back here after; not on the list, the sign-in page says so;
 // not a developer, /admin goes to /home. A payload request gets a bare 401
 // instead, so the router falls back to loading the page, which then
-// redirects. Pages doesn't apply public/_headers to a response that passed
+// redirects; so does a HEAD, which Next sends to check a link before
+// prefetching it: a redirect there would be remembered as where the link
+// leads ("/home is /signin") until the page reloads, so a person who signs
+// in on a page that loaded signed out couldn't follow its links. A browser
+// opens a page with a GET, which still gets the redirect. Pages doesn't apply public/_headers to a response that passed
 // through a Function, so every page served here gets its headers from
 // PAGE_HEADERS, and a gated one is cached nowhere shared (it depends on who's
 // asking).
@@ -30,7 +34,7 @@ export const onRequest: PagesFunction<{ DB?: D1Database }> = async ({ request, n
         : need === "developer" && !access.developer
           ? "/home"
           : null;
-    if (to) return /\.txt$/i.test(url.pathname) ? new Response(null, { status: 401, headers: NO_STORE }) : new Response(null, { status: 302, headers: { Location: to, ...NO_STORE } });
+    if (to) return request.method === "HEAD" || /\.txt$/i.test(url.pathname) ? new Response(null, { status: 401, headers: NO_STORE }) : new Response(null, { status: 302, headers: { Location: to, ...NO_STORE } });
   }
   const res = await next();
   const out = new Response(res.body, res);
