@@ -48,6 +48,13 @@ const jargon = "We used actigraphy.";
 assert.equal((await checkProse(linter, jargon, jargon, us)).length, 1);
 assert.equal((await checkProse(linter, jargon, jargon, { dialect: "us", words: ["actigraphy"] })).length, 0);
 assert.equal((await checkProse(linter, jargon, jargon, us)).length, 1, "words are the paper's, not remembered across papers");
+// ... and they survive a change of English (Harper forgets them with its dialect)
+assert.equal((await checkProse(linter, jargon, jargon, { dialect: "us", words: ["actigraphy"] })).length, 0);
+assert.equal((await checkProse(linter, jargon, jargon, { dialect: "gb", words: ["actigraphy"] })).length, 0, "still known in UK English");
+// a word kept in lower case is accepted at the start of a sentence too
+assert.equal((await checkProse(linter, "Actigraphy helps.", "Actigraphy helps.", { dialect: "gb", words: ["actigraphy"] })).length, 0);
+// each fix is offered once
+for (const i of await checkProse(linter, "Their is a problem with there method.", "Their is a problem with there method.", us)) assert.equal(new Set(i.replacements).size, i.replacements.length, i.message);
 
 // Harper's wording, as the site writes: quotes, not code backticks; no em dashes
 assert.equal(plainMessage("Did you mean to spell `thiss` this way?"), "Did you mean to spell “thiss” this way?");

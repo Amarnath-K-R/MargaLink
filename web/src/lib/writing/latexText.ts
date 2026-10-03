@@ -9,7 +9,12 @@ const NOT_PROSE = new Set([
   "url", "includegraphics", "input", "include", "includeonly", "bibliography", "bibliographystyle", "addbibresource", "printbibliography",
   "usepackage", "documentclass", "graphicspath", "hypersetup", "newcommand", "renewcommand", "providecommand", "def", "let",
   "setlength", "addtolength", "setcounter", "vspace", "hspace", "includepdf", "lstinputlisting", "newenvironment", "renewenvironment",
+  "bibitem", "definecolor", "newtheorem", "lstinline",
 ]);
+// ... and any citation or reference command (\Citet, \citenum, \subref), and glossary and acronym entries (\gls, \acrshort, \ac).
+const notProse = (name: string) => NOT_PROSE.has(name) || (/cite|ref$/i.test(name) && name !== "href") || /^(gls\w*|acr\w*|ac[slf]?p?)$/i.test(name);
+// Accent commands: a word with one in it (Schr\"odinger, Ko\v{s}ice) is read whole or not at all.
+const ACCENT = /^\\(?:["'`^~=.]|(?:[vuHcdbtrk]|ss|o|O|ae|AE|oe|OE|aa|AA|l|L|i|j)(?![A-Za-z]))/;
 // Environments whose contents aren't prose: maths and code. Blanked whole.
 const MATH = /^(equation|align|alignat|flalign|gather|multline|eqnarray|displaymath|math|split)\*?$/;
 const CODE = /^(verbatim|Verbatim|lstlisting|minted|comment)\*?$/;
@@ -17,12 +22,13 @@ const CODE = /^(verbatim|Verbatim|lstlisting|minted|comment)\*?$/;
 const SPEC_ARGS: Record<string, number> = { tabular: 1, "tabular*": 2, tabularx: 2, array: 1, longtable: 1, minipage: 1, wrapfigure: 2 };
 
 // The runs of markup in LaTeX source. "hidden": what isn't prose and must
-// be kept exactly (comments, maths, code, \verb, the NOT_PROSE commands
+// be kept exactly (comments, maths, code, \verb, the notProse commands
 // with their arguments, \begin and \end with their set-up, an \href's URL);
 // "command": any other command's name and options (\emph, \section[short]),
 // whose {text} is prose; "escape": \% and the like; "symbol": \\, \, and
-// the like; TeX's quotes and dashes; "mark": a brace, tie or alignment mark.
-type Run = "hidden" | "command" | "escape" | "symbol" | "open-quote" | "close-quote" | "dash" | "mark";
+// the like; "accent": a whole word with an accent command in it; TeX's
+// quotes and dashes; "mark": a brace, tie or alignment mark.
+type Run = "hidden" | "command" | "escape" | "symbol" | "accent" | "open-quote" | "close-quote" | "dash" | "mark";
 
 function scan(tex: string, start: number, visit: (run: Run, from: number, to: number) => void): void {
   // the index after a {…} group starting at i (nested, escapes skipped), or i if there's none
@@ -43,6 +49,19 @@ function scan(tex: string, start: number, visit: (run: Run, from: number, to: nu
     for (let next = group(j, "[", "]"); next !== j; next = group(j, "[", "]")) j = next;
     return j;
   };
+  // the whole word around an accent command at i: where it starts and ends
+  const accented = (i: number) => {
+    let a = i;
+    while (a > 0 && /[A-Za-z{}]/.test(tex[a - 1])) a--;
+    let b = i;
+    for (;;) {
+      const n = ACCENT.exec(tex.slice(b, b + 4))?.[0].length ?? 0;
+      if (n) b += n;
+      else if (/[A-Za-z{}]/.test(tex[b] ?? "")) b++;
+      else break;
+    }
+    return [a, b];
+  };
   // where `end` next occurs at or after i (its end), or the end of the text
   const until = (i: number, end: string) => {
     const at = tex.indexOf(end, i);
@@ -57,6 +76,10 @@ function scan(tex: string, start: number, visit: (run: Run, from: number, to: nu
       const eol = tex.indexOf("\n", i);
       i = eol < 0 ? tex.length : eol;
       visit("hidden", at, i);
+    } else if (c === "\\" && ACCENT.test(tex.slice(i, i + 4))) {
+      const [a, b] = accented(i);
+      i = b;
+      visit("accent", a, b);
     } else if (c === "\\") {
       const name = /^[A-Za-z@]+\*?/.exec(tex.slice(i + 1, i + 40))?.[0];
       if (!name) {
@@ -83,12 +106,12 @@ function scan(tex: string, start: number, visit: (run: Run, from: number, to: nu
           }
         }
         visit("hidden", at, i);
-      } else if (name === "verb" || name === "verb*") {
+      } else if (name === "verb" || name === "verb*" || (name === "lstinline" && !"{[".includes(tex[after]))) {
         const delim = tex[after];
         const close = delim ? tex.indexOf(delim, after + 1) : -1;
         i = close < 0 ? tex.length : close + 1;
         visit("hidden", at, i);
-      } else if (NOT_PROSE.has(name.replace(/\*$/, ""))) {
+      } else if (notProse(name.replace(/\*$/, ""))) {
         i = options(after);
         for (let next = group(i); next !== i; next = options(group(i))) i = next;
         visit("hidden", at, i);

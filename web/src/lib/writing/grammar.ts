@@ -43,6 +43,7 @@ export async function checkProse(linter: Linter, prose: string, source: string, 
     await linter.setDialect(dialect);
     await linter.setLintConfig(RULES_OFF); // a new dialect brings back every rule
     state.dialect = dialect;
+    state.words = "\u0000"; // ... and forgets the imported words
   }
   const words = spelling.words.join("\n");
   if (state.words !== words) {
@@ -63,12 +64,12 @@ export async function checkProse(linter: Linter, prose: string, source: string, 
         to,
         message: plainMessage(lint.message()),
         kind: kind === "Spelling" || kind === "Typo" ? "spelling" : "grammar",
-        replacements: lint.suggestions().map((s) => {
+        replacements: [...new Set(lint.suggestions().map((s) => {
           const k = s.kind();
           const text = k === REMOVE ? "" : k === INSERT_AFTER ? marked + s.get_replacement_text() : s.get_replacement_text();
           s.free();
           return text;
-        }),
+        }))], // Harper can offer the same fix twice
       });
     }
     span.free();
@@ -97,7 +98,13 @@ export function grammarEngine(): Promise<Linter> {
     if (!res.ok) throw new Error(`The spelling checker didn't download (${res.status}).`);
     const url = URL.createObjectURL(new Blob([await res.arrayBuffer()], { type: "application/wasm" }));
     const linter = new WorkerLinter({ binary: createBinaryModuleFromUrl(url, "full") });
-    await linter.setup();
+    try {
+      await linter.setup();
+    } catch (err) {
+      void linter.dispose().catch(() => {}); // the worker stops
+      URL.revokeObjectURL(url); // and the engine's copy is let go
+      throw err;
+    }
     return linter;
   })().catch((err: unknown) => {
     engine = null; // a failed download is tried again next time

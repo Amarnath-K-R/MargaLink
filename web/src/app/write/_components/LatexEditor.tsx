@@ -58,6 +58,8 @@ export type LineMark = { line: number; message: string; severity: "error" | "war
 // "Check again now": new compiler marks or spelling settings change no text,
 // and a forced check only runs when one is pending, so this makes one pending.
 const recheck = StateEffect.define<null>();
+// A spelling or grammar mark (told apart by its class: a source would be printed under each mark).
+const isSpelling = (d: Diagnostic) => d.markClass === "cm-spell" || d.markClass === "cm-grammar";
 const compilerMarks = (doc: Text, marks: LineMark[]): Diagnostic[] =>
   marks.filter((m) => m.line >= 1 && m.line <= doc.lines).map((m) => ({ from: doc.line(m.line).from, to: doc.line(m.line).to, severity: m.severity, message: m.message }));
 function checkAgain(v: EditorView) {
@@ -82,6 +84,7 @@ export default function LatexEditor({
   spelling = null,
   onAddWord,
   onSpellCount,
+  ignored,
 }: {
   text: string;
   readOnly?: boolean; // shown, selectable and copyable, not editable (set at mount: the editor is keyed on it)
@@ -92,7 +95,8 @@ export default function LatexEditor({
   completions: CompletionData; // the project's .bib entries and labels, read when a suggestion list opens
   spelling?: Spelling | null; // the paper's spelling settings; null: not prose (a .bib, a .cls)
   onAddWord?: (word: string) => void; // "Add to dictionary"
-  onSpellCount?: (marks: number | null) => void; // how many spelling and grammar marks are showing (null: none checked)
+  onSpellCount?: (marks: number | "failed" | null) => void; // how many spelling and grammar marks are showing (null: none checked)
+  ignored: Set<string>; // "Ignore", for this session and every file of the paper: the word and what was said about it
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -100,7 +104,7 @@ export default function LatexEditor({
   useEffect(() => {
     cbRef.current = { onChange, onSave, completions, marks, spelling, onAddWord, onSpellCount };
   });
-  const ignored = useRef(new Set<string>()); // "Ignore", for this session: the word and what was said about it
+  const run = useRef(0); // the latest check: an older one finishing later is dropped
 
   const extensions = () => {
     // A spelling or grammar mark, with its fixes (none in a read-only tab but Ignore).
@@ -114,33 +118,40 @@ export default function LatexEditor({
       actions.push({
         name: "Ignore",
         apply: (v) => {
-          ignored.current.add(`${word}\u0000${i.message}`);
+          ignored.add(`${word}\u0000${i.message}`);
           checkAgain(v);
         },
       });
-      return { from: i.from, to: i.to, severity: "info", source: "spelling", markClass: i.kind === "spelling" ? "cm-spell" : "cm-grammar", message: i.message, actions };
+      return { from: i.from, to: i.to, severity: "info", markClass: i.kind === "spelling" ? "cm-spell" : "cm-grammar", message: i.message, actions };
     };
     // One lint source for both kinds of mark: the compiler's (from props) and
     // the prose's (checked here). Two would each replace the other's.
     const marksAndSpelling = linter(
       async (v) => {
         const doc = v.state.doc;
-        const { marks: lines, spelling: settings, onSpellCount: count } = cbRef.current;
-        const tex = compilerMarks(doc, lines);
+        const mine = ++run.current;
+        const { spelling: settings, onSpellCount: count } = cbRef.current;
         if (!settings || settings.dialect === "off") {
           count?.(null);
-          return tex;
+          return compilerMarks(doc, cbRef.current.marks);
         }
         const text = doc.toString();
+        let issues: Issue[] | null = null;
         try {
-          const issues = await checkProse(await grammarEngine(), proseMask(text), text, settings);
-          const shown = issues.filter((i) => !ignored.current.has(`${text.slice(i.from, i.to)}\u0000${i.message}`));
-          count?.(shown.length);
-          return [...tex, ...shown.map((i) => spellingMark(i, text))];
+          issues = await checkProse(await grammarEngine(), proseMask(text), text, settings);
         } catch {
-          count?.(null); // the checker didn't load: the compiler's marks alone
+          // the checker didn't load: the compiler's marks alone; it's tried again after the next edit
+        }
+        // A newer check started meanwhile (new settings, say): its marks stand, these never arrive.
+        if (mine !== run.current) return new Promise<Diagnostic[]>(() => {});
+        const tex = compilerMarks(doc, cbRef.current.marks); // as they are now: a compile may have ended meanwhile
+        if (!issues) {
+          count?.("failed");
           return tex;
         }
+        const shown = issues.filter((i) => !ignored.has(`${text.slice(i.from, i.to)}\u0000${i.message}`));
+        count?.(shown.length);
+        return [...tex, ...shown.map((i) => spellingMark(i, text))];
       },
       { delay: 500, needsRefresh: (u) => u.transactions.some((tr) => tr.effects.some((e) => e.is(recheck))) },
     );
@@ -152,7 +163,7 @@ export default function LatexEditor({
       EditorState.readOnly.of(readOnly),
       StreamLanguage.define(stex),
       marksAndSpelling,
-      lintGutter({ markerFilter: (diagnostics) => diagnostics.filter((d) => d.source !== "spelling") }), // the gutter: the compiler's marks only
+      lintGutter({ markerFilter: (diagnostics) => diagnostics.filter((d) => !isSpelling(d)) }), // the gutter: the compiler's marks only
       EditorState.languageData.of(() => [{ autocomplete: suggest }]),
       EditorView.lineWrapping,
       keymap.of([{ key: "Mod-s", preventDefault: true, run: () => (cbRef.current.onSave(), true) }]),
@@ -248,7 +259,7 @@ export default function LatexEditor({
     const v = view.current;
     if (!v) return;
     const spellingMarks: Diagnostic[] = [];
-    forEachDiagnostic(v.state, (d, from, to) => void (d.source === "spelling" && spellingMarks.push({ ...d, from, to })));
+    forEachDiagnostic(v.state, (d, from, to) => void (isSpelling(d) && spellingMarks.push({ ...d, from, to })));
     v.dispatch(setDiagnostics(v.state, [...compilerMarks(v.state.doc, cbRef.current.marks), ...spellingMarks]));
   }, [marksKey]);
   // New spelling settings (the paper's English, a word added): check again now.
