@@ -89,6 +89,10 @@ bad(base, `Sleep was briefer${P(1)} following surgery.\n\nIt came back ${P(2)} b
 const noted = ok(req(`Recovery was slower${P(1)}. It improved by day 90.`));
 bad(noted, `Recovery was delayed ${P(1)}. It improved by day 90.`, "a space put before a footnote mark");
 good(noted, `Recovery was delayed${P(1)}. It got better by day 90.`);
+// in LaTeX a tie is a space: ~ before a placeholder may become a space and back (seen live)
+const tied = ok(req(`Shown before~${P(1)}, and tonight. ${P(2)}\nNext line.`, { format: "latex" }));
+good(tied, `Reported before ${P(1)}, and tonight.~${P(2)}\nNext line.`);
+bad(tied, `Reported before${P(1)}, and tonight. ${P(2)}\nNext line.`, "but not glued to the word");
 
 // gaps between objects: empty stays empty, words stay words
 const cites = ok(req(`Shown before ${P(1)}${P(2)} in adults.`));
