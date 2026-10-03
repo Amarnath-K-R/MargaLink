@@ -97,7 +97,7 @@ export function checkRewrite(req: RewriteRequest, answer: { text: unknown; notes
 
   if (req.format === "latex") {
     if (commands(text) !== commands(req.passage)) return "Keep every LaTeX command exactly as often as the passage has it.";
-    for (const ch of ["{", "}", "$", "%"]) if (tally(text, ch) !== tally(req.passage, ch)) return `Keep the passage's ${ch} characters exactly as they are.`;
+    for (const ch of ["{", "}", "$", "%", "&"]) if (tally(text, ch) !== tally(req.passage, ch)) return `Keep the passage's ${ch} characters exactly as they are.`;
   }
 
   const before = rewriteWords(req.passage);

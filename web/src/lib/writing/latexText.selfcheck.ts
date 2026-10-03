@@ -3,7 +3,7 @@
 // spaces in a copy of the same length, and a mark's position in the copy is its
 // position in the source.
 import assert from "node:assert/strict";
-import { proseMask } from "./latexText.ts";
+import { fromPassage, proseMask, toPassage, type Passage } from "./latexText.ts";
 
 // What's left readable, with the blanked runs squeezed (positions checked separately).
 const visible = (tex: string) => proseMask(tex).replace(/\s+/g, " ").trim();
@@ -67,5 +67,51 @@ assert.equal(visible("\\begin{itemize}\n\\item First pont.\n\\end{itemize}"), "F
 
 // broken LaTeX never throws and keeps its length
 for (const broken of ["\\emph{unclosed", "}{ stray", "$ unclosed maths", "\\", "\\begin{equation} no end", "%"]) same(broken);
+
+// --- Rewrite's passage: what isn't prose travels as numbered placeholders, kept exactly
+const P = (n: number) => `\u27e6${n}\u27e7`;
+const doc = [
+  "\\section{Intro}",
+  "Sleep was \\emph{short}~\\cite[p.~3]{smith2019} after surgery ($n = 412$).",
+  "% a note to self",
+  "See Figure~\\ref{fig:a} and \\href{https://x.org}{the registry}.",
+  "\\begin{equation}",
+  "E = mc^2",
+  "\\end{equation}",
+  "It recovered \\verb|x| by day 90 \\begin{itemize}\\item fast\\end{itemize}",
+].join("\n");
+const passage = (from: number, to: number) => {
+  const p = toPassage(doc, from, to);
+  assert.ok(typeof p !== "string", `a passage: ${p}`);
+  return p as Passage;
+};
+const from = doc.indexOf("Sleep");
+const to = doc.indexOf("registry}.") + "registry}.".length;
+const p = passage(from, to);
+assert.equal(p.passage, `Sleep was \\emph{short}~${P(1)} after surgery (${P(2)}).\n${P(3)}\nSee Figure~${P(4)} and ${P(5)}{the registry}.`, "formatting commands stay in the text");
+assert.deepEqual(p.parts, ["\\cite[p.~3]{smith2019}", "$n = 412$", "% a note to self", "\\ref{fig:a}", "\\href{https://x.org}"]);
+assert.deepEqual([p.from, p.to], [from, to]);
+assert.equal(fromPassage(p.passage, p.parts), doc.slice(from, to), "the round trip is exact");
+assert.equal(fromPassage(`After surgery (${P(2)}) sleep was \\emph{brief}~${P(1)}.\n${P(3)}\nFigure~${P(4)} and ${P(5)}{the registry} show it.`, p.parts),
+  "After surgery ($n = 412$) sleep was \\emph{brief}~\\cite[p.~3]{smith2019}.\n% a note to self\nFigure~\\ref{fig:a} and \\href{https://x.org}{the registry} show it.", "parts go back by number");
+// maths environments, \verb and \begin/\end travel whole
+assert.deepEqual(passage(doc.indexOf("See"), doc.length).parts, ["\\ref{fig:a}", "\\href{https://x.org}", "\\begin{equation}\nE = mc^2\n\\end{equation}", "\\verb|x|", "\\begin{itemize}", "\\end{itemize}"]);
+// the range is narrowed to the text: the blank lines around a selection stay where they are
+const padded = passage(from - 1, to + 1);
+assert.deepEqual([padded.from, padded.to], [from, to]);
+
+// refused: a selection that cuts through markup, or already has Rewrite's brackets
+const refusedAt = (f: number, t: number, why: string, text = doc) => assert.equal(typeof toPassage(text, f, t), "string", why);
+refusedAt(doc.indexOf("emph"), to, "starting inside a command's name");
+refusedAt(from, doc.indexOf("\\emph") + 3, "ending inside a command's name");
+refusedAt(doc.indexOf("smith2019"), to, "starting inside a citation");
+refusedAt(doc.indexOf("n = 412"), to, "starting inside maths");
+refusedAt(from, doc.indexOf("mc^2"), "ending inside an equation");
+refusedAt(doc.indexOf("note to self"), to, "starting inside a comment");
+refusedAt(doc.indexOf("short}"), to, "starting inside an argument");
+refusedAt(from, doc.indexOf("short}") + 2, "ending inside an argument");
+refusedAt(0, 8, "a selection holding Rewrite's brackets", "A \u27e61\u27e7 b.");
+refusedAt(0, 7, "maths left open", "Text $x and more");
+refusedAt(0, 0, "nothing selected");
 
 console.log("latexText.selfcheck: OK");

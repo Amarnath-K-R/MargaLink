@@ -16,18 +16,15 @@ const CODE = /^(verbatim|Verbatim|lstlisting|minted|comment)\*?$/;
 // Environments with a set-up argument (a column spec, a width) after \begin{…}.
 const SPEC_ARGS: Record<string, number> = { tabular: 1, "tabular*": 2, tabularx: 2, array: 1, longtable: 1, minipage: 1, wrapfigure: 2 };
 
-/**
- * A copy of LaTeX source with everything that isn't prose blanked to spaces:
- * the preamble, commands, citations and their keys, maths, code, comments,
- * braces, ties and alignment marks. The text of \emph{…}, \section{…},
- * \caption{…} and the like stays where it is, and line breaks are kept, so
- * any position in the copy is the same position in the source.
- */
-export function proseMask(tex: string): string {
-  const out = tex.split("");
-  const blank = (from: number, to: number) => {
-    for (let k = Math.max(0, from); k < Math.min(to, tex.length); k++) if (out[k] !== "\n") out[k] = " ";
-  };
+// The runs of markup in LaTeX source. "hidden": what isn't prose and must
+// be kept exactly (comments, maths, code, \verb, the NOT_PROSE commands
+// with their arguments, \begin and \end with their set-up, an \href's URL);
+// "command": any other command's name and options (\emph, \section[short]),
+// whose {text} is prose; "escape": \% and the like; "symbol": \\, \, and
+// the like; TeX's quotes and dashes; "mark": a brace, tie or alignment mark.
+type Run = "hidden" | "command" | "escape" | "symbol" | "open-quote" | "close-quote" | "dash" | "mark";
+
+function scan(tex: string, start: number, visit: (run: Run, from: number, to: number) => void): void {
   // the index after a {…} group starting at i (nested, escapes skipped), or i if there's none
   const group = (i: number, open = "{", close = "}") => {
     let j = i;
@@ -52,33 +49,24 @@ export function proseMask(tex: string): string {
     return at < 0 ? tex.length : at + end.length;
   };
 
-  let i = 0;
-  const begin = tex.indexOf("\\begin{document}");
-  if (begin >= 0) {
-    i = begin + "\\begin{document}".length;
-    blank(0, i);
-  }
+  let i = start;
   while (i < tex.length) {
+    const at = i;
     const c = tex[i];
     if (c === "%") {
       const eol = tex.indexOf("\n", i);
-      const to = eol < 0 ? tex.length : eol;
-      blank(i, to);
-      i = to;
+      i = eol < 0 ? tex.length : eol;
+      visit("hidden", at, i);
     } else if (c === "\\") {
       const name = /^[A-Za-z@]+\*?/.exec(tex.slice(i + 1, i + 40))?.[0];
       if (!name) {
         const next = tex[i + 1];
         if (next === "(" || next === "[") {
-          const to = until(i + 2, next === "(" ? "\\)" : "\\]");
-          blank(i, to);
-          i = to;
-        } else if (next !== undefined && "%&$#_{}".includes(next)) {
-          blank(i, i + 1); // an escaped character is that character
-          i += 2;
+          i = until(i + 2, next === "(" ? "\\)" : "\\]");
+          visit("hidden", at, i);
         } else {
-          blank(i, i + 2); // \\, \, \; \' and the like
-          i += 2;
+          i = Math.min(i + 2, tex.length);
+          visit(next !== undefined && "%&$#_{}".includes(next) ? "escape" : "symbol", at, i);
         }
         continue;
       }
@@ -86,69 +74,118 @@ export function proseMask(tex: string): string {
       if (name === "begin" || name === "end") {
         const argEnd = group(after);
         const env = tex.slice(after, argEnd).replace(/^\s*\{|\}$/g, "");
-        if (name === "begin" && (MATH.test(env) || CODE.test(env))) {
-          const to = until(argEnd, `\\end{${env}}`);
-          blank(i, to);
-          i = to;
-          continue;
+        if (name === "begin" && (MATH.test(env) || CODE.test(env))) i = until(argEnd, `\\end{${env}}`);
+        else {
+          i = argEnd;
+          if (name === "begin") {
+            i = options(i);
+            for (let n = SPEC_ARGS[env] ?? 0; n > 0; n--) i = group(i);
+          }
         }
-        let to = argEnd;
-        if (name === "begin") {
-          to = options(to);
-          for (let n = SPEC_ARGS[env] ?? 0; n > 0; n--) to = group(to);
-        }
-        blank(i, to);
-        i = to;
+        visit("hidden", at, i);
       } else if (name === "verb" || name === "verb*") {
         const delim = tex[after];
         const close = delim ? tex.indexOf(delim, after + 1) : -1;
-        const to = close < 0 ? tex.length : close + 1;
-        blank(i, to);
-        i = to;
+        i = close < 0 ? tex.length : close + 1;
+        visit("hidden", at, i);
       } else if (NOT_PROSE.has(name.replace(/\*$/, ""))) {
-        let to = options(after);
-        for (let next = group(to); next !== to; next = options(group(to))) to = next;
-        blank(i, to);
-        i = to;
+        i = options(after);
+        for (let next = group(i); next !== i; next = options(group(i))) i = next;
+        visit("hidden", at, i);
       } else if (name === "href") {
-        const to = group(after); // the URL; the link text stays
-        blank(i, to);
-        i = to;
+        i = group(after); // the URL; the link text is prose
+        visit("hidden", at, i);
       } else {
-        const to = options(after); // \section[short]{Long}: the command and its options go, the {text} stays
-        blank(i, to);
-        i = to;
+        i = options(after); // \section[short]{Long}: the command and its options; the {text} is prose
+        visit("command", at, i);
       }
     } else if (c === "$") {
       const display = tex[i + 1] === "$";
-      let to = tex.length;
-      for (let j = i + (display ? 2 : 1); j < tex.length; j++) {
+      i = tex.length;
+      for (let j = at + (display ? 2 : 1); j < tex.length; j++) {
         if (tex[j] === "\\") j++;
         else if (tex[j] === "$" && (!display || tex[j + 1] === "$")) {
-          to = j + (display ? 2 : 1);
+          i = j + (display ? 2 : 1);
           break;
         }
       }
-      blank(i, to);
-      i = to;
-    } else if (c === "`" && tex[i + 1] === "`") {
-      out[i] = " ";
-      out[i + 1] = '"';
+      visit("hidden", at, i);
+    } else if ((c === "`" || c === "'") && tex[i + 1] === c) {
       i += 2;
-    } else if (c === "'" && tex[i + 1] === "'") {
-      out[i] = '"';
-      out[i + 1] = " ";
-      i += 2;
+      visit(c === "`" ? "open-quote" : "close-quote", at, i);
     } else if (c === "-" && tex[i + 1] === "-") {
-      const to = tex[i + 2] === "-" ? i + 3 : i + 2; // -- and ---: LaTeX's dashes, not text
-      blank(i, to);
-      i = to;
+      i += tex[i + 2] === "-" ? 3 : 2; // -- and ---: LaTeX's dashes, not text
+      visit("dash", at, i);
     } else {
-      if (c === "{" || c === "}" || c === "~" || c === "&") out[i] = " ";
       i++;
+      if (c === "{" || c === "}" || c === "~" || c === "&") visit("mark", at, i);
     }
   }
+}
+
+/**
+ * A copy of LaTeX source with everything that isn't prose blanked to spaces:
+ * the preamble, commands, citations and their keys, maths, code, comments,
+ * braces, ties and alignment marks. The text of \emph{…}, \section{…},
+ * \caption{…} and the like stays where it is, and line breaks are kept, so
+ * any position in the copy is the same position in the source.
+ */
+export function proseMask(tex: string): string {
+  const out = tex.split("");
+  const blank = (from: number, to: number) => {
+    for (let k = Math.max(0, from); k < Math.min(to, tex.length); k++) if (out[k] !== "\n") out[k] = " ";
+  };
+  let start = 0;
+  const begin = tex.indexOf("\\begin{document}");
+  if (begin >= 0) {
+    start = begin + "\\begin{document}".length;
+    blank(0, start);
+  }
+  scan(tex, start, (run, from, to) => {
+    if (run === "escape") blank(from, from + 1); // an escaped character is that character
+    else if (run === "open-quote") out.splice(from, 2, " ", '"');
+    else if (run === "close-quote") out.splice(from, 2, '"', " ");
+    else blank(from, to);
+  });
   const end = tex.indexOf("\\end{document}");
   if (end >= 0) blank(end, tex.length);
   return out.join("");
 }
+
+export type Passage = { passage: string; parts: string[]; from: number; to: number };
+const CUT = "Select whole sentences: this selection starts or ends inside a command, maths, a comment or an argument.";
+
+/**
+ * Rewrite's passage for the selection [from, to) of `doc`: what isn't prose
+ * (the "hidden" runs above) replaced by placeholders ⟦1⟧…⟦k⟧ in order, its
+ * source kept in `parts`; formatting commands stay in the text, where the
+ * answer's check (rewrite.ts) guards them. The range is narrowed past the
+ * whitespace at its ends. Refused when the selection cuts through markup.
+ */
+export function toPassage(doc: string, from: number, to: number): Passage | string {
+  while (from < to && /\s/.test(doc[from])) from++;
+  while (to > from && /\s/.test(doc[to - 1])) to--;
+  if (from >= to) return "Select some text to rewrite.";
+  const sel = doc.slice(from, to);
+  if (/[⟦⟧]/.test(sel)) return "This selection holds ⟦ or ⟧, which Rewrite uses itself.";
+  const parts: string[] = [];
+  let passage = "";
+  let at = from;
+  let cut = false;
+  scan(doc, 0, (run, a, b) => {
+    if ((a < from && from < b) || (a < to && to < b)) cut = true;
+    else if (run === "hidden" && from <= a && b <= to) {
+      passage += `${doc.slice(at, a)}⟦${parts.length + 1}⟧`;
+      parts.push(doc.slice(a, b));
+      at = b;
+    }
+  });
+  passage += doc.slice(at, to);
+  if (cut) return CUT;
+  let depth = 0;
+  for (const c of passage.replace(/\\[{}]/g, "")) if ((depth += c === "{" ? 1 : c === "}" ? -1 : 0) < 0) return CUT;
+  return depth ? CUT : { passage, parts, from, to };
+}
+
+/** A checked answer with each placeholder's source put back. */
+export const fromPassage = (text: string, parts: string[]) => text.replace(/⟦(\d+)⟧/g, (_, n: string) => parts[Number(n) - 1]);

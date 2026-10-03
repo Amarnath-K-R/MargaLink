@@ -106,6 +106,8 @@ bad(tex, "We observed a \\textbf{large effect in 5\\% of cases, and \\emph{fewer
 bad(tex, "We observed a \\textbf{large} effect in 5\\% of cases, and \\emph{fewer} wakings {}.", "braces added");
 bad(tex, "We observed a \\textbf{large} effect in 5\\% of cases, and \\emph{fewer} wakings $.", "a dollar sign added");
 bad(tex, "We observed a \\textbf{large} effect in 5\\% of cases % a comment\n, and \\emph{fewer} wakings.", "a percent sign added");
+const cells = ok(req("Short sleep & 31 of 118 \\\\\nLong sleep & 12 of 294", { format: "latex" }));
+bad(cells, "Short sleep 31 of 118 \\\\\nLong sleep & 12 of 294", "a table's & dropped");
 
 // Shorten is shorter, Expand longer but not without end; every tool within 2.5 times + 20 words
 const ten = "Sleep after cardiac surgery was short and broken for many weeks.";
