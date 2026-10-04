@@ -1,72 +1,77 @@
-// Client-side orchestration of a review: plan chunks from the prepared text,
-// pay for the review (POST /api/review/start: section ids and lengths only,
-// answered with a ticket), run one bounded extract pass per chunk (a small
-// worker pool), build the claims ledger, run one synthesize pass, assemble
-// the ReviewResult. Every pass carries the ticket; a resume reuses it. Every
-// pass is an independent request to the stateless Function, so any pass can
-// fail, be retried, or be resumed alone, and partial results render on the way.
+// Client-side orchestration of a review: plan the paper (every included
+// chunk, never references) and the sections this depth reviews; pay for it
+// (POST /api/review/start: ids, lengths and which are reviewed, never text),
+// answered with a ticket; run one section pass per reviewed section, each
+// carrying the whole paper (the first alone, so Anthropic caches the paper
+// once; the rest 4 at a time; at thorough, the checklist pass among them);
+// then one editor pass over every finding by id; then assemble the report
+// (reviewReport.ts). Every pass is an independent request to the stateless
+// Function: any can fail, be retried or be resumed alone, on the same ticket.
 // Callers MUST have consent before calling runReview() (ReviewConsent.tsx).
-// `fetch` is resolved at call time, never captured at import — NetworkTrace's
-// window.fetch patch must see every request.
+// `fetch` is resolved at call time, so NetworkTrace's patch sees every request.
 import { ReviewCapacityError } from "./review.ts";
 import { NotEnoughCoinsError, SignInRequiredError, reviewPrice } from "../accounts/coins.ts";
 import { TIER_PLAN } from "./reviewPrompt.ts";
-import { MAX_ABSTRACT_CHARS, MAX_LEDGER, MAX_NOTES, MAX_PAPER_SECTIONS, MAX_STATS_FINDINGS, billedChars } from "./reviewPasses.ts";
-import { buildPaperMap, chunkSections, splitIntoSections } from "./reviewSections.ts";
+import { MAX_EDITOR_FINDINGS, billedChars } from "./reviewLimits.ts";
+import { chunkSections, splitIntoSections } from "./reviewSections.ts";
+import { assembleReport, findingId } from "./reviewReport.ts";
 import type {
+  ChecklistRequest,
+  ChecklistResponse,
   Chunk,
-  Citation,
-  ExtractRequest,
+  EditorFinding,
+  EditorRequest,
+  EditorResponse,
   HeadingHint,
-  ExtractResponse,
-  PaperMap,
-  Section,
+  PaperChunk,
+  PassRequest,
   ReviewProgress,
-  ReviewResult,
+  ReviewReport,
   ReviewTier,
-  SynthesizeRequest,
-  SynthesizeResponse,
+  Section,
+  SectionRequest,
+  SectionResponse,
 } from "./reviewTypes.ts";
 
 export type RunReviewOptions = {
   text: string; // output of prepareForReview()
-  hints?: HeadingHint[]; // the document's own headings (extract.ts), when it has them
-  // The user-confirmed outline (reviewSections.ts buildOutline). Excluded
-  // sections are never sent — not as a chunk, not in the paper map.
+  hints?: HeadingHint[];
+  // The user-confirmed outline. Excluded sections are never sent.
   outline?: { sections: Section[]; excluded: Section[] };
   journalId: string;
+  journalName: string;
   tier: ReviewTier;
   endpoint?: string;
   onProgress?: (p: ReviewProgress) => void;
-  // Called once with the run's state before any request: lets a caller that
-  // cancels mid-run resume later without re-sending finished sections.
+  // Called once with the run's state before any request, so a cancelled run can be resumed.
   onState?: (state: ReviewState) => void;
   signal?: AbortSignal;
-  // The account's balance after the review was paid for.
-  onCharged?: (balance: number) => void;
+  onCharged?: (balance: number) => void; // the balance after the review was paid for
   concurrency?: number;
-  timeoutMs?: { extract: number; synthesize: number };
+  timeoutMs?: { section: number; editor: number };
   retryDelaysMs?: number[];
 };
 export type ReviewState = {
-  chunks: Chunk[];
-  paperMap: PaperMap;
-  abstractText: string | null;
-  extracted: Record<string, ExtractResponse>;
-  failed: Record<string, string>;
+  chunks: Chunk[]; // the paper: every included chunk, in order
+  review: string[]; // the ids this depth reviews
+  skipped: { id: string; title: string }[];
   excluded: { id: string; title: string }[];
-  ticket: string | null; // from /api/review/start; a resume reuses it, so a review is paid for once
-  // The last cross-check that came back, and how many sections it covered:
-  // a resume shows it while it runs, keeps it if a new one fails, and runs a
-  // new one only once more sections have come back (the server refuses otherwise).
-  synth: SynthesizeResponse | null;
-  synthCovers: number;
+  sections: Record<string, SectionResponse>;
+  failed: Record<string, string>;
+  checklist: ChecklistResponse | null;
+  checklistFailed: string | null;
+  ticket: string | null; // a resume reuses it, so a review is paid for once
+  // The last report the editor put together, and how many parts it covered:
+  // a resume shows it while it runs, and asks again only once more have come back.
+  editor: EditorResponse | null;
+  editorCovers: number;
+  createdAt: string;
 };
-export type ReviewRun = { result: ReviewResult; state: ReviewState };
-export class ReviewSynthesisError extends Error {
-  partial: ReviewResult;
+export type ReviewRun = { result: ReviewReport; state: ReviewState };
+export class ReviewEditorError extends Error {
+  partial: ReviewReport;
   state: ReviewState;
-  constructor(message: string, partial: ReviewResult, state: ReviewState) {
+  constructor(message: string, partial: ReviewReport, state: ReviewState) {
     super(message);
     this.partial = partial;
     this.state = state;
@@ -77,9 +82,8 @@ class FatalPassError extends Error {}
 // The review's ticket can't be used any more (expired, or its passes spent):
 // Resume can't help; what didn't run is refunded automatically.
 export class ReviewEndedError extends Error {}
-const abortError = (signal: AbortSignal) =>
-  signal.reason instanceof Error ? signal.reason : new DOMException("Review cancelled", "AbortError");
-// A retry delay that ends immediately on cancel, so a cancelled run settles now, not seconds later.
+const abortError = (signal: AbortSignal) => (signal.reason instanceof Error ? signal.reason : new DOMException("Review cancelled", "AbortError"));
+// A retry delay that ends immediately on cancel.
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     if (signal.aborted) return reject(abortError(signal));
@@ -94,105 +98,84 @@ const sleep = (ms: number, signal: AbortSignal) =>
     signal.addEventListener("abort", onAbort, { once: true });
   });
 
-export function planChunks(chunks: Chunk[], tier: ReviewTier): { run: Chunk[]; skipped: Chunk[] } {
+/** The paper every pass carries (never references) and the sections this depth reviews (all of them, if it recognises none). */
+export function planReview(sections: Section[], hints: HeadingHint[], tier: ReviewTier): { chunks: Chunk[]; review: Chunk[]; skipped: Chunk[] } {
+  const all = chunkSections(sections, hints, { subsections: TIER_PLAN[tier].subsections });
+  const chunks = all.filter((c) => c.kind !== "references");
   const kinds = TIER_PLAN[tier].kinds;
-  const run = chunks.filter((c) => kinds.includes(c.kind));
-  // No section the tier asks for was recognized (e.g. a PDF with no detectable
-  // headings, which is all "other" — quick skips "other"): review every
-  // non-reference chunk rather than nothing.
-  if (run.length === 0) return { run: chunks.filter((c) => c.kind !== "references"), skipped: chunks.filter((c) => c.kind === "references") };
-  return { run, skipped: chunks.filter((c) => !kinds.includes(c.kind)) };
+  const picked = chunks.filter((c) => kinds.includes(c.kind));
+  const review = picked.length > 0 ? picked : chunks;
+  return { chunks, review, skipped: all.filter((c) => !review.includes(c)) };
 }
 
-function planState(text: string, hints: HeadingHint[], outline?: RunReviewOptions["outline"]): ReviewState {
-  const sections = outline?.sections ?? splitIntoSections(text, hints);
+function planState(opts: RunReviewOptions): ReviewState {
+  const sections = opts.outline?.sections ?? splitIntoSections(opts.text, opts.hints ?? []);
+  const { chunks, review, skipped } = planReview(sections, opts.hints ?? [], opts.tier);
   return {
-    chunks: chunkSections(sections, hints),
-    paperMap: buildPaperMap(sections),
-    abstractText: sections.find((s) => s.kind === "abstract")?.text ?? null,
-    extracted: {},
+    chunks,
+    review: review.map((c) => c.id),
+    skipped: skipped.map((c) => ({ id: c.id, title: c.title })),
+    excluded: (opts.outline?.excluded ?? []).map((s) => ({ id: s.id, title: s.title })),
+    sections: {},
     failed: {},
-    excluded: (outline?.excluded ?? []).map((s) => ({ id: s.id, title: s.title })),
+    checklist: null,
+    checklistFailed: null,
     ticket: null,
-    synth: null,
-    synthCovers: 0,
+    editor: null,
+    editorCovers: 0,
+    createdAt: new Date().toISOString(),
   };
 }
 
-/** What a review would cost, from exactly what it would send: shown in the consent before anything is. */
+/** What a review would cost, from exactly what it would send (the whole paper, at every depth). */
 export function quoteReview(opts: Pick<RunReviewOptions, "text" | "hints" | "outline" | "tier">): { coins: number; chars: number; sections: number } {
-  const { run } = planChunks(planState(opts.text, opts.hints ?? [], opts.outline).chunks, opts.tier);
-  const chars = run.reduce((n, c) => n + c.text.length, 0);
-  // Priced as review/start.ts charges it: each section at least MIN_BILLED_SECTION_CHARS.
-  return { coins: reviewPrice(opts.tier, run.reduce((n, c) => n + billedChars(c.text.length), 0)), chars, sections: run.length };
-}
-
-// Builds the wire ledger and an id → citation map in document order. Ids are
-// deterministic (chunkId-cN) so a retried pass regenerates identical ids.
-function buildLedger(state: ReviewState) {
-  const ledger: SynthesizeRequest["ledger"] = [];
-  const statsFindings: SynthesizeRequest["statsFindings"] = [];
-  const notes: SynthesizeRequest["notes"] = [];
-  const cite = new Map<string, Citation>();
-  const stats: ReviewResult["statisticalReporting"] = [];
-  const extractedCount = Object.keys(state.extracted).length;
-  // A ledger past MAX_LEDGER (≈25 dense chunks) keeps each chunk's first N claims.
-  const perChunk = extractedCount > 0 ? Math.floor(MAX_LEDGER / extractedCount) : 0;
-  const total = Object.values(state.extracted).reduce((n, ex) => n + ex.claims.length, 0);
-  for (const chunk of state.chunks) {
-    const ex = state.extracted[chunk.id];
-    if (!ex) continue;
-    const section = chunk.title;
-    ex.claims.forEach((c, i) => {
-      if (total > MAX_LEDGER && i >= perChunk) return;
-      const id = `${chunk.id}-c${i}`;
-      ledger.push({ id, section, quote: c.quote, measure: c.measure, values: c.values });
-      cite.set(id, { quote: c.quote, section });
-    });
-    ex.statisticalReporting.forEach((s, i) => {
-      const id = `${chunk.id}-st${i}`;
-      // Every finding is shown to the user; only the first MAX_STATS_FINDINGS go to synthesis.
-      if (statsFindings.length < MAX_STATS_FINDINGS) statsFindings.push({ id, section, description: s.description, severity: s.severity });
-      cite.set(id, { quote: s.quote, section });
-      stats.push({ description: s.description, severity: s.severity, citations: [{ quote: s.quote, section }] });
-    });
-    ex.notes.forEach((n, i) => {
-      const id = `${chunk.id}-n${i}`;
-      if (notes.length < MAX_NOTES) notes.push({ id, section, description: n.description });
-      if (n.quote) cite.set(id, { quote: n.quote, section });
-    });
-  }
-  return { ledger, statsFindings, notes, cite, stats };
-}
-
-function assemble(state: ReviewState, run: Chunk[], skipped: Chunk[], synth: SynthesizeResponse | null): ReviewResult {
-  const { cite, stats } = buildLedger(state);
-  const resolve = (ids: string[]) => ids.map((id) => cite.get(id)).filter((c): c is Citation => !!c);
+  const sections = opts.outline?.sections ?? splitIntoSections(opts.text, opts.hints ?? []);
+  const { chunks, review } = planReview(sections, opts.hints ?? [], opts.tier);
   return {
-    journalFit: synth?.journalFit ?? null,
-    summary: synth?.summary.map((s) => ({ text: s.text, severity: s.severity, citations: resolve(s.refs) })) ?? [],
-    inconsistencies: synth?.inconsistencies.map((f) => ({ description: f.description, citations: resolve(f.claimIds) })) ?? [],
-    statisticalReporting: stats,
-    otherObservations: synth?.otherObservations ?? [],
-    coverage: {
-      reviewed: state.chunks.filter((c) => c.id in state.extracted).map((c) => ({ id: c.id, title: c.title })),
-      failed: state.chunks.filter((c) => c.id in state.failed).map((c) => ({ id: c.id, title: c.title, reason: state.failed[c.id] })),
-      pending: run.filter((c) => !(c.id in state.extracted) && !(c.id in state.failed)).map((c) => ({ id: c.id, title: c.title })),
-      skipped: [
-        ...skipped.map((c) => ({ id: c.id, title: c.title })),
-        ...state.excluded.map((s) => ({ id: s.id, title: `${s.title} (excluded by you)` })),
-      ],
-    },
+    coins: reviewPrice(opts.tier, chunks.reduce((n, c) => n + billedChars(c.text.length), 0)),
+    chars: chunks.reduce((n, c) => n + c.text.length, 0),
+    sections: review.length,
   };
 }
 
-// `exhausted`: the server has no more tries for this section (409); don't retry it.
+/** Every finding and key number that came back, by id, for the editor: past its cap, majors first (document order within each severity). */
+export function editorInputs(state: ReviewState): Pick<EditorRequest, "findings" | "keyNumbers"> {
+  const findings: EditorFinding[] = [];
+  const keyNumbers: EditorRequest["keyNumbers"] = [];
+  for (const id of state.review) {
+    const got = state.sections[id];
+    if (!got) continue;
+    got.findings.forEach((f, i) => findings.push({ id: findingId(id, i), title: f.title, severity: f.severity, why: f.why, quotes: f.quotes.map((q) => q.text) }));
+    got.keyNumbers.forEach((k, i) => keyNumbers.push({ id: `${id}-k${i}`, measure: k.measure, quote: k.quote.text }));
+  }
+  const rank = { major: 0, minor: 1, suggestion: 2 } as const;
+  const capped = findings.length <= MAX_EDITOR_FINDINGS ? findings : [...findings].sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, MAX_EDITOR_FINDINGS);
+  return { findings: capped, keyNumbers };
+}
+
+const reportOf = (state: ReviewState, opts: RunReviewOptions) =>
+  assembleReport({
+    chunks: state.chunks,
+    review: state.review,
+    skipped: state.skipped,
+    excluded: state.excluded,
+    sections: state.sections,
+    failed: state.failed,
+    checklist: state.checklist,
+    checklistFailed: state.checklistFailed,
+    editor: state.editor,
+    tier: opts.tier,
+    journalName: opts.journalName,
+    createdAt: state.createdAt,
+  });
+
+// `exhausted`: the server has no more tries for this part (409); don't retry it.
 type Attempt = { ok: true; data: unknown } | { ok: false; reason: string; retryable: boolean; exhausted?: boolean };
 
-// One POST. Throws for outcomes that end the whole review (caller abort,
-// 429 capacity, a 4xx contract error every pass would hit); returns a
-// failure for outcomes worth retrying or recording against one chunk.
-async function attempt(endpoint: string, body: Req, ticket: string, timeoutMs: number, outer: AbortSignal): Promise<Attempt> {
+// One POST. Throws for outcomes that end the whole review (caller abort, 429
+// capacity, a 4xx contract error every pass would hit); returns a failure for
+// outcomes worth retrying or recording against one part.
+async function attempt(endpoint: string, body: PassRequest, ticket: string, timeoutMs: number, outer: AbortSignal): Promise<Attempt> {
   try {
     const res = await fetch(endpoint, {
       method: "POST",
@@ -209,7 +192,7 @@ async function attempt(endpoint: string, body: Req, ticket: string, timeoutMs: n
     if (res.status === 401) throw new SignInRequiredError();
     // 403: the ticket is expired or used up; the server says which.
     if (res.status === 403) throw new ReviewEndedError(detail || "This review can't continue. Start a new one; what it didn't finish is refunded automatically.");
-    if (res.status === 409) return { ok: false, reason: detail || "no tries left for this section; its coins come back", retryable: false, exhausted: true };
+    if (res.status === 409) return { ok: false, reason: detail || "no tries left for this part; its coins come back", retryable: false, exhausted: true };
     if (res.status === 400 || res.status === 404 || res.status === 413) throw new FatalPassError(`The review couldn't be sent${detail ? `: ${detail}` : "."}`);
     // 422 = the model's output was truncated; not worth a same-size retry.
     if (res.status === 422) return { ok: false, reason: "the answer came back cut short", retryable: false };
@@ -221,16 +204,14 @@ async function attempt(endpoint: string, body: Req, ticket: string, timeoutMs: n
     return { ok: false, reason: err instanceof Error ? err.message : String(err), retryable: true };
   }
 }
-type Req = ExtractRequest | SynthesizeRequest;
 
-// Pays for the review: section ids and lengths go up, a ticket comes back.
-// Never aborted mid-flight: a charge the server made must reach the state,
-// so a cancel pressed meanwhile takes effect once it has (see runReview).
-async function startReview(endpoint: string, opts: RunReviewOptions, run: Chunk[]): Promise<{ ticket: string; balance: number }> {
+// Pays for the review. Never aborted mid-flight: a charge the server made must
+// reach the state, so a cancel pressed meanwhile takes effect once it has.
+async function startReview(endpoint: string, opts: RunReviewOptions, state: ReviewState): Promise<{ ticket: string; balance: number }> {
   const res = await fetch(`${endpoint}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tier: opts.tier, journalId: opts.journalId, chunks: run.map((c) => ({ id: c.id, chars: c.text.length })) }),
+    body: JSON.stringify({ tier: opts.tier, journalId: opts.journalId, chunks: state.chunks.map((c) => ({ id: c.id, chars: c.text.length, review: state.review.includes(c.id) })) }),
   });
   if (res.ok) return (await res.json()) as { ticket: string; balance: number };
   if (res.status === 401) throw new SignInRequiredError();
@@ -243,28 +224,32 @@ async function startReview(endpoint: string, opts: RunReviewOptions, run: Chunk[
   throw new Error(`The review couldn't start${detail ? `: ${detail}` : ". Try again in a moment; nothing was charged."}`);
 }
 
-// Runs a review, or — given `resume` (from a previous run's state or a
-// ReviewSynthesisError, or onState after a cancel) — re-runs only the chunks
-// not yet extracted plus synthesis, on the same ticket: paid for once.
+// Runs a review, or (given `resume`) only the parts not yet back, then the
+// editor, on the same ticket: paid for once.
 export async function runReview(opts: RunReviewOptions, resume?: ReviewState): Promise<ReviewRun> {
   const endpoint = opts.endpoint ?? "/api/review";
-  const concurrency = opts.concurrency ?? 3;
-  const timeoutMs = opts.timeoutMs ?? { extract: 120_000, synthesize: 300_000 };
+  const concurrency = opts.concurrency ?? 4;
+  const timeoutMs = opts.timeoutMs ?? { section: 180_000, editor: 300_000 };
   const delays = opts.retryDelaysMs ?? [1000, 3000];
+  const plan = TIER_PLAN[opts.tier];
 
-  const state = resume ?? planState(opts.text, opts.hints ?? [], opts.outline);
+  const state = resume ?? planState(opts);
   opts.onState?.(state);
-  const { run, skipped } = planChunks(state.chunks, opts.tier);
   if (!state.ticket) {
     if (opts.signal?.aborted) throw abortError(opts.signal);
-    const paid = await startReview(endpoint, opts, run);
+    const paid = await startReview(endpoint, opts, state);
     state.ticket = paid.ticket;
     opts.onCharged?.(paid.balance);
   }
   const ticket = state.ticket;
-  const queue = run.filter((c) => !(c.id in state.extracted));
-  for (const c of queue) delete state.failed[c.id];
-  let done = run.length - queue.length;
+  const paper: PaperChunk[] = state.chunks.map(({ id, title, kind, text }) => ({ id, title, kind, text }));
+  const titleOf = new Map(state.chunks.map((c) => [c.id, c.title]));
+  const queue = state.review.filter((id) => !(id in state.sections));
+  for (const id of queue) delete state.failed[id];
+  const wantChecklist = plan.checklist && !state.checklist;
+  if (wantChecklist) state.checklistFailed = null;
+  const total = state.review.length + (plan.checklist ? 1 : 0);
+  let done = total - queue.length - (wantChecklist ? 1 : 0);
 
   // One controller for the whole run: the caller's abort, or a fatal outcome
   // in any worker, stops every in-flight pass and the queue at once.
@@ -272,88 +257,78 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
   const onOuterAbort = () => controller.abort(opts.signal?.reason);
   if (opts.signal?.aborted) onOuterAbort();
   opts.signal?.addEventListener("abort", onOuterAbort, { once: true });
-  const emit = (phase: ReviewProgress["phase"], current: string | null) =>
-    opts.onProgress?.({ phase, done, total: run.length, current, partial: assemble(state, run, skipped, state.synth) });
+  const emit = (phase: ReviewProgress["phase"], current: string | null) => opts.onProgress?.({ phase, done, total, current, partial: reportOf(state, opts) });
 
-  const runExtract = async (chunk: Chunk) => {
-    const fullCap = TIER_PLAN[opts.tier].claimsCap;
-    let cap = fullCap;
+  const runPass = async (body: SectionRequest | ChecklistRequest): Promise<{ data: unknown } | { reason: string }> => {
     let reason = "";
     for (let i = 0; i <= delays.length; i++) {
-      const body: ExtractRequest = {
-        pass: "extract",
-        tier: opts.tier,
-        claimsCap: cap,
-        chunk: { id: chunk.id, title: chunk.title, kind: chunk.kind, part: chunk.part, parts: chunk.parts, text: chunk.text },
-      };
-      const a = await attempt(endpoint, body, ticket, timeoutMs.extract, controller.signal);
-      if (a.ok) {
-        state.extracted[chunk.id] = a.data as ExtractResponse;
-        return;
-      }
+      const a = await attempt(endpoint, body, ticket, timeoutMs.section, controller.signal);
+      if (a.ok) return { data: a.data };
       reason = a.reason;
-      if (a.exhausted) break;
-      if (!a.retryable) {
-        // Truncated output: one retry asking for half as many claims, then give up.
-        if (cap === fullCap) {
-          cap = Math.max(1, Math.floor(cap / 2));
-          continue;
-        }
-        reason = "section too dense for one pass";
-        break;
-      }
+      if (a.exhausted || !a.retryable) break;
       if (i < delays.length) await sleep(delays[i], controller.signal);
     }
-    state.failed[chunk.id] = reason;
+    return { reason };
   };
+  const jobs: { title: string; run: () => Promise<void> }[] = queue.map((id) => ({
+    title: titleOf.get(id) ?? id,
+    run: async () => {
+      const r = await runPass({ pass: "section", tier: opts.tier, paper, target: id });
+      if ("data" in r) state.sections[id] = r.data as SectionResponse;
+      else state.failed[id] = r.reason;
+    },
+  }));
+  // The checklist never goes first: the first pass writes the cache alone.
+  if (wantChecklist) {
+    jobs.splice(Math.min(1, jobs.length), 0, {
+      title: "the reporting checklist",
+      run: async () => {
+        const r = await runPass({ pass: "checklist", tier: "thorough", paper });
+        if ("data" in r) state.checklist = r.data as ChecklistResponse;
+        else state.checklistFailed = r.reason;
+      },
+    });
+  }
 
-  const worker = async () => {
-    for (let chunk = queue.shift(); chunk && !controller.signal.aborted; chunk = queue.shift()) {
-      try {
-        await runExtract(chunk);
-      } catch (err) {
-        controller.abort();
-        throw err;
+  const settle = async (batch: typeof jobs, n: number) => {
+    const worker = async () => {
+      for (let job = batch.shift(); job && !controller.signal.aborted; job = batch.shift()) {
+        try {
+          await job.run();
+        } catch (err) {
+          controller.abort();
+          throw err;
+        }
+        done++;
+        emit("sections", batch[0]?.title ?? null);
       }
-      done++;
-      emit("extract", queue[0]?.title ?? null);
-    }
+    };
+    const settled = await Promise.allSettled(Array.from({ length: Math.min(n, batch.length) }, worker));
+    // A sibling's AbortError is a consequence, not the cause: surface the cause.
+    const failure = settled.find((s): s is PromiseRejectedResult => s.status === "rejected" && !(s.reason instanceof Error && s.reason.name === "AbortError"));
+    if (failure) throw failure.reason;
+    if (controller.signal.aborted) throw abortError(opts.signal ?? controller.signal);
   };
 
   try {
-    const settled = await Promise.allSettled(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
-    // A sibling's AbortError is a consequence, not the cause — surface the cause.
-    const failure = settled.find(
-      (s): s is PromiseRejectedResult => s.status === "rejected" && !(s.reason instanceof Error && s.reason.name === "AbortError")
-    );
-    if (failure) throw failure.reason;
-    if (controller.signal.aborted) throw abortError(opts.signal ?? controller.signal);
+    emit("sections", jobs[0]?.title ?? null);
+    await settle(jobs.splice(0, 1), 1); // writes the paper to Anthropic's cache
+    await settle(jobs, concurrency);
 
-    // Nothing came back since the last cross-check: it still stands, and there's nothing to send.
-    const covered = Object.keys(state.extracted).length;
-    if (state.synth && covered === state.synthCovers) return { result: assemble(state, run, skipped, state.synth), state };
+    const covered = Object.keys(state.sections).length + (state.checklist ? 1 : 0);
+    if (state.editor && covered === state.editorCovers) return { result: reportOf(state, opts), state };
+    if (Object.keys(state.sections).length === 0) throw new ReviewEditorError("No section came back, so there's no report to put together yet.", reportOf(state, opts), state);
 
-    const { ledger, statsFindings, notes } = buildLedger(state);
-    emit("synthesize", `Cross-checking ${ledger.length} claims`);
-    // Clamped to the server's caps (reviewPasses.ts) so a very long paper
-    // can't turn the final, most expensive step into a 400.
-    const synthBody: SynthesizeRequest = {
-      pass: "synthesize",
-      journalId: opts.journalId,
-      tier: opts.tier,
-      paperMap: { ...state.paperMap, sections: state.paperMap.sections.slice(0, MAX_PAPER_SECTIONS) },
-      abstractText: state.abstractText?.slice(0, MAX_ABSTRACT_CHARS) ?? null,
-      ledger,
-      statsFindings,
-      notes,
-    };
-    let synth: SynthesizeResponse | null = null;
+    const inputs = editorInputs(state);
+    emit("editor", `Putting the report together from ${inputs.findings.length} findings`);
+    const body: EditorRequest = { pass: "editor", tier: opts.tier, journalId: opts.journalId, paper, ...inputs };
+    let editor: EditorResponse | null = null;
     let reason = "";
     try {
-      for (let i = 0; i < 2 && !synth; i++) {
-        const a = await attempt(endpoint, synthBody, ticket, timeoutMs.synthesize, controller.signal);
+      for (let i = 0; i < 2 && !editor; i++) {
+        const a = await attempt(endpoint, body, ticket, timeoutMs.editor, controller.signal);
         if (a.ok) {
-          synth = a.data as SynthesizeResponse;
+          editor = a.data as EditorResponse;
           break;
         }
         reason = a.reason;
@@ -361,21 +336,20 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
         if (i === 0) await sleep(delays[0] ?? 0, controller.signal);
       }
     } catch (err) {
-      // Every extract pass is already paid for: a synthesis-phase failure keeps
-      // the state so the user can retry just this step. Not a cancel, a ticket
-      // that can't be used or a lapsed sign-in: each ends the run as itself
-      // (retrying the cross-check would only fail the same way).
+      // The sections are paid for and kept: an editor failure keeps the state so a resume runs just this step.
       if (err instanceof Error && err.name === "AbortError") throw err;
       if (err instanceof ReviewEndedError || err instanceof SignInRequiredError) throw err;
       reason = err instanceof Error ? err.message : String(err);
     }
-    if (!synth) {
-      const message = state.synth ? `The cross-check didn't run again (${reason}); the earlier one is shown.` : `The cross-check didn't finish (${reason}).`;
-      throw new ReviewSynthesisError(message, assemble(state, run, skipped, state.synth), state);
+    if (!editor) {
+      const message = state.editor
+        ? `The report wasn't put together again (${reason}); the earlier one is shown.`
+        : `The report wasn't put together (${reason}). The sections are below; Resume finishes it.`;
+      throw new ReviewEditorError(message, reportOf(state, opts), state);
     }
-    state.synth = synth;
-    state.synthCovers = covered;
-    return { result: assemble(state, run, skipped, synth), state };
+    state.editor = editor;
+    state.editorCovers = covered;
+    return { result: reportOf(state, opts), state };
   } finally {
     opts.signal?.removeEventListener("abort", onOuterAbort);
   }

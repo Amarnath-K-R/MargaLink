@@ -91,7 +91,7 @@ const withCache = (u: Record<string, number>) => [
   ev("content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{}" } }),
   ev("message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 50 } }),
 ];
-for (const u of [{ input_tokens: 100, cache_creation_input_tokens: 1000, cache_read_input_tokens: 0 }, { input_tokens: 100, cache_read_input_tokens: 1000 }]) {
+for (const u of [{ input_tokens: 100, cache_creation_input_tokens: 1000, cache_read_input_tokens: 0 }, { input_tokens: 100, cache_read_input_tokens: 1000 }] as Record<string, number>[]) {
   stubFetch(withCache(u));
   await callAnthropicTool("key", { model: "m", messages: [] }, { toolName: "submit_extraction", timeoutMs: 5000, onUsage: (x) => void cached.push(x) });
 }
