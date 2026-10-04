@@ -163,6 +163,8 @@ What the review should cover:
 * Fit between the paper and the chosen journal's scope.
 * Language and readability.
 
+Status (October 2026): built as review v2 (`docs/superpowers/specs/2026-10-03-review-v2-design.md`): section by section, with reporting checklists at thorough depth; prose and readability are Rewrite's job.
+
 What it must not do:
 * It must not predict the chance of acceptance.
 * It must not be described as peer review. Call it a "before submission check".

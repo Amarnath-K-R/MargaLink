@@ -98,7 +98,7 @@ export default function ReviewWindow({
         <section className="mt-10 border-t border-line pt-6">
           <h3 className="font-serif text-lg font-medium">Get it reviewed</h3>
           <p className="mt-1 text-ink-soft">
-            An LLM review from Claude: inconsistencies, statistical reporting gaps, journal fit. The one feature that sends your whole paper&apos;s text off
+            An LLM review from Claude: each section reviewed in turn, problems across the paper, and journal fit. The one feature that sends your whole paper&apos;s text off
             this device (Rewrite sends only a passage you select), and only after you confirm the notice.
           </p>
           <ReviewRunner review={r} onCitation={jump} />

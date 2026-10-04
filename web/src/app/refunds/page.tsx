@@ -29,8 +29,7 @@ export default function RefundsPage() {
 
         <LegalSection title="Coins back, automatically">
           <p>
-            A review&apos;s price is shared among its parts: each section it sends, weighed by its length, and the final cross-check, counted like an
-            average section. Any part that doesn&apos;t come back is refunded (rounded up to whole coins), whether or not the rest of the review
+            A review&apos;s price is shared among its parts: each section it reviews, weighed by its length, and the reporting checklist (at thorough depth) and the final report, each counted like an average section. Any part that doesn&apos;t come back is refunded (rounded up to whole coins), whether or not the rest of the review
             finished, about two hours after the review started. An Ask Claude request that fails, or
             whose answer can&apos;t be used, is refunded at once, and so is a rewrite that fails or that our checks refuse. A rewrite that came back
             but wasn&apos;t put in (your text changed first, or it couldn&apos;t be placed around a citation or another object) isn&apos;t refunded,

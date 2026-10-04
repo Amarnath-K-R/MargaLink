@@ -166,86 +166,55 @@ every new migration, and the account secrets listed in `CLAUDE.md`.
 
 ### The AI review: what it defends against, and why
 
-A real manuscript fact-check against an early version of this feature
-turned up three failure modes that still shape it: (1) the model
-attributed numbers to the abstract that only appeared in Results — so the
-abstract is handed over as its own labeled block, never inferred; (2) it
-flagged "inconsistencies" that reconciled once the arithmetic was checked
-— so the prompts require reconciliation before a finding is reported; (3)
-a model can state a quote confidently that appears nowhere in the source —
-so every quote is verified server-side, never trusted.
+Design: `docs/superpowers/specs/2026-10-03-review-v2-design.md`.
 
-The first implementation was one synchronous call over the whole paper.
-It broke in three ways on real, long papers: extended thinking and the
-final JSON share one `max_tokens` budget, so a table-heavy paper ended
-with `stop_reason: max_tokens` and no result at all; the text was silently
-truncated past 150k characters; and one dropped stream lost everything.
+**Shape.** The browser (`reviewOrchestrator.ts`) plans the paper (every
+included chunk, never references), pays once (`/api/review/start`: ids,
+lengths and which are reviewed), then sends one **section pass** per
+reviewed section, a **checklist pass** at thorough, and one **editor pass**
+last. Every pass carries the whole paper as one block marked
+`cache_control`, after one shared system prompt and all three tools in a
+fixed order (`reviewPasses.ts` `upstreamBody`), so Anthropic caches that
+prefix once per review and later passes read it at a tenth of the price.
+The first section pass runs alone so the cache is written once; the rest
+run 4 at a time.
 
-**The review is now a map-reduce over the paper, orchestrated by the
-browser** (`src/lib/review/reviewOrchestrator.ts`):
+**What each pass defends against.**
+- Fabricated quotes: every quote is looked up in the paper the request
+  carried (`reviewGrounding.ts` `locate`); one that isn't there is removed,
+  and a finding left with nothing to point at is dropped unless it's about
+  something missing.
+- Fabricated cross-references: the editor can only name finding ids it was
+  shown, and only from sections this ticket delivered
+  (`editorOutsideDelivered`); its own across-paper findings are grounded
+  like any other, and a disagreement between places needs a quote from each.
+- Overconfidence: the system prompt asks for a legitimate explanation
+  before an error, and a question when one is plausible; at standard and
+  thorough, the editor keeps, softens or drops every major finding.
+- Repetition: each section pass reports only problems whose fix belongs in
+  its section; the editor groups duplicates; the report is assembled from
+  ids (`reviewReport.ts`), so a finding has one place.
+- Our own redaction marker: the prompt says "[redacted]" lines are ours, a
+  quote that is only the marker never grounds, and a finding about it is
+  dropped.
+- Prompt injection: the paper is untrusted data, said so in the system
+  prompt; tools are strict and every field is re-checked.
 
-1. `review.ts`'s `prepareForReview` strips author lines and normalizes the
-   text (NFKC, ligatures, line-end hyphenation, curly quotes) once,
-   client-side, so the model's verbatim quotes come back in the same
-   alphabet the grounding check reads. `reviewSections.ts` splits it into
-   headed sections and ≤16k-character chunks. **Headings come from the
-   document itself where it has them** (`headingHints.ts`): Word heading
-   styles from a DOCX, and for a PDF the embedded font data — a heading is a
-   short line in a non-body font that is followed by body text, used more
-   than once (this separates real headings from figure labels, table headers
-   and bold reference fragments; the level-1 style is the one carrying
-   Methods/Results/…). A document heading that isn't a standard one
-   ("Wave III: Hard Clinical Outcomes") becomes its own section of kind
-   `body`, reviewed at every depth, instead of being swallowed by the
-   previous section. Without such structure, a conservative word list takes
-   over (letter-spaced "R E F E R E N C E S" recognized; a wrapped lowercase
-   "methods" line is not a heading). Before consent the user sees the
-   detected outline and can correct it — change a section's type, merge it
-   into the previous one, add a heading by its exact text, or mark it
-   "Don't send", which keeps it out of every request and out of the section
-   map (`buildOutline`). Papers over 400,000 characters are refused before
-   consent — never truncated.
-2. One **extract** pass per chunk (≤3 concurrent, effort `medium` on every
-   tier — it's mechanical) returns a bounded list of quantitative claims,
-   each with a verbatim quote that `reviewGrounding.ts`'s
-   `groundExtractOutput` verifies against *that chunk only*. Output is
-   small and capped, so a pass can't run out of budget the way the single
-   call did; if one still truncates (422), it is retried once asking for
-   half as many claims. A pass that keeps failing is recorded in
-   `coverage.failed` — not fatal: synthesis runs on what succeeded, the
-   page says which section couldn't be checked, and "Retry failed
-   sections" re-runs only those plus synthesis (no second device use).
-3. One **synthesize** pass over the resulting **claims ledger** — never the
-   paper text — finds inconsistencies label by label and writes the
-   prioritized "Fix these first" summary. It can only cite ledger ids;
-   `reviewPasses.ts` drops any id not in the submitted ledger and any
-   inconsistency left with fewer than two. A fabricated cross-reference
-   therefore cannot survive: every citation the user sees was verified in
-   the chunk it came from. (A separate draft-then-verify second call was
-   tried before this redesign and dropped for re-sending the whole paper;
-   the ledger gets the same guarantee without that cost.)
+**Money.** The ticket weighs each reviewed section by its billed length and
+the checklist and the editor as an average section; refunds are shared that
+way. Each pass checks that its paper is no longer than the price paid for
+(`maxPaidChars`). Cache writes and reads are counted at their rates (1.25x
+and 0.1x input) as input-equivalent tokens, so /admin's cost is right.
 
-`functions/api/review.ts` is a thin, stateless dispatcher on `pass`: it
-validates exact key sets and caps (`parsePassRequest`), applies the daily
-*pass* cap (`review-pass-count:${date}`, 1,500, incremented before the
-upstream call so client retries can't spend uncounted), calls Anthropic
-through the selfchecked `anthropicStream.ts` (streaming, because long
-non-streaming requests with thinking hit 524s at Anthropic's edge), and
-grounds/validates the output. It never holds paper text between
-requests. No prompt caching is used; Anthropic retains API data only
-under its own API data policy, and MargaLink itself stores nothing.
+**Kept on the device.** The finished report is kept only in the browser:
+the last one on /review (`reviewKeep.ts`, `localStorage`), and each paper's
+in the writing workspace beside its last PDF (`.margalink/review.json`,
+never in a backup). Download (Markdown), Print or save as PDF, and Copy
+work from the same report.
 
-Tiers (`TIER_PLAN` in `reviewPrompt.ts`) decide which section kinds are
-extracted (quick: abstract/results/discussion; standard: everything but
-references and supplementary material; thorough: everything but
-references), the claims cap per chunk (20/30/40) and the synthesis effort
-(low/medium/high). Verification rigor is identical at every tier. `max`
-effort stays off-limits: it was confirmed to be effectively unbounded in
-cost and time on a real paper. Measured on three real papers (39k–103k
-characters) across all tiers: every review completed with no failed
-section, costing $0.12–0.32 and taking 41–142 s. Projected for a
-400k-character paper on thorough: about $1.2 typical, $1.7 if every chunk
-is table-dense; the knobs are `CHUNK_CHARS` and the thorough claims cap.
+**Depths:** `TIER_PLAN` in `reviewPrompt.ts`. The live check
+`scripts/eval/review_live.ts` measures cost, time and quality per depth
+against the ceilings ($0.22, $0.32 and $0.54 per 50,000 characters).
 
 ### The figure generator: what leaves the device, and what doesn't
 
@@ -575,24 +544,26 @@ are spent first, a refund returns to the coins it was paid with, a
 reversed pack takes pack coins first and a reversed Pro payment Pro coins
 first.
 
-**Paying for a review.** `POST /api/review/start` receives the planned
-sections' ids and lengths, never text; prices them with `reviewPrice`
-(the same function the consent quotes); checks today's capacity; and, in
-one batch, debits and creates a ticket bound to the tier, those sections
-and lengths, for two hours. Every pass sends `X-Review-Ticket`;
+**Paying for a review.** `POST /api/review/start` receives every chunk the
+review sends, as ids and lengths (never text), and which of them are
+reviewed; prices the whole paper with `reviewPrice` (the same function the
+consent quotes); checks today's capacity; and, in one batch, debits and
+creates a ticket bound to the tier and the reviewed sections (plus the
+checklist at thorough), for two hours. Every pass's paper must fit the price
+paid (`maxPaidChars`). Every pass sends `X-Review-Ticket`;
 `review.ts` spends one of it (`claimReviewPass`) before calling Claude, so
 nothing unpaid reaches the API: a section that already came back is
 refused (409), each section gets at most four tries (`TRIES_PER_SECTION`,
 counted in the same statement that checks them, in the ticket's `passes`),
-the cross-check runs once, and none starts within five minutes of the
+the editor runs once per new delivery, and none starts within five minutes of the
 ticket's end, so a pass can't outlive it. That binds what a ticket buys to
 what it cost: Claude reads each paid section at most four times. Each
-section that comes back is recorded (`review_deliveries`), as is a
-synthesis. When the ticket expires, `sweepTickets` refunds the share it
+section that comes back is recorded (`review_deliveries`), as is the
+editor's report. When the ticket expires, `sweepTickets` refunds the share it
 didn't deliver, rounded up: sections weigh by their length and the
-cross-check like an average section, so padding a review with tiny
+editor (and the checklist) like an average section, so padding a review with tiny
 sections buys nothing, and a client that takes every section and skips the
-cross-check still pays for what it got. Resume and
+editor still pays for what it got. Resume and
 Retry reuse the ticket: a review is paid for once. A pass refused for
 today's capacity is refused before it spends one of the ticket's. A
 cancel pressed while a review is being paid for takes effect once the
@@ -644,7 +615,7 @@ used at build time) don't, and should never be imported from `functions/`.
 `src/lib/review/reviewTypes.ts` is the cleanest example: it's the one file both
 the client (`reviewOrchestrator.ts` and its consumers) and
 `functions/api/review.ts` (via `reviewPasses.ts`) take the pass contract
-— `ExtractRequest`/`SynthesizeRequest`/their responses, `ReviewResult` — from, instead
+— `SectionRequest`/`ChecklistRequest`/`EditorRequest`/their responses, `ReviewReport` — from, instead
 of each side declaring its own copy. It qualifies for the same reason —
 just types and a `const` array, nothing environment-specific.
 
@@ -689,7 +660,7 @@ is Next's required per-route metadata shim for a `"use client"` page.
 | `review/_components/JournalPicker.tsx` | The hand-verified-journal grid (`showMatchLink` off inside the workspace). |
 | `review/_components/TierPicker.tsx` | The quick/standard/thorough grid; owns `TIER_OPTIONS`. |
 | `review/_components/OutlineEditor.tsx` | The detected outline before consent: per-section type, merge, add heading, "Don't send". |
-| `review/_components/ReviewResultPanel.tsx` | The review's result: comments section by section, the numbers check. |
+| `review/_components/ReviewResultPanel.tsx` | The review's report: overview and Fix these first, section by section, across the paper; Download, Print, Copy. |
 | `review/layout.tsx` | Route metadata shim. |
 | `figures/page.tsx` | Header, `FigureStudio` over `useFigures()`, and "Add to a paper" in the export bar's slot. |
 | `figures/_components/useFigures.ts`, `FigureStudio.tsx` | The studio's state (upload → data prep → spec, the debounced render loop, recipes, export) as a hook, and its body as a component — shared with the workspace's Figures window. |
@@ -812,13 +783,16 @@ checks.
 | File | What |
 |---|---|
 | `review.ts` | Before anything is sent: `prepareForReview()` (strip + normalize), `MAX_REVIEW_CHARS`. |
-| `reviewOrchestrator.ts` | Client: `runReview()` — plans chunks, runs extract passes (≤3 concurrent, retries, resume), builds the claims ledger, runs synthesis, assembles `ReviewResult` with `coverage`. |
-| `reviewSections.ts` | Pure: `splitIntoSections()` (document headings first, word list as fallback), `chunkSections()`, `buildPaperMap()`, `buildOutline()` (the user's outline edits). |
-| `reviewTypes.ts` | The pass contract and `ReviewResult` — shared by the client and `functions/api/review.ts`. |
-| `reviewPasses.ts` | The Function's gates: `parsePassRequest()` (exact keys, caps), `validateSynthesisOutput()` (ledger-id membership), `passCallConfig()`. |
-| `reviewGrounding.ts` | `normalizeText()`, `groundExtractOutput()` — the anti-fabrication check, imported by `functions/`. |
-| `reviewPrompt.ts` | `TIER_PLAN`, `buildExtractPrompt()`, `buildSynthesizePrompt()` — imported by `functions/`. |
-| `reviewTool.ts` | The two strict tool schemas + drift guards — imported by `functions/`. |
+| `reviewOrchestrator.ts` | Client: `runReview()`: plans the paper and the depth's sections (`planReview`), pays, runs the section passes (the first alone to write the cache, then 4 at a time) and the checklist, then the editor; retries, resume. |
+| `reviewSections.ts` | Pure: `splitIntoSections()` (document headings first, word list as fallback), `chunkSections()` (subsections at thorough), `buildOutline()` (the user's outline edits). |
+| `reviewTypes.ts` | The pass contract and `ReviewReport`, shared by the client and `functions/api/review.ts`. |
+| `reviewPasses.ts` | The Function's gates: `parsePassRequest()` (exact keys, caps), `validateEditorOutput()` (ids it was shown), `passCallConfig()` and `upstreamBody()` (the shared cached prefix). |
+| `reviewGrounding.ts` | `normalizeText()`, `locate()`, `groundSectionOutput()`, `groundChecklistOutput()`: the anti-fabrication check, imported by `functions/`. |
+| `reviewPrompt.ts` | `TIER_PLAN`, `REVIEW_SYSTEM`, `paperBlock()`, the section, checklist and editor instructions, imported by `functions/`. |
+| `reviewReport.ts` | Pure: `assembleReport()` (from ids: every finding once), `reportMarkdown()`, `parseKept()`. |
+| `reviewKeep.ts` | `browserKeeper`: the last report in this browser. |
+| `reviewLimits.ts` | The hard limits both sides share. |
+| `reviewTool.ts` | The three strict tool schemas, listed together in every pass. |
 
 *`src/lib/figures/`*: the figure studio (data, specs, the Pyodide worker, Ask Claude).
 

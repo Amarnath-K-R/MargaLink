@@ -45,10 +45,13 @@ none has a default-on path.
 
 1. **The LLM pre-submission review** (`functions/api/review.ts`,
    orchestrated by `src/lib/review/reviewOrchestrator.ts`, consent in
-   `ReviewConsent.tsx`) sends the paper's text, in several short requests
-   — one per section, then one over the extracted numbers. This is the
-   only feature that sends a whole paper's content (Rewrite sends only a
-   selected passage). The server keeps none of it between requests.
+   `ReviewConsent.tsx`) sends the paper's text with every request: one per
+   reviewed section, the reporting checklist at thorough depth, then one
+   editor pass over the findings (Anthropic's prompt caching reuses the text
+   between them for a few minutes). This is the only feature that sends a
+   whole paper's content (Rewrite sends only a selected passage). The server
+   keeps none of it between requests; the finished report is kept only in
+   the browser (`reviewKeep.ts`, the project's `.margalink/review.json`).
 2. **The figure generator** (`functions/api/figure.ts`, consent in
    `FigureConsent.tsx`). Figures are drawn locally (Pyodide worker running
    `public/figurelib.py`); only "Ask Claude" sends anything: column names,

@@ -38,12 +38,14 @@ export default function ReviewConsent({
       </p>
       <p className="font-serif text-lg font-medium">Send this paper&apos;s text to Claude for a {tier} review?</p>
       <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-        Unlike matching and the structural checks, this sends your paper&apos;s text to Anthropic&apos;s Claude API, in the United States, in{" "}
-        {passCount} short requests (one per section, then one cross-check over the numbers found) to review it against {journalName}&apos;s
-        guidelines, at {tier} depth. We try to remove author names and email addresses first; this is automatic and can miss some, so check. The
-        paper&apos;s content itself is sent as it is. MargaLink doesn&apos;t store it. Anthropic doesn&apos;t use it to train models and deletes it
-        within 30 days; it may keep it longer only to enforce its Usage Policy or where the law requires. This is the one feature in MargaLink that
-        sends your whole paper&apos;s text off your device; Rewrite sends only a passage you select.
+        Unlike matching and the structural checks, this sends your paper&apos;s text to Anthropic&apos;s Claude API, in the United States, to review it
+        against {journalName}&apos;s guidelines at {tier} depth. It goes in {passCount} requests: each carries the paper&apos;s text and does one part of
+        the review (a section each, the reporting checklist at thorough depth, then the final report), and Anthropic may hold the text in memory for a
+        few minutes to reuse it between them. We try to remove author names and email addresses first; this is automatic and can miss some, so check.
+        The paper&apos;s content itself is sent as it is. MargaLink doesn&apos;t store it; the finished review is kept only in your browser.
+        Anthropic doesn&apos;t use it to train models and deletes it within 30 days; it may keep it longer only to enforce its Usage Policy or where the
+        law requires. This is the one feature in MargaLink that sends your whole paper&apos;s text off your device; Rewrite sends only a passage you
+        select.
         {excludedCount > 0 &&
           ` The ${excludedCount} section${excludedCount === 1 ? "" : "s"} you marked "Don't send" won't be sent at all.`}
       </p>
@@ -57,8 +59,7 @@ export default function ReviewConsent({
       <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed" data-testid="review-price">
         <Coin className="mt-0.5" />
         <span>
-          This review costs <strong className="font-medium">{price} M coins</strong>; you have {balance}. If part of it doesn&apos;t come back (a
-          section, or the final cross-check), you get that part&apos;s coins back automatically, about two hours after it starts. Resuming or retrying
+          This review costs <strong className="font-medium">{price} M coins</strong>; you have {balance}. If part of it doesn&apos;t come back (a section, the reporting checklist or the final report), you get that part&apos;s coins back automatically, about two hours after it starts. Resuming or retrying
           within those two hours costs nothing more.
         </span>
       </p>

@@ -116,8 +116,9 @@ export default function ArchitecturePage() {
           />
           <Aside tone="away" title="What the three exceptions send">
             <p>
-              <strong>The review:</strong> the paper&apos;s text (author lines stripped, best effort), one request per section chunk, then one over the
-              extracted claims, never the text again. Sections the user marks Don&apos;t send are never in any request.
+              <strong>The review:</strong> the paper&apos;s text (author lines stripped, best effort) with every request, each doing one part: a section, the
+              checklist at thorough depth, then the editor. The paper block is cached by Anthropic for a few minutes between them. Sections the user marks
+              Don&apos;t send, and references, are never in any request.
             </p>
             <p>
               <strong>Ask Claude:</strong> column names and inferred types, the row count, the request text, the current figure spec with typed text
@@ -162,16 +163,16 @@ export default function ArchitecturePage() {
         </DocSection>
 
         {/* ---------------------------------------------------------------- */}
-        <DocSection id="reviewing" title="The AI review" icon={icon(FileCheck2)} tint="#ecdcc0" lead="A map-reduce over the paper, run by the browser, where every quote the user sees has been verified against the paper.">
+        <DocSection id="reviewing" title="The AI review" icon={icon(FileCheck2)} tint="#ecdcc0" lead="Section reviewers and an editor, run by the browser over a cached copy of the paper, where every quote the user sees has been found in the paper.">
           <Steps
             tint="#ecdcc0"
             steps={[
               { title: "Prepare, on the device", detail: "Author lines stripped; the text normalised once (NFKC, ligatures, hyphenation, quotes) so quotes come back in the alphabet the check reads.", files: "review.ts" },
-              { title: "Find the sections", detail: "From the document's own headings (Word heading styles; a PDF's fonts), a word list otherwise. The user can fix the outline and mark sections Don't send.", files: "headingHints.ts · reviewSections.ts" },
-              { title: "Extract, per chunk", detail: "≤16k-character chunks, up to 3 at a time: bounded lists of quantitative claims, each with a verbatim quote.", files: "reviewOrchestrator.ts → /api/review", away: true },
-              { title: "Verify every quote", detail: "On the server, each quote is checked against that chunk only; a quote that isn't there is dropped. A truncated pass is retried once asking for fewer claims.", files: "reviewGrounding.ts" },
-              { title: "Cross-check the ledger", detail: "One pass over the claims ledger (never the text) finds inconsistencies and writes the prioritised summary. It can only cite ledger ids; unknown ids are dropped.", files: "reviewPasses.ts", away: true },
-              { title: "Assemble", detail: "Findings with their verified quotes, and coverage: what was reviewed, what failed (retryable alone), what the depth skipped.", files: "reviewTypes.ts" },
+              { title: "Find the sections", detail: "From the document's own headings (Word heading styles; a PDF's fonts), a word list otherwise. The user can fix the outline and mark sections Don't send. At thorough depth, each subsection of 2,000+ characters is its own part.", files: "headingHints.ts · reviewSections.ts" },
+              { title: "Review each section", detail: "One pass per section, each with the whole paper as context and a checklist for its kind. The first runs alone so Anthropic caches the paper; the rest run 4 at a time.", files: "reviewOrchestrator.ts → /api/review", away: true },
+              { title: "Verify every quote", detail: "On the server, every quote is looked up in the paper; one that isn't there is removed, and a finding left with nothing to point at is dropped.", files: "reviewGrounding.ts" },
+              { title: "Edit", detail: "One editor pass over every finding by id: the overview, merged duplicates, a second look at major findings, problems across the paper, what to fix first. It can only name ids it was shown.", files: "reviewPasses.ts", away: true },
+              { title: "Assemble and keep", detail: "The report is built from ids, so every finding shows once; it is kept in the browser and can be downloaded, printed or copied.", files: "reviewReport.ts · reviewKeep.ts" },
             ]}
           />
           <DocPart title="Why it's built this way">
@@ -182,9 +183,9 @@ export default function ArchitecturePage() {
               reporting), and quotes that appear nowhere (every quote is verified).
             </p>
             <p>
-              Depth decides which section kinds are read, the claims cap per chunk and the effort of the cross-check; verification is the same at every
-              depth. The Function checks exact request shapes and caps, applies the daily pass cap before calling upstream, streams from Anthropic (long
-              non-streaming calls time out at the edge) and keeps nothing between requests. Papers over 400,000 characters are refused before the notice.
+              Depth decides which sections are reviewed, how many findings each may have, whether the editor double-checks and looks across the paper,
+              and the reporting checklist; verification is the same at every depth. The Function checks exact request shapes and caps, applies the daily
+              pass cap before calling upstream, streams from Anthropic and keeps nothing between requests. Papers over 400,000 characters are refused before the notice.
             </p>
           </DocPart>
         </DocSection>
@@ -279,9 +280,9 @@ export default function ArchitecturePage() {
                 name: "Paying for a review",
                 what: (
                   <>
-                    {code("review/start")} gets section ids and lengths (never text), charges {code("reviewPrice")} and issues a ticket bound to them for two
+                    {code("review/start")} gets every chunk&apos;s id and length and which are reviewed (never text), charges {code("reviewPrice")} on the whole paper and issues a ticket bound to them for two
                     hours. Every pass is claimed before Claude is called: a section that came back isn&apos;t sent again, and each gets at most four tries. When
-                    the ticket expires, what it didn&apos;t deliver is refunded, sections weighed by length.
+                    the ticket expires, what it didn&apos;t deliver is refunded, sections weighed by length, the checklist and the editor as an average section.
                   </>
                 ),
                 away: true,

@@ -408,6 +408,8 @@ consented = true;
 await review.getByText("Send it and review").click();
 await review.locator('[data-testid="review-coverage"]').waitFor({ timeout: 60_000 });
 await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });
+// Sections with only minor points start collapsed: open the first one, as a person would, to reach its quotes.
+await review.locator("[data-testid=review-sections] details:not([open]) > summary").first().click({ timeout: 2000 }).catch(() => {});
 const jumps = review.getByRole("button", { name: "Jump to source" });
 check("the review's quotes offer Jump to source", (await jumps.count()) >= 1);
 const quote = (await review.locator("li:has(button:text-is('Jump to source'))").first().innerText()).match(/“([^”]+)”/)?.[1] ?? "";

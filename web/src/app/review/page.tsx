@@ -69,7 +69,7 @@ export default function ReviewPage() {
             title="Get it reviewed"
             hint={
               <>
-                An LLM review from Claude that checks for inconsistencies, statistical reporting gaps, and journal fit. The one feature on MargaLink that
+                An LLM review from Claude: each section reviewed in turn, problems across the paper, and journal fit. The one feature on MargaLink that
                 sends your whole paper&apos;s text off this device (the other opt-in exceptions send only what you choose: Rewrite, a passage you
                 select; the figure studio&apos;s &ldquo;Ask Claude&rdquo;, a description of your data, never its values).
               </>

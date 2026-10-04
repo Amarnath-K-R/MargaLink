@@ -324,6 +324,8 @@ await reviewWindow.getByLabel(/I agree to send this text to Anthropic/).check();
 await reviewWindow.getByText("Send it and review").click();
 await reviewWindow.locator('[data-testid="review-coverage"]').waitFor({ timeout: 60_000 });
 await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });
+// Sections with only minor points start collapsed: open the first one, as a person would, to reach its quotes.
+await reviewWindow.locator("[data-testid=review-sections] details:not([open]) > summary").first().click({ timeout: 2000 }).catch(() => {});
 const jumps = reviewWindow.getByRole("button", { name: "Jump to source" });
 check("review citations offer Jump to source", (await jumps.count()) >= 1);
 await jumps.first().click();
