@@ -76,7 +76,12 @@ const out = groundSectionOutput(
   { pass: "section", tier: "quick", paper, target: "s2" },
 );
 assert.equal(out.findings.length, 4, "quick reports at most 4");
-assert.deepEqual(out.keyNumbers, [{ measure: "patients", quote: { text: "1,730 patients", chunk: "s2" } }]);
+assert.deepEqual(out.keyNumbers, [], "quick compares no numbers across sections, so keeps none");
+const std = groundSectionOutput(
+  { verdict: "Sound design.", findings: [f()], keyNumbers: [{ measure: "patients", quote: "1,730 patients" }, { measure: "made up", quote: "999 people" }] },
+  { pass: "section", tier: "standard", paper, target: "s2" },
+);
+assert.deepEqual(std.keyNumbers, [{ measure: "patients", quote: { text: "1,730 patients", chunk: "s2" } }]);
 assert.throws(() => groundSectionOutput({ verdict: 1 }, { pass: "section", tier: "quick", paper, target: "s2" }));
 
 // the checklist: a known guideline or none; an unfound quote becomes null, the item stays

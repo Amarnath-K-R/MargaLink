@@ -11,6 +11,7 @@ export type TierPlan = {
   kinds: SectionKind[]; // reviewed; every other included section is still sent, as context
   subsections: boolean; // each subsection of 2,000+ characters reviewed on its own
   maxFindings: number; // per section
+  keyNumbers: number; // per section, for the editor's across-paper check; 0 where there is none
   severities: Severity[];
   sectionEffort: Effort;
   sectionMaxTokens: number;
@@ -30,6 +31,7 @@ export const TIER_PLAN: Record<ReviewTier, TierPlan> = {
     kinds: ["abstract", "results", "discussion", "body"],
     subsections: false,
     maxFindings: 4,
+    keyNumbers: 0,
     severities: ["major", "minor"],
     sectionEffort: "low",
     sectionMaxTokens: 8000,
@@ -44,9 +46,10 @@ export const TIER_PLAN: Record<ReviewTier, TierPlan> = {
   standard: {
     kinds: ["abstract", "introduction", "methods", "results", "discussion", "body", "other"],
     subsections: false,
-    maxFindings: 8,
+    maxFindings: 6,
+    keyNumbers: 8,
     severities: ["major", "minor"],
-    sectionEffort: "medium",
+    sectionEffort: "low",
     sectionMaxTokens: 12000,
     editorEffort: "medium",
     editorMaxTokens: 16000,
@@ -59,12 +62,13 @@ export const TIER_PLAN: Record<ReviewTier, TierPlan> = {
   thorough: {
     kinds: ["abstract", "introduction", "methods", "results", "discussion", "body", "supplement", "other"],
     subsections: true,
-    maxFindings: 12,
+    maxFindings: 8,
+    keyNumbers: 8,
     severities: ["major", "minor", "suggestion"],
-    sectionEffort: "medium",
+    sectionEffort: "low",
     sectionMaxTokens: 16000,
-    editorEffort: "high",
-    editorMaxTokens: 24000,
+    editorEffort: "medium",
+    editorMaxTokens: 32000,
     verdicts: true,
     acrossPaper: true,
     checklist: true,
@@ -130,7 +134,7 @@ Report at most ${plan.maxFindings} findings, most important first, with severity
 
 Also give:
 - verdict: 1-2 sentences on how well this section does its job, naming what works as well as what doesn't.
-- keyNumbers: up to 15 numbers from this section that other sections might restate (sample sizes, primary outcomes, headline metrics), each with a short measure label and the shortest quote containing it, copied word for word.
+- keyNumbers: ${plan.keyNumbers ? `up to ${plan.keyNumbers} numbers from this section that other sections might restate (sample sizes, primary outcomes, headline metrics), each with a short measure label and the shortest quote containing it, copied word for word.` : "an empty list; this depth doesn't compare numbers across sections."}
 
 When done, call the submit_section_review tool.`;
 }

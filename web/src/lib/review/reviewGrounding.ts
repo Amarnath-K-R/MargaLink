@@ -106,7 +106,7 @@ export function groundSectionOutput(output: unknown, req: SectionRequest): Secti
     .slice(0, plan.maxFindings);
   const keyNumbers: SectionResponse["keyNumbers"] = [];
   for (const k of output.keyNumbers) {
-    if (keyNumbers.length >= MAX_KEY_NUMBERS) break;
+    if (keyNumbers.length >= Math.min(MAX_KEY_NUMBERS, plan.keyNumbers)) break;
     if (!isObj(k) || typeof k.measure !== "string") continue;
     const chunk = locate(k.quote, index, req.target);
     if (chunk) keyNumbers.push({ measure: clip(k.measure, MAX_MEASURE_CHARS), quote: { text: k.quote as string, chunk } });
