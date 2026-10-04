@@ -6,7 +6,7 @@ import type { Citation } from "@/lib/review/reviewTypes";
 import ErrorText from "@/components/ui/ErrorText";
 import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
 import JournalPicker from "@/app/review/_components/JournalPicker";
-import ReviewRunner from "@/app/review/_components/ReviewRunner";
+import ReviewRunner, { LastReview } from "@/app/review/_components/ReviewRunner";
 import type { ReviewApi } from "@/app/review/_components/useReview";
 import CompileFirst from "./CompileFirst.tsx";
 
@@ -109,6 +109,7 @@ export default function ReviewWindow({
           )}
         </section>
       )}
+      {!r.selectedRules && <LastReview review={r} onCitation={jump} />}
     </div>
   );
 }

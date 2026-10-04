@@ -8,7 +8,7 @@ import Step from "@/components/ui/Step";
 import { Check } from "lucide-react";
 import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
 import JournalPicker from "./_components/JournalPicker.tsx";
-import ReviewRunner from "./_components/ReviewRunner.tsx";
+import ReviewRunner, { LastReview } from "./_components/ReviewRunner.tsx";
 import { useReview } from "./_components/useReview.ts";
 
 // Attach → choose a known journal directly → see Claude's review. Unlike
@@ -78,6 +78,7 @@ export default function ReviewPage() {
             <ReviewRunner review={r} />
           </Step>
         )}
+        {!r.selectedRules && <LastReview review={r} />}
       </div>
 
       <footer className="mt-16 border-t border-line/80 pt-6 text-sm text-ink-soft">

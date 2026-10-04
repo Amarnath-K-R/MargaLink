@@ -73,7 +73,7 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
         )}
         {r.canRetry && r.resumeState && (
           <button type="button" onClick={() => void r.startReview(r.resumeState ?? undefined)} className="clay-btn h-11 px-5 text-sm text-accent">
-            {r.unfinished ? "Resume review" : (r.reviewResult?.coverage.failed.length ?? 0) > 0 ? "Retry failed sections" : "Retry the cross-check"}
+            {r.unfinished ? "Resume review" : (r.reviewResult?.coverage.failed.length ?? 0) > 0 ? "Retry failed sections" : "Finish the report"}
           </button>
         )}
       </div>
@@ -93,9 +93,9 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
         <div data-testid="review-progress" className="mt-4 max-w-xl" aria-live="polite">
           <p className="flex items-center gap-2 text-sm text-ink-soft">
             <span aria-hidden className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" />
-            {r.progress.phase === "extract" ? `Reviewing ${r.progress.current ?? "the last sections"} (${r.progress.done} of ${r.progress.total})…` : `${r.progress.current}…`}
+            {r.progress.phase === "sections" ? `Reviewing ${r.progress.current ?? "the last sections"} (${r.progress.done} of ${r.progress.total})…` : `${r.progress.current}…`}
           </p>
-          {r.progress.phase === "extract" && r.progress.total > 0 && (
+          {r.progress.phase === "sections" && r.progress.total > 0 && (
             <span aria-hidden className="mt-2 block h-2 rounded-full bg-[#dcd8ce] shadow-[inset_0_1px_2px_rgba(58,44,28,.15)]">
               <span
                 className="block h-2 rounded-full bg-gradient-to-r from-[#5d8f9b] to-accent transition-[width] duration-500"
@@ -131,7 +131,25 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
           )}
         </ErrorText>
       )}
-      {r.reviewResult && <ReviewResultPanel result={r.reviewResult} partial={r.reviewResult.journalFit === null} onCitation={onCitation} />}
+      {r.reviewResult ? (
+        <ReviewResultPanel report={r.reviewResult} partial={!r.reviewResult.overview} onCitation={onCitation} onForget={r.kept === r.reviewResult ? r.forget : undefined} />
+      ) : (
+        <LastReview review={r} onCitation={onCitation} />
+      )}
     </>
+  );
+}
+
+// The last review kept on this device, until a new one replaces it or it's forgotten.
+export function LastReview({ review: r, onCitation }: { review: ReviewApi; onCitation?: (c: Citation) => void }) {
+  if (!r.kept || r.reviewResult || r.reviewLoading) return null;
+  return (
+    <section className="mt-6" data-testid="review-kept">
+      <p className="text-sm text-ink-soft">
+        Your last review, from {new Date(r.kept.createdAt).toLocaleDateString()} ({r.kept.tier}, for {r.kept.journalName}). It&apos;s kept in this browser until you
+        forget it.
+      </p>
+      <ReviewResultPanel report={r.kept} partial={!r.kept.overview} onCitation={onCitation} onForget={r.forget} />
+    </section>
   );
 }

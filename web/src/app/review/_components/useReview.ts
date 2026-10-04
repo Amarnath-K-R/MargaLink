@@ -1,16 +1,18 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { extractFromFile } from "@/lib/paper/extract";
 import { findJournalRules } from "@/lib/journals/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/checks/rulesCheck";
 import { MAX_REVIEW_CHARS, prepareForReview } from "@/lib/review/review";
-import { MAX_REVIEW_CHUNKS } from "@/lib/review/reviewPasses";
-import { ReviewEndedError, ReviewSynthesisError, planChunks, quoteReview, runReview, type ReviewState } from "@/lib/review/reviewOrchestrator";
+import { MAX_REVIEW_CHUNKS } from "@/lib/review/reviewLimits";
+import { TIER_PLAN } from "@/lib/review/reviewPrompt";
+import { browserKeeper, type ReviewKeeper } from "@/lib/review/reviewKeep";
+import { ReviewEditorError, ReviewEndedError, planReview, quoteReview, runReview, type ReviewState } from "@/lib/review/reviewOrchestrator";
 import { NotEnoughCoinsError, SignInRequiredError } from "@/lib/accounts/coins";
 import { refreshAccount, setBalance } from "@/components/account/useAccount";
-import { NO_EDITS, buildOutline, chunkSections, type OutlineEdits } from "@/lib/review/reviewSections";
-import type { HeadingHint, ReviewProgress, ReviewResult, ReviewTier } from "@/lib/review/reviewTypes";
+import { NO_EDITS, buildOutline, type OutlineEdits } from "@/lib/review/reviewSections";
+import type { HeadingHint, ReviewProgress, ReviewReport, ReviewTier } from "@/lib/review/reviewTypes";
 import { errorMessage } from "@/lib/errorMessage";
 
 const TOO_LONG = "This paper is over 400,000 characters of text. Split off supplementary material and try again.";
@@ -20,7 +22,7 @@ const TOO_LONG = "This paper is over 400,000 characters of text. Split off suppl
 // and the writing workspace's Review window. The review itself runs as
 // several short passes (see reviewOrchestrator.ts), so this tracks progress,
 // partial results, and what a retry can resume from.
-export function useReview() {
+export function useReview(keep: ReviewKeeper = browserKeeper) {
   const [busy, setBusy] = useState(false);
   const [source, setSource] = useState<File | null>(null);
   const [paperText, setPaperText] = useState<string | null>(null);
@@ -34,7 +36,28 @@ export function useReview() {
   const [consentOpen, setConsentOpen] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [progress, setProgress] = useState<ReviewProgress | null>(null);
-  const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
+  const [reviewResult, setReviewResult] = useState<ReviewReport | null>(null);
+  const [kept, setKept] = useState<ReviewReport | null>(null); // the last finished review, kept on this device
+  useEffect(() => {
+    let live = true;
+    void keep.load().then((r) => {
+      if (live) setKept(r);
+    });
+    return () => {
+      live = false;
+    };
+  }, [keep]);
+  const keepReport = useCallback(
+    (report: ReviewReport) => {
+      setKept(report);
+      void keep.save(report);
+    },
+    [keep],
+  );
+  const forget = useCallback(() => {
+    setKept(null);
+    void keep.save(null);
+  }, [keep]);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [shortOfCoins, setShortOfCoins] = useState(false); // the last start was refused for too few coins
   const [tier, setTier] = useState<ReviewTier>("standard");
@@ -126,26 +149,27 @@ export function useReview() {
   );
 
   const outline = useMemo(() => (reviewText ? buildOutline(reviewText, headings, edits) : null), [reviewText, headings, edits]);
-  const plannedRun = useMemo(() => (outline ? planChunks(chunkSections(outline.sections, headings), tier).run : []), [outline, headings, tier]);
-  // How many requests the consent notice names: one per planned chunk + the cross-check.
-  const passCount = plannedRun.length + 1;
+  const plan = useMemo(() => (outline ? planReview(outline.sections, headings, tier) : null), [outline, headings, tier]);
+  // How many requests the consent names: one per reviewed section, the checklist at thorough, the final report.
+  const passCount = (plan?.review.length ?? 0) + (TIER_PLAN[tier].checklist ? 1 : 0) + 1;
   // What the server would refuse at the start, said before the consent instead of after it.
-  const runProblem =
-    plannedRun.length === 0
+  const runProblem = !plan
+    ? null
+    : plan.chunks.length === 0
       ? "Every section is marked Don't send, so there's nothing to review."
-      : plannedRun.length > MAX_REVIEW_CHUNKS
-        ? `This outline has ${plannedRun.length} parts to review; a review takes at most ${MAX_REVIEW_CHUNKS}. Merge some sections in the outline.`
+      : plan.chunks.length > MAX_REVIEW_CHUNKS
+        ? `This outline has ${plan.chunks.length} parts to send; a review sends at most ${MAX_REVIEW_CHUNKS}. Merge some sections in the outline.`
         : null;
   // What it costs, priced from exactly what would be sent (the server charges the same).
   const price = useMemo(() => (reviewText ? quoteReview({ text: reviewText, hints: headings, outline: outline ?? undefined, tier }).coins : 0), [reviewText, headings, outline, tier]);
   const outlineRows = useMemo(() => {
     if (!outline) return [];
-    const reviewed = new Set(plannedRun.map((c) => c.sectionId));
+    const reviewed = new Set((plan?.review ?? []).map((c) => c.sectionId));
     return [
       ...outline.sections.map((s) => ({ ...s, excluded: false, reviewedAtTier: reviewed.has(s.id) })),
       ...outline.excluded.map((s) => ({ ...s, excluded: true, reviewedAtTier: false })),
     ].sort((a, b) => a.charStart - b.charStart);
-  }, [outline, plannedRun]);
+  }, [outline, plan]);
 
   // Any outline change invalidates a result computed from the old outline.
   const editOutline = useCallback(
@@ -178,19 +202,22 @@ export function useReview() {
             hints: headings,
             outline: outline ?? undefined,
             journalId: selectedJournalId,
+            journalName: findJournalRules(selectedJournalId)?.journalName ?? selectedJournalId,
             tier,
             signal: ac.signal,
             onCharged: setBalance,
             onState: (st) => (runStateRef.current = st),
             onProgress: (p) => {
               setProgress(p);
-              setReviewResult(p.partial);
+              // The report appears once something is in it; the progress line shows from the start.
+              if (p.done > 0 || p.phase === "editor") setReviewResult(p.partial);
             },
           },
           resume,
         );
         setResumeState(run.state);
         setReviewResult(run.result);
+        keepReport(run.result);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
           // Cancelled by the user (not by a re-upload/journal/tier change, which
@@ -198,9 +225,10 @@ export function useReview() {
           if (abortRef.current === ac) setResumeState(runStateRef.current);
           return;
         }
-        if (err instanceof ReviewSynthesisError) {
+        if (err instanceof ReviewEditorError) {
           setResumeState(err.state);
           setReviewResult(err.partial);
+          keepReport(err.partial);
         } else if (err instanceof ReviewEndedError) {
           setResumeState(null); // its ticket is spent or expired: a Resume would only fail
         } else if (runStateRef.current?.ticket) {
@@ -225,7 +253,7 @@ export function useReview() {
         setProgress(null);
       }
     },
-    [reviewText, headings, outline, selectedJournalId, tier, runProblem],
+    [reviewText, headings, outline, selectedJournalId, tier, runProblem, keepReport],
   );
 
   const cancel = useCallback(() => abortRef.current?.abort(), []);
@@ -234,9 +262,9 @@ export function useReview() {
   const coverage = reviewResult?.coverage;
   // Cancelled before any section finished → no partial result yet, but still resumable.
   const unfinished = reviewResult === null || (coverage?.pending.length ?? 0) > 0;
-  // Sections came back since the last cross-check (a Retry, whose cross-check then failed): it can run again.
-  const crossCheckBehind = resumeState !== null && Object.keys(resumeState.extracted).length > resumeState.synthCovers;
-  const canRetry = !reviewLoading && resumeState !== null && (unfinished || (coverage?.failed.length ?? 0) > 0 || reviewResult?.journalFit === null || crossCheckBehind);
+  // Parts came back since the last report was put together (a Retry): it can be put together again.
+  const editorBehind = resumeState !== null && Object.keys(resumeState.sections).length + (resumeState.checklist ? 1 : 0) > resumeState.editorCovers;
+  const canRetry = !reviewLoading && resumeState !== null && (unfinished || (coverage?.failed.length ?? 0) > 0 || reviewResult?.overview === null || editorBehind);
 
   return {
     busy,
@@ -263,6 +291,8 @@ export function useReview() {
     reviewLoading,
     progress,
     reviewResult,
+    kept,
+    forget,
     reviewError,
     shortOfCoins,
     resumeState,

@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JOURNAL_RULES } from "../../src/lib/journals/journalRules.ts";
 import { WELCOME_COINS } from "../../src/lib/accounts/coins.ts";
+import { reviewAnswer } from "../smoke/mock_review.mjs";
 
 const PORT = 8790;
 const O = `http://localhost:${PORT}`;
@@ -191,9 +192,7 @@ try {
   const tickets = [];
   await page.route("**/api/review", async (route) => {
     tickets.push(route.request().headers()["x-review-ticket"]);
-    const req = route.request().postDataJSON();
-    if (req.pass === "extract") return route.fulfill({ json: { claims: [], statisticalReporting: [], notes: [] } });
-    return route.fulfill({ json: { journalFit: { assessment: "possible", explanation: "Fits." }, inconsistencies: [], summary: [], otherObservations: [] } });
+    return route.fulfill({ json: reviewAnswer(route.request().postDataJSON()) });
   });
   await page.goto(`${O}/review`);
   const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.click("text=Drop a PDF or DOCX")]);
@@ -204,7 +203,7 @@ try {
   const price = Number((await page.locator('[data-testid="review-price"]').innerText()).match(/costs (\d+) M coins/)?.[1]);
   await page.getByLabel(/I agree to send this text to Anthropic/).check();
   await page.click("text=Send it and review");
-  await page.waitForSelector('[data-testid="review-summary"], [data-testid="review-coverage"]', { timeout: 30000 });
+  await page.waitForSelector('[data-testid="review-fix-first"], [data-testid="review-coverage"]', { timeout: 30000 });
   await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 30000 });
   const afterReview = await page.evaluate(() => fetch("/api/me").then((r) => r.json()));
   check(`the review cost its price (${price})`, price > 0 && afterReview.balance === WELCOME_COINS + 50 - price);
@@ -212,7 +211,7 @@ try {
 
   // more than the balance: 402 with the price and balance, nothing taken
   const big = await page.evaluate(async (journalId) => {
-    const chunks = Array.from({ length: 60 }, (_, i) => ({ id: `s${i + 1}`, chars: 24000 })); // the most sections a review may have (MAX_REVIEW_CHUNKS)
+    const chunks = Array.from({ length: 60 }, (_, i) => ({ id: `s${i + 1}`, chars: 24000, review: true })); // the most sections a review may have (MAX_REVIEW_CHUNKS)
     const r = await fetch("/api/review/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tier: "thorough", journalId, chunks }) });
     return { status: r.status, body: await r.json() };
   }, JOURNAL_ID);
@@ -234,7 +233,7 @@ try {
 
   // a paid review that never ran: once its ticket expires, the sweep (real D1, json_each) refunds all of it
 const unused = await page.evaluate(async (journalId) => {
-    const r = await fetch("/api/review/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tier: "quick", journalId, chunks: [{ id: "s1", chars: 1000 }, { id: "s2", chars: 1000 }] }) });
+    const r = await fetch("/api/review/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tier: "quick", journalId, chunks: [{ id: "s1", chars: 1000, review: true }, { id: "s2", chars: 1000, review: true }] }) });
     return r.json();
   }, JOURNAL_ID);
   check("an unused review was charged", unused.balance === afterReview.balance - unused.coins);

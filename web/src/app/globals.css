@@ -63,3 +63,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Print or save as PDF (the review's report): only the report, every section open. */
+@media print {
+  body * { visibility: hidden; }
+  [data-print-report], [data-print-report] * { visibility: visible; }
+  [data-print-report] { position: absolute; inset: 0 auto auto 0; width: 100%; box-shadow: none; }
+  [data-print-hide] { display: none !important; }
+}

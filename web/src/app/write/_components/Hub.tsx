@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectMeta, ProjectStore } from "@/lib/write/projectStore";
 import { findJournalRules } from "@/lib/journals/journalRules";
 import type { Template } from "@/lib/write/templateCatalog";
@@ -14,6 +14,8 @@ import CommandPalette, { type Command } from "./CommandPalette.tsx";
 import { useChecks } from "./useChecks.ts";
 import { useMatch } from "@/app/match/_components/useMatch";
 import { useReview } from "@/app/review/_components/useReview";
+import { parseKept } from "@/lib/review/reviewReport";
+import type { ReviewKeeper } from "@/lib/review/reviewKeep";
 import { useFigures } from "@/app/figures/_components/useFigures";
 
 // The windows over an open project (Match, Review, Figures, Checks,
@@ -71,7 +73,15 @@ export function useHub({
 
   const checks = useChecks();
   const match = useMatch();
-  const review = useReview();
+  // Each paper's last review is kept with its project, in this browser (never in a backup).
+  const keeper = useMemo<ReviewKeeper>(
+    () => ({
+      load: async () => parseKept(await store.lastReview(project.id)),
+      save: (r) => store.saveLastReview(project.id, r ? JSON.stringify(r) : null),
+    }),
+    [store, project.id],
+  );
+  const review = useReview(keeper);
   const studio = useFigures();
   const rules = project.journalId ? findJournalRules(project.journalId) : undefined;
   const setTarget = guarded(async (j: Journal | null) => {

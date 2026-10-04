@@ -264,6 +264,25 @@ export class ProjectStore {
     }
   }
 
+  // The last review of this paper (its report as JSON): the app's own file, beside the last PDF,
+  // so it's never a project file and never in a backup. null forgets it.
+  async saveLastReview(id: string, json: string | null): Promise<void> {
+    if (json !== null) return this.writeRaw(id, `${HIDDEN}/review.json`, json);
+    try {
+      await (await (await this.dir(id)).getDirectoryHandle(HIDDEN)).removeEntry("review.json");
+    } catch {
+      // nothing kept: nothing to forget
+    }
+  }
+
+  async lastReview(id: string): Promise<string | null> {
+    try {
+      return await this.readText(id, `${HIDDEN}/review.json`);
+    } catch {
+      return null;
+    }
+  }
+
   // With the project's settings (main file, engine, journal, template), which importZip honours.
   async exportZip(id: string): Promise<Uint8Array> {
     const paths = await this.files(id);
