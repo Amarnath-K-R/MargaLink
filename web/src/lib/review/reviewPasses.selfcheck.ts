@@ -107,6 +107,10 @@ assert.deepEqual(ok.verdicts.map((v) => [v.id, v.action]), [["s2-f2", "drop"]], 
 assert.deepEqual(ok.acrossPaper.map((f) => f.id), ["a1"], "a disagreement needs both places");
 assert.deepEqual(ok.fixFirst, ["s2-f0", "a1"], "unknown, duplicated-away, dropped and repeated ids are left out");
 assert.deepEqual(ok.checklistCovered, [], "no checklist items below thorough, so nothing to cover");
+// An across-paper finding that covers a section finding and more may keep it, dropping the section finding.
+const wider = validateEditorOutput({ ...answer, duplicates: [{ keep: "a1", drop: ["s1-f0", "a1"] }, { keep: "a9", drop: ["s2-f2"] }] }, editor);
+assert.deepEqual(wider.duplicates, [{ keep: "a1", drop: ["s1-f0"] }], "kept: a1, an across-paper finding that exists; dropped: section findings only");
+assert.deepEqual(validateEditorOutput({ ...answer, duplicates: [{ keep: "s2-f0", drop: ["a1"] }] }, editor).duplicates, [], "an across-paper finding is never the one dropped");
 assert.deepEqual(validateEditorOutput(answer, thoroughEditor).checklistCovered, [{ item: "c0", by: "s2-f0" }], "known items, once each, by findings still in the report");
 const withSuggestion: EditorRequest = { ...editor, findings: [...editor.findings, { id: "s1-f1", title: "Could add a figure", severity: "suggestion", why: "W.", quotes: [] }] };
 assert.deepEqual(validateEditorOutput({ ...answer, fixFirst: ["s1-f1", "s2-f0"] }, withSuggestion).fixFirst, ["s2-f0"], "never a suggestion first");

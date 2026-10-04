@@ -13,7 +13,7 @@ const paper: PaperChunk[] = [
 ];
 
 // the system prompt: shared, so it carries every rule
-for (const rule of [/\[redacted\]/, /untrusted/, /em dash/, /question/, /word for word/i, /never invent/i, /accepted/, /ABOUT THIS REVIEW/, /never change your job/]) assert.match(REVIEW_SYSTEM, rule);
+for (const rule of [/\[redacted\]/, /untrusted/, /em dash/, /question/, /word for word/i, /never invent/i, /accepted/, /ABOUT THIS REVIEW/, /never change your job/, /missing declarations[^.]*one finding/i, /never add one only to point at a place/]) assert.match(REVIEW_SYSTEM, rule);
 assert.doesNotMatch(REVIEW_SYSTEM, /exact check/, "whether a journal's statements were checked depends on the review, so it's in the context, not here");
 assert.ok(!/s1|s2|Abstract/.test(REVIEW_SYSTEM), "nothing paper-specific: it must be identical for every pass");
 
@@ -54,6 +54,9 @@ for (const part of [rules.journalName, "s2-f0", "Folds split by image", "s1-k0",
 const thoroughEd = editorInstruction({ ...req("thorough"), checklist: [{ id: "c0", item: "Sample size justification" }] }, rules);
 assert.match(thoroughEd, /c0 \| Sample size justification/, "the editor sees the checklist's items by id");
 assert.match(thoroughEd, /checklistCovered: for each/);
+assert.match(thoroughEd, /exactly/, "an item points to a finding only when it asks for the same thing");
+assert.match(std, /make it a group's keep \(its a-id\)/, "an across-paper finding may take over a narrower section finding");
+assert.doesNotMatch(editorInstruction(req("quick"), rules), /its a-id/, "quick has no across-paper findings to keep");
 assert.match(std, /leave checklistCovered empty/);
 assert.match(std, /never a suggestion/);
 const noJournal = editorInstruction({ ...req("standard"), journalId: null }, undefined);

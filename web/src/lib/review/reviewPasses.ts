@@ -230,10 +230,24 @@ export function validateEditorOutput(output: unknown, req: EditorRequest): Edito
     throw new Error("malformed editor output");
   }
   const severity = new Map(req.findings.map((f) => [f.id, f.severity]));
+  const acrossPaper: EditorResponse["acrossPaper"] = [];
+  if (plan.acrossPaper) {
+    const index = indexPaper(req.paper);
+    output.acrossPaper.forEach((raw, i) => {
+      if (acrossPaper.length >= MAX_ACROSS) return;
+      const f = groundFinding(raw, index, undefined, plan.severities);
+      // A disagreement between places has to show both.
+      if (!f || (f.category === "consistency" && f.quotes.length < 2)) return;
+      acrossPaper.push({ ...f, id: `a${i + 1}` });
+    });
+  }
+  // A group keeps one finding and drops the rest, which must be section findings: the kept one may be the
+  // editor's own across-paper finding when it covers a section finding's point and more.
+  const across = new Set(acrossPaper.map((f) => f.id));
   const grouped = new Set<string>();
   const duplicates: EditorResponse["duplicates"] = [];
   for (const g of output.duplicates) {
-    if (!isObj(g) || typeof g.keep !== "string" || !severity.has(g.keep) || grouped.has(g.keep) || !Array.isArray(g.drop)) continue;
+    if (!isObj(g) || typeof g.keep !== "string" || !(severity.has(g.keep) || across.has(g.keep)) || grouped.has(g.keep) || !Array.isArray(g.drop)) continue;
     const keep = g.keep;
     const drop = [...new Set(g.drop.filter((id): id is string => typeof id === "string" && severity.has(id) && id !== keep && !grouped.has(id)))];
     if (drop.length === 0) continue;
@@ -250,17 +264,6 @@ export function validateEditorOutput(output: unknown, req: EditorRequest): Edito
         verdicts.push({ id: v.id, action: "soften", title: clip(v.title.trim(), MAX_TITLE_CHARS), why: clip(v.why, MAX_TEXT_CHARS), reason });
       }
     }
-  }
-  const acrossPaper: EditorResponse["acrossPaper"] = [];
-  if (plan.acrossPaper) {
-    const index = indexPaper(req.paper);
-    output.acrossPaper.forEach((raw, i) => {
-      if (acrossPaper.length >= MAX_ACROSS) return;
-      const f = groundFinding(raw, index, undefined, plan.severities);
-      // A disagreement between places has to show both.
-      if (!f || (f.category === "consistency" && f.quotes.length < 2)) return;
-      acrossPaper.push({ ...f, id: `a${i + 1}` });
-    });
   }
   const gone = new Set([...duplicates.flatMap((d) => d.drop), ...verdicts.filter((v) => v.action === "drop").map((v) => v.id)]);
   // What to fix first is a major or minor problem; a suggestion never is, whatever the editor ranked.
