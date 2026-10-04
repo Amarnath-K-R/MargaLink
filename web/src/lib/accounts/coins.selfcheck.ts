@@ -7,13 +7,13 @@ import { canonicalEmail, dueProGrants, isEmail, ledgerLabel, maxPaidChars, norma
 
 // the pricing table, exactly
 const table: [string, number, number][] = [
-  ["quick", 30_000, 4], ["quick", 75_000, 6], ["quick", 150_000, 8], ["quick", 400_000, 18],
-  ["standard", 30_000, 6], ["standard", 75_000, 9], ["standard", 150_000, 12], ["standard", 400_000, 27],
-  ["thorough", 30_000, 10], ["thorough", 75_000, 15], ["thorough", 150_000, 20], ["thorough", 400_000, 45],
+  ["quick", 30_000, 4], ["quick", 75_000, 8], ["quick", 150_000, 12], ["quick", 400_000, 32],
+  ["standard", 30_000, 6], ["standard", 75_000, 12], ["standard", 150_000, 18], ["standard", 400_000, 48],
+  ["thorough", 30_000, 10], ["thorough", 75_000, 20], ["thorough", 150_000, 30], ["thorough", 400_000, 80],
 ];
 for (const [tier, chars, coins] of table) assert.equal(reviewPrice(tier as "quick", chars), coins, `${tier} ${chars}`);
 assert.equal(reviewPrice("quick", 50_000), 4, "the first 50k is the base");
-assert.equal(reviewPrice("quick", 50_001), 6, "a character over starts the next step");
+assert.equal(reviewPrice("quick", 50_001), 8, "a character over starts the next step");
 assert.equal(reviewPrice("quick", 0), 4);
 
 // Rewrite: 1 coin per 500 words, rounded up, at least 1; up to 2,000 words

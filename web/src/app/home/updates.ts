@@ -30,6 +30,20 @@ export const TAG_TINT: Record<UpdateTag, string> = {
 
 export const UPDATES: Update[] = [
   {
+    date: "2026-10-04",
+    tag: "Review",
+    title: "A new AI review, section by section",
+    summary: "The review now reads like a reviewer's report: each section reviewed in turn with the whole paper in view, then an overview and what to fix first. Nothing is repeated, and every quote is checked against your paper.",
+    points: [
+      "Fix these first takes you straight to each finding",
+      "Thorough adds the reporting checklist for your study type",
+      "Kept on your device, with Download, Print or save as PDF, and Copy",
+      "Papers longer than 50,000 characters now cost as much for each further 50,000 as for the first",
+    ],
+    href: "/review",
+    cta: "Review a paper",
+  },
+  {
     date: "2026-10-03",
     tag: "Write",
     title: "Rewrite with Claude",

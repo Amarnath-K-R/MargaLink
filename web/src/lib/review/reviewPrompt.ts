@@ -47,11 +47,11 @@ export const TIER_PLAN: Record<ReviewTier, TierPlan> = {
     kinds: ["abstract", "introduction", "methods", "results", "discussion", "body", "other"],
     subsections: false,
     maxFindings: 6,
-    keyNumbers: 8,
+    keyNumbers: 5,
     severities: ["major", "minor"],
     sectionEffort: "low",
     sectionMaxTokens: 12000,
-    editorEffort: "medium",
+    editorEffort: "low",
     editorMaxTokens: 16000,
     verdicts: true,
     acrossPaper: true,
@@ -63,7 +63,7 @@ export const TIER_PLAN: Record<ReviewTier, TierPlan> = {
     kinds: ["abstract", "introduction", "methods", "results", "discussion", "body", "supplement", "other"],
     subsections: true,
     maxFindings: 8,
-    keyNumbers: 8,
+    keyNumbers: 5,
     severities: ["major", "minor", "suggestion"],
     sectionEffort: "low",
     sectionMaxTokens: 16000,
@@ -91,9 +91,9 @@ How to write a finding:
 - question: true when you aren't sure it is an error and the authors should clarify it; then put the title and why as a question.
 - missing: true when the problem is that something is absent.
 
-Before calling something an error, look in the manuscript for a legitimate explanation; if one is plausible, ask it as a question instead. For example, an AUC pooled over cross-validation folds can be lower than every fold's own AUC when the folds' scores sit on different scales, so a pooled AUC below the per-fold range calls for a question, not an error. A wrong finding costs the authors more than a missing one: report only what holds up, and never invent problems to fill space.
+Before calling something an error, look in the manuscript for a legitimate explanation; if one is plausible, ask it as a question instead. For example, an AUC pooled over cross-validation folds can be lower than every fold's own AUC when the folds' scores sit on different scales, so a pooled AUC below the per-fold range calls for a question, not an error. A wrong finding costs the authors more than a missing one: report only what holds up, and never invent problems to fill space. Before you submit, look again at each finding that says something is wrong: unless the manuscript rules out every legitimate explanation, make it a question.
 
-Write plainly, for the authors. Don't use em dashes. Don't predict whether the paper will be accepted. Don't comment on word count, or on whether required statements (funding, conflicts of interest, data availability, ethics approval) are present: the authors have already seen an exact check of both.
+Write plainly, for the authors. Don't use em dashes. Don't predict whether the paper will be accepted. Don't report typos, spelling, punctuation or formatting slips: MargaLink's spelling and grammar check covers those. Don't comment on word count, or on whether required statements (funding, conflicts of interest, data availability, ethics approval) are present: the authors have already seen an exact check of both.
 
 Lines reading "[redacted]" were removed by MargaLink before sending, to hide author names and email addresses. They aren't part of the manuscript: never comment on them.
 

@@ -49,7 +49,10 @@ give.
 
 - **Coin value:** $0.09-0.12.
 - **Prices for the first 50k characters (and each further 50k):** quick 4
-  (+2), standard 6 (+3), thorough 10 (+5).
+  (+2), standard 6 (+3), thorough 10 (+5). Changed by the owner after the
+  live check (2026-10-04): each further 50k now costs what the first does
+  (quick 4+4, standard 6+6, thorough 10+10), since a review's cost follows
+  its sections and long papers have more.
 - **Model:** `claude-sonnet-5`, $2/M input and $10/M output.
 - **Measured today:** $0.12-0.32 and 41-142 s per review (39k-103k chars).
 - **Input is cheap** (a 60k-character paper is about 15k tokens, $0.03).
@@ -137,7 +140,7 @@ malformed output, which is retried.
 |---|---|---|---|---|
 | Quick | abstract, results, discussion/conclusion, body | major + the most important minor, up to 4 per section | low effort; no verdicts, no across-paper findings | – |
 | Standard | every section but references and supplement | major + minor, up to 8 per section | medium; verdicts on majors; across-paper findings | – |
-| Thorough | + supplement; each subsection of 2,000+ chars on its own | major, minor and suggestions, up to 12 per section | high; verdicts on majors; across-paper findings | checklist pass |
+| Thorough | + supplement; each subsection of 3,000+ chars on its own (2,000 before the live check) | major, minor and suggestions, up to 12 per section | high; verdicts on majors; across-paper findings | checklist pass |
 
 Effort and `max_tokens` per pass and tier are set from the live check, so
 each tier stays under its ceiling.

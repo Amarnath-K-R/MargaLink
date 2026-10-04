@@ -12,7 +12,8 @@ export const FIGURE_PRICE = 1;
 export const REVIEW_TICKET_TTL_MS = 2 * 60 * 60 * 1000;
 
 // [coins for the first 50,000 characters, coins for each further 50,000]
-const REVIEW_PRICE: Record<ReviewTier, [number, number]> = { quick: [4, 2], standard: [6, 3], thorough: [10, 5] };
+// Each further 50,000 characters costs what the first did: a review's cost follows its sections, and long papers have more (live check, 2026-10-04).
+const REVIEW_PRICE: Record<ReviewTier, [number, number]> = { quick: [4, 4], standard: [6, 6], thorough: [10, 10] };
 const PRICE_STEP = 50_000;
 
 /** The price of a review of `chars` characters (what will actually be sent). */

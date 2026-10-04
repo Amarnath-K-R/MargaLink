@@ -168,7 +168,7 @@ export default function ArchitecturePage() {
             tint="#ecdcc0"
             steps={[
               { title: "Prepare, on the device", detail: "Author lines stripped; the text normalised once (NFKC, ligatures, hyphenation, quotes) so quotes come back in the alphabet the check reads.", files: "review.ts" },
-              { title: "Find the sections", detail: "From the document's own headings (Word heading styles; a PDF's fonts), a word list otherwise. The user can fix the outline and mark sections Don't send. At thorough depth, each subsection of 2,000+ characters is its own part.", files: "headingHints.ts · reviewSections.ts" },
+              { title: "Find the sections", detail: "From the document's own headings (Word heading styles; a PDF's fonts), a word list otherwise. The user can fix the outline and mark sections Don't send. At thorough depth, each subsection of 3,000+ characters is its own part.", files: "headingHints.ts · reviewSections.ts" },
               { title: "Review each section", detail: "One pass per section, each with the whole paper as context and a checklist for its kind. The first runs alone so Anthropic caches the paper; the rest run 4 at a time.", files: "reviewOrchestrator.ts → /api/review", away: true },
               { title: "Verify every quote", detail: "On the server, every quote is looked up in the paper; one that isn't there is removed, and a finding left with nothing to point at is dropped.", files: "reviewGrounding.ts" },
               { title: "Edit", detail: "One editor pass over every finding by id: the overview, merged duplicates, a second look at major findings, problems across the paper, what to fix first. It can only name ids it was shown.", files: "reviewPasses.ts", away: true },

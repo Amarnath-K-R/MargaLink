@@ -193,7 +193,7 @@ function pack(spans: Span[]): Span[] {
 }
 
 // Thorough reviews each subsection on its own; one under this joins the one before it.
-export const SUBSECTION_MIN_CHARS = 2_000;
+export const SUBSECTION_MIN_CHARS = 3_000;
 function mergeSmall(spans: Span[]): Span[] {
   const out: Span[] = [];
   for (const s of spans) {
@@ -204,7 +204,7 @@ function mergeSmall(spans: Span[]): Span[] {
   return out;
 }
 
-// `subsections` (thorough): every subsection of 2,000+ characters is its own
+// `subsections` (thorough): every subsection of 3,000+ characters is its own
 // chunk; otherwise a section is split only past CHUNK_CHARS.
 export function chunkSections(sections: Section[], hints: HeadingHint[] = [], opts: { subsections?: boolean } = {}): Chunk[] {
   const subheads = new Set(hints.filter((h) => h.level === 2).map((h) => lineKey(h.text)));
