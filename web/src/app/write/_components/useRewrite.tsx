@@ -10,6 +10,7 @@ import { requestRewrite } from "@/lib/writing/rewriteClient";
 import { parseRewriteRequest, rewriteWords, type Tone, type Tool } from "@/lib/writing/rewrite";
 import type { Spelling } from "@/lib/writing/spelling";
 import RewriteCard, { RewriteDiff } from "./RewriteCard";
+import type { Box } from "./placeCard";
 import { RewriteMenuItems, type RewriteOffer } from "./RewriteMenu";
 
 // What an editor gives Rewrite: the selection read as a passage (or why it
@@ -25,7 +26,7 @@ export type RewriteSelection = {
 export type RewriteTarget = {
   format: "latex" | "text";
   read: () => RewriteSelection | string;
-  anchor: () => { left: number; top: number; above: number } | null; // the selection's left edge, just under it and just over it, in the viewport
+  anchor: () => { sel: Box; editor: Box } | null; // the selection and the editor's visible area, in the viewport
   focus: () => void; // back to the editor
 };
 
@@ -40,6 +41,9 @@ type Stage =
 
 const LABEL: Record<Tool, string> = { paraphrase: "Paraphrase", tone: "Change tone", shorten: "Shorten", expand: "Expand", clarity: "Clarity and flow" };
 const coinsLabel = (n: number) => `${n} M coin${n === 1 ? "" : "s"}`;
+// Each step's width, and the least it reads well at beside the selection: a list of tools is narrow, a notice
+// needs room, a rewrite is wide but reads at 320.
+const WIDTH: Record<Stage["kind"], [number, number]> = { menu: [300, 260], consent: [560, 420], running: [420, 300], done: [640, 320], stale: [640, 320], error: [440, 300] };
 
 /**
  * Rewrite with Claude for one editor: its menu's price, the consent (once
@@ -49,7 +53,7 @@ const coinsLabel = (n: number) => `${n} M coin${n === 1 ? "" : "s"}`;
  */
 export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: Spelling["dialect"]; consented: boolean; onConsent: () => Promise<void>; enabled: boolean }) {
   const [stage, setStage] = useState<Stage | null>(null);
-  const [at, setAt] = useState({ left: 16, top: 96, above: 88 });
+  const [at, setAt] = useState<{ sel: Box; editor: Box }>({ sel: { left: 16, right: 16, top: 96, bottom: 96 }, editor: { left: 0, right: 1024, top: 80, bottom: 768 } });
   const inFlight = useRef(false); // a rewrite on its way: no second one meanwhile (each is paid for)
   const optsRef = useRef(opts);
   useEffect(() => {
@@ -141,8 +145,32 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
   };
   const title = (job: Job) => `${LABEL[job.tool]}${job.tone ? `, ${job.tone}` : ""}`;
 
+  const footer =
+    stage?.kind === "done" ? (
+      <>
+        <button type="button" data-primary onClick={() => replace(stage.job, stage.text)} className="clay-btn clay-primary h-9 px-4 font-medium">
+          Replace
+        </button>
+        <button type="button" onClick={() => again(stage.job)} className="clay-btn h-9 px-4">
+          Try again · {coinsLabel(stage.job.coins)}
+        </button>
+        <button type="button" onClick={close} className="h-9 px-3 text-ink-soft hover:text-ink">
+          Discard
+        </button>
+      </>
+    ) : stage?.kind === "stale" ? (
+      <>
+        <button type="button" data-primary onClick={() => void navigator.clipboard?.writeText(stage.job.sel.show(stage.text)).catch(() => {})} className="clay-btn h-9 px-4">
+          Copy the rewrite
+        </button>
+        <button type="button" onClick={close} className="h-9 px-3 text-ink-soft hover:text-ink">
+          Close
+        </button>
+      </>
+    ) : null;
+
   const element = stage && (
-    <RewriteCard left={at.left} top={at.top} above={at.above} onClose={close} focusKey={stage.kind}>
+    <RewriteCard sel={at.sel} editor={at.editor} want={WIDTH[stage.kind === "error" && stage.signIn ? "consent" : stage.kind]} onClose={close} focusKey={stage.kind} footer={footer}>
       {stage.kind === "menu" && (
         <div role="menu" aria-label="Rewrite">
           <RewriteMenuItems offer={stage.offer} onTool={run} />
@@ -158,7 +186,7 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
         />
       )}
       {stage.kind === "running" && (
-        <p aria-live="polite" className="text-ink-soft">
+        <p aria-live="polite" className="py-2 text-ink-soft">
           {title(stage.job)}: Claude is rewriting the selection ({coinsLabel(stage.job.coins)})…
         </p>
       )}
@@ -173,17 +201,6 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
               ))}
             </ul>
           )}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => replace(stage.job, stage.text)} className="clay-btn clay-primary h-9 px-4 font-medium">
-              Replace
-            </button>
-            <button type="button" onClick={() => again(stage.job)} className="clay-btn h-9 px-4">
-              Try again · {coinsLabel(stage.job.coins)}
-            </button>
-            <button type="button" onClick={close} className="h-9 px-3 text-ink-soft hover:text-ink">
-              Discard
-            </button>
-          </div>
         </>
       )}
       {stage.kind === "stale" && (
@@ -197,14 +214,6 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
             Copy it and place it yourself:
           </p>
           <RewriteDiff before={stage.job.sel.before} after={stage.job.sel.show(stage.text)} />
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => void navigator.clipboard?.writeText(stage.job.sel.show(stage.text)).catch(() => {})} className="clay-btn h-9 px-4">
-              Copy the rewrite
-            </button>
-            <button type="button" onClick={close} className="h-9 px-3 text-ink-soft hover:text-ink">
-              Close
-            </button>
-          </div>
         </>
       )}
       {stage.kind === "error" && (
@@ -229,11 +238,6 @@ export function useRewrite(target: () => RewriteTarget | null, opts: { dialect: 
               />
             </div>
           )}
-          <div className="mt-3">
-            <button type="button" onClick={close} className="h-9 px-3 text-ink-soft hover:text-ink">
-              Close
-            </button>
-          </div>
         </>
       )}
     </RewriteCard>
