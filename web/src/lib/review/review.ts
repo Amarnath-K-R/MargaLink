@@ -25,6 +25,15 @@ export function prepareForReview(fullText: string): string {
 // minimum the *authors* aren't identifiable in what gets sent, even though
 // the paper's substantive content still is. Labeled as best-effort in the
 // consent UI — never claim more than this actually does.
+// A byline: names of capitalised words, initials allowed ("Gopal S Pillai", "J. A. Smith", any script's
+// capitals), each maybe carrying affiliation marks ("1", "1,2", "*", "†", "¹"), joined by commas, "and" or "&".
+const NAME = String.raw`\p{Lu}[\p{L}.'’-]*(?:\s+\p{Lu}[\p{L}.'’-]*)*`;
+const MARKS = String.raw`[\d*†‡§¶#¹²³⁴⁵⁶⁷⁸⁹⁰]+(?:,[\d*†‡§¶#¹²³⁴⁵⁶⁷⁸⁹⁰]+)*`;
+const JOIN = String.raw`(?:,\s*and\s+|\s*[,;&]\s*|\s+and\s+)`;
+const BYLINE = new RegExp(String.raw`^${NAME}(?:${MARKS})?(?:${JOIN}${NAME}(?:${MARKS})?)+,?$`, "u");
+// One author alone: two or more name words with an affiliation mark ("Jane Q Doe1"), not a heading.
+const ONE_AUTHOR = new RegExp(String.raw`^\p{Lu}[\p{L}.'’-]*(?:\s+\p{Lu}[\p{L}.'’-]*)+${MARKS}$`, "u");
+
 export function stripIdentifyingInfo(text: string): string {
   const head = text.slice(0, 500);
   const rest = text.slice(500);
@@ -32,13 +41,8 @@ export function stripIdentifyingInfo(text: string): string {
     .split("\n")
     .map((line) => {
       if (/[\w.+-]+@[\w-]+\.[\w.-]+/.test(line)) return "[redacted]";
-      // A short line, title-cased, comma-separated names — the shape of a
-      // byline ("John Smith, Jane Doe") rather than prose.
-      if (/^[A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+)*(?:\s*,\s*[A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+)*)+$/.test(
-        line.trim()
-      )) {
-        return "[redacted]";
-      }
+      // The shape of a byline ("John Smith, Jane Doe", "Gopal S Pillai1, Merin Dickson1,*") rather than prose.
+      if (BYLINE.test(line.trim()) || ONE_AUTHOR.test(line.trim())) return "[redacted]";
       return line;
     })
     .join("\n");

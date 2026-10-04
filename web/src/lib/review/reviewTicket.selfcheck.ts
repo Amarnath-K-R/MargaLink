@@ -1,43 +1,43 @@
-// Runnable check for paid reviews: functions/api/review/start.ts charges the
-// price and issues a ticket; functions/api/review.ts spends one pass of it
-// per request, only for what was paid for; an unfinished run is refunded
-// once, a finished one isn't. Drives the real handlers with Anthropic
+// Runnable check for paid reviews: review/start.ts charges the price of the
+// whole paper sent and issues a ticket for the sections the depth reviews
+// (and the checklist at thorough); review.ts spends one pass per request,
+// only for what was paid for and with no more paper than was paid for; an
+// unfinished run is refunded once. Drives the real handlers with Anthropic
 // stubbed, on the node:sqlite D1 stand-in.
 //   node src/lib/review/reviewTicket.selfcheck.ts
 import assert from "node:assert/strict";
 import { testD1 } from "../accounts/testD1.ts";
 import { createSession, signInUser } from "../accounts/auth.ts";
-import { balance, claimReviewPass, credit, markDelivered, sweepTickets } from "../accounts/ledger.ts";
-import { sha256Hex } from "../accounts/auth.ts";
-import { reviewPrice, REVIEW_TICKET_TTL_MS } from "../accounts/coins.ts";
-import { DAILY_PASS_CAP, MAX_REVIEW_CHUNKS, MIN_BILLED_SECTION_CHARS } from "./reviewPasses.ts";
-import { TIER_PLAN } from "./reviewPrompt.ts";
+import { balance, credit, sweepTickets } from "../accounts/ledger.ts";
+import { reviewPrice } from "../accounts/coins.ts";
 import { DAILY, capKeys } from "../accounts/dailyCaps.ts";
 import { JOURNAL_RULES } from "../journals/journalRules.ts";
 import { onRequestPost as start } from "../../../functions/api/review/start.ts";
 import { onRequestPost as review } from "../../../functions/api/review.ts";
 
 const env = { DB: testD1(), ANTHROPIC_API_KEY: "k" };
-// Sets today's count of a daily limit (dailyCaps.ts), as if that many had been used.
-const setUsed = (key: string, n: number) =>
-  env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET count = ?2").bind(key, n, Date.now() + 86_400_000).run();
-const usedOf = async (key: string) => (await env.DB.prepare("SELECT count FROM rate_limits WHERE key = ?").bind(key).first<number>("count")) ?? 0;
-type Handler = (ctx: { request: Request; env: typeof env }) => Promise<Response>;
-let upstreamCalls = 0;
+type Handler = (ctx: { request: Request; env: typeof env; data: Record<string, unknown> }) => Promise<Response>;
+const upstream: { tools: { name: string }[]; system: string; messages: { content: { text: string; cache_control?: unknown }[] }[] }[] = [];
 let upstreamDown = false;
+let wrongTool = false;
 globalThis.fetch = (async (_u: string, init?: RequestInit) => {
-  upstreamCalls++;
-  if (upstreamDown) return new Response("overloaded", { status: 529 });
   const body = JSON.parse(init!.body as string);
-  const name = body.tools[0].name;
-  const out = name.includes("synth")
-    ? { journalFit: { assessment: "good", explanation: "Fits." }, inconsistencies: [], summary: [], otherObservations: [] }
-    : { claims: [], statisticalReporting: [], notes: [] };
+  upstream.push(body);
+  if (upstreamDown) return new Response("overloaded", { status: 529 });
+  const job = body.messages[0].content.at(-1).text as string; // the job is always last
+  const [name, out] = job.includes("submit_checklist")
+    ? ["submit_checklist", { guideline: null, why: "None applies.", items: [] }]
+    : job.includes("submit_editor_review")
+      ? ["submit_editor_review", { overview: "O.", strengths: [], journalFit: { assessment: "good", explanation: "Fits." }, fixFirst: [], duplicates: [], verdicts: [], acrossPaper: [] }]
+      : ["submit_section_review", { verdict: "Fine.", findings: [], keyNumbers: [] }];
   const sse = [
-    { type: "content_block_start", index: 0, content_block: { type: "tool_use", name } },
+    { type: "message_start", message: { usage: { input_tokens: 10, cache_read_input_tokens: 1000 } } },
+    { type: "content_block_start", index: 0, content_block: { type: "tool_use", name: wrongTool ? "submit_checklist" : name } },
     { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: JSON.stringify(out) } },
-    { type: "message_delta", delta: { stop_reason: "tool_use" } },
-  ].map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
+    { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 20 } },
+  ]
+    .map((e) => `data: ${JSON.stringify(e)}\n\n`)
+    .join("");
   return new Response(sse, { status: 200 });
 }) as typeof fetch;
 
@@ -46,182 +46,123 @@ const ann = await signInUser(env.DB, { email: "ann@x.org" }, now);
 const bob = await signInUser(env.DB, { email: "bob@x.org" }, now);
 const annCookie = `__Host-ml_session=${await createSession(env.DB, ann.id, now)}`;
 const bobCookie = `__Host-ml_session=${await createSession(env.DB, bob.id, now)}`;
-await credit(env.DB, ann.id, 4, "admin", "seed", now);
-
+await credit(env.DB, ann.id, 100, "admin", "seed", now);
 const journalId = JOURNAL_RULES[0].journalId;
-const post = (h: unknown, path: string, body: unknown, cookie: string, ticket?: string) =>
+const post = (h: unknown, path: string, body: unknown, cookie = annCookie, ticket?: string, headers: Record<string, string> = {}) =>
   (h as Handler)({
-    request: new Request(`https://m.test${path}`, { method: "POST", body: JSON.stringify(body), headers: { cookie, ...(ticket ? { "x-review-ticket": ticket } : {}) } }),
+    request: new Request(`https://m.test${path}`, { method: "POST", body: JSON.stringify(body), headers: { cookie, ...(ticket ? { "x-review-ticket": ticket } : {}), ...headers } }),
     env,
+    data: {},
   });
-const chunks = [{ id: "s1", chars: 20_000 }, { id: "s2-p1", chars: 24_000 }, { id: "s2-p2", chars: 12_000 }];
-const begin = (cookie: string, body: object = {}) => post(start, "/api/review/start", { tier: "quick", journalId, chunks, ...body }, cookie);
-const extract = (ticket: string | undefined, id = "s1", text = "x".repeat(100), tier = "quick", cookie = annCookie) =>
-  post(review, "/api/review", { pass: "extract", tier, claimsCap: 4, chunk: { id, title: "Intro", kind: "introduction", part: 1, parts: 1, text } }, cookie, ticket);
-const synthesize = (ticket: string, body: object = {}) =>
-  post(review, "/api/review", { pass: "synthesize", journalId, tier: "quick", paperMap: { title: null, totalWords: 10, sections: [] }, abstractText: null, ledger: [], statsFindings: [], notes: [], ...body }, annCookie, ticket);
+const text = (n: number) => "The cohort had 412 adults in it. ".repeat(Math.ceil(n / 33)).slice(0, n);
+const paper = [
+  { id: "s1", title: "Abstract", kind: "abstract", text: text(1500) },
+  { id: "s2", title: "Methods", kind: "methods", text: text(20_000) },
+  { id: "s3", title: "Results", kind: "results", text: text(24_000) },
+];
+const billed = 2000 + 20_000 + 24_000; // the abstract billed as 2,000
+const begin = (tier: string, reviewIds: string[], cookie = annCookie, context: { journalId?: string | null; guidanceChars?: number } = {}) =>
+  post(start, "/api/review/start", { tier, journalId, guidanceChars: 0, ...context, chunks: paper.map((c) => ({ id: c.id, chars: c.text.length, review: reviewIds.includes(c.id) })) }, cookie);
+const section = (ticket: string, target: string, tier = "quick", p: unknown = paper, cookie = annCookie, guidance = "") =>
+  post(review, "/api/review", { pass: "section", tier, journalId, guidance, paper: p, target }, cookie, ticket);
+const checklist = (ticket: string, tier = "thorough") => post(review, "/api/review", { pass: "checklist", tier, journalId, guidance: "", paper }, annCookie, ticket);
+const editor = (ticket: string, tier = "quick", extra: object = {}) => post(review, "/api/review", { pass: "editor", tier, journalId, guidance: "", paper, findings: [], keyNumbers: [], checklist: [], ...extra }, annCookie, ticket);
+type Paid = { ticket: string; coins: number; balance: number };
 
-// --- starting: signed in, valid, affordable
-assert.equal((await begin("")).status, 401);
-assert.equal((await begin(annCookie, { tier: "epic" })).status, 400);
-assert.equal((await begin(annCookie, { journalId: "nope" })).status, 400);
-assert.equal((await begin(annCookie, { chunks: [] })).status, 400);
-assert.equal((await begin(annCookie, { chunks: [{ id: "s1", chars: 5 }, { id: "s1", chars: 5 }] })).status, 400, "duplicate ids");
-assert.equal((await begin(annCookie, { chunks: [{ id: "s1", chars: 30_000 }] })).status, 400, "longer than a chunk can be");
-const price = reviewPrice("quick", 56_000);
-assert.equal(price, 6);
-let r = await begin(annCookie);
-assert.equal(r.status, 402);
-assert.deepEqual(await r.json(), { coins: 6, balance: 4 });
-assert.equal(await balance(env.DB, ann.id), 4, "nothing taken");
-
-await credit(env.DB, ann.id, 20, "admin", "seed2", now);
-r = await begin(annCookie);
-assert.equal(r.status, 200);
-const t1 = (await r.json()) as { ticket: string; coins: number; balance: number };
-assert.deepEqual([t1.coins, t1.balance], [6, 18]);
-assert.equal(upstreamCalls, 0, "starting sends nothing to Claude");
-assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM review_tickets WHERE id_hash = ?").bind(t1.ticket).first<{ n: number }>())?.n, 0, "only the hash is stored");
-
-// --- passes: only with the ticket, only what was paid for
-assert.equal((await extract(undefined)).status, 403);
-assert.equal((await extract("forged")).status, 403);
-assert.equal((await extract(t1.ticket, "s1", "x", "quick", bobCookie)).status, 403, "someone else's ticket");
-assert.equal((await extract(t1.ticket, "s1", "x", "thorough")).status, 403, "a deeper tier than paid");
-assert.equal((await extract(t1.ticket, "s9")).status, 403, "a section not paid for");
-assert.equal((await extract(t1.ticket, "s2-p2", "x".repeat(12_001))).status, 403, "longer than paid");
-assert.equal(upstreamCalls, 0, "refused passes never reach Claude");
-r = await extract(t1.ticket, "s1");
+// --- starting
+assert.equal((await begin("quick", ["s1"], "")).status, 401);
+assert.equal((await post(start, "/api/review/start", { tier: "quick", journalId, chunks: paper.map((c) => ({ id: c.id, chars: c.text.length })) })).status, 400, "the v1 shape");
+assert.equal((await begin("quick", [])).status, 400, "nothing to review");
+let r = await begin("quick", ["s1", "s3"]);
 assert.equal(r.status, 200, await r.clone().text());
-assert.equal(upstreamCalls, 1);
-// a section that came back isn't sent again; one that keeps failing gets 4 tries, then no more
-assert.equal((await extract(t1.ticket, "s1")).status, 409, "already delivered");
-assert.equal((await extract(t1.ticket, "s2-p1")).status, 200);
+const quick = (await r.json()) as Paid;
+assert.equal(quick.coins, reviewPrice("quick", billed), "priced on the whole paper sent, not only the sections reviewed");
+assert.equal(quick.balance, 100 - quick.coins);
+
+// --- a section pass: a reviewed section only, with no more paper than paid for
+assert.equal((await section(quick.ticket, "s2")).status, 403, "a section this depth doesn't review");
+const longer = [...paper, { id: "s4", title: "More", kind: "discussion", text: text(24_000) }, { id: "s5", title: "More", kind: "discussion", text: text(24_000) }];
+assert.equal((await section(quick.ticket, "s1", "quick", longer)).status, 403, "more paper than was paid for");
+assert.equal((await section(quick.ticket, "s1", "quick", paper, annCookie, "x".repeat(20_000))).status, 403, "notes that weren't paid for");
+assert.equal((await post(review, "/api/review", { pass: "section", tier: "quick", journalId: "no-such-journal", guidance: "", paper, target: "s1" }, annCookie, quick.ticket)).status, 404);
+assert.equal((await section(quick.ticket, "s1", "standard")).status, 403, "another depth");
+assert.equal((await section(quick.ticket, "s1", "quick", paper, bobCookie)).status, 403, "another account");
+assert.equal((await post(review, "/api/review", {}, annCookie, quick.ticket, { "content-length": "4000000" })).status, 413);
+assert.equal((await editor(quick.ticket)).status, 409, "nothing back yet, nothing to put together");
+r = await section(quick.ticket, "s1");
+assert.equal(r.status, 200, await r.clone().text());
+assert.deepEqual(await r.json(), { verdict: "Fine.", findings: [], keyNumbers: [] });
+assert.equal((await checklist(quick.ticket, "quick")).status, 400, "the checklist is thorough's alone");
+
+// --- what Claude got: all three tools, the system prompt, the whole paper cached, then the job
+const sent = upstream.at(-1)!;
+assert.deepEqual(sent.tools.map((t) => t.name), ["submit_section_review", "submit_checklist", "submit_editor_review"]);
+assert.match(sent.system, /\[redacted\]/);
+assert.equal(sent.messages[0].content[0].cache_control, undefined);
+assert.deepEqual(sent.messages[0].content[1].cache_control, { type: "ephemeral" }, "the cache mark is on the review's context, after the paper");
+assert.match(sent.messages[0].content[1].text, /Target journal: /);
+assert.ok(["s1", "s2", "s3"].every((id) => sent.messages[0].content[0].text.includes(`id="${id}"`)), "every section, reviewed or not");
+assert.match(sent.messages[0].content[2].text, /id="s1"/);
+
+// --- a wrong tool is a malformed answer: 502, retried by the browser
+wrongTool = true;
+assert.equal((await section(quick.ticket, "s3")).status, 502);
+wrongTool = false;
+
+// --- the editor: only what this ticket delivered
+assert.equal((await editor(quick.ticket, "quick", { findings: [{ id: "s3-f0", title: "T", severity: "major", why: "W", quotes: [] }] })).status, 400, "from a section that hasn't come back");
+r = await editor(quick.ticket);
+assert.equal(r.status, 200, await r.clone().text());
+assert.equal((await editor(quick.ticket)).status, 409, "already put together");
+// A section's result lost to a Cancel (the server had finished it): it may run once more, and the report again with it.
+assert.equal((await section(quick.ticket, "s1")).status, 200, "a section that came back may run once more");
+assert.equal((await editor(quick.ticket)).status, 200, "and the report be put together again with it");
+assert.equal((await editor(quick.ticket)).status, 409, "but not again without something new");
+r = await section(quick.ticket, "s1");
+assert.equal(r.status, 409, "only once more");
+assert.match(await r.text(), /run again once/);
+
+// --- thorough: the checklist is a paid part of the ticket
+const thorough = (await (await begin("thorough", ["s1", "s2", "s3"])).json()) as Paid;
+assert.equal(thorough.coins, reviewPrice("thorough", billed));
+assert.equal((await checklist(thorough.ticket)).status, 200);
+assert.equal((await checklist(thorough.ticket)).status, 200, "a delivered part may run once more");
+assert.equal((await checklist(thorough.ticket)).status, 409, "and only once");
+
+// --- four tries per section, then its coins come back
+const standard = (await (await begin("standard", ["s1"])).json()) as Paid;
 upstreamDown = true;
-for (let i = 1; i <= 4; i++) assert.equal((await extract(t1.ticket, "s2-p2")).status, 502, `try ${i}`);
+for (let i = 0; i < 4; i++) assert.equal((await section(standard.ticket, "s1", "standard")).status, 502);
+assert.equal((await section(standard.ticket, "s1", "standard")).status, 409, "out of tries");
 upstreamDown = false;
-const callsBefore = upstreamCalls;
-r = await extract(t1.ticket, "s2-p2");
-assert.equal(r.status, 409, "no tries left for that section");
-assert.match(await r.text(), /no tries left/);
-assert.equal(upstreamCalls, callsBefore, "and it never reached Claude");
 
-// --- a pass refused by today's capacity doesn't use up the ticket
-const left = async (ticket: string) => (await env.DB.prepare("SELECT extract_left AS n FROM review_tickets WHERE id_hash = ?").bind(await sha256Hex(ticket)).first<{ n: number }>())?.n;
-const dayKey = capKeys("reviewPass", ann.id, Date.now()).all;
-const usedBefore = await usedOf(dayKey);
-await setUsed(dayKey, DAILY_PASS_CAP);
-r = await begin(annCookie); // (refused too: nothing charged)
-assert.equal(r.status, 429);
-await setUsed(dayKey, usedBefore);
-
-// --- a finished run keeps its coins; an unfinished one gets back the share it didn't deliver, once
-assert.equal((await synthesize(t1.ticket)).status, 200);
-r = await begin(annCookie);
-const t2 = (await r.json()) as { ticket: string; balance: number };
-assert.equal(t2.balance, 12);
-const t2left = await left(t2.ticket);
-await setUsed(dayKey, DAILY_PASS_CAP);
-assert.equal((await extract(t2.ticket)).status, 429);
-assert.equal(await left(t2.ticket), t2left, "a capacity refusal spends no pass");
-await setUsed(dayKey, usedBefore);
-assert.equal((await extract(t2.ticket)).status, 200);
-assert.equal((await extract(t2.ticket)).status, 409, "the same section isn't sent twice");
-r = await begin(annCookie);
-const t3 = (await r.json()) as { ticket: string; balance: number };
-for (const c of chunks) assert.equal((await extract(t3.ticket, c.id, "x".repeat(100))).status, 200);
-assert.equal(t3.balance, 6);
-const later = Date.now() + REVIEW_TICKET_TTL_MS + 1000; // tickets expire on the handler's clock
-await sweepTickets(env.DB, later);
-await sweepTickets(env.DB, later);
-// Sections weigh by length (20k, 24k, 12k of 56k); the cross-check like an average one; rounded up.
-// t2: only s1 came back, no cross-check: 6 * (36k*3 + 56k) / (56k*4) = 4.4, so 5 back.
-// t3: every section but no cross-check: 6 * 56k / (56k*4) = 1.5, so 2 back.
-// t1: finished, but s2-p2 (12k) never came back: 6 * 36k / 224k = 0.96, so 1 back.
-assert.equal(await balance(env.DB, ann.id), 6 + 5 + 2 + 1, "refunds for what wasn't delivered, once");
-assert.equal((await extract(t2.ticket)).status, 403, "an expired ticket is gone");
-
-// --- no pass starts within five minutes of the ticket's end (a pass can run that long)
-r = await begin(annCookie);
-const t4 = (await r.json()) as { ticket: string };
-const expires = (await env.DB.prepare("SELECT expires_at AS e FROM review_tickets WHERE id_hash = ?").bind(await sha256Hex(t4.ticket)).first<{ e: number }>())!.e;
-await markDelivered(env.DB, t4.ticket, "s1"); // (a cross-check needs a section that came back)
-assert.equal(await claimReviewPass(env.DB, t4.ticket, ann.id, { pass: "synthesize", tier: "quick" }, expires - 6 * 60_000), null);
-assert.match((await claimReviewPass(env.DB, t4.ticket, ann.id, { pass: "synthesize", tier: "quick" }, expires - 4 * 60_000))?.message ?? "", /expired/);
-
-// --- the audit's attack: one big section and many one-character ones buy almost nothing
-await credit(env.DB, ann.id, 20, "admin", "seed3", now);
-const tooMany = Array.from({ length: MAX_REVIEW_CHUNKS + 1 }, (_, i) => ({ id: `s${i + 1}`, chars: 100 }));
-assert.equal((await begin(annCookie, { chunks: tooMany })).status, 400, "no more sections than a real paper has");
-const decoys = [{ id: "s1", chars: 24_000 }, ...Array.from({ length: MAX_REVIEW_CHUNKS - 1 }, (_, i) => ({ id: `s${i + 2}`, chars: 1 }))];
-r = await begin(annCookie, { chunks: decoys });
-const t5 = (await r.json()) as { ticket: string; coins: number; balance: number };
-// each tiny section is billed as MIN_BILLED_SECTION_CHARS: 24k + 59 x 2k = 142k characters, a quick review's 8 coins
-assert.equal(MIN_BILLED_SECTION_CHARS, 2000);
-assert.equal(t5.coins, reviewPrice("quick", 24_000 + (MAX_REVIEW_CHUNKS - 1) * MIN_BILLED_SECTION_CHARS));
-assert.equal(t5.coins, 8);
-const big = "x".repeat(24_000);
-const calls0 = upstreamCalls;
-assert.equal((await extract(t5.ticket, "s1", big)).status, 200);
-for (let i = 0; i < 5; i++) assert.equal((await extract(t5.ticket, "s1", big)).status, 409, "the big section is sent once");
-assert.equal((await synthesize(t5.ticket)).status, 200);
-assert.equal((await synthesize(t5.ticket)).status, 409, "and cross-checked once");
-assert.equal(upstreamCalls - calls0, 2, "two calls for what was paid, not hundreds");
-await sweepTickets(env.DB, Date.now() + REVIEW_TICKET_TTL_MS + 1000);
-const t5refund = await env.DB.prepare("SELECT delta FROM coin_ledger WHERE kind = 'review_refund' AND ref = ?").bind(await sha256Hex(t5.ticket)).first<number>("delta");
-// refunded at what they were billed: 8 * (118k * 60) / (142k * 61) = 6.5, so 7 back
-assert.equal(t5refund, 7, "the undelivered decoys come back at the size they were billed");
-
-// --- the global daily cap is checked before anything is charged
+// --- expiry refunds what didn't come back, by its share (the editor and the checklist weigh as an average section)
+await env.DB.prepare(
+  `INSERT INTO review_tickets (id_hash, user_id, tier, coins, chunks, extract_left, synth_left, created_at, expires_at) VALUES ('old', ?1, 'quick', 4, '{"s1":2000,"s2":24000}', 8, 4, ?2, ?2)`,
+)
+  .bind(ann.id, now)
+  .run(); // a ticket from before this change
+const share = (coins: number, weights: Record<string, number>, delivered: string[], edited: boolean) => {
+  const n = Object.keys(weights).length;
+  const total = Object.values(weights).reduce((a, b) => a + b, 0);
+  const got = delivered.reduce((a, id) => a + weights[id], 0);
+  return Math.ceil((coins * ((total - got) * n + (edited ? 0 : total))) / (total * (n + 1)));
+};
+const expected =
+  share(quick.coins, { s1: 2000, s3: 24_000 }, ["s1"], true) +
+  share(thorough.coins, { s1: 2000, s2: 20_000, s3: 24_000, checklist: Math.round(46_000 / 3) }, ["checklist"], false) +
+  share(standard.coins, { s1: 2000 }, [], false) +
+  4;
 const before = await balance(env.DB, ann.id);
-await setUsed(dayKey, DAILY_PASS_CAP - 2);
-assert.equal((await begin(annCookie)).status, 429);
-assert.equal(await balance(env.DB, ann.id), before);
-await setUsed(dayKey, 0);
+await sweepTickets(env.DB, now + 3 * 60 * 60 * 1000);
+assert.equal((await balance(env.DB, ann.id)) - before, expected);
 
-// --- and so is each account's own daily limit: one account can't use up everyone's day
-const annKey = capKeys("reviewPass", ann.id, Date.now()).user;
-await setUsed(annKey, DAILY.reviewPass.user - 2);
-r = await begin(annCookie);
-assert.equal(r.status, 429);
-assert.match(await r.text(), /this account/i);
-assert.equal(await balance(env.DB, ann.id), before, "nothing charged");
-await setUsed(annKey, 0);
-r = await begin(annCookie);
-const t6 = (await r.json()) as { ticket: string };
-await setUsed(annKey, DAILY.reviewPass.user);
-const t6left = await left(t6.ticket);
-assert.equal((await extract(t6.ticket)).status, 429, "a pass over the account's limit is refused");
-assert.equal(await left(t6.ticket), t6left, "and spends none of the ticket");
-await setUsed(annKey, 0);
-const u0 = await usedOf(annKey);
-assert.equal((await extract(t6.ticket)).status, 200);
-assert.equal(await usedOf(annKey), u0 + 1, "each pass that reaches Claude counts against the account");
+// --- today's limit: a review whose passes don't fit isn't charged
+await env.DB.prepare("INSERT INTO rate_limits (key, count, expires_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET count = ?2")
+  .bind(capKeys("reviewPass", ann.id, Date.now()).user, DAILY.reviewPass.user - 3, Date.now() + 86_400_000)
+  .run();
+const left = await balance(env.DB, ann.id);
+assert.equal((await begin("thorough", ["s1", "s2", "s3"])).status, 429, "five passes don't fit in three");
+assert.equal(await balance(env.DB, ann.id), left);
 
-// --- a cross-check needs a section that came back, and cites only sections that did (the free-synthesis attack)
-await credit(env.DB, ann.id, 20, "admin", "seed4", now);
-r = await begin(annCookie);
-const t7 = (await r.json()) as { ticket: string };
-const calls7 = upstreamCalls;
-r = await synthesize(t7.ticket);
-assert.equal(r.status, 409, "nothing to cross-check before a section has come back");
-assert.equal(upstreamCalls, calls7, "and it never reached Claude");
-assert.equal((await extract(t7.ticket, "s1")).status, 200);
-const entry = (id: string) => ({ id, section: "Intro", quote: "a quote from the paper", measure: "n", values: [{ value: 1, unit: null }] });
-r = await synthesize(t7.ticket, { ledger: [entry("s2-p1-c1")] });
-assert.equal(r.status, 400, "no entries from a section that didn't come back");
-r = await synthesize(t7.ticket, { ledger: Array.from({ length: TIER_PLAN.quick.claimsCap + 1 }, (_, i) => entry(`s1-c${i + 1}`)) });
-assert.equal(r.status, 400, "no more entries per section than its extract pass could return");
-r = await synthesize(t7.ticket, { notes: Array.from({ length: 6 }, (_, i) => ({ id: `s1-n${i + 1}`, section: "Intro", description: "d" })) });
-assert.equal(r.status, 400, "nor more notes");
-const calls7b = upstreamCalls;
-assert.equal((await synthesize(t7.ticket, { ledger: [entry("s1-c1")] })).status, 200);
-assert.equal(upstreamCalls, calls7b + 1, "the refused cross-checks never reached Claude");
-
-// --- Retry after a finished cross-check: a section that came back since is cross-checked again, once
-assert.equal((await synthesize(t7.ticket)).status, 409, "nothing new since the last cross-check");
-assert.equal((await extract(t7.ticket, "s2-p1")).status, 200);
-r = await synthesize(t7.ticket, { ledger: [entry("s1-c1"), entry("s2-p1-c1")] });
-assert.equal(r.status, 200, "the retried section is cross-checked with the rest");
-assert.equal((await synthesize(t7.ticket)).status, 409, "and not again without another");
 console.log("reviewTicket.selfcheck: OK");

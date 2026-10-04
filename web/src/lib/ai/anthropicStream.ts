@@ -18,7 +18,8 @@ export class TruncatedOutputError extends Error {
   override name = "TruncatedOutputError";
 }
 
-type Usage = { input_tokens?: number; output_tokens?: number };
+type Usage = { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
+type Counted = { input: number; output: number; cacheRead: number; cacheWrite: number };
 type SseEvent = {
   type?: string;
   index?: number;
@@ -32,7 +33,7 @@ type SseEvent = {
 export async function callAnthropicTool(
   apiKey: string,
   body: Record<string, unknown>,
-  opts: { toolName: string; timeoutMs: number; onUsage?: (u: { input: number; output: number }) => void }
+  opts: { toolName: string; timeoutMs: number; onUsage?: (u: Counted) => void }
 ): Promise<{ toolInput: unknown | undefined; stopReason: string | undefined }> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -46,7 +47,7 @@ export async function callAnthropicTool(
   const decoder = new TextDecoder();
   const blocks = new Map<number, { name: string; json: string }>();
   let stopReason: string | undefined;
-  let usage: { input: number; output: number } | null = null;
+  let usage: Counted | null = null;
   let buffer = "";
 
   const handle = (raw: string) => {
@@ -72,7 +73,19 @@ export async function callAnthropicTool(
     }
     if (evt.type === "message_delta" && evt.delta?.stop_reason) stopReason = evt.delta.stop_reason;
     const u = evt.type === "message_start" ? evt.message?.usage : evt.type === "message_delta" ? evt.usage : undefined;
-    if (u) usage = { input: u.input_tokens ?? usage?.input ?? 0, output: u.output_tokens ?? usage?.output ?? 0 }; // message_delta's counts are running totals
+    if (u) {
+      // A cached prompt token is billed at 1.25x input when written and 0.1x when read: counted
+      // here as that much input, so the activity log's cost (aiCost) stays right.
+      const counts = u.input_tokens !== undefined || u.cache_creation_input_tokens !== undefined || u.cache_read_input_tokens !== undefined;
+      const cacheWrite = u.cache_creation_input_tokens ?? usage?.cacheWrite ?? 0;
+      const cacheRead = u.cache_read_input_tokens ?? usage?.cacheRead ?? 0;
+      usage = {
+        input: counts ? Math.round((u.input_tokens ?? 0) + 1.25 * cacheWrite + 0.1 * cacheRead) : (usage?.input ?? 0),
+        output: u.output_tokens ?? usage?.output ?? 0, // message_delta's counts are running totals
+        cacheRead,
+        cacheWrite,
+      };
+    }
   };
 
   for (;;) {

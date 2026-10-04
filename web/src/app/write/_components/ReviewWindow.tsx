@@ -6,8 +6,8 @@ import type { Citation } from "@/lib/review/reviewTypes";
 import ErrorText from "@/components/ui/ErrorText";
 import RulesCheckPanel from "@/components/checks/RulesCheckPanel";
 import JournalPicker from "@/app/review/_components/JournalPicker";
-import ReviewRunner from "@/app/review/_components/ReviewRunner";
-import type { ReviewApi } from "@/app/review/_components/useReview";
+import ReviewRunner, { LastReview } from "@/app/review/_components/ReviewRunner";
+import { NO_JOURNAL, type ReviewApi } from "@/app/review/_components/useReview";
 import CompileFirst from "./CompileFirst.tsx";
 
 // The Review window: the paper (the compiled PDF, or the Word document),
@@ -43,7 +43,7 @@ export default function ReviewWindow({
 
   if (!paperFile) return <CompileFirst compiling={compiling} onCompile={onCompile} />;
   const stale = r.source !== null && r.source !== paperFile && !r.reviewLoading; // loading a new draft would abort a run that costs a review
-  const onTarget = !!pilotId && !!r.selectedJournalId && shortId(r.selectedJournalId) === shortId(pilotId);
+  const onTarget = !!pilotId && !!r.selectedJournalId && r.selectedJournalId !== NO_JOURNAL && shortId(r.selectedJournalId) === shortId(pilotId);
   const jump = (c: Citation) => setNotFound(!onJump(c.quote));
 
   return (
@@ -71,11 +71,11 @@ export default function ReviewWindow({
             </p>
           ) : (
             <>
-              {!onTarget && (
+              {!onTarget && r.selectedJournalId === null && (
                 <p className="text-ink-soft">
                   {targetName
-                    ? `Your target journal, ${targetName}, isn't among the pilot journals with hand-verified guidelines yet. Pick the closest.`
-                    : "Pick the journal to review against."}
+                    ? `Your target journal, ${targetName}, isn't among the journals with hand-verified guidelines yet. Choose No specific journal and paste its guidelines for authors into the notes, or pick the closest.`
+                    : "Pick the journal to review against, or none."}
                 </p>
               )}
               <fieldset disabled={r.reviewLoading} className="m-0 min-w-0 border-0 p-0">
@@ -94,11 +94,11 @@ export default function ReviewWindow({
         </section>
       )}
 
-      {r.selectedRules && (
+      {r.journalChosen && (
         <section className="mt-10 border-t border-line pt-6">
           <h3 className="font-serif text-lg font-medium">Get it reviewed</h3>
           <p className="mt-1 text-ink-soft">
-            An LLM review from Claude: inconsistencies, statistical reporting gaps, journal fit. The one feature that sends your whole paper&apos;s text off
+            An LLM review from Claude: each section reviewed in turn, problems across the paper, and journal fit. The one feature that sends your whole paper&apos;s text off
             this device (Rewrite sends only a passage you select), and only after you confirm the notice.
           </p>
           <ReviewRunner review={r} onCitation={jump} />
@@ -109,6 +109,7 @@ export default function ReviewWindow({
           )}
         </section>
       )}
+      {!r.journalChosen && <LastReview review={r} onCitation={jump} />}
     </div>
   );
 }

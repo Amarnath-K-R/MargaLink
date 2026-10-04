@@ -10,6 +10,7 @@
 import { chromium } from "playwright";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mockAccount } from "../smoke/mock_account.mjs";
+import { reviewAnswer } from "../smoke/mock_review.mjs";
 import { BETA } from "../../src/lib/access/beta.ts";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { paperDocx, TEXT } from "../fixtures/docx_fixtures.mjs";
@@ -30,37 +31,8 @@ page.on("pageerror", (e) => console.log("pageerror:", e.message));
 page.on("dialog", (d) => void d.accept());
 await mockAccount(ctx, { balance: 42, paddle: { env: "sandbox", token: "test_guide", prices: { S: "pri_s", M: "pri_m", L: "pri_l", PRO_MONTH: "pri_pm", PRO_YEAR: "pri_py" } } });
 
-// The review's passes, mocked: every extract quotes its chunk's first sentence.
-const firstSentence = (t) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12 && l !== l.toUpperCase()) ?? t.trim()).split(". ")[0];
-await page.route("**/api/review", async (route) => {
-  const req = route.request().postDataJSON();
-  if (req.pass === "extract") {
-    const q = firstSentence(req.chunk.text);
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        claims: [{ quote: q, measure: `count in ${req.chunk.id}`, values: [{ value: 1, unit: null }] }],
-        statisticalReporting: [{ description: `An effect is reported without a confidence interval in ${req.chunk.title}`, severity: "minor", quote: q }],
-        notes: [],
-      }),
-    });
-  }
-  const ids = req.ledger.slice(0, 2).map((e) => e.id);
-  return route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      journalFit: { assessment: "possible", explanation: "The scope overlaps the journal's remit, though the clinical angle is thin for its readership." },
-      inconsistencies: ids.length === 2 ? [{ description: "The number of sampling sites differs between the abstract and the methods.", claimIds: ids }] : [],
-      summary: [
-        { text: "Reconcile the number of sampling sites across sections.", severity: "major", refs: ids },
-        { text: "Report confidence intervals alongside the effect sizes.", severity: "minor", refs: ids.slice(0, 1) },
-      ],
-      otherObservations: ["Consider a short limitations paragraph."],
-    }),
-  });
-});
+// The review's passes, mocked (scripts/smoke/mock_review.mjs).
+await page.route("**/api/review", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reviewAnswer(route.request().postDataJSON())) }));
 
 const pct = (v, total) => Math.max(2, Math.min(98, Math.round((v / total) * 1000) / 10));
 const loc = (l) => (typeof l === "string" ? page.locator(l).first() : l);
@@ -154,11 +126,11 @@ if (want("review")) {
   await tidy();
   const step = (t) => `main section.clay:has(h2:text("${t}"))`;
   await shot("review-attach", [step("Attach your paper")], ['main button[aria-label^="Upload"]', "text=Loaded test-paper.pdf"]);
-  await shot("review-journal", [step("Choose a journal")], [page.getByRole("button", { name: /^JAMA/ }), page.getByRole("button", { name: /^IEEE Access/ }), `${step("Choose a journal")} .sheet`]);
+  await shot("review-journal", [step("Choose a journal")], [page.getByRole("button", { name: /^JAMA/ }), page.getByRole("button", { name: /^IEEE Access/ }), page.getByTestId("no-journal"), `${step("Choose a journal")} .sheet`]);
   await page.locator('[data-testid="review-outline"] summary').click();
   await page.waitForTimeout(300);
   const s3 = step("Get it reviewed");
-  await shot("review-depth", [`${s3} .grid:has([aria-pressed])`, `${s3} button.clay-primary`], [page.getByRole("button", { name: /^Quick/ }), page.getByRole("button", { name: /^Standard/ }), page.getByRole("button", { name: /^Thorough/ }), '[data-testid="review-outline"] select', '[data-testid="review-outline"] #outline-add-heading', `${s3} button.clay-primary`]);
+  await shot("review-depth", [`${s3} .grid:has([aria-pressed])`, `${s3} button.clay-primary`], [page.getByRole("button", { name: /^Quick/ }), page.getByRole("button", { name: /^Standard/ }), page.getByRole("button", { name: /^Thorough/ }), '[data-testid="review-outline"] select', '[data-testid="review-outline"] #outline-add-heading', '[data-testid="review-notes"]', `${s3} button.clay-primary`]);
   await page.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
   await page.waitForSelector('[role="alertdialog"]');
   await shot("review-consent", ['[role="alertdialog"]'], ['[role="alertdialog"] p.text-away', '[role="alertdialog"] p.font-serif', '[data-testid="review-price"]', "text=Send it and review"]);
@@ -166,9 +138,9 @@ if (want("review")) {
   await page.click("text=Send it and review");
   await page.waitForSelector('[data-testid="review-coverage"]', { timeout: 60_000 });
   await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });
-  const res = page.locator("div.sheet:has([data-testid=review-coverage])");
-  await shot("review-result", [res.locator("p").first(), res.locator("[data-testid=review-summary]")], [res.locator(".rounded-full").first(), res.locator("[data-testid=review-summary] > p"), res.locator("[data-testid=review-summary] li li").first()]);
-  await shot("review-result-more", [res.locator('p.font-serif:text("Inconsistencies")'), res.locator("[data-testid=review-coverage]")], [res.locator('p.font-serif:text("Inconsistencies")'), res.locator('p.font-serif:text("Statistical reporting")'), res.locator("[data-testid=review-coverage]")]);
+  const res = page.locator('[data-testid="review-report"]');
+  await shot("review-result", [res.locator('[data-testid="review-overview"]')], [res.locator('[data-testid="review-overview"] .rounded-full').first(), res.locator('[data-testid="review-fix-first"] > p'), res.locator('[data-testid="review-fix-first"] li').first(), res.locator("button:text('Download')")]);
+  await shot("review-result-more", [res.locator('[data-testid="review-sections"]'), res.locator('[data-testid="review-coverage"]')], [res.locator('[data-testid="review-sections"] details').first(), res.locator("[data-finding]").first(), res.locator('[data-testid="review-coverage"]')]);
   await page.evaluate(() => localStorage.removeItem("margalink-review-uses"));
 }
 

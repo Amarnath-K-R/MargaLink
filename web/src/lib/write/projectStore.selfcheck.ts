@@ -140,6 +140,18 @@ await assert.rejects(store.meta(copy.id));
   const again = await store.importZip("Backup", await store.exportZip(p.id));
   assert.equal(await store.lastPdf(again.id), null, "not in the backup");
   await store.remove(again.id);
+
+  // the last review: kept beside the last PDF, never a project file, never in a backup
+  assert.equal(await store.lastReview(p.id), null);
+  await store.saveLastReview(p.id, '{"version":2}');
+  assert.equal(await store.lastReview(p.id), '{"version":2}');
+  assert.ok(!(await store.files(p.id)).some((f) => f.includes("review.json")));
+  const backup = await store.importZip("Backup", await store.exportZip(p.id));
+  assert.equal(await store.lastReview(backup.id), null, "not in the backup");
+  await store.remove(backup.id);
+  await store.saveLastReview(p.id, null);
+  assert.equal(await store.lastReview(p.id), null);
+  await store.saveLastReview(p.id, null); // forgetting twice is fine
 }
 
 // 6c. a project can carry the data packs its template needs

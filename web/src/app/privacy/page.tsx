@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 // and bump the version (accounts/notice.ts) and the date below.
 // users.notice_version records which version each account agreed to; new
 // accounts get NOTICE_VERSION (access/access.ts admitUser).
-const VERSION = `Version ${NOTICE_VERSION}, last updated 3 October 2026`;
+const VERSION = `Version ${NOTICE_VERSION}, last updated 4 October 2026`;
 
 const TOC: TocItem[] = [
   { id: "summary", label: "In short" },
@@ -156,7 +156,7 @@ export default function PrivacyPage() {
               a server. Clearing this site&apos;s data in your browser deletes them, so use &ldquo;Download backup&rdquo; to keep a copy or move to
               another computer. Spelling and grammar are checked in your browser too, and the words you add to a paper&apos;s dictionary are kept with
               that paper. Two features can send a draft&apos;s text, each only after its notice (below): the AI review, if you run it, sends the
-              paper&apos;s text, and Rewrite, if you turn it on for a paper, a passage you select.
+              paper&apos;s text, and Rewrite, if you turn it on for a paper, a passage you select. A finished review is kept in your browser too, with its paper in the writing workspace and the last one on the review page, until you forget it.
             </p>
           </Section>
 
@@ -172,9 +172,11 @@ export default function PrivacyPage() {
                   name: "AI pre-submission review",
                   what: (
                     <>
-                      Your paper&apos;s text, a section at a time, then one cross-check over the numbers found, with the chosen journal&apos;s guidelines.
-                      Author names and email addresses are stripped first (best effort). Sections you mark &ldquo;Don&apos;t send&rdquo; are never
-                      sent.
+                      Your paper&apos;s text with every request, each doing one part of the review (a section each, the reporting checklist at thorough
+                      depth, then the final report), with the chosen journal&apos;s guidelines if you chose one, and any notes you add for the review
+                      (your instructions, or your journal&apos;s guidelines). Anthropic may hold the text in memory for a few minutes to
+                      reuse it between these requests. Author names and email addresses are stripped first (best effort). Sections you mark
+                      &ldquo;Don&apos;t send&rdquo;, and the references, are never sent.
                     </>
                   ),
                   away: true,

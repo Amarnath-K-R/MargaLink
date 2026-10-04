@@ -12,13 +12,20 @@ export const FIGURE_PRICE = 1;
 export const REVIEW_TICKET_TTL_MS = 2 * 60 * 60 * 1000;
 
 // [coins for the first 50,000 characters, coins for each further 50,000]
-const REVIEW_PRICE: Record<ReviewTier, [number, number]> = { quick: [4, 2], standard: [6, 3], thorough: [10, 5] };
+// Each further 50,000 characters costs what the first did: a review's cost follows its sections, and long papers have more (live check, 2026-10-04).
+const REVIEW_PRICE: Record<ReviewTier, [number, number]> = { quick: [4, 4], standard: [6, 6], thorough: [10, 10] };
 const PRICE_STEP = 50_000;
 
 /** The price of a review of `chars` characters (what will actually be sent). */
 export function reviewPrice(tier: ReviewTier, chars: number): number {
   const [base, step] = REVIEW_PRICE[tier];
   return base + step * Math.ceil(Math.max(0, chars - PRICE_STEP) / PRICE_STEP);
+}
+
+/** The most characters a review's price pays for (the inverse of reviewPrice): how much paper each of its passes may carry. */
+export function maxPaidChars(tier: ReviewTier, coins: number): number {
+  const [base, step] = REVIEW_PRICE[tier];
+  return coins < base ? 0 : PRICE_STEP * (1 + Math.floor((coins - base) / step));
 }
 
 // Rewrite: a coin per 500 words of the passage sent, rounded up (at least

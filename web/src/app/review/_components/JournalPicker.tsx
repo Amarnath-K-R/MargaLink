@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { JOURNAL_RULES } from "@/lib/journals/journalRules";
+import { NO_JOURNAL } from "./useReview.ts";
 
-// The pilot journals as clay cards. The caller supplies the heading.
+// The pilot journals as clay cards, and no journal at all. The caller supplies the heading.
 // `showMatchLink` false inside the writing workspace, where leaving for
 // /match would close the project (its Match window is a click away instead).
 export default function JournalPicker({
@@ -30,6 +31,12 @@ export default function JournalPicker({
         )}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
+        <button type="button" onClick={() => onSelect(NO_JOURNAL)} aria-pressed={selectedJournalId === NO_JOURNAL} className="clay-card px-5 py-4" data-testid="no-journal">
+          <p className="font-serif text-[1.05rem] font-medium">No specific journal</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink-soft">
+            The paper reviewed on its own merits. Writing for a journal that isn&apos;t listed? Paste its guidelines for authors into the notes.
+          </p>
+        </button>
         {JOURNAL_RULES.map((j) => (
           <button
             key={j.journalId}

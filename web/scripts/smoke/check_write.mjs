@@ -10,6 +10,7 @@
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import { mockAccount } from "./mock_account.mjs";
+import { reviewAnswer } from "./mock_review.mjs";
 
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../../.smoke/", import.meta.url).pathname;
 mkdirSync(SCRATCH, { recursive: true });
@@ -28,37 +29,8 @@ page.on("request", (r) => {
 });
 page.on("dialog", (d) => void d.accept()); // a project's delete still confirms in the browser
 
-// The Review window's passes go to a mocked /api/review (the shape check_review.mjs
-// uses): every extract quotes its chunk's first sentence (skipping the all-caps
-// running head IEEEtran prints, which no source line spells the same way), the
-// cross-check cites the first two. Never a real Anthropic call.
-const firstSentence = (t) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12 && l !== l.toUpperCase()) ?? t.trim()).split(". ")[0];
-await page.route("**/api/review", async (route) => {
-  const req = route.request().postDataJSON();
-  if (req.pass === "extract") {
-    const q = firstSentence(req.chunk.text);
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        claims: [{ quote: q, measure: `count in ${req.chunk.id}`, values: [{ value: 1, unit: null }] }],
-        statisticalReporting: [{ description: `Result reported without a confidence interval in ${req.chunk.title}`, severity: "minor", quote: q }],
-        notes: [],
-      }),
-    });
-  }
-  const ids = req.ledger.slice(0, 2).map((e) => e.id);
-  return route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      journalFit: { assessment: "possible", explanation: "Scope overlaps the journal's remit." },
-      inconsistencies: ids.length === 2 ? [{ description: "The sample size is stated differently in two places.", claimIds: ids }] : [],
-      summary: [{ text: "Reconcile the sample size across sections.", severity: "major", refs: ids }],
-      otherObservations: ["Consider adding a limitations paragraph."],
-    }),
-  });
-});
+// The Review window's passes go to a mocked /api/review (scripts/smoke/mock_review.mjs). Never a real Anthropic call.
+await page.route("**/api/review", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reviewAnswer(route.request().postDataJSON())) }));
 
 let failed = false;
 function check(label, ok) {
@@ -347,13 +319,16 @@ await page.waitForFunction(
 if (!(await reviewWindow.getByText("(your target journal)").count())) await reviewWindow.getByRole("button", { name: /^JAMA/ }).click();
 await reviewWindow.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
 await reviewWindow.locator('[role="alertdialog"]').waitFor();
-check("the consent notice appears inside the window", /in \d+ short requests/.test(await reviewWindow.locator('[role="alertdialog"]').innerText()));
+check("the consent notice appears inside the window", /in \d+ (?:short )?requests/.test(await reviewWindow.locator('[role="alertdialog"]').innerText()));
 await reviewWindow.getByLabel(/I agree to send this text to Anthropic/).check();
 await reviewWindow.getByText("Send it and review").click();
 await reviewWindow.locator('[data-testid="review-coverage"]').waitFor({ timeout: 60_000 });
 await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });
+// Sections with only minor points start collapsed: open the first one, as a person would, to reach its quotes.
+await reviewWindow.locator("[data-testid=review-sections] details:not([open]) > summary").first().click({ timeout: 2000 }).catch(() => {});
 const jumps = reviewWindow.getByRole("button", { name: "Jump to source" });
 check("review citations offer Jump to source", (await jumps.count()) >= 1);
+check("Fix these first says where, with Jump to source", (await reviewWindow.locator('[data-testid="review-fix-first"] li li button:text-is("Jump to source")').count()) >= 1);
 await jumps.first().click();
 await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 }).catch(() => {});
 check(
@@ -363,6 +338,22 @@ check(
 check("the Review window's review was paid for once", account.starts.length === 1);
 check("the status bar says something was sent", (await page.locator('[data-testid="workspace"]').textContent()).includes("carried text you agreed to send"));
 check(`the review's requests are the only ones with a body (${bodyRequests.length})`, bodyRequests.length > 0 && bodyRequests.every((u) => u.endsWith("/api/review") || u.endsWith("/api/review/start")));
+// The Review window's notes are kept with the paper (its settings, in this browser), once typing pauses.
+await page.click('[role="group"][aria-label="Tools"] button:has-text("Review")');
+const REVIEW_NOTES = "Our journal asks for STROBE; check the reporting closely.";
+await reviewWindow.getByTestId("review-notes").fill(REVIEW_NOTES);
+await page.waitForTimeout(1500);
+const keptNotes = await page.evaluate(async () => {
+  const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("margalink-write");
+  for await (const [, h] of root.entries()) {
+    if (h.kind !== "directory") continue;
+    const meta = await h.getFileHandle("project.json").then((f) => f.getFile()).then((f) => f.text()).then(JSON.parse).catch(() => null);
+    if (meta?.reviewNotes) return meta.reviewNotes;
+  }
+  return null;
+});
+check("the Review window's notes are kept with the paper", keptNotes === REVIEW_NOTES);
+await page.keyboard.press("Escape");
 
 // --- the Figures window: a figure from a spreadsheet, inserted into the paper (the plain article loads graphicx), reopened from its recipe ---
 await page.click("text=← All projects");

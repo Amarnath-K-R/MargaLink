@@ -62,7 +62,7 @@ export default function OutlineEditor({
                 {r.title}
                 <span className="ml-2 text-xs text-ink-soft">
                   {countWords(r.text).toLocaleString()} words
-                  {r.excluded ? " · won't be sent" : r.reviewedAtTier ? "" : " · not reviewed at this depth"}
+                  {r.excluded ? " · won't be sent" : r.reviewedAtTier ? "" : " · read for context only at this depth"}
                 </span>
               </span>
               <select

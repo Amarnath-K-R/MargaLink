@@ -78,8 +78,8 @@ export default function PricingPage() {
             </tbody>
           </table>
           <p className="border-t border-line/70 px-5 py-3 text-xs leading-relaxed text-ink-soft">
-            Priced by what&apos;s actually sent: sections you mark &ldquo;Don&apos;t send&rdquo;, and the ones a depth skips, don&apos;t count; a section
-            shorter than 2,000 characters counts as 2,000. Resuming or retrying a review costs nothing more. Each account can make up to 150 review
+            Priced by what&apos;s actually sent: every section goes with each request, as the paper the reviewers read, at every depth, so only sections
+            you mark &ldquo;Don&apos;t send&rdquo; don&apos;t count; a section shorter than 2,000 characters counts as 2,000; notes you add for the review count too. Resuming or retrying a review costs nothing more. Each account can make up to 150 review
             passes, 50 Ask Claude requests and 100 rewrites a day.
           </p>
         </div>

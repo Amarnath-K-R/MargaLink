@@ -22,6 +22,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { unzipSync, strFromU8 } from "fflate";
 import { asMacroDocument, asTemplate, docText, oldWordDoc, paperDocx, part, TEXT } from "../fixtures/docx_fixtures.mjs";
 import { mockAccount } from "./mock_account.mjs";
+import { reviewAnswer } from "./mock_review.mjs";
 
 // ORIGIN: another server, e.g. the production build under its real headers
 // (wrangler pages dev out, from a folder without functions/, so no beta gate).
@@ -53,17 +54,8 @@ const account = await mockAccount(context, { origin: O }); // the Review window'
 // except eval: the zip reader's util polyfill (is-generator-function) probes
 // for generators with Function() inside a try, and falls back when it's refused.
 await context.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => e.blockedURI !== "eval" && console.error(`CSP blocked ${e.blockedURI} (${e.violatedDirective})`)));
-// The review's passes go to a mocked /api/review (as check_write.mjs): every
-// extract quotes its section's first sentence. Never a real Anthropic call.
-const firstSentence = (t) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12) ?? t.trim()).split(". ")[0];
-await context.route("**/api/review", async (route) => {
-  const req = route.request().postDataJSON();
-  if (req.pass === "extract") {
-    const q = firstSentence(req.chunk.text);
-    return route.fulfill({ json: { claims: [{ quote: q, measure: `count in ${req.chunk.id}`, values: [{ value: 1, unit: null }] }], statisticalReporting: [], notes: [] } });
-  }
-  return route.fulfill({ json: { journalFit: { assessment: "possible", explanation: "Scope overlaps." }, inconsistencies: [], summary: [{ text: "Reconcile the sample size.", severity: "major", refs: req.ledger.slice(0, 1).map((e) => e.id) }], otherObservations: [] } });
-});
+// The review's passes go to a mocked /api/review (scripts/smoke/mock_review.mjs). Never a real Anthropic call.
+await context.route("**/api/review", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reviewAnswer(route.request().postDataJSON())) }));
 
 let failed = false;
 const check = (label, ok) => {
@@ -410,12 +402,14 @@ await page.waitForFunction(
 if (!(await review.getByText("(your target journal)").count())) await review.getByRole("button", { name: /^JAMA/ }).click();
 await review.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
 await review.locator('[role="alertdialog"]').waitFor();
-check("the review's consent notice appears inside the window", /in \d+ short requests/.test(await review.locator('[role="alertdialog"]').innerText()));
+check("the review's consent notice appears inside the window", /in \d+ (?:short )?requests/.test(await review.locator('[role="alertdialog"]').innerText()));
 await review.getByLabel(/I agree to send this text to Anthropic/).check();
 consented = true;
 await review.getByText("Send it and review").click();
 await review.locator('[data-testid="review-coverage"]').waitFor({ timeout: 60_000 });
 await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 60_000 });
+// Sections with only minor points start collapsed: open the first one, as a person would, to reach its quotes.
+await review.locator("[data-testid=review-sections] details:not([open]) > summary").first().click({ timeout: 2000 }).catch(() => {});
 const jumps = review.getByRole("button", { name: "Jump to source" });
 check("the review's quotes offer Jump to source", (await jumps.count()) >= 1);
 const quote = (await review.locator("li:has(button:text-is('Jump to source'))").first().innerText()).match(/“([^”]+)”/)?.[1] ?? "";

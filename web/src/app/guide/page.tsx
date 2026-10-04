@@ -280,10 +280,14 @@ export default function GuidePage() {
             alt="Step 1: the drop area, and the paper loaded"
             notes={[<>Drop the file here, or click to choose it.</>, <>A tick and the file&apos;s name once it&apos;s read.</>]}
           />
-          <DocPart title="2 · Choose a journal">
+          <DocPart title="2 · Choose a journal, or none">
             <p>
               The journals whose guidelines have been verified by hand: JAMA, PLoS ONE, Cureus, BMC Public Health, IEEE Access, Frontiers in Psychology,
               Nature Communications and Scientific Reports. For suggestions across the whole index, use Match.
+            </p>
+            <p>
+              Writing for another journal, or for none yet? Choose <strong>No specific journal</strong>: the paper is reviewed on its own merits, and
+              you can paste your journal&apos;s guidelines for authors into the notes in step 3.
             </p>
           </DocPart>
           <Shot
@@ -295,13 +299,16 @@ export default function GuidePage() {
               </>,
               <>Any other card switches to it.</>,
               <>
+                <strong>No specific journal</strong>: no journal fit, and no structural check; your notes can carry a journal&apos;s guidelines.
+              </>,
+              <>
                 <strong>Structural check</strong>: your word count against the limit for its main article type, the reference style it asks for (numbered
                 or author–year) where it sets one, and its required statements. Dated, and linked to the journal&apos;s own guidelines.
               </>,
             ]}
           />
           <DocPart title="3 · Get it reviewed">
-            <p>Choose how deep, check the outline, then ask. The notice tells you exactly what would be sent before anything is.</p>
+            <p>Choose how deep, check the outline, add notes if you like, then ask. The notice tells you exactly what would be sent before anything is.</p>
           </DocPart>
           <Shot
             name="review-depth"
@@ -323,6 +330,10 @@ export default function GuidePage() {
                 <strong>Missing a heading?</strong> Type it exactly as it appears in the paper and add it.
               </>,
               <>
+                <strong>Notes for the review</strong> (optional): what to focus on, or your journal&apos;s guidelines for authors, pasted in. Sent with
+                the paper and counted in its length, up to 20,000 characters. In the writing workspace they&apos;re kept with the paper.
+              </>,
+              <>
                 <strong>Get a … review by Claude</strong>: opens the notice; nothing is sent yet.
               </>,
             ]}
@@ -330,9 +341,9 @@ export default function GuidePage() {
           <OptionTable
             title="Depth"
             rows={[
-              { name: "Quick", what: "The abstract, results and discussion; the 2–3 most significant issues, fast." },
-              { name: "Standard", what: "Every section except the references and supplementary material; balanced coverage.", def: "Default" },
-              { name: "Thorough", what: "Every section except the references, every subsection and table, with the most effort." },
+              { name: "Quick", what: "The abstract, results and discussion reviewed, with the whole paper as context; the major problems, fast." },
+              { name: "Standard", what: "Every section except the references and supplementary material, then a second look at the major findings and problems across the paper.", def: "Default" },
+              { name: "Thorough", what: "Standard, plus the supplementary material, each subsection on its own, minor points and suggestions, and the reporting checklist for your study type." },
             ]}
           />
           <OptionTable
@@ -351,12 +362,10 @@ export default function GuidePage() {
             notes={[
               <>Marked in the colour for something that leaves your device.</>,
               <>
-                <strong>What happens</strong>: your text goes to Claude in a stated number of short requests: one per section, then one cross-check of the
-                numbers found. Author names and email addresses are stripped first (best effort).
+                <strong>What happens</strong>: your text goes to Claude in a stated number of requests, each carrying the paper and doing one part: a section each, then the final report. Author names and email addresses are stripped first (best effort).
               </>,
               <>
-                <strong>The price</strong>: what this review costs in M coins, and your balance. Any part that doesn&apos;t come back (a section, or the
-                final cross-check) is refunded about two hours after it starts; resuming or retrying costs nothing more.
+                <strong>The price</strong>: what this review costs in M coins, and your balance. Any part that doesn&apos;t come back (a section, the reporting checklist or the final report) is refunded about two hours after it starts; resuming or retrying costs nothing more.
               </>,
               <>
                 <strong>Send it and review</strong>: the only way a review starts, and only once you tick the box agreeing to send the text. Cancel
@@ -366,7 +375,7 @@ export default function GuidePage() {
           />
           <Aside tone="away" title="What a review sends, and what happens to it">
             <p>
-              The text of the sections you didn&apos;t mark <strong>Don&apos;t send</strong>, to Anthropic&apos;s Claude API. Anthropic doesn&apos;t train
+              The text of the sections you didn&apos;t mark <strong>Don&apos;t send</strong>, with every request, to Anthropic&apos;s Claude API, which may hold it in memory for a few minutes to reuse between the requests. Anthropic doesn&apos;t train
               on API data and deletes it within 30 days, keeping it longer only to enforce its Usage Policy or where the law requires; MargaLink stores
               none of it. Papers over 400,000 characters are refused before the notice, never cut short.
             </p>
@@ -380,44 +389,41 @@ export default function GuidePage() {
             </ul>
             <p>If your journal wants a disclosure, you can adapt this:</p>
             <blockquote className="clay-well rounded-xl p-4 text-sm">
-              The authors used MargaLink&apos;s AI review, which uses Claude by Anthropic, to check the manuscript against the journal&apos;s guidelines
-              before submission. The authors reviewed all suggestions and take full responsibility for the content.
+              The authors used MargaLink&apos;s AI review, which uses Claude by Anthropic, to check the manuscript before submission. The authors reviewed all suggestions and take full responsibility for the content.
             </blockquote>
           </DocPart>
           <DocPart title="While it runs">
             <p>
-              A bar shows each section as it&apos;s read. <strong>Cancel</strong> stops it without using a review; <strong>Resume review</strong> picks up
+              Each section&apos;s review appears as it comes back; the overview and <strong>Fix these first</strong> come last. <strong>Cancel</strong> stops it without using a review; <strong>Resume review</strong> picks up
               where it stopped. If a section couldn&apos;t be checked, the rest still finishes and <strong>Retry failed sections</strong> re-runs just
               those.
             </p>
           </DocPart>
           <Shot
             name="review-result"
-            alt="The review: the journal fit, and the prioritised list with quoted passages"
+            alt="The review's overview: what the paper does, its strengths and weaknesses, the journal fit, and what to fix first"
             notes={[
               <>
-                <strong>Journal fit</strong>: good, possible or poor, with the reasoning.
+                <strong>Overview</strong>: what the paper does, its strengths and main weaknesses, and the journal fit.
               </>,
               <>
-                <strong>Fix these first</strong>: the findings that matter most, in order; major ones are marked.
+                <strong>Fix these first</strong>: the findings that matter most, in order, each with where to change it (the section and the passage) and what to do. In the writing workspace, <strong>Jump to source</strong> takes you to the passage.
               </>,
               <>
-                <strong>The passages</strong> each finding rests on. Every quote was checked against your paper before you see it.
+                <strong>Download</strong>, <strong>Print or save as PDF</strong>, <strong>Copy</strong>: keep the report. It&apos;s also kept in this browser until you forget it.
               </>,
             ]}
           />
           <Shot
             name="review-result-more"
-            alt="The rest of the review: inconsistencies, statistical reporting, and coverage"
+            alt="The review section by section, with the coverage"
             notes={[
               <>
-                <strong>Inconsistencies</strong>: numbers that disagree between sections.
+                <strong>Section by section</strong>: each section&apos;s verdict, then its findings, each with the passages it rests on (every quote checked against your paper), why it matters and what to do.
               </>,
+              <>Major findings get a second look; a doubtful one is put as a question.</>,
               <>
-                <strong>Statistical reporting</strong>: for example an effect without a confidence interval.
-              </>,
-              <>
-                <strong>Coverage</strong>: which sections were reviewed, any that couldn&apos;t be, and what this depth skipped.
+                <strong>Coverage</strong>: which sections were reviewed, any that couldn&apos;t be, and findings set aside on a second look.
               </>,
             ]}
             caption="It's a second opinion from a language model: consider it, but don't treat it as a guarantee."
@@ -993,7 +999,7 @@ export default function GuidePage() {
               <>
                 <strong>Length</strong>: the characters sent, in steps of 50,000.
               </>,
-              <>Sections you mark &ldquo;Don&apos;t send&rdquo;, and those a depth skips, don&apos;t count. Resuming or retrying is free.</>,
+              <>Sections you mark &ldquo;Don&apos;t send&rdquo; don&apos;t count; every other section is sent, at every depth. Resuming or retrying is free.</>,
               <>
                 <strong>Ask Claude</strong>: 1 M coin a request.
               </>,
@@ -1004,7 +1010,7 @@ export default function GuidePage() {
           />
           <Aside title="Coins come back on their own">
             <p>
-              A review&apos;s price is shared among its sections, by length, and the final cross-check; any part that doesn&apos;t come back is
+              A review&apos;s price is shared among its parts: its sections, by length, and the reporting checklist and the final report; any part that doesn&apos;t come back is
               refunded about two hours after the review started. An Ask Claude request or a rewrite that fails is refunded at once. Your history on the account
               page shows each refund.
             </p>

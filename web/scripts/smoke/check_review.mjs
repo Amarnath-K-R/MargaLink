@@ -1,14 +1,17 @@
 // Dev-only: verify /review end to end against a mocked /api/review — upload,
 // journal, consent naming the request count, per-pass progress, a forced
-// failure on one section surfacing in coverage, Retry healing it, the
-// prioritized summary and grounded citations, cancel, and the capacity
+// failure on one section surfacing in coverage, Retry healing it, Fix these
+// first, every finding once with grounded citations, the same paper on every
+// pass, Download, Copy, the report kept across a reload until forgotten,
+// cancel, and the capacity
 // stop; paying for it (signed in through mock_account.mjs): the price in the
 // consent, one charge per review, the ticket on every pass, too few coins;
 // and signed out, the sign-in in place of the button. Never a real Anthropic call —
-// that's a manual gate (see docs/ARCHITECTURE.md's review section).
+// that's the live check, scripts/eval/review_live.ts.
 import { chromium } from "playwright";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { mockAccount } from "./mock_account.mjs";
+import { reviewAnswer } from "./mock_review.mjs";
 
 const SCRATCH = process.env.SMOKE_OUT ?? new URL("../../.smoke/", import.meta.url).pathname;
 mkdirSync(SCRATCH, { recursive: true });
@@ -32,46 +35,26 @@ function check(label, ok) {
   }
 }
 
-const firstSentence = (t) => (t.split("\n").map((l) => l.trim()).find((l) => l.length >= 12) ?? t.trim()).split(". ")[0];
-let failChunkId = null; // the first extract request's chunk fails until healed
+let failTarget = null; // the first section pass's target fails until healed
 let healed = false;
 let slow = false; // makes passes slow enough to cancel mid-run
-let extractCount = 0;
-let synthCount = 0;
+let sectionCount = 0;
+let editorCount = 0;
+const papers = [];
 await page.route("**/api/review", async (route) => {
   const req = route.request().postDataJSON();
   tickets.push(route.request().headers()["x-review-ticket"]);
+  papers.push(JSON.stringify(req.paper));
   if (slow) await new Promise((r) => setTimeout(r, 1500));
-  if (req.pass === "extract") {
-    extractCount++;
-    failChunkId ??= req.chunk.id;
-    if (req.chunk.id === failChunkId && !healed) {
-      return route.fulfill({ status: 502, contentType: "text/plain", body: "Upstream review request failed (529): overloaded" });
-    }
-    const q = firstSentence(req.chunk.text);
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        claims: [{ quote: q, measure: `count in ${req.chunk.id}`, values: [{ value: 1, unit: null }] }],
-        statisticalReporting: [{ description: `Result reported without a confidence interval in ${req.chunk.title}`, severity: "minor", quote: q }],
-        notes: [],
-      }),
-    });
+  if (req.pass === "section") {
+    sectionCount++;
+    failTarget ??= req.target;
+    if (req.target === failTarget && !healed) return route.fulfill({ status: 502, contentType: "text/plain", body: "Upstream review request failed (529): overloaded" });
   }
-  synthCount++;
-  const ids = req.ledger.slice(0, 2).map((e) => e.id);
-  return route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      journalFit: { assessment: "possible", explanation: "Scope overlaps the journal's remit." },
-      inconsistencies: ids.length === 2 ? [{ description: "The sample size is stated differently in two places.", claimIds: ids }] : [],
-      summary: [{ text: "Reconcile the sample size across sections.", severity: "major", refs: ids }],
-      otherObservations: ["Consider adding a limitations paragraph."],
-    }),
-  });
+  if (req.pass === "editor") editorCount++;
+  return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reviewAnswer(req)) });
 });
+await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://localhost:3000" });
 
 await page.goto("http://localhost:3000/review");
 await page.evaluate(() => {
@@ -89,7 +72,7 @@ await page.getByRole("button", { name: /^JAMA/ }).click();
 const getReview = () => page.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ });
 await getReview().click();
 await page.waitForSelector('[role="alertdialog"]');
-check("consent names the request count", /in \d+ short requests/.test(await page.locator('[role="alertdialog"]').innerText()));
+check("consent names the request count", /in \d+ (?:short )?requests/.test(await page.locator('[role="alertdialog"]').innerText()));
 const priceLine = await page.locator('[data-testid="review-price"]').innerText();
 const price = Number(priceLine.match(/costs (\d+) M coins/)?.[1]);
 check(`consent names the price and the balance (${priceLine})`, price > 0 && /you have 100\b/.test(priceLine));
@@ -100,25 +83,48 @@ await page.waitForSelector('[data-testid="review-coverage"]', { timeout: 30000 }
 await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 30000 });
 const coverage1 = await page.locator('[data-testid="review-coverage"]').innerText();
 check("failed section surfaces in coverage", /couldn't be checked \(Claude didn't answer/.test(coverage1));
-check("synthesis still ran with the failure", synthCount === 1);
+check("the report was still put together with the failure", editorCount === 1);
 
 healed = true;
-const extractsBeforeRetry = extractCount;
+const sectionsBeforeRetry = sectionCount;
 await page.getByRole("button", { name: "Retry failed sections" }).click();
-await page.waitForFunction(
-  () => !/couldn't be checked/.test(document.querySelector('[data-testid="review-coverage"]')?.textContent ?? "x"),
-  null,
-  { timeout: 30000 }
-);
-check("retry re-ran only the failed section + synthesis", extractCount === extractsBeforeRetry + 1 && synthCount === 2);
+// The retry shows progress at once (the failed section reads "not reviewed yet"), so wait for its editor pass and the end of the run.
+for (let i = 0; i < 300 && editorCount < 2; i++) await page.waitForTimeout(100);
+await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 30000 });
+check("the healed section no longer reads as failed", !/couldn't be checked/.test(await page.locator('[data-testid="review-coverage"]').innerText()));
+check("retry re-ran only the failed section + the editor", sectionCount === sectionsBeforeRetry + 1 && editorCount === 2);
 
-const summary = await page.locator('[data-testid="review-summary"]').innerText();
-check("prioritized summary rendered", summary.includes("Reconcile the sample size"));
-check("summary items carry grounded citations", (await page.locator('[data-testid="review-summary"] li li').count()) >= 1);
+const fixFirst = await page.locator('[data-testid="review-fix-first"]').innerText();
+check("Fix these first rendered", (await page.locator('[data-testid="review-fix-first"] > ol > li').count()) === 2 && fixFirst.length > 0);
+check("findings carry grounded citations", (await page.locator('[data-testid="review-sections"] [data-finding] li').count()) >= 1);
+const titles = await page.locator("[data-finding] > p:first-child > span:last-child").allInnerTexts();
+check(`every finding shows once (${titles.length})`, titles.length > 0 && new Set(titles).size === titles.length);
+check("every pass carried the same paper", papers.length > 0 && papers.every((p) => p === papers[0]));
 check("paid once, and retrying cost nothing more", account.starts.length === 1 && account.balance === 100 - price);
 check("every pass carried the ticket", tickets.length > 0 && tickets.every((t) => t === "ticket-1"));
-check("the start sent section ids and lengths, never text", account.starts[0].chunks.every((c) => Object.keys(c).join() === "id,chars"));
+check("the start sent section ids and lengths, never text", account.starts[0].chunks.every((c) => Object.keys(c).join() === "id,chars,review"));
 check("the tray shows the new balance", (await page.locator('a[href="/account"]').first().getAttribute("aria-label")).startsWith(`${100 - price} M coins`));
+
+// A priority takes you to its finding; the report can be downloaded and copied; it survives a reload until forgotten.
+await page.locator('[data-testid="review-fix-first"] button').first().click();
+check("a priority takes you to its finding", await page.evaluate(() => !!document.activeElement?.getAttribute("data-finding")));
+const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download" }).click()]);
+const md = readFileSync(await dl.path(), "utf8");
+check(`Download gives the Markdown report (${dl.suggestedFilename()})`, dl.suggestedFilename().endsWith(".md") && md.includes("## Section by section"));
+await page.getByRole("button", { name: "Copy" }).click();
+check("Copy puts the report on the clipboard", (await page.evaluate(() => navigator.clipboard.readText())).startsWith("# Pre-submission review"));
+await page.reload();
+await page.waitForSelector('[data-testid="review-kept"]', { timeout: 10000 });
+check("the report survives a reload", await page.locator('[data-testid="review-kept"] [data-testid="review-fix-first"]').isVisible());
+await page.getByRole("button", { name: "Forget this report" }).click();
+check("Forget removes it", (await page.locator('[data-testid="review-kept"]').count()) === 0);
+await page.reload();
+await page.waitForSelector("text=Get it reviewed.");
+check("and it stays forgotten", (await page.locator('[data-testid="review-kept"]').count()) === 0);
+const [fc2] = await Promise.all([page.waitForEvent("filechooser"), page.click("text=Drop a PDF or DOCX")]);
+await fc2.setFiles(FIXTURE);
+await page.waitForSelector("text=Loaded test-paper.pdf", { timeout: 15000 });
+await page.getByRole("button", { name: /^JAMA/ }).click();
 
 // Cancel mid-run.
 slow = true;
@@ -140,7 +146,7 @@ await page.click("text=Send it and review");
 await page.waitForSelector("text=fully booked", { timeout: 10000 });
 await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
 check("capacity error stops the run", !(await page.locator('[data-testid="review-progress"]').isVisible()));
-check("a fresh run doesn't leave the previous review's results on screen", (await page.locator('[data-testid="review-summary"]').count()) === 0);
+check("a stopped fresh run shows the earlier review only as the last one", (await page.locator('[data-testid="review-report"]').count()) === (await page.locator('[data-testid="review-kept"] [data-testid="review-report"]').count()));
 
 // Outline: visible, a section marked "Don't send" lowers the request count and its text is never sent.
 const bodies = [];
@@ -152,7 +158,7 @@ const rows = page.locator('[data-testid="review-outline"] li');
 check("outline lists the paper's sections", (await rows.count()) >= 3);
 const countIn = async () => {
   await getReview().click();
-  const m = (await page.locator('[role="alertdialog"]').innerText()).match(/in (\d+) short requests/);
+  const m = (await page.locator('[role="alertdialog"]').innerText()).match(/in (\d+) (?:short )?requests/);
   return Number(m?.[1]);
 };
 const before = await countIn();
@@ -165,7 +171,7 @@ check(`excluding a section lowers the request count (${before} → ${after})`, a
 check("consent says the excluded section won't be sent", /won't be sent at all/.test(await page.locator('[role="alertdialog"]').innerText()));
 await page.getByLabel(/I agree to send this text to Anthropic/).check();
 await page.click("text=Send it and review");
-await page.waitForSelector('[data-testid="review-summary"]', { timeout: 30000 });
+await page.waitForSelector('[data-testid="review-fix-first"]', { timeout: 30000 });
 check(`no request carried the excluded section "${excludedTitle}"`, bodies.length > 0 && bodies.every((b) => !b.includes(excludedTitle)));
 check("coverage names the exclusion", /excluded by you/.test(await page.locator('[data-testid="review-coverage"]').innerText()));
 await page.locator('[data-testid="review-outline"] summary').click({ trial: true }).catch(() => {});
@@ -183,14 +189,14 @@ await page.waitForSelector('[data-testid="review-progress"]');
 check("the outline is locked while a review runs", await rows.first().locator("select").isDisabled());
 check("and so is the tier", (await page.locator("fieldset[disabled] button").count()) > 0);
 await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 30000 });
-check("the run finishes with its result", await page.locator('[data-testid="review-summary"]').isVisible());
+check("the run finishes with its result", await page.locator('[data-testid="review-fix-first"]').isVisible());
 check("and the outline unlocks", await rows.first().locator("select").isEnabled());
 slow = false;
 
 // Signed out mid-run (a session that expired): the run stops, and resuming it later isn't charged again.
 let signedOutOnce = true;
 await page.route("**/api/review", async (route) => {
-  if (signedOutOnce && route.request().postDataJSON().pass === "extract") {
+  if (signedOutOnce && route.request().postDataJSON().pass === "section") {
     signedOutOnce = false;
     return route.fulfill({ status: 401, contentType: "text/plain", body: "Sign in to get a review." });
   }
@@ -204,8 +210,32 @@ await page.waitForSelector("text=Sign in to get a review.", { timeout: 10000 });
 await page.waitForFunction(() => !document.body.innerText.includes("Reviewing…"), null, { timeout: 10000 });
 check("a run stopped by an expired sign-in can be resumed", await page.getByRole("button", { name: "Resume review" }).isVisible());
 await page.getByRole("button", { name: "Resume review" }).click();
-await page.waitForSelector('[data-testid="review-summary"]', { timeout: 30000 });
+await page.waitForSelector('[data-testid="review-fix-first"]', { timeout: 30000 });
 check("and resuming it wasn't charged again", account.starts.length === startsBefore + 1);
+
+// No specific journal, with notes for the review: every pass carries no journal and the same notes, the
+// start is told their length, the consent names them, and the report has no journal fit.
+const noted = [];
+const onNoted = (r) => r.url().endsWith("/api/review") && r.method() === "POST" && noted.push(r.postDataJSON());
+page.on("request", onNoted);
+await page.getByTestId("no-journal").click();
+check("No specific journal can be chosen", (await page.getByTestId("no-journal").getAttribute("aria-pressed")) === "true");
+await page.getByTestId("review-notes").fill("x".repeat(20_001));
+check("notes over the limit are refused before the consent", (await page.locator("text=a review takes at most 20,000").isVisible()) && (await getReview().isDisabled()));
+const NOTES = "Check it against CONSORT, and look closely at the statistics.";
+await page.getByTestId("review-notes").fill(NOTES);
+await getReview().click();
+check("the consent names the notes", /your notes for the review \(\d+ characters\)/.test(await page.locator('[role="alertdialog"]').innerText()));
+check("and doesn't name a journal", !/against .*guidelines/.test(await page.locator('[role="alertdialog"]').innerText()));
+await page.getByLabel(/I agree to send this text and my notes to Anthropic/).check();
+await page.click("text=Send it and review");
+await page.waitForSelector('[data-testid="review-fix-first"]', { timeout: 30000 });
+await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 30000 });
+page.off("request", onNoted);
+check(`every pass carried no journal and the notes (${noted.length})`, noted.length > 0 && noted.every((b) => b.journalId === null && b.guidance === NOTES));
+check("the start was told the notes' length", account.starts.at(-1).journalId === null && account.starts.at(-1).guidanceChars === NOTES.length);
+check("no journal, no journal fit", !(await page.locator('[data-testid="review-overview"]').innerText()).includes("Journal fit"));
+await page.getByTestId("review-notes").fill("");
 
 // Too few coins: the server says 402, the page says how many and won't send.
 account.balance = 0;

@@ -90,8 +90,7 @@ export default function TermsPage() {
             </li>
             <li>We spend Pro coins first, then your other coins.</li>
             <li>
-              The price of every use is shown before anything is sent. Any part of a review that doesn&apos;t come back (a section, or the final
-              cross-check) is refunded in coins automatically, and a failed Ask Claude request at once.
+              The price of every use is shown before anything is sent. Any part of a review that doesn&apos;t come back (a section, the reporting checklist or the final report) is refunded in coins automatically, and a failed Ask Claude request at once.
             </li>
             <li>
               A rewrite costs 1 M coin per {REWRITE_WORDS_PER_COIN} words you select (a long unbroken run of characters counts as a word for

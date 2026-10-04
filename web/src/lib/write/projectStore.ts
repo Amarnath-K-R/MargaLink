@@ -30,6 +30,7 @@ export type ProjectMeta = {
   packs?: string[]; // data packs the template needs up front (["all"] for classes like IEEEtran)
   spelling?: Spelling; // the paper's English and its own words (absent: US English, none); carried in backups
   rewriteConsent?: string; // when Rewrite (Claude) was turned on for this paper, in this browser; never in a backup
+  reviewNotes?: string; // the authors' notes for this paper's AI reviews (instructions, their journal's guidelines); sent only with a review they confirm
   createdAt: string;
   updatedAt: string;
 };
@@ -259,6 +260,25 @@ export class ProjectStore {
   async lastPdf(id: string): Promise<Uint8Array | null> {
     try {
       return await this.read(id, `${HIDDEN}/last.pdf`);
+    } catch {
+      return null;
+    }
+  }
+
+  // The last review of this paper (its report as JSON): the app's own file, beside the last PDF,
+  // so it's never a project file and never in a backup. null forgets it.
+  async saveLastReview(id: string, json: string | null): Promise<void> {
+    if (json !== null) return this.writeRaw(id, `${HIDDEN}/review.json`, json);
+    try {
+      await (await (await this.dir(id)).getDirectoryHandle(HIDDEN)).removeEntry("review.json");
+    } catch {
+      // nothing kept: nothing to forget
+    }
+  }
+
+  async lastReview(id: string): Promise<string | null> {
+    try {
+      return await this.readText(id, `${HIDDEN}/review.json`);
     } catch {
       return null;
     }
