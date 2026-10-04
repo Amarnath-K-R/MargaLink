@@ -2,8 +2,7 @@
 // merging, chunk packing. Run directly:
 //   node src/lib/review/reviewSections.selfcheck.ts
 import assert from "node:assert/strict";
-import { CHUNK_CHARS, MAX_TITLE_CHARS, NO_EDITS, buildOutline, buildPaperMap, chunkSections, splitIntoSections } from "./reviewSections.ts";
-import { countWords } from "../checks/formatCheck.ts";
+import { CHUNK_CHARS, MAX_TITLE_CHARS, NO_EDITS, buildOutline, chunkSections, splitIntoSections } from "./reviewSections.ts";
 
 const para = (n: number, seed: string) => Array.from({ length: n }, (_, i) => `${seed} sentence ${i} with enough words to count.`).join(" ");
 // 12 lines ≈ 480 chars — a references block shorter than MIN_SECTION_CHARS
@@ -103,15 +102,11 @@ ${REFS}
   assert.ok(!s.some((x) => x.kind === "abstract"));
   assert.deepEqual(s.map((x) => x.kind), ["other", "other"]);
 }
-// 8. supplement after references stays separate; paperMap totals agree
+// 8. supplement after references stays separate
 {
   const text = `Abstract\n\n${para(6, "A")}\n\nReferences\n\n${REFS}\n\nSupplementary Material\n\n${para(12, "Supp")}\n`;
   const s = splitIntoSections(text);
   assert.deepEqual(s.map((x) => x.kind), ["abstract", "references", "supplement"]);
-  const map = buildPaperMap(s);
-  assert.equal(map.totalWords, countWords(text));
-  assert.equal(map.sections.length, s.length);
-  assert.equal(map.title, "Abstract"); // first non-empty line — fine for a test text; real papers start with the title
 }
 
 // 9-11: shapes seen in real PDFs during the Task 1 probe.
@@ -206,8 +201,7 @@ ${REFS}
   const excl = buildOutline(NUMBERED, [], { ...NO_EDITS, kinds: { [results.charStart]: "excluded", [refs.charStart]: "excluded" } });
   assert.deepEqual(excl.excluded.map((x) => x.title), ["3. Results", "5. References"]);
   assert.ok(!excl.sections.some((x) => x.text.includes("Results sentence 0")), "excluded text is in no included section");
-  const map = buildPaperMap(excl.sections);
-  assert.ok(!map.sections.some((x) => x.title === "3. Results"), "excluded sections are not in the paper map either");
+  assert.ok(!excl.sections.some((x) => x.title === "3. Results"), "excluded sections are not among those sent either");
 
   const added = buildOutline(NUMBERED, [], { ...NO_EDITS, addedHeadings: ["Keywords: deep learning, agriculture", "No such heading line"] });
   assert.deepEqual(added.unmatchedHeadings, ["No such heading line"]);
@@ -231,7 +225,28 @@ ${REFS}
   const kept = buildOutline(text, [], { kinds: {}, merged: [], addedHeadings: [long] });
   const chunks = chunkSections(kept.sections, []);
   assert.ok(chunks.every((c) => c.title.length <= MAX_TITLE_CHARS), "every chunk title fits the review Function's cap");
-  assert.ok(buildPaperMap(kept.sections).sections.every((s) => s.title.length <= MAX_TITLE_CHARS));
+}
+
+// --- headings written "3.Results:-" (a real manuscript): each starts its own section
+{
+  const body = (w: string) => `${w} text that runs on for a while to make a real section. `.repeat(8);
+  const text = ["A title", "", "Abstract", body("Abstract"), "2.Methodology:-", body("Methods"), "3.Results:-", body("Results"), "4.Conclusion:-", body("Conclusion")].join("\n");
+  assert.deepEqual(splitIntoSections(text).map((s) => s.kind), ["other", "abstract", "methods", "results", "discussion"]);
+  assert.equal(splitIntoSections("Intro\n\nResults.\n" + body("x")).length, 2, "a trailing full stop is a heading too");
+}
+
+// --- thorough: each subsection of 2,000+ characters is its own chunk; a short one joins the one before
+{
+  const sub = (h: string, n: number) => `${h}\n${"Words in this subsection carry on. ".repeat(Math.ceil(n / 34)).slice(0, n)}\n`;
+  const text = `Methods\n${sub("2.1 Data", 3000)}${sub("2.2 Model", 3000)}${sub("2.3 Settings", 500)}${sub("2.4 Training", 3000)}`;
+  const [s] = splitIntoSections(text);
+  assert.equal(chunkSections([s]).length, 1, "below thorough, a section under 16k stays whole");
+  const parts = chunkSections([s], [], { subsections: true });
+  assert.deepEqual(parts.map((c) => c.id), ["s1-p1", "s1-p2", "s1-p3"]);
+  assert.ok(parts[1].title.endsWith("2.2 Model") && parts[1].text.includes("2.3 Settings"), "the short 2.3 joined 2.2");
+  assert.equal(parts.map((c) => c.text).join(""), s.text, "nothing lost or repeated");
+  const [one] = splitIntoSections("Results\n" + "One undivided result paragraph. ".repeat(100));
+  assert.deepEqual(chunkSections([one], [], { subsections: true }).map((c) => c.id), ["s1"], "a section with no subsections keeps its id");
 }
 
 console.log("reviewSections.selfcheck: OK");

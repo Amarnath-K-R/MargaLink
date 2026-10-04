@@ -1,11 +1,10 @@
 // Splits a prepared (stripped + normalized) paper into headed sections and
-// bounded chunks for the review's per-section extract passes. Pure — no
-// window, no fetch — so the orchestrator's selfcheck can drive it. The
-// heading vocab is deliberately conservative: a missed heading only means a
-// coarser chunk label, while a false one mislabels a whole span.
-import { countWords } from "../checks/formatCheck.ts";
+// bounded chunks for the review's per-section passes. Pure — no window, no
+// fetch — so the orchestrator's selfcheck can drive it. The heading vocab is
+// deliberately conservative: a missed heading only means a coarser chunk
+// label, while a false one mislabels a whole span.
 import { normalizeText } from "./reviewGrounding.ts";
-import type { Chunk, HeadingHint, PaperMap, Section, SectionKind } from "./reviewTypes.ts";
+import type { Chunk, HeadingHint, Section, SectionKind } from "./reviewTypes.ts";
 
 export const CHUNK_CHARS = 16_000;
 export const MIN_SECTION_CHARS = 300;
@@ -29,7 +28,8 @@ const HEADING_VOCAB: [SectionKind, string][] = [
   ["supplement", String.raw`(?:supplementary|supplemental) (?:material|materials|information|data|methods|figures|tables)|supporting information|appendix|appendices`],
   ["other", String.raw`keywords?|key words?|acknowledge?ments?|funding|conflicts? of interest|competing interests?|declarations?(?: of interest)?|data availability|availability of data and materials|authors?'? contributions|ethics (?:statement|approval)|consent for publication|abbreviations|highlights`],
 ];
-const HEADING_RES = HEADING_VOCAB.map(([kind, vocab]) => [kind, new RegExp(String.raw`^\s*${NUMBERING}\s*(?:${vocab})\s*:?\s*$`, "i")] as const);
+// A heading may end in ":", ":-", "-" or "." ("3.Results:-" in a real manuscript).
+const HEADING_RES = HEADING_VOCAB.map(([kind, vocab]) => [kind, new RegExp(String.raw`^\s*${NUMBERING}\s*(?:${vocab})\s*(?::-?|[-.])?\s*$`, "i")] as const);
 // For lines already known to be headings (hints): the vocab word may start a
 // longer title — "Appendix: All 54 Papers", "Discussion and implications".
 const HEADING_PREFIX_RES = HEADING_VOCAB.map(([kind, vocab]) => [kind, new RegExp(String.raw`^\s*${NUMBERING}\s*(?:${vocab})\b`, "i")] as const);
@@ -192,15 +192,33 @@ function pack(spans: Span[]): Span[] {
   return packed;
 }
 
-export function chunkSections(sections: Section[], hints: HeadingHint[] = []): Chunk[] {
+// Thorough reviews each subsection on its own; one under this joins the one before it.
+export const SUBSECTION_MIN_CHARS = 2_000;
+function mergeSmall(spans: Span[]): Span[] {
+  const out: Span[] = [];
+  for (const s of spans) {
+    const last = out[out.length - 1];
+    if (last && (s.text.length < SUBSECTION_MIN_CHARS || last.text.length < SUBSECTION_MIN_CHARS)) last.text += s.text;
+    else out.push({ ...s });
+  }
+  return out;
+}
+
+// `subsections` (thorough): every subsection of 2,000+ characters is its own
+// chunk; otherwise a section is split only past CHUNK_CHARS.
+export function chunkSections(sections: Section[], hints: HeadingHint[] = [], opts: { subsections?: boolean } = {}): Chunk[] {
   const subheads = new Set(hints.filter((h) => h.level === 2).map((h) => lineKey(h.text)));
   const chunks: Chunk[] = [];
   for (const s of sections) {
-    if (s.text.length <= CHUNK_CHARS) {
+    const parts = opts.subsections
+      ? mergeSmall(splitAtSubsections(s.text, subheads)).flatMap(cutOversized)
+      : s.text.length <= CHUNK_CHARS
+        ? null
+        : pack(splitAtSubsections(s.text, subheads));
+    if (!parts || parts.length === 1) {
       chunks.push({ id: s.id, sectionId: s.id, title: clip(s.title), kind: s.kind, part: 1, parts: 1, text: s.text });
       continue;
     }
-    const parts = pack(splitAtSubsections(s.text, subheads));
     parts.forEach((p, i) =>
       chunks.push({
         id: `${s.id}-p${i + 1}`,
@@ -214,20 +232,6 @@ export function chunkSections(sections: Section[], hints: HeadingHint[] = []): C
     );
   }
   return chunks;
-}
-
-// Built from the sections that will be sent only: an excluded section's title
-// and length are content too. The title is the paper's first line only when
-// the section holding it (the front matter) is included.
-export function buildPaperMap(sections: Section[]): PaperMap {
-  const first = sections[0];
-  const firstLine = first?.charStart === 0 ? (first.text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? null) : null;
-  const mapped = sections.map((s) => ({ id: s.id, title: clip(s.title), kind: s.kind, words: countWords(s.text) }));
-  return {
-    title: firstLine && firstLine.length <= 200 ? firstLine : null,
-    totalWords: mapped.reduce((n, s) => n + s.words, 0),
-    sections: mapped,
-  };
 }
 
 // --- The user's edits to the detected outline (all local; nothing is sent) ---
