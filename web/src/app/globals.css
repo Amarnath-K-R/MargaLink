@@ -64,10 +64,19 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   }
 }
 
-/* Print or save as PDF (the review's report): only the report, every section open. */
+/* Print or save as PDF (the review's report). Print copies the report into
+   #print-root, straight under <body>, and printing shows only that: the
+   report's own place (a window, a scrolling panel) would cut it to one page.
+   Portrait on the reader's own paper size. */
+@page { size: portrait; margin: 16mm 15mm; }
+#print-root { display: none; }
 @media print {
-  body * { visibility: hidden; }
-  [data-print-report], [data-print-report] * { visibility: visible; }
-  [data-print-report] { position: absolute; inset: 0 auto auto 0; width: 100%; box-shadow: none; }
+  html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+  body > *:not(#print-root) { display: none !important; }
+  #print-root { display: block; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  #print-root [data-print-report] { margin: 0; padding: 0; border: 0; box-shadow: none; background: none; }
+  #print-root details > summary { list-style: none; }
+  #print-root [data-finding], #print-root li { break-inside: avoid; }
+  #print-root h3 { break-after: avoid; }
   [data-print-hide] { display: none !important; }
 }
