@@ -20,6 +20,28 @@ assert(!stripped.includes("john.smith@example.edu"), "email should be redacted")
 assert(stripped.includes("Deep Learning for Crop Disease Detection"), "title should survive");
 assert(stripped.includes("This paper presents a CNN approach"), "body text should survive");
 
+// Bylines as papers write them: initials, affiliation marks, "and", accents, one author with a mark.
+for (const byline of [
+  "Gopal S Pillai1, Siva Chandra S1, Amarnath K R1, Merin Dickson1,*",
+  "John Smith and Jane Doe",
+  "J. A. Smith, B. Jones, and C. Wu",
+  "Ana María López¹, Wei Zhang²*",
+  "Priya Raman1,2, Arjun Mehta3†",
+  "Jane Q Doe1",
+]) {
+  assert.equal(stripIdentifyingInfo(`A Title Of The Paper about things\n${byline}\n\nAbstract`).split("\n")[1], "[redacted]", byline);
+}
+// …and lines that aren't bylines stay.
+for (const line of [
+  "Stroke screening from retinal fundus photographs: an interpretable, patient-level deep learning model",
+  "1 Department of Ophthalmology, Amrita Institute of Medical Sciences, Kochi, Kerala, India",
+  "Abstract",
+  "Introduction",
+  "Background: Strokes are common, and costly.",
+]) {
+  assert.equal(stripIdentifyingInfo(`${line}\n\nAbstract`).split("\n")[0], line, line);
+}
+
 // A byline far past the 500-char head window should NOT be touched — the
 // function only redacts near the top, where a byline actually lives, not
 // anywhere a short title-cased comma list might appear (e.g. an author list
