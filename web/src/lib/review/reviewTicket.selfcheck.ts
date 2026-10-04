@@ -92,7 +92,6 @@ assert.equal((await editor(quick.ticket)).status, 409, "nothing back yet, nothin
 r = await section(quick.ticket, "s1");
 assert.equal(r.status, 200, await r.clone().text());
 assert.deepEqual(await r.json(), { verdict: "Fine.", findings: [], keyNumbers: [] });
-assert.equal((await section(quick.ticket, "s1")).status, 409, "a section that came back isn't sent again");
 assert.equal((await checklist(quick.ticket, "quick")).status, 400, "the checklist is thorough's alone");
 
 // --- what Claude got: all three tools, the system prompt, the whole paper cached, then the job
@@ -115,12 +114,20 @@ assert.equal((await editor(quick.ticket, "quick", { findings: [{ id: "s3-f0", ti
 r = await editor(quick.ticket);
 assert.equal(r.status, 200, await r.clone().text());
 assert.equal((await editor(quick.ticket)).status, 409, "already put together");
+// A section's result lost to a Cancel (the server had finished it): it may run once more, and the report again with it.
+assert.equal((await section(quick.ticket, "s1")).status, 200, "a section that came back may run once more");
+assert.equal((await editor(quick.ticket)).status, 200, "and the report be put together again with it");
+assert.equal((await editor(quick.ticket)).status, 409, "but not again without something new");
+r = await section(quick.ticket, "s1");
+assert.equal(r.status, 409, "only once more");
+assert.match(await r.text(), /run again once/);
 
 // --- thorough: the checklist is a paid part of the ticket
 const thorough = (await (await begin("thorough", ["s1", "s2", "s3"])).json()) as Paid;
 assert.equal(thorough.coins, reviewPrice("thorough", billed));
 assert.equal((await checklist(thorough.ticket)).status, 200);
-assert.equal((await checklist(thorough.ticket)).status, 409, "delivered once");
+assert.equal((await checklist(thorough.ticket)).status, 200, "a delivered part may run once more");
+assert.equal((await checklist(thorough.ticket)).status, 409, "and only once");
 
 // --- four tries per section, then its coins come back
 const standard = (await (await begin("standard", ["s1"])).json()) as Paid;

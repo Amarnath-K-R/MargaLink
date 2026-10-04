@@ -177,10 +177,22 @@ export type PassRefusal = { status: 403 | 409; message: string };
 /** A paid section that came back with a result. Recorded once, however often it's retried. */
 export async function markDelivered(db: D1Database, ticket: string, chunkId: string) {
   const idHash = await sha256Hex(ticket);
-  await db
+  const r = await db
     .prepare("INSERT INTO review_deliveries (ticket, chunk_id) SELECT ?1, ?2 WHERE EXISTS (SELECT 1 FROM review_tickets WHERE id_hash = ?1) ON CONFLICT DO NOTHING")
     .bind(idHash, chunkId)
     .run();
+  // A section run again (its first result never reached the browser) came back: new to the report, so the
+  // final report may be put together once more. Refunds still count each section once (review_deliveries).
+  if (r.meta.changes === 0) await db.prepare(`UPDATE review_tickets SET passes = json_set(passes, '$."redelivered"', ${REDELIVERED} + 1) WHERE id_hash = ?`).bind(idHash).run();
+}
+
+// The ticket's deliveries as the final report counts them: each section that came back, and each one that came back again.
+const REDELIVERED = `COALESCE(json_extract(passes, '$."redelivered"'), 0)`;
+const DELIVERIES = (ticketCol: string) => `((SELECT COUNT(*) FROM review_deliveries WHERE ticket = ${ticketCol}) + ${REDELIVERED})`;
+
+/** How many deliveries the final report covers when it's put together now (the basis markSynthesized keeps). */
+export async function deliveryCount(db: D1Database, ticket: string): Promise<number> {
+  return (await db.prepare(`SELECT ${DELIVERIES("id_hash")} AS n FROM review_tickets WHERE id_hash = ?`).bind(await sha256Hex(ticket)).first<number>("n")) ?? 0;
 }
 
 /**
@@ -204,11 +216,11 @@ export async function claimReviewPass(
   const idHash = await sha256Hex(ticket);
   const t = await db
     .prepare(
-      `SELECT tier, coins, chunks, synthesized, synth_basis, synth_left, (SELECT COUNT(*) FROM review_deliveries WHERE ticket = id_hash) AS delivered
+      `SELECT tier, coins, chunks, passes, synthesized, synth_basis, synth_left, ${DELIVERIES("id_hash")} AS delivered
        FROM review_tickets WHERE id_hash = ? AND user_id = ? AND expires_at > ?`,
     )
     .bind(idHash, userId, now + CLAIM_MARGIN_MS)
-    .first<{ tier: string; coins: number; chunks: string; synthesized: number; synth_basis: number; synth_left: number; delivered: number }>();
+    .first<{ tier: string; coins: number; chunks: string; passes: string; synthesized: number; synth_basis: number; synth_left: number; delivered: number }>();
   if (!t) return refuse(403, "This review's ticket has expired. Start a new review; what the old one didn't finish is refunded automatically.");
   if (t.tier !== want.tier) return refuse(403, "This pass doesn't match the review that was paid for.");
   // Every pass carries the paper; it may not be longer than the price paid for.
@@ -220,7 +232,7 @@ export async function claimReviewPass(
     const r = await db
       .prepare(
         `UPDATE review_tickets SET synth_left = synth_left - 1
-         WHERE id_hash = ?1 AND synth_left > 0 AND expires_at > ?2 AND (SELECT COUNT(*) FROM review_deliveries WHERE ticket = ?1) > synth_basis`,
+         WHERE id_hash = ?1 AND synth_left > 0 AND expires_at > ?2 AND ${DELIVERIES("?1")} > synth_basis`,
       )
       .bind(idHash, now + CLAIM_MARGIN_MS)
       .run();
@@ -229,13 +241,17 @@ export async function claimReviewPass(
   const id = want.chunkId ?? "";
   const paid = (JSON.parse(t.chunks) as Record<string, number>)[id];
   if (!paid || (want.chars ?? Infinity) > paid) return refuse(403, "This section wasn't part of the review that was paid for.");
-  if (await db.prepare("SELECT 1 AS y FROM review_deliveries WHERE ticket = ? AND chunk_id = ?").bind(idHash, id).first()) return refuse(409, "This section was already reviewed.");
+  // A section that came back may be run once more, within its tries: its result is lost if the browser
+  // stopped waiting (a Cancel, a dropped connection) after the server finished it, and nothing is kept here to send again.
+  const again = `$."re:${id}"`;
+  const delivered = !!(await db.prepare("SELECT 1 AS y FROM review_deliveries WHERE ticket = ? AND chunk_id = ?").bind(idHash, id).first());
+  if (delivered && (JSON.parse(t.passes) as Record<string, number>)[`re:${id}`]) return refuse(409, "This section was already reviewed, and run again once.");
   const r = await db
     .prepare(
-      `UPDATE review_tickets SET extract_left = extract_left - 1, passes = json_set(passes, ?2, COALESCE(json_extract(passes, ?2), 0) + 1)
-       WHERE id_hash = ?1 AND extract_left > 0 AND expires_at > ?3 AND COALESCE(json_extract(passes, ?2), 0) < ?4`,
+      `UPDATE review_tickets SET extract_left = extract_left - 1, passes = json_set(passes, ?2, COALESCE(json_extract(passes, ?2), 0) + 1${delivered ? ", ?5, 1" : ""})
+       WHERE id_hash = ?1 AND extract_left > 0 AND expires_at > ?3 AND COALESCE(json_extract(passes, ?2), 0) < ?4${delivered ? " AND json_extract(passes, ?5) IS NULL" : ""}`,
     )
-    .bind(idHash, `$."${id}"`, now + CLAIM_MARGIN_MS, TRIES_PER_SECTION) // id is CHUNK_ID-shaped (s3, s3-p2) or CHECKLIST_ID
+    .bind(idHash, `$."${id}"`, now + CLAIM_MARGIN_MS, TRIES_PER_SECTION, ...(delivered ? [again] : [])) // id is CHUNK_ID-shaped (s3, s3-p2) or CHECKLIST_ID
     .run();
   return r.meta.changes === 1 ? null : refuse(409, "This part has no tries left; its share of the coins comes back automatically.");
 }

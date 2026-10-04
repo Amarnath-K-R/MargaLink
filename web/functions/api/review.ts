@@ -17,7 +17,7 @@ import { groundChecklistOutput, groundSectionOutput } from "../../src/lib/review
 import { DAILY, reserveUse } from "../../src/lib/accounts/dailyCaps.ts";
 import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/ai/anthropicStream.ts";
 import { getSession, type AccountEnv } from "../../src/lib/accounts/auth.ts";
-import { claimReviewPass, deliveredChunks, markDelivered, markSynthesized } from "../../src/lib/accounts/ledger.ts";
+import { claimReviewPass, deliveredChunks, deliveryCount, markDelivered, markSynthesized } from "../../src/lib/accounts/ledger.ts";
 import { usageSink } from "../../src/lib/telemetry/apiEvents.ts";
 
 type Env = AccountEnv & { ANTHROPIC_API_KEY: string };
@@ -56,6 +56,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) 
   // The editor is shown only what this ticket's paid passes returned.
   const delivered = req.pass === "editor" ? await deliveredChunks(env.DB, ticket) : null;
   const outside = req.pass === "editor" ? editorOutsideDelivered(req, delivered!) : null;
+  // What this report covers, for "only again once something new has come back" (a section run again counts).
+  const basis = req.pass === "editor" ? await deliveryCount(env.DB, ticket) : 0;
   if (outside) return new Response(outside, { status: 400 });
 
   // Today's capacity first (dailyCaps.ts), so a pass refused for it spends none of the ticket.
@@ -97,7 +99,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) 
   try {
     const result =
       req.pass === "section" ? groundSectionOutput(toolInput, req) : req.pass === "checklist" ? groundChecklistOutput(toolInput, req) : validateEditorOutput(toolInput, req);
-    if (req.pass === "editor") await markSynthesized(env.DB, ticket, delivered!.size);
+    if (req.pass === "editor") await markSynthesized(env.DB, ticket, basis);
     else await markDelivered(env.DB, ticket, req.pass === "section" ? req.target : CHECKLIST_ID);
     return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
