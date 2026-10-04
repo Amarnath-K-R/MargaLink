@@ -9,6 +9,7 @@ import { CHECKLIST_TOOL, EDITOR_TOOL, REVIEW_TOOLS, SECTION_TOOL } from "./revie
 import {
   CHUNK_TEXT_MAX,
   MAX_ACROSS,
+  MAX_CHECKLIST_ITEMS,
   MAX_EDITOR_FINDINGS,
   MAX_GUIDANCE_CHARS,
   MAX_KEY_NUMBERS,
@@ -43,6 +44,7 @@ import {
 export const CHUNK_ID = /^s\d+(?:-p\d+)?$/;
 export const FINDING_ID = /^(s\d+(?:-p\d+)?)-f(\d+)$/;
 export const KEY_ID = /^(s\d+(?:-p\d+)?)-k(\d+)$/;
+export const CHECKLIST_ITEM_ID = /^c\d+$/;
 // Thorough's checklist pass: tracked in the ticket like a section, under this id.
 export const CHECKLIST_ID = "checklist";
 
@@ -108,7 +110,7 @@ function parseChecklist(body: Loose): ChecklistRequest | string {
 }
 
 function parseEditor(body: Loose): EditorRequest | string {
-  const keyErr = keysExactly(body, ["pass", "tier", "journalId", "guidance", "paper", "findings", "keyNumbers"], "request");
+  const keyErr = keysExactly(body, ["pass", "tier", "journalId", "guidance", "paper", "findings", "keyNumbers", "checklist"], "request");
   if (keyErr) return keyErr;
   if (!isTier(body.tier)) return "tier must be quick, standard or thorough";
   const ctxErr = contextError(body);
@@ -130,6 +132,14 @@ function parseEditor(body: Loose): EditorRequest | string {
     if (typeof k.id !== "string" || !KEY_ID.test(k.id) || ids.has(k.id)) return "key number ids must be unique and look like s3-k0";
     if (!shortString(k.measure, MAX_MEASURE_CHARS) || !shortString(k.quote, MAX_QUOTE_CHARS)) return "a key number's fields are malformed";
     ids.add(k.id);
+  }
+  if (!Array.isArray(body.checklist) || body.checklist.length > MAX_CHECKLIST_ITEMS) return `checklist must list at most ${MAX_CHECKLIST_ITEMS} items`;
+  if (body.checklist.length > 0 && body.tier !== "thorough") return "the checklist is part of a thorough review only";
+  for (const c of body.checklist) {
+    if (!isObj(c) || keysExactly(c, ["id", "item"], "checklist item")) return "each checklist item must have exactly id, item";
+    if (typeof c.id !== "string" || !CHECKLIST_ITEM_ID.test(c.id) || ids.has(c.id)) return "checklist item ids must be unique and look like c0";
+    if (!shortString(c.item, MAX_TITLE_CHARS)) return "a checklist item's name is malformed";
+    ids.add(c.id);
   }
   return body as unknown as EditorRequest;
 }
@@ -192,6 +202,7 @@ export function editorOutsideDelivered(req: EditorRequest, delivered: Set<string
     if (!delivered.has(chunk)) return `${k.id} is from a section of this review that hasn't come back`;
     if (Number(n) >= MAX_KEY_NUMBERS) return `more key numbers from ${chunk} than its section pass could return`;
   }
+  if (req.checklist.length > 0 && !delivered.has(CHECKLIST_ID)) return "the reporting checklist of this review hasn't come back";
   return null;
 }
 
@@ -252,8 +263,18 @@ export function validateEditorOutput(output: unknown, req: EditorRequest): Edito
     });
   }
   const gone = new Set([...duplicates.flatMap((d) => d.drop), ...verdicts.filter((v) => v.action === "drop").map((v) => v.id)]);
-  const known = new Set([...severity.keys(), ...acrossPaper.map((f) => f.id)]);
-  const fixFirst = [...new Set(output.fixFirst.filter((id): id is string => typeof id === "string" && known.has(id) && !gone.has(id)))].slice(0, plan.fixFirst[1]);
+  // What to fix first is a major or minor problem; a suggestion never is, whatever the editor ranked.
+  const known = new Map<string, Severity>([...severity, ...acrossPaper.map((f) => [f.id, f.severity] as const)]);
+  const fixable = (id: unknown): id is string => typeof id === "string" && !gone.has(id) && (known.get(id) ?? "suggestion") !== "suggestion";
+  const fixFirst = [...new Set(output.fixFirst.filter(fixable))].slice(0, plan.fixFirst[1]);
+  // A checklist item a finding in the report already raises: the item points to it rather than saying it again.
+  const items = new Set(req.checklist.map((c) => c.id));
+  const checklistCovered: EditorResponse["checklistCovered"] = [];
+  for (const pair of Array.isArray(output.checklistCovered) ? output.checklistCovered : []) {
+    const [item, by] = typeof pair === "string" ? pair.split(":").map((x) => x.trim()) : [];
+    if (!item || !items.has(item) || !by || !known.has(by) || gone.has(by) || checklistCovered.some((x) => x.item === item)) continue;
+    checklistCovered.push({ item, by });
+  }
   return {
     overview: clip(output.overview, MAX_OVERVIEW_CHARS),
     strengths: output.strengths
@@ -265,6 +286,7 @@ export function validateEditorOutput(output: unknown, req: EditorRequest): Edito
     duplicates,
     verdicts,
     acrossPaper,
+    checklistCovered,
   };
 }
 

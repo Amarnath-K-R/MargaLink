@@ -37,5 +37,7 @@ export function reviewAnswer(req) {
     duplicates: [],
     verdicts: [],
     acrossPaper: [],
+    // At thorough, the checklist's first item is raised by the first finding, as the real editor would say.
+    checklistCovered: req.checklist?.length && req.findings.length ? [`c0:${req.findings[0].id}`] : [],
   };
 }

@@ -66,7 +66,7 @@ const begin = (tier: string, reviewIds: string[], cookie = annCookie, context: {
 const section = (ticket: string, target: string, tier = "quick", p: unknown = paper, cookie = annCookie, guidance = "") =>
   post(review, "/api/review", { pass: "section", tier, journalId, guidance, paper: p, target }, cookie, ticket);
 const checklist = (ticket: string, tier = "thorough") => post(review, "/api/review", { pass: "checklist", tier, journalId, guidance: "", paper }, annCookie, ticket);
-const editor = (ticket: string, tier = "quick", extra: object = {}) => post(review, "/api/review", { pass: "editor", tier, journalId, guidance: "", paper, findings: [], keyNumbers: [], ...extra }, annCookie, ticket);
+const editor = (ticket: string, tier = "quick", extra: object = {}) => post(review, "/api/review", { pass: "editor", tier, journalId, guidance: "", paper, findings: [], keyNumbers: [], checklist: [], ...extra }, annCookie, ticket);
 type Paid = { ticket: string; coins: number; balance: number };
 
 // --- starting

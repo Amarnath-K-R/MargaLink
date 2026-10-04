@@ -47,9 +47,15 @@ const req = (tier: EditorRequest["tier"]): EditorRequest => ({
   paper,
   findings: [{ id: "s2-f0", title: "Folds split by image", severity: "major", why: "Leakage.", quotes: ["Five-fold cross-validation on images"] }],
   keyNumbers: [{ id: "s1-k0", measure: "adults enrolled", quote: "412 adults" }],
+  checklist: [],
 });
 const std = editorInstruction(req("standard"), rules);
 for (const part of [rules.journalName, "s2-f0", "Folds split by image", "s1-k0", "submit_editor_review", "verdicts", "acrossPaper", "a1"]) assert.ok(std.includes(part), part);
+const thoroughEd = editorInstruction({ ...req("thorough"), checklist: [{ id: "c0", item: "Sample size justification" }] }, rules);
+assert.match(thoroughEd, /c0 \| Sample size justification/, "the editor sees the checklist's items by id");
+assert.match(thoroughEd, /checklistCovered: for each/);
+assert.match(std, /leave checklistCovered empty/);
+assert.match(std, /never a suggestion/);
 const noJournal = editorInstruction({ ...req("standard"), journalId: null }, undefined);
 assert.match(noJournal, /no journal was chosen/);
 assert.match(noJournal, /one report\./, "no journal named");

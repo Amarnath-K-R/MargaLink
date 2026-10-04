@@ -49,6 +49,7 @@ export type EditorRequest = {
   paper: PaperChunk[];
   findings: EditorFinding[];
   keyNumbers: { id: string; measure: string; quote: string }[]; // id s3-k0
+  checklist: { id: string; item: string }[]; // the reporting checklist's items (thorough), id c0, c1, …
 } & ReviewContext;
 export type Verdict = { id: string; action: "keep" | "soften" | "drop"; title: string; why: string; reason: string };
 export type EditorResponse = {
@@ -59,6 +60,7 @@ export type EditorResponse = {
   duplicates: { keep: string; drop: string[] }[];
   verdicts: Verdict[];
   acrossPaper: (Finding & { id: string })[];
+  checklistCovered: { item: string; by: string }[]; // a checklist item (c0…) a finding (s3-f0, a1) already raises
 };
 export type PassRequest = SectionRequest | ChecklistRequest | EditorRequest;
 
@@ -82,7 +84,8 @@ export type ReviewReport = {
   fixFirst: { id: string; title: string; severity: Severity; section: string }[];
   sections: ReportSection[];
   acrossPaper: ShownFinding[];
-  checklist: { guideline: string | null; why: string; items: (Omit<ChecklistItem, "quote"> & { citation: Citation | null })[] } | null;
+  // coveredBy: a finding in the report that already raises the item (absent in reports kept before it existed).
+  checklist: { guideline: string | null; why: string; items: (Omit<ChecklistItem, "quote"> & { citation: Citation | null; coveredBy?: { id: string; title: string; section: string } | null })[] } | null;
   coverage: Coverage & { setAside: number };
 };
 export type ReviewProgress = { phase: "sections" | "editor"; done: number; total: number; current: string | null; partial: ReviewReport };

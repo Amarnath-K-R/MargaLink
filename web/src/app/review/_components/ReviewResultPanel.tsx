@@ -234,15 +234,25 @@ export default function ReviewResultPanel({
               <p className="font-medium">Reporting checklist{report.checklist.guideline ? `: ${report.checklist.guideline}` : ""}</p>
               <p className="mt-1 text-ink-soft">{report.checklist.why}</p>
               <ul className="mt-2 space-y-2">
-                {report.checklist.items.map((it, i) => (
-                  <li key={i}>
-                    <span className="font-medium">{it.item}</span>{" "}
-                    <span className="text-ink-soft">
-                      ({it.status === "missing" ? "missing" : "partly reported"}): {it.note}
-                    </span>
-                    {it.citation && <Quotes citations={[it.citation]} onCitation={onCitation} />}
-                  </li>
-                ))}
+                {report.checklist.items.map((it, i) =>
+                  it.coveredBy ? (
+                    <li key={i}>
+                      <span className="font-medium">{it.item}</span>{" "}
+                      <span className="text-ink-soft">({it.status === "missing" ? "missing" : "partly reported"}): raised above, in {it.coveredBy.section}: </span>
+                      <button type="button" onClick={() => go(it.coveredBy!.id)} className="text-left text-accent hover:underline">
+                        {it.coveredBy.title}
+                      </button>
+                    </li>
+                  ) : (
+                    <li key={i}>
+                      <span className="font-medium">{it.item}</span>{" "}
+                      <span className="text-ink-soft">
+                        ({it.status === "missing" ? "missing" : "partly reported"}): {it.note}
+                      </span>
+                      {it.citation && <Quotes citations={[it.citation]} onCitation={onCitation} />}
+                    </li>
+                  ),
+                )}
               </ul>
             </div>
           )}

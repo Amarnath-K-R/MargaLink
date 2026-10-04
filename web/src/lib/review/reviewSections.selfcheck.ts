@@ -243,7 +243,9 @@ ${REFS}
   assert.equal(chunkSections([s]).length, 1, "below thorough, a section under 16k stays whole");
   const parts = chunkSections([s], [], { subsections: true });
   assert.deepEqual(parts.map((c) => c.id), ["s1-p1", "s1-p2", "s1-p3"]);
-  assert.ok(parts[1].title.endsWith("2.2 Model") && parts[1].text.includes("2.3 Settings"), "the short 2.3 joined 2.2");
+  assert.ok(parts[1].title.endsWith("2.2 Model to 2.3 Settings") && parts[1].text.includes("2.3 Settings"), "the short 2.3 joined 2.2, and the title says so");
+  assert.equal(parts[0].title, "Methods · 2.1 Data", "the section's opening lines join its first subsection, named for it");
+  assert.equal(parts[2].title, "Methods · 2.4 Training");
   assert.equal(parts.map((c) => c.text).join(""), s.text, "nothing lost or repeated");
   const [one] = splitIntoSections("Results\n" + "One undivided result paragraph. ".repeat(100));
   assert.deepEqual(chunkSections([one], [], { subsections: true }).map((c) => c.id), ["s1"], "a section with no subsections keeps its id");

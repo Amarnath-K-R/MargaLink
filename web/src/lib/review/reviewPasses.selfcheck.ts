@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { CHECKLIST_ID, editorOutsideDelivered, parsePassRequest, parseStartRequest, passBudget, passCallConfig, sentChars, upstreamBody, validateEditorOutput } from "./reviewPasses.ts";
 import { JOURNAL_RULES } from "../journals/journalRules.ts";
+import { REVIEW_TOOLS } from "./reviewTool.ts";
 import type { EditorRequest, PaperChunk } from "./reviewTypes.ts";
 
 const paper: PaperChunk[] = [
@@ -63,6 +64,7 @@ const editor: EditorRequest = {
     { id: "s2-f2", title: "Calibration only described", severity: "major", why: "W.", quotes: [] },
   ],
   keyNumbers: [{ id: "s2-k0", measure: "patients", quote: "1,730 patients" }],
+  checklist: [],
 };
 assert.equal(typeof parsePassRequest(editor), "object");
 assert.equal(typeof parsePassRequest({ ...editor, findings: [editor.findings[0], editor.findings[0]] }), "string", "duplicate ids");
@@ -70,6 +72,15 @@ assert.equal(typeof parsePassRequest({ ...editor, findings: [{ ...editor.finding
 assert.equal(editorOutsideDelivered(editor, new Set(["s1", "s2"])), null);
 assert.match(editorOutsideDelivered(editor, new Set(["s1"]))!, /s2/);
 assert.match(editorOutsideDelivered({ ...editor, findings: [{ ...editor.findings[0], id: "s1-f8" }] }, new Set(["s1"]))!, /more/, "standard returns at most 8 per section");
+// The checklist's items, at thorough only, and only once the checklist came back.
+const items = [{ id: "c0", item: "Study size" }, { id: "c1", item: "Outcome definition" }];
+const thoroughEditor: EditorRequest = { ...editor, tier: "thorough", checklist: items };
+assert.equal(typeof parsePassRequest(thoroughEditor), "object");
+assert.equal(typeof parsePassRequest({ ...editor, checklist: items }), "string", "no checklist below thorough");
+assert.equal(typeof parsePassRequest({ ...thoroughEditor, checklist: [items[0], items[0]] }), "string", "duplicate item ids");
+assert.equal(typeof parsePassRequest({ ...thoroughEditor, checklist: [{ id: "x0", item: "Study size" }] }), "string");
+assert.match(editorOutsideDelivered(thoroughEditor, new Set(["s1", "s2"]))!, /checklist/);
+assert.equal(editorOutsideDelivered(thoroughEditor, new Set(["s1", "s2", "checklist"])), null);
 
 // --- the editor's answer, checked
 const answer = {
@@ -83,6 +94,7 @@ const answer = {
     { id: "s1-f0", action: "drop", title: "", why: "", reason: "Only majors get verdicts." },
     { id: "s2-f0", action: "soften", title: "", why: "", reason: "" },
   ],
+  checklistCovered: ["c0:s2-f0", "c0:s1-f0", "c1:s2-f2", "c9:s2-f0", "c1:zz", "c1", 7],
   acrossPaper: [
     { title: "Patients differ", severity: "major", category: "consistency", quotes: ["We enrolled 412 adults", "across 1,730 patients"], why: "W.", suggestion: "S.", question: false, missing: false },
     { title: "One-sided disagreement", severity: "major", category: "consistency", quotes: ["We enrolled 412 adults"], why: "W.", suggestion: "S.", question: false, missing: false },
@@ -94,6 +106,10 @@ assert.deepEqual(ok.duplicates, [{ keep: "s2-f0", drop: ["s2-f1"] }], "unknown i
 assert.deepEqual(ok.verdicts.map((v) => [v.id, v.action]), [["s2-f2", "drop"]], "only majors; soften needs a title and a why");
 assert.deepEqual(ok.acrossPaper.map((f) => f.id), ["a1"], "a disagreement needs both places");
 assert.deepEqual(ok.fixFirst, ["s2-f0", "a1"], "unknown, duplicated-away, dropped and repeated ids are left out");
+assert.deepEqual(ok.checklistCovered, [], "no checklist items below thorough, so nothing to cover");
+assert.deepEqual(validateEditorOutput(answer, thoroughEditor).checklistCovered, [{ item: "c0", by: "s2-f0" }], "known items, once each, by findings still in the report");
+const withSuggestion: EditorRequest = { ...editor, findings: [...editor.findings, { id: "s1-f1", title: "Could add a figure", severity: "suggestion", why: "W.", quotes: [] }] };
+assert.deepEqual(validateEditorOutput({ ...answer, fixFirst: ["s1-f1", "s2-f0"] }, withSuggestion).fixFirst, ["s2-f0"], "never a suggestion first");
 const quick = validateEditorOutput(answer, { ...editor, tier: "quick" });
 assert.deepEqual([quick.verdicts, quick.acrossPaper], [[], []], "quick's editor has neither job");
 assert.throws(() => validateEditorOutput({ ...answer, journalFit: { assessment: "great", explanation: "" } }, editor));
@@ -131,5 +147,8 @@ assert.equal(passCallConfig(checklist, undefined).toolName, "submit_checklist");
 assert.doesNotMatch(passCallConfig({ ...editor, journalId: null }, undefined).instruction, /for undefined/, "the editor works without a journal");
 assert.match(passCallConfig({ ...editor, journalId: null }, undefined).instruction, /no journal was chosen/);
 assert.equal(CHECKLIST_ID, "checklist");
+// Every pass offers all three strict tools, which Anthropic compiles into one grammar of capped size: an
+// object-shaped field once tipped it over ("compiled grammar is too large"), failing every pass. Grow them only after a live check.
+assert.ok(JSON.stringify(REVIEW_TOOLS).length <= 3550, `the tool schemas grew to ${JSON.stringify(REVIEW_TOOLS).length} characters: check live first`);
 
 console.log("reviewPasses.selfcheck: OK");

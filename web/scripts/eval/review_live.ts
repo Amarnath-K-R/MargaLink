@@ -64,6 +64,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const handler = (url.endsWith("/start") ? start : review) as unknown as (c: { request: Request; env: typeof env; data: Record<string, unknown> }) => Promise<Response>;
   const res = await handler({ request, env, data });
   if (url.endsWith("/api/review")) passes.push({ pass: JSON.parse(init!.body as string).pass, ms: performance.now() - t0, status: res.status, ai: data.ai as Pass["ai"] });
+  // Why a pass failed, on stderr (the server's message: never the paper).
+  if (!res.ok) console.error(`${url.split("/api/")[1]} ${res.status}: ${(await res.clone().text()).slice(0, 300)}`);
   return res;
 }) as typeof fetch;
 

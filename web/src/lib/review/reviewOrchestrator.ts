@@ -146,8 +146,8 @@ export function quoteReview(opts: Pick<RunReviewOptions, "text" | "hints" | "out
   };
 }
 
-/** Every finding and key number that came back, by id, for the editor: past its cap, majors first (document order within each severity). */
-export function editorInputs(state: ReviewState): Pick<EditorRequest, "findings" | "keyNumbers"> {
+/** Every finding and key number that came back, by id, for the editor: past its cap, majors first (document order within each severity); and the checklist's items. */
+export function editorInputs(state: ReviewState): Pick<EditorRequest, "findings" | "keyNumbers" | "checklist"> {
   const findings: EditorFinding[] = [];
   const keyNumbers: EditorRequest["keyNumbers"] = [];
   for (const id of state.review) {
@@ -158,7 +158,9 @@ export function editorInputs(state: ReviewState): Pick<EditorRequest, "findings"
   }
   const rank = { major: 0, minor: 1, suggestion: 2 } as const;
   const capped = findings.length <= MAX_EDITOR_FINDINGS ? findings : [...findings].sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, MAX_EDITOR_FINDINGS);
-  return { findings: capped, keyNumbers };
+  // The checklist's items by position (c0, c1, …), as the report lists them.
+  const checklist = (state.checklist?.items ?? []).map((it, i) => ({ id: `c${i}`, item: it.item }));
+  return { findings: capped, keyNumbers, checklist };
 }
 
 const reportOf = (state: ReviewState, opts: RunReviewOptions) =>

@@ -130,7 +130,8 @@ export function splitIntoSections(text: string, hints: HeadingHint[] = []): Sect
   return spans.map((s, i) => ({ ...s, id: `s${i + 1}`, text: text.slice(s.charStart, s.charEnd) }));
 }
 
-type Span = { title: string | null; text: string };
+// `through`: the last subsection merged into this one, so its title can name all it holds.
+type Span = { title: string | null; text: string; through?: string };
 
 function splitAtSubsections(text: string, subheads: Set<string>): Span[] {
   const spans: Span[] = [];
@@ -178,7 +179,8 @@ function cutOversized(span: Span): Span[] {
     rest = rest.slice(at);
     title = null;
   }
-  out.push({ title, text: rest });
+  // Uncut, it keeps the subsections merged into it, for its title; cut, its later pieces are numbered parts.
+  out.push(out.length === 0 ? { title, text: rest, through: span.through } : { title, text: rest });
   return out;
 }
 
@@ -198,8 +200,11 @@ function mergeSmall(spans: Span[]): Span[] {
   const out: Span[] = [];
   for (const s of spans) {
     const last = out[out.length - 1];
-    if (last && (s.text.length < SUBSECTION_MIN_CHARS || last.text.length < SUBSECTION_MIN_CHARS)) last.text += s.text;
-    else out.push({ ...s });
+    if (last && (s.text.length < SUBSECTION_MIN_CHARS || last.text.length < SUBSECTION_MIN_CHARS)) {
+      last.text += s.text;
+      if (s.title && !last.title) last.title = s.title; // the section's opening lines, joined to its first subsection
+      else if (s.title) last.through = s.title;
+    } else out.push({ ...s });
   }
   return out;
 }
@@ -223,7 +228,7 @@ export function chunkSections(sections: Section[], hints: HeadingHint[] = [], op
       chunks.push({
         id: `${s.id}-p${i + 1}`,
         sectionId: s.id,
-        title: clip(p.title ? `${clip(s.title, 120)} · ${p.title}` : `${clip(s.title, 180)} (part ${i + 1}/${parts.length})`),
+        title: clip(p.title ? `${clip(s.title, 120)} · ${p.title}${p.through ? ` to ${p.through}` : ""}` : `${clip(s.title, 180)} (part ${i + 1}/${parts.length})`),
         kind: s.kind,
         part: i + 1,
         parts: parts.length,

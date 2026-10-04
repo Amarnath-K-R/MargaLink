@@ -146,7 +146,7 @@ export function sectionInstruction(target: PaperChunk, tier: ReviewTier): string
 
 What to check in this section: ${KIND_CHECKLIST[target.kind]}
 
-Report at most ${plan.maxFindings} findings, most important first, with severity ${either(plan.severities)}. ${plan.guidance}
+Report at most ${plan.maxFindings} findings, most important first, with severity ${either(plan.severities)}. ${plan.guidance} Each finding is a different problem: if two points would be fixed by the same change, make them one finding.
 
 Also give:
 - verdict: 1-2 sentences on how well this section does its job, naming what works as well as what doesn't.
@@ -174,14 +174,17 @@ export function editorInstruction(req: EditorRequest, rules: JournalRules | unde
     rules
       ? `journalFit: does the paper fit the journal's scope above? "good", "possible" or "poor", with a one-sentence explanation.`
       : `journalFit: no journal was chosen. If the authors' notes describe the journal they're writing for, judge the fit against that: "good", "possible" or "poor", with a one-sentence explanation. Otherwise set assessment to "possible" and explanation to an empty string; it isn't shown.`,
-    "duplicates: findings that describe the same problem. For each group, keep the one in the section where the fix belongs (keep), and list the others (drop). A finding may be in only one group.",
+    "duplicates: findings that describe the same problem, or whose fixes would be the same change, whether in one section or in different ones. For each group, keep the one in the section where the fix belongs (keep), and list the others (drop). A finding may be in only one group.",
     plan.verdicts
       ? `verdicts: check every major finding against the manuscript. "keep" if it holds; "soften" if a legitimate explanation is plausible (give a new title and why, put as a question to the authors); "drop" if the manuscript shows it is wrong (say why in reason). For keep and drop, leave title and why empty.`
       : "verdicts: leave verdicts empty.",
     plan.acrossPaper
-      ? "acrossPaper: problems no single section shows, which the section reviewers couldn't see: a quantity stated differently in two places (quote both; not when the difference is explained, e.g. by a subgroup, a time point or a stated exclusion), an abstract that doesn't match the results, conclusions that go beyond the results, analyses the methods promise that are never reported, results whose methods are never described. Use the finding format. Refer to your own acrossPaper findings as a1, a2, … in the order you list them. Don't repeat a section finding."
+      ? "acrossPaper: problems no single section shows, which the section reviewers couldn't see: a quantity stated differently in two places (quote both; not when the difference is explained, e.g. by a subgroup, a time point or a stated exclusion), an abstract that doesn't match the results, conclusions that go beyond the results, analyses the methods promise that are never reported, results whose methods are never described. Use the finding format. Refer to your own acrossPaper findings as a1, a2, … in the order you list them. Never restate a problem a section finding already raises, even in other words or at another severity: add only what no section finding covers."
       : "acrossPaper: leave acrossPaper empty.",
-    `fixFirst: the ${least}-${most} things the authors should fix first, most important first, as ids (section findings' ids${plan.acrossPaper ? ", or a1, a2, … for your own" : ""}). Never an id you dropped, or listed as a duplicate to drop.`,
+    plan.checklist
+      ? 'checklistCovered: for each reporting-checklist item below that a finding (a section\'s, or your own acrossPaper one) already raises, "item id:finding id", e.g. "c2:s3-f1", so the report points to the finding instead of saying it twice. Leave out an item no finding raises.'
+      : "checklistCovered: leave checklistCovered empty.",
+    `fixFirst: the ${least}-${most} things the authors should fix first, most important first, as ids (section findings' ids${plan.acrossPaper ? ", or a1, a2, … for your own" : ""}): major and minor findings only, never a suggestion. Never an id you dropped, or listed as a duplicate to drop.`,
   ];
   return `YOUR JOB: you are the editor. Section reviewers have each reviewed one section of the manuscript; their findings are below, each with an id. Turn them into one report${rules ? ` for ${rules.journalName}` : ""}.
 
@@ -192,6 +195,7 @@ ${req.findings.map((f) => `${f.id} | ${f.severity} | ${f.title} | ${f.why} | ${f
 
 KEY NUMBERS (id | measure | quote):
 ${req.keyNumbers.map((k) => `${k.id} | ${k.measure} | "${k.quote}"`).join("\n") || "(none)"}
+${plan.checklist ? `\nREPORTING CHECKLIST ITEMS (id | item):\n${req.checklist.map((c) => `${c.id} | ${c.item}`).join("\n") || "(none)"}\n` : ""}
 
 When done, call the submit_editor_review tool.`;
 }

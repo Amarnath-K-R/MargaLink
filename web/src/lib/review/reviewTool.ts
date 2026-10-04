@@ -67,11 +67,11 @@ export const CHECKLIST_TOOL = {
 export const EDITOR_TOOL = {
   name: "submit_editor_review",
   strict: true,
-  description: "Submit the editor's overview, priorities, duplicates, verdicts and across-paper findings.",
+  description: "Submit the editor's overview, priorities, duplicates, verdicts, across-paper findings, and which checklist items a finding already raises.",
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["overview", "strengths", "journalFit", "fixFirst", "duplicates", "verdicts", "acrossPaper"],
+    required: ["overview", "strengths", "journalFit", "fixFirst", "duplicates", "verdicts", "acrossPaper", "checklistCovered"],
     properties: {
       overview: { type: "string" },
       strengths: { type: "array", items: { type: "string" } },
@@ -96,6 +96,8 @@ export const EDITOR_TOOL = {
         },
       },
       acrossPaper: { type: "array", items: FINDING },
+      // "c2:s3-f1" pairs, not objects: the three strict tools compile into one grammar, and Anthropic caps its size.
+      checklistCovered: { type: "array", items: { type: "string" } },
     },
   },
 } as const;

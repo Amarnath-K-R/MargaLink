@@ -25,6 +25,9 @@ export type ReportInput = {
 
 // Claude is asked for no em dashes; any that come back are shown as a comma (as Rewrite's notes).
 const plain = (s: string) => s.replace(/\s*—\s*/g, ", ");
+// Within a section, the major findings first, then minor, then suggestions (each kind in the reviewer's order).
+const RANK: Record<Severity, number> = { major: 0, minor: 1, suggestion: 2 };
+const bySeverity = (a: ShownFinding, b: ShownFinding) => RANK[a.severity] - RANK[b.severity];
 
 export function assembleReport(x: ReportInput): ReviewReport {
   const titles = new Map(x.chunks.map((c) => [c.id, c.title]));
@@ -54,15 +57,19 @@ export function assembleReport(x: ReportInput): ReviewReport {
       const s = v ? show({ ...f, title: v.title, why: v.why, question: true }, fid, true) : show(f, fid);
       shown.set(fid, { finding: s, section: title });
       return [s];
-    });
+    }).sort(bySeverity);
     const status: "done" | "failed" | "pending" = got ? "done" : id in x.failed ? "failed" : "pending";
     return { id, title, status, reason: x.failed[id] ?? null, verdict: got ? plain(got.verdict) : null, findings };
   });
-  const acrossPaper = (ed?.acrossPaper ?? []).map((f) => {
-    const s = show(f, f.id);
-    shown.set(f.id, { finding: s, section: ACROSS_THE_PAPER });
-    return s;
-  });
+  const acrossPaper = (ed?.acrossPaper ?? [])
+    .map((f) => {
+      const s = show(f, f.id);
+      shown.set(f.id, { finding: s, section: ACROSS_THE_PAPER });
+      return s;
+    })
+    .sort(bySeverity);
+  // A checklist item a finding already raises points to it (only to one still shown).
+  const covered = new Map((ed?.checklistCovered ?? []).map((c) => [c.item, c.by]));
   const fixFirst = (ed?.fixFirst ?? []).flatMap((id) => {
     const hit = shown.get(id);
     return hit ? [{ id, title: hit.finding.title, severity: hit.finding.severity, section: hit.section }] : [];
@@ -83,7 +90,15 @@ export function assembleReport(x: ReportInput): ReviewReport {
     sections,
     acrossPaper,
     checklist: x.checklist
-      ? { guideline: x.checklist.guideline, why: plain(x.checklist.why), items: x.checklist.items.map(({ quote, ...it }) => ({ ...it, note: plain(it.note), citation: quote ? cite(quote) : null })) }
+      ? {
+          guideline: x.checklist.guideline,
+          why: plain(x.checklist.why),
+          items: x.checklist.items.map(({ quote, ...it }, i) => {
+            const by = covered.get(`c${i}`);
+            const hit = by ? shown.get(by) : undefined;
+            return { ...it, note: plain(it.note), citation: quote ? cite(quote) : null, coveredBy: hit ? { id: by!, title: hit.finding.title, section: hit.section } : null };
+          }),
+        }
       : null,
     coverage: {
       reviewed: sections.filter((s) => s.status === "done").map(({ id, title }) => ({ id, title })),
@@ -164,7 +179,11 @@ export function reportMarkdown(r: ReviewReport): string {
     if (r.checklist) {
       out.push(`### Reporting checklist${r.checklist.guideline ? `: ${r.checklist.guideline}` : ""}`, "", r.checklist.why, "");
       out.push(
-        ...r.checklist.items.flatMap((it) => [`- **${it.item}** (${it.status === "missing" ? "missing" : "partly reported"}): ${it.note}`, ...(it.citation ? [`  > "${it.citation.quote}" (${it.citation.section})`] : [])]),
+        ...r.checklist.items.flatMap((it) =>
+          it.coveredBy
+            ? [`- **${it.item}** (${it.status === "missing" ? "missing" : "partly reported"}): raised above, in ${it.coveredBy.section}: "${it.coveredBy.title}"`]
+            : [`- **${it.item}** (${it.status === "missing" ? "missing" : "partly reported"}): ${it.note}`, ...(it.citation ? ["", `  > "${it.citation.quote}" (${it.citation.section})`, ""] : [])],
+        ),
         "",
       );
     }

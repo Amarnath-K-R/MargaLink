@@ -45,6 +45,7 @@ const input: ReportInput = {
       { id: "s2-f2", action: "drop", title: "", why: "", reason: "The paper reports it." },
     ],
     acrossPaper: [{ ...f("Abstract and results disagree on n", "major", "s1"), id: "a1" }],
+    checklistCovered: [{ item: "c0", by: "s2-f0" }],
   },
   tier: "standard",
   journalName: "JAMA",
@@ -82,6 +83,16 @@ assert.deepEqual(assembleReport({ ...input, checklist: null, checklistFailed: "t
   title: "Reporting checklist",
   reason: "the answer came back cut short",
 });
+
+// a checklist item a finding already raises points to it, in the report and its Markdown
+assert.deepEqual(r.checklist?.items[0].coveredBy, { id: "s2-f0", title: "Folds split by image, not patient", section: "Methods" });
+assert.ok(reportMarkdown(r).includes('- **Sample size** (missing): raised above, in Methods: "Folds split by image, not patient"'));
+const notCovered = assembleReport({ ...input, editor: { ...input.editor!, checklistCovered: [] } });
+assert.equal(notCovered.checklist?.items[0].coveredBy, null);
+
+// within a section, major findings first, then minor, then suggestions
+const mixed = assembleReport({ ...input, editor: null, sections: { ...input.sections, s2: { verdict: "V.", findings: [f("A suggestion", "suggestion", "s2"), f("A minor one", "minor", "s2"), f("A major one", "major", "s2")], keyNumbers: [] } } });
+assert.deepEqual(mixed.sections[1].findings.map((x) => [x.severity, x.id]), [["major", "s2-f2"], ["minor", "s2-f1"], ["suggestion", "s2-f0"]], "sorted, each keeping its id");
 
 // Fix these first in full: where the change goes, the passages, what to do
 const details = fixFirstDetails(r);

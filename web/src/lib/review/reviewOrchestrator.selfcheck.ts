@@ -44,7 +44,7 @@ globalThis.fetch = (async (url: string, init: RequestInit) => {
       keyNumbers: [{ measure: "n", quote: q }],
     });
   }
-  if (body.pass === "checklist") return Response.json({ guideline: "STROBE", why: "Observational.", items: [] });
+  if (body.pass === "checklist") return Response.json({ guideline: "STROBE", why: "Observational.", items: [{ item: "Study size", status: "missing", note: "N.", quote: null }] });
   if (editorFails > 0) {
     editorFails--;
     return new Response("busy", { status: 502 });
@@ -98,6 +98,7 @@ const t = await runReview({ ...opts, tier: "thorough" });
 assert.equal(calls.filter((c) => c.pass === "checklist").length, 1);
 assert.equal(calls[0].pass, "section");
 assert.equal(t.result.checklist?.guideline, "STROBE");
+assert.deepEqual((calls.at(-1)!.body as EditorRequest).checklist, [{ id: "c0", item: "Study size" }], "the editor sees the checklist's items, to point the covered ones at findings");
 
 // --- no journal, with the authors' notes: every pass carries the same context; the start pays for the notes
 reset();
