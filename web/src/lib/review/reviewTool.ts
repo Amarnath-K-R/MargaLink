@@ -1,103 +1,103 @@
-// The Claude tool-call schemas behind functions/api/review.ts's two passes
-// (imported there via a relative path — see reviewGrounding.ts's header for why).
-import type { ExtractResponse, SynthesizeResponse } from "./reviewTypes.ts";
+// The three tools a review pass can submit through: one per pass, but every
+// pass lists all three in this order, so tools, system prompt and paper make
+// one cached prefix shared by the whole review (reviewPasses.ts upstreamBody).
+// Strict: the shape is guaranteed on the wire; reviewGrounding.ts and
+// reviewPasses.ts still check every field.
+import { CATEGORIES, FIT, SEVERITIES } from "./reviewTypes.ts";
 
-// strict:true → the API guarantees schema-valid input. Strict mode requires
-// every property in `required` and additionalProperties:false at every
-// level; optionals are expressed as nullable. No minLength/maxLength (not
-// supported) — caps are enforced in reviewPasses.ts instead.
-const VALUE = {
+const FINDING = {
   type: "object",
   additionalProperties: false,
-  required: ["value", "unit"],
-  properties: { value: { type: "number" }, unit: { type: ["string", "null"] } },
+  required: ["title", "severity", "category", "quotes", "why", "suggestion", "question", "missing"],
+  properties: {
+    title: { type: "string" },
+    severity: { type: "string", enum: SEVERITIES },
+    category: { type: "string", enum: CATEGORIES },
+    quotes: { type: "array", items: { type: "string" } },
+    why: { type: "string" },
+    suggestion: { type: "string" },
+    question: { type: "boolean" },
+    missing: { type: "boolean" },
+  },
 } as const;
 
-export const EXTRACT_TOOL = {
-  name: "submit_extraction",
+export const SECTION_TOOL = {
+  name: "submit_section_review",
   strict: true,
-  description: "Submit the claims, statistical-reporting findings and notes extracted from this section.",
+  description: "Submit your review of the one section you were asked to review.",
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["claims", "statisticalReporting", "notes"],
+    required: ["verdict", "findings", "keyNumbers"],
     properties: {
-      claims: {
+      verdict: { type: "string" },
+      findings: { type: "array", items: FINDING },
+      keyNumbers: {
         type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["quote", "measure", "values"],
-          properties: { quote: { type: "string" }, measure: { type: "string" }, values: { type: "array", items: VALUE } },
-        },
+        items: { type: "object", additionalProperties: false, required: ["measure", "quote"], properties: { measure: { type: "string" }, quote: { type: "string" } } },
       },
-      statisticalReporting: {
+    },
+  },
+} as const;
+
+export const CHECKLIST_TOOL = {
+  name: "submit_checklist",
+  strict: true,
+  description: "Submit the reporting-guideline check of the whole manuscript.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["guideline", "why", "items"],
+    properties: {
+      guideline: { type: ["string", "null"] },
+      why: { type: "string" },
+      items: {
         type: "array",
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["description", "severity", "quote"],
-          properties: { description: { type: "string" }, severity: { type: "string", enum: ["minor", "major"] }, quote: { type: "string" } },
-        },
-      },
-      notes: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["description", "quote"],
-          properties: { description: { type: "string" }, quote: { type: ["string", "null"] } },
+          required: ["item", "status", "note", "quote"],
+          properties: { item: { type: "string" }, status: { type: "string", enum: ["missing", "partial"] }, note: { type: "string" }, quote: { type: ["string", "null"] } },
         },
       },
     },
   },
 } as const;
 
-export const SYNTHESIZE_TOOL = {
-  name: "submit_synthesis",
+export const EDITOR_TOOL = {
+  name: "submit_editor_review",
   strict: true,
-  description: "Submit the journal-fit assessment, cross-section inconsistencies, prioritized summary and other observations.",
+  description: "Submit the editor's overview, priorities, duplicates, verdicts and across-paper findings.",
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["journalFit", "inconsistencies", "summary", "otherObservations"],
+    required: ["overview", "strengths", "journalFit", "fixFirst", "duplicates", "verdicts", "acrossPaper"],
     properties: {
+      overview: { type: "string" },
+      strengths: { type: "array", items: { type: "string" } },
       journalFit: {
         type: "object",
         additionalProperties: false,
         required: ["assessment", "explanation"],
-        properties: { assessment: { type: "string", enum: ["good", "possible", "poor"] }, explanation: { type: "string" } },
+        properties: { assessment: { type: "string", enum: FIT }, explanation: { type: "string" } },
       },
-      inconsistencies: {
+      fixFirst: { type: "array", items: { type: "string" } },
+      duplicates: {
+        type: "array",
+        items: { type: "object", additionalProperties: false, required: ["keep", "drop"], properties: { keep: { type: "string" }, drop: { type: "array", items: { type: "string" } } } },
+      },
+      verdicts: {
         type: "array",
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["description", "claimIds"],
-          properties: { description: { type: "string" }, claimIds: { type: "array", items: { type: "string" } } },
+          required: ["id", "action", "title", "why", "reason"],
+          properties: { id: { type: "string" }, action: { type: "string", enum: ["keep", "soften", "drop"] }, title: { type: "string" }, why: { type: "string" }, reason: { type: "string" } },
         },
       },
-      summary: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["text", "severity", "refs"],
-          properties: {
-            text: { type: "string" },
-            severity: { type: "string", enum: ["major", "minor"] },
-            refs: { type: "array", items: { type: "string" } },
-          },
-        },
-      },
-      otherObservations: { type: "array", items: { type: "string" } },
+      acrossPaper: { type: "array", items: FINDING },
     },
   },
 } as const;
 
-// Drift guards: fail to typecheck if a response type gains a field the
-// schema above doesn't cover.
-const _extractCoversType: Record<keyof ExtractResponse, true> = { claims: true, statisticalReporting: true, notes: true };
-const _synthCoversType: Record<keyof SynthesizeResponse, true> = { journalFit: true, inconsistencies: true, summary: true, otherObservations: true };
-void _extractCoversType;
-void _synthCoversType;
+export const REVIEW_TOOLS = [SECTION_TOOL, CHECKLIST_TOOL, EDITOR_TOOL] as const;

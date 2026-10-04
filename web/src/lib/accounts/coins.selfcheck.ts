@@ -3,7 +3,7 @@
 // canonicalisation for the once-per-address welcome bonus.
 //   node src/lib/accounts/coins.selfcheck.ts
 import assert from "node:assert/strict";
-import { canonicalEmail, dueProGrants, isEmail, ledgerLabel, normalEmail, proCoinsLeft, reviewPrice, rewritePrice, REWRITE_MAX_WORDS, NotEnoughCoinsError, type LedgerKind } from "./coins.ts";
+import { canonicalEmail, dueProGrants, isEmail, ledgerLabel, maxPaidChars, normalEmail, proCoinsLeft, reviewPrice, rewritePrice, REWRITE_MAX_WORDS, NotEnoughCoinsError, type LedgerKind } from "./coins.ts";
 
 // the pricing table, exactly
 const table: [string, number, number][] = [
@@ -68,4 +68,13 @@ for (const k of ["welcome", "pack", "pro_grant", "pro_expire", "pro_reversal", "
 assert.equal(new NotEnoughCoinsError(1, 0).message, "This costs 1 M coin and you have 0.");
 const err = new NotEnoughCoinsError(9, 4);
 assert.equal(err.coins, 9); assert.equal(err.balance, 4); assert.ok(err instanceof Error);
+
+// The longest paper a price pays for: never shorter than what was priced, never a full step longer.
+for (const tier of ["quick", "standard", "thorough"] as const) {
+  for (const chars of [1, 2_000, 50_000, 50_001, 120_000, 400_000]) {
+    const most = maxPaidChars(tier, reviewPrice(tier, chars));
+    assert.ok(most >= chars && most < chars + 50_000 + 50_000, `${tier} ${chars}: ${most}`);
+  }
+  assert.equal(maxPaidChars(tier, 0), 0, "no coins, no paper");
+}
 console.log("coins.selfcheck: OK");

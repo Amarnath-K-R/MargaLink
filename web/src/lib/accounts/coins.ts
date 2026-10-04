@@ -21,6 +21,12 @@ export function reviewPrice(tier: ReviewTier, chars: number): number {
   return base + step * Math.ceil(Math.max(0, chars - PRICE_STEP) / PRICE_STEP);
 }
 
+/** The most characters a review's price pays for (the inverse of reviewPrice): how much paper each of its passes may carry. */
+export function maxPaidChars(tier: ReviewTier, coins: number): number {
+  const [base, step] = REVIEW_PRICE[tier];
+  return coins < base ? 0 : PRICE_STEP * (1 + Math.floor((coins - base) / step));
+}
+
 // Rewrite: a coin per 500 words of the passage sent, rounded up (at least
 // one), up to 2,000 words an action (1,000 to expand).
 export const REWRITE_WORDS_PER_COIN = 500;

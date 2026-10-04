@@ -1,76 +1,85 @@
-// Shared between the client (reviewOrchestrator.ts, review.ts, ReviewConsent.tsx,
-// ReviewResultPanel.tsx, app/review/page.tsx) and the Cloudflare Pages Function
-// that actually calls Claude (functions/api/review.ts, via reviewPasses.ts) — the only src/lib/ module functions/
-// imports purely for its type contract (figureSchema.ts/figurePrompt.ts, the
-// figure generator's equivalents, carry real logic alongside their types, so
-// they don't count as "purely"). Pure types + one const array, no
-// window/localStorage/fetch, so it's safe to bundle into the Worker. See
-// docs/ARCHITECTURE.md's note on the invariant this depends on: functions/
-// may only import src/lib/ modules that are pure/isomorphic like this one.
+// Shared between the browser (reviewOrchestrator.ts, reviewReport.ts, the
+// review components) and the Pages Function (functions/api/review.ts, via
+// reviewPasses.ts). Pure types and const arrays: safe to bundle into the
+// Worker (docs/ARCHITECTURE.md's invariant on what functions/ may import).
 
-// Every finding shown to the user cites the exact source text it's built on —
-// a description alone lets the model drift into paraphrase-that-becomes-
-// fabrication (verified against a real manuscript: it attributed numbers to
-// the abstract that were only ever in the Results tables). Every quote is
-// verified against the chunk it came from (reviewGrounding.ts), and
-// cross-section findings can only cite ledger ids (reviewPasses.ts).
-export type Citation = { quote: string; section: string };
+// A passage a finding rests on, as the user sees it: the quote, verified by the
+// server, and the section it was found in.
+export type Citation = { quote: string; section: string; sectionId: string };
 
-// Three review depths — see TIER_PLAN in reviewPrompt.ts for what each one
-// extracts and how hard synthesis reasons.
 export const REVIEW_TIERS = ["quick", "standard", "thorough"] as const;
 export type ReviewTier = (typeof REVIEW_TIERS)[number];
 
-// "body" = a section the document itself marks with a heading that isn't one
-// of the standard ones (e.g. "Wave III: Hard Clinical Outcomes" in a review).
+// "body" = a section the document marks with a heading that isn't a standard one.
 export const SECTION_KINDS = ["abstract", "introduction", "methods", "results", "discussion", "body", "references", "supplement", "other"] as const;
 export type SectionKind = (typeof SECTION_KINDS)[number];
-// A heading line the document's own structure marks (DOCX heading styles,
-// PDF heading fonts): level 1 starts a section, level 2 is a subsection.
+// A heading line the document's own structure marks: level 1 starts a section, level 2 is a subsection.
 export type HeadingHint = { text: string; level: 1 | 2 };
 export type Section = { id: string; title: string; kind: SectionKind; text: string; charStart: number; charEnd: number };
 export type Chunk = { id: string; sectionId: string; title: string; kind: SectionKind; part: number; parts: number; text: string };
-export type PaperMap = { title: string | null; totalWords: number; sections: { id: string; title: string; kind: SectionKind; words: number }[] };
 
-export type ClaimValue = { value: number; unit: string | null };
-export type ExtractRequest = { pass: "extract"; tier: ReviewTier; claimsCap: number; chunk: Omit<Chunk, "sectionId"> };
-export type ExtractResponse = {
-  claims: { quote: string; measure: string; values: ClaimValue[] }[];
-  statisticalReporting: { description: string; severity: "minor" | "major"; quote: string }[];
-  notes: { description: string; quote: string | null }[];
-};
+export const SEVERITIES = ["major", "minor", "suggestion"] as const;
+export type Severity = (typeof SEVERITIES)[number];
+export const CATEGORIES = ["design", "analysis", "reporting", "consistency", "claims", "clarity", "figures"] as const;
+export type Category = (typeof CATEGORIES)[number];
+export const FIT = ["good", "possible", "poor"] as const;
+export type JournalFit = { assessment: (typeof FIT)[number]; explanation: string };
 
-export type LedgerEntry = { id: string; section: string; quote: string; measure: string; values: ClaimValue[] };
-export type SynthesizeRequest = {
-  pass: "synthesize";
-  journalId: string;
+// The paper as every pass carries it: each included chunk, in order (never references).
+export type PaperChunk = { id: string; title: string; kind: SectionKind; text: string };
+// A quote, found in the paper: the chunk it is in.
+export type Quote = { text: string; chunk: string };
+export type Finding = { title: string; severity: Severity; category: Category; quotes: Quote[]; why: string; suggestion: string; question: boolean; missing: boolean };
+
+export type SectionRequest = { pass: "section"; tier: ReviewTier; paper: PaperChunk[]; target: string };
+export type SectionResponse = { verdict: string; findings: Finding[]; keyNumbers: { measure: string; quote: Quote }[] };
+
+export type ChecklistRequest = { pass: "checklist"; tier: "thorough"; paper: PaperChunk[] };
+export type ChecklistItem = { item: string; status: "missing" | "partial"; note: string; quote: Quote | null };
+export type ChecklistResponse = { guideline: string | null; why: string; items: ChecklistItem[] };
+
+// What the editor is shown of each section finding, by id (s3-f0: chunk s3, its first finding).
+export type EditorFinding = { id: string; title: string; severity: Severity; why: string; quotes: string[] };
+export type EditorRequest = {
+  pass: "editor";
   tier: ReviewTier;
-  paperMap: PaperMap;
-  abstractText: string | null;
-  ledger: LedgerEntry[];
-  statsFindings: { id: string; section: string; description: string; severity: "minor" | "major" }[];
-  notes: { id: string; section: string; description: string }[];
+  journalId: string;
+  paper: PaperChunk[];
+  findings: EditorFinding[];
+  keyNumbers: { id: string; measure: string; quote: string }[]; // id s3-k0
 };
-export type SynthesizeResponse = {
-  journalFit: { assessment: "good" | "possible" | "poor"; explanation: string };
-  inconsistencies: { description: string; claimIds: string[] }[];
-  summary: { text: string; severity: "major" | "minor"; refs: string[] }[];
-  otherObservations: string[];
+export type Verdict = { id: string; action: "keep" | "soften" | "drop"; title: string; why: string; reason: string };
+export type EditorResponse = {
+  overview: string;
+  strengths: string[];
+  journalFit: JournalFit;
+  fixFirst: string[]; // section finding ids, or a1, a2, … for its own across-paper findings
+  duplicates: { keep: string; drop: string[] }[];
+  verdicts: Verdict[];
+  acrossPaper: (Finding & { id: string })[];
 };
-export type PassRequest = ExtractRequest | SynthesizeRequest;
+export type PassRequest = SectionRequest | ChecklistRequest | EditorRequest;
 
 export type Coverage = {
   reviewed: { id: string; title: string }[];
   failed: { id: string; title: string; reason: string }[];
   pending: { id: string; title: string }[]; // planned but not reached (cancelled or stopped)
-  skipped: { id: string; title: string }[];
+  skipped: { id: string; title: string }[]; // read for context only at this depth, or excluded by the user
 };
-export type ReviewResult = {
-  journalFit: SynthesizeResponse["journalFit"] | null; // null until synthesis succeeds
-  summary: { text: string; severity: "major" | "minor"; citations: Citation[] }[];
-  inconsistencies: { description: string; citations: Citation[] }[];
-  statisticalReporting: { description: string; severity: "minor" | "major"; citations: Citation[] }[];
-  otherObservations: string[];
-  coverage: Coverage;
+
+// The report the browser builds from the passes (reviewReport.ts): shown, kept and exported.
+export type ShownFinding = Finding & { id: string; citations: Citation[]; softened: boolean };
+export type ReportSection = { id: string; title: string; status: "done" | "failed" | "pending"; reason: string | null; verdict: string | null; findings: ShownFinding[] };
+export type ReviewReport = {
+  version: 2;
+  tier: ReviewTier;
+  journalName: string;
+  createdAt: string;
+  overview: { text: string; strengths: string[]; journalFit: JournalFit } | null; // null until the editor has run
+  fixFirst: { id: string; title: string; severity: Severity; section: string }[];
+  sections: ReportSection[];
+  acrossPaper: ShownFinding[];
+  checklist: { guideline: string | null; why: string; items: (Omit<ChecklistItem, "quote"> & { citation: Citation | null })[] } | null;
+  coverage: Coverage & { setAside: number };
 };
-export type ReviewProgress = { phase: "extract" | "synthesize"; done: number; total: number; current: string | null; partial: ReviewResult };
+export type ReviewProgress = { phase: "sections" | "editor"; done: number; total: number; current: string | null; partial: ReviewReport };
