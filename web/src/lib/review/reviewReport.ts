@@ -118,11 +118,15 @@ export function whereLine(d: ReturnType<typeof fixFirstDetails>[number]): string
 }
 
 export function reportMarkdown(r: ReviewReport): string {
+  // Each part of a finding is its own paragraph: a line straight after a quote would join the quote.
   const finding = (f: ShownFinding) => [
     `- **${LABEL[f.severity]}: ${f.title}**`,
-    ...f.citations.map((c) => `  > "${c.quote}" (${c.section})`),
+    "",
+    ...f.citations.flatMap((c) => [`  > "${c.quote}" (${c.section})`, ""]),
     `  Why it matters: ${f.why}`,
+    "",
     `  Suggestion: ${f.suggestion}`,
+    "",
   ];
   const out = [
     `# Pre-submission review (${r.tier}) for ${r.journalName}`,
@@ -138,10 +142,9 @@ export function reportMarkdown(r: ReviewReport): string {
   if (r.fixFirst.length) {
     out.push("## Fix these first", "");
     fixFirstDetails(r).forEach((d, i) => {
-      out.push(`${i + 1}. **${LABEL[d.item.severity]}: ${d.item.title}**`, `   Where: ${whereLine(d)}`);
-      for (const c of d.finding?.citations ?? []) out.push(`   > "${c.quote}" (${c.section})`);
-      if (d.finding) out.push(`   What to do: ${d.finding.suggestion}`);
-      out.push("");
+      out.push(`${i + 1}. **${LABEL[d.item.severity]}: ${d.item.title}**`, "", `   Where: ${whereLine(d)}`, "");
+      for (const c of d.finding?.citations ?? []) out.push(`   > "${c.quote}" (${c.section})`, "");
+      if (d.finding) out.push(`   What to do: ${d.finding.suggestion}`, "");
     });
   }
   out.push("## Section by section", "");
