@@ -173,7 +173,8 @@ export default function PrivacyPage() {
                   what: (
                     <>
                       Your paper&apos;s text with every request, each doing one part of the review (a section each, the reporting checklist at thorough
-                      depth, then the final report), with the chosen journal&apos;s guidelines. Anthropic may hold the text in memory for a few minutes to
+                      depth, then the final report), with the chosen journal&apos;s guidelines if you chose one, and any notes you add for the review
+                      (your instructions, or your journal&apos;s guidelines). Anthropic may hold the text in memory for a few minutes to
                       reuse it between these requests. Author names and email addresses are stripped first (best effort). Sections you mark
                       &ldquo;Don&apos;t send&rdquo;, and the references, are never sent.
                     </>

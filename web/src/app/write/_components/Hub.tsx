@@ -81,7 +81,20 @@ export function useHub({
     }),
     [store, project.id],
   );
-  const review = useReview(keeper);
+  // The paper's notes for its reviews, kept in its settings in this browser (and in its backups).
+  const [initialNotes] = useState(project.reviewNotes ?? "");
+  const notes = useMemo(
+    () => ({
+      initial: initialNotes,
+      save: (text: string) =>
+        void store
+          .setMeta(project.id, { reviewNotes: text || undefined })
+          .then(async () => onMeta(await store.meta(project.id)))
+          .catch(() => {}),
+    }),
+    [store, project.id, initialNotes, onMeta],
+  );
+  const review = useReview(keeper, notes);
   const studio = useFigures();
   const rules = project.journalId ? findJournalRules(project.journalId) : undefined;
   const setTarget = guarded(async (j: Journal | null) => {

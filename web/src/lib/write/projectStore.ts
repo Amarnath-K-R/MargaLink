@@ -30,6 +30,7 @@ export type ProjectMeta = {
   packs?: string[]; // data packs the template needs up front (["all"] for classes like IEEEtran)
   spelling?: Spelling; // the paper's English and its own words (absent: US English, none); carried in backups
   rewriteConsent?: string; // when Rewrite (Claude) was turned on for this paper, in this browser; never in a backup
+  reviewNotes?: string; // the authors' notes for this paper's AI reviews (instructions, their journal's guidelines); sent only with a review they confirm
   createdAt: string;
   updatedAt: string;
 };

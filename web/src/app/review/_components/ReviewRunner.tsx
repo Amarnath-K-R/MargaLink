@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { NO_EDITS } from "@/lib/review/reviewSections";
 import { WELCOME_COINS } from "@/lib/accounts/coins";
+import { MAX_GUIDANCE_CHARS } from "@/lib/review/reviewLimits";
 import { Coin } from "@/components/account/AccountButton";
 import SignInPanel from "@/components/account/SignInPanel";
 import { useAccount } from "@/components/account/useAccount";
@@ -14,15 +15,16 @@ import TierPicker from "./TierPicker.tsx";
 import OutlineEditor from "./OutlineEditor.tsx";
 import type { ReviewApi } from "./useReview.ts";
 
-// Everything after a journal is chosen: the depth, the outline, the run
-// (with its consent notice, progress, cancel and resume) and the result.
-// Rendered by the /review page and by the workspace's Review window.
-// Requires `review.selectedRules` — the caller shows it only then. Signed
-// out, the button signs you in right here (the paper stays loaded).
+// Everything after a journal (or none) is chosen: the depth, the outline,
+// the notes for the review, the run (with its consent notice, progress,
+// cancel and resume) and the result. Rendered by the /review page and by the
+// workspace's Review window, once `review.journalChosen`. Signed out, the
+// button signs you in right here (the paper stays loaded).
 export default function ReviewRunner({ review: r, onCitation }: { review: ReviewApi; onCitation?: (c: Citation) => void }) {
   const account = useAccount();
   const [signingIn, setSigningIn] = useState(false);
-  if (!r.selectedRules) return null;
+  if (!r.journalChosen) return null;
+  const notes = r.guidance.trim().length;
   return (
     <>
       <fieldset disabled={r.reviewLoading} className="m-0 min-w-0 border-0 p-0">
@@ -38,6 +40,27 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
             onReset={() => r.editOutline(() => NO_EDITS)}
           />
         )}
+        <div className="mt-6 max-w-2xl">
+          <label htmlFor="review-notes" className="text-sm font-medium">
+            Notes for the review <span className="font-normal text-ink-soft">(optional)</span>
+          </label>
+          <p className="mt-1 text-sm text-ink-soft">
+            What the reviewers should know or look at: what to focus on, or your journal&apos;s guidelines for authors, pasted in. Sent with your paper
+            and counted in its length.
+          </p>
+          <textarea
+            id="review-notes"
+            data-testid="review-notes"
+            value={r.guidance}
+            onChange={(e) => r.setGuidance(e.target.value)}
+            rows={4}
+            placeholder="For example: check the statistics closely; we're aiming for a clinical readership."
+            className="clay-well mt-2 block w-full resize-y px-3.5 py-2.5 text-sm leading-relaxed outline-none placeholder:text-ink-soft/70"
+          />
+          <p className={`mt-1 text-xs tabular-nums ${notes > MAX_GUIDANCE_CHARS ? "text-away" : "text-ink-soft"}`}>
+            {notes.toLocaleString("en")} of {MAX_GUIDANCE_CHARS.toLocaleString("en")} characters
+          </p>
+        </div>
       </fieldset>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -107,7 +130,8 @@ export default function ReviewRunner({ review: r, onCitation }: { review: Review
       )}
       {r.consentOpen && (
         <ReviewConsent
-          journalName={r.selectedRules.journalName}
+          journalName={r.selectedRules?.journalName ?? null}
+          notesChars={notes}
           tier={r.tier}
           passCount={r.passCount}
           excludedCount={r.outline?.excluded.length ?? 0}
@@ -146,7 +170,8 @@ export function LastReview({ review: r, onCitation }: { review: ReviewApi; onCit
   return (
     <section className="mt-6" data-testid="review-kept">
       <p className="text-sm text-ink-soft">
-        Your last review, from {new Date(r.kept.createdAt).toLocaleDateString()} ({r.kept.tier}, for {r.kept.journalName}). It&apos;s kept in this browser until you
+        Your last review, from {new Date(r.kept.createdAt).toLocaleDateString()} ({r.kept.tier}
+        {r.kept.journalName ? `, for ${r.kept.journalName}` : ""}). It&apos;s kept in this browser until you
         forget it.
       </p>
       <ReviewResultPanel report={r.kept} partial={!r.kept.overview} onCitation={onCitation} onForget={r.forget} />

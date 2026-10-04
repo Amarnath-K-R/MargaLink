@@ -24,7 +24,7 @@ globalThis.fetch = (async (_u: string, init?: RequestInit) => {
   const body = JSON.parse(init!.body as string);
   upstream.push(body);
   if (upstreamDown) return new Response("overloaded", { status: 529 });
-  const job = body.messages[0].content[1].text as string;
+  const job = body.messages[0].content.at(-1).text as string; // the job is always last
   const [name, out] = job.includes("submit_checklist")
     ? ["submit_checklist", { guideline: null, why: "None applies.", items: [] }]
     : job.includes("submit_editor_review")
@@ -61,11 +61,12 @@ const paper = [
   { id: "s3", title: "Results", kind: "results", text: text(24_000) },
 ];
 const billed = 2000 + 20_000 + 24_000; // the abstract billed as 2,000
-const begin = (tier: string, reviewIds: string[], cookie = annCookie) =>
-  post(start, "/api/review/start", { tier, journalId, chunks: paper.map((c) => ({ id: c.id, chars: c.text.length, review: reviewIds.includes(c.id) })) }, cookie);
-const section = (ticket: string, target: string, tier = "quick", p: unknown = paper, cookie = annCookie) => post(review, "/api/review", { pass: "section", tier, paper: p, target }, cookie, ticket);
-const checklist = (ticket: string, tier = "thorough") => post(review, "/api/review", { pass: "checklist", tier, paper }, annCookie, ticket);
-const editor = (ticket: string, tier = "quick", extra: object = {}) => post(review, "/api/review", { pass: "editor", tier, journalId, paper, findings: [], keyNumbers: [], ...extra }, annCookie, ticket);
+const begin = (tier: string, reviewIds: string[], cookie = annCookie, context: { journalId?: string | null; guidanceChars?: number } = {}) =>
+  post(start, "/api/review/start", { tier, journalId, guidanceChars: 0, ...context, chunks: paper.map((c) => ({ id: c.id, chars: c.text.length, review: reviewIds.includes(c.id) })) }, cookie);
+const section = (ticket: string, target: string, tier = "quick", p: unknown = paper, cookie = annCookie, guidance = "") =>
+  post(review, "/api/review", { pass: "section", tier, journalId, guidance, paper: p, target }, cookie, ticket);
+const checklist = (ticket: string, tier = "thorough") => post(review, "/api/review", { pass: "checklist", tier, journalId, guidance: "", paper }, annCookie, ticket);
+const editor = (ticket: string, tier = "quick", extra: object = {}) => post(review, "/api/review", { pass: "editor", tier, journalId, guidance: "", paper, findings: [], keyNumbers: [], ...extra }, annCookie, ticket);
 type Paid = { ticket: string; coins: number; balance: number };
 
 // --- starting
@@ -82,6 +83,8 @@ assert.equal(quick.balance, 100 - quick.coins);
 assert.equal((await section(quick.ticket, "s2")).status, 403, "a section this depth doesn't review");
 const longer = [...paper, { id: "s4", title: "More", kind: "discussion", text: text(24_000) }, { id: "s5", title: "More", kind: "discussion", text: text(24_000) }];
 assert.equal((await section(quick.ticket, "s1", "quick", longer)).status, 403, "more paper than was paid for");
+assert.equal((await section(quick.ticket, "s1", "quick", paper, annCookie, "x".repeat(20_000))).status, 403, "notes that weren't paid for");
+assert.equal((await post(review, "/api/review", { pass: "section", tier: "quick", journalId: "no-such-journal", guidance: "", paper, target: "s1" }, annCookie, quick.ticket)).status, 404);
 assert.equal((await section(quick.ticket, "s1", "standard")).status, 403, "another depth");
 assert.equal((await section(quick.ticket, "s1", "quick", paper, bobCookie)).status, 403, "another account");
 assert.equal((await post(review, "/api/review", {}, annCookie, quick.ticket, { "content-length": "4000000" })).status, 413);
@@ -96,9 +99,11 @@ assert.equal((await checklist(quick.ticket, "quick")).status, 400, "the checklis
 const sent = upstream.at(-1)!;
 assert.deepEqual(sent.tools.map((t) => t.name), ["submit_section_review", "submit_checklist", "submit_editor_review"]);
 assert.match(sent.system, /\[redacted\]/);
-assert.deepEqual(sent.messages[0].content[0].cache_control, { type: "ephemeral" });
+assert.equal(sent.messages[0].content[0].cache_control, undefined);
+assert.deepEqual(sent.messages[0].content[1].cache_control, { type: "ephemeral" }, "the cache mark is on the review's context, after the paper");
+assert.match(sent.messages[0].content[1].text, /Target journal: /);
 assert.ok(["s1", "s2", "s3"].every((id) => sent.messages[0].content[0].text.includes(`id="${id}"`)), "every section, reviewed or not");
-assert.match(sent.messages[0].content[1].text, /id="s1"/);
+assert.match(sent.messages[0].content[2].text, /id="s1"/);
 
 // --- a wrong tool is a malformed answer: 502, retried by the browser
 wrongTool = true;

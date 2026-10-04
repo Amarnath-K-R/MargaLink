@@ -27,6 +27,7 @@ import type {
   PassRequest,
   ReviewProgress,
   ReviewReport,
+  ReviewContext,
   ReviewTier,
   Section,
   SectionRequest,
@@ -38,8 +39,11 @@ export type RunReviewOptions = {
   hints?: HeadingHint[];
   // The user-confirmed outline. Excluded sections are never sent.
   outline?: { sections: Section[]; excluded: Section[] };
-  journalId: string;
-  journalName: string;
+  journalId: string | null; // null: no target journal
+  journalName: string | null;
+  // The authors' own notes for the review (instructions, or their journal's guidelines), sent with
+  // every pass and priced like the paper. At most MAX_GUIDANCE_CHARS once trimmed.
+  guidance?: string;
   tier: ReviewTier;
   endpoint?: string;
   onProgress?: (p: ReviewProgress) => void;
@@ -127,13 +131,17 @@ function planState(opts: RunReviewOptions): ReviewState {
   };
 }
 
-/** What a review would cost, from exactly what it would send (the whole paper, at every depth). */
-export function quoteReview(opts: Pick<RunReviewOptions, "text" | "hints" | "outline" | "tier">): { coins: number; chars: number; sections: number } {
+/** The authors' notes exactly as every pass sends them. */
+export const guidanceOf = (opts: Pick<RunReviewOptions, "guidance">) => (opts.guidance ?? "").trim();
+
+/** What a review would cost, from exactly what it would send (the whole paper and the authors' notes, at every depth). */
+export function quoteReview(opts: Pick<RunReviewOptions, "text" | "hints" | "outline" | "tier" | "guidance">): { coins: number; chars: number; sections: number } {
   const sections = opts.outline?.sections ?? splitIntoSections(opts.text, opts.hints ?? []);
   const { chunks, review } = planReview(sections, opts.hints ?? [], opts.tier);
+  const notes = guidanceOf(opts).length;
   return {
-    coins: reviewPrice(opts.tier, chunks.reduce((n, c) => n + billedChars(c.text.length), 0)),
-    chars: chunks.reduce((n, c) => n + c.text.length, 0),
+    coins: reviewPrice(opts.tier, chunks.reduce((n, c) => n + billedChars(c.text.length), 0) + notes),
+    chars: chunks.reduce((n, c) => n + c.text.length, 0) + notes,
     sections: review.length,
   };
 }
@@ -211,7 +219,7 @@ async function startReview(endpoint: string, opts: RunReviewOptions, state: Revi
   const res = await fetch(`${endpoint}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tier: opts.tier, journalId: opts.journalId, chunks: state.chunks.map((c) => ({ id: c.id, chars: c.text.length, review: state.review.includes(c.id) })) }),
+    body: JSON.stringify({ tier: opts.tier, journalId: opts.journalId, guidanceChars: guidanceOf(opts).length, chunks: state.chunks.map((c) => ({ id: c.id, chars: c.text.length, review: state.review.includes(c.id) })) }),
   });
   if (res.ok) return (await res.json()) as { ticket: string; balance: number };
   if (res.status === 401) throw new SignInRequiredError();
@@ -232,6 +240,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
   const timeoutMs = opts.timeoutMs ?? { section: 180_000, editor: 300_000 };
   const delays = opts.retryDelaysMs ?? [1000, 3000];
   const plan = TIER_PLAN[opts.tier];
+  const context: ReviewContext = { journalId: opts.journalId, guidance: guidanceOf(opts) };
 
   const state = resume ?? planState(opts);
   opts.onState?.(state);
@@ -273,7 +282,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
   const jobs: { title: string; run: () => Promise<void> }[] = queue.map((id) => ({
     title: titleOf.get(id) ?? id,
     run: async () => {
-      const r = await runPass({ pass: "section", tier: opts.tier, paper, target: id });
+      const r = await runPass({ pass: "section", tier: opts.tier, ...context, paper, target: id });
       if ("data" in r) state.sections[id] = r.data as SectionResponse;
       else state.failed[id] = r.reason;
     },
@@ -283,7 +292,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
     jobs.splice(Math.min(1, jobs.length), 0, {
       title: "the reporting checklist",
       run: async () => {
-        const r = await runPass({ pass: "checklist", tier: "thorough", paper });
+        const r = await runPass({ pass: "checklist", tier: "thorough", ...context, paper });
         if ("data" in r) state.checklist = r.data as ChecklistResponse;
         else state.checklistFailed = r.reason;
       },
@@ -321,7 +330,7 @@ export async function runReview(opts: RunReviewOptions, resume?: ReviewState): P
 
     const inputs = editorInputs(state);
     emit("editor", `Putting the report together from ${inputs.findings.length} findings`);
-    const body: EditorRequest = { pass: "editor", tier: opts.tier, journalId: opts.journalId, paper, ...inputs };
+    const body: EditorRequest = { pass: "editor", tier: opts.tier, ...context, paper, ...inputs };
     let editor: EditorResponse | null = null;
     let reason = "";
     try {

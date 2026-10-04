@@ -17,7 +17,7 @@ const TEXT = ["A study of sleep after surgery", "", "Abstract", para("Abstract")
 
 type Call = { pass: string; target?: string; body: PassRequest; inFlightAtArrival: number };
 let calls: Call[] = [];
-let starts: { chunks: { id: string; chars: number; review: boolean }[] }[] = [];
+let starts: { journalId: string | null; guidanceChars: number; chunks: { id: string; chars: number; review: boolean }[] }[] = [];
 let inFlight = 0;
 let maxInFlight = 0;
 let failTarget: string | null = null;
@@ -68,6 +68,8 @@ assert.deepEqual(plan.review.map((c) => c.kind), ["other", "abstract", "introduc
 assert.deepEqual(planReview(sections, [], "quick").review.map((c) => c.kind), ["abstract", "results", "discussion"]);
 assert.equal(planReview(sections, [], "quick").chunks.length, plan.chunks.length, "every depth sends the whole paper");
 assert.equal(quoteReview({ text: TEXT, tier: "quick" }).coins, reviewPrice("quick", plan.chunks.reduce((n, c) => n + billedChars(c.text.length), 0)));
+const paperBilled = plan.chunks.reduce((n, c) => n + billedChars(c.text.length), 0);
+assert.equal(quoteReview({ text: TEXT, tier: "quick", guidance: `  ${"x".repeat(60_000)}  ` }).coins, reviewPrice("quick", paperBilled + 60_000), "the notes, trimmed, are priced like the paper");
 const lone = planReview(splitIntoSections("no headings at all ".repeat(40)), [], "quick");
 assert.equal(lone.review.length, 1, "a paper with no headings is still reviewed, as one section");
 
@@ -96,6 +98,14 @@ const t = await runReview({ ...opts, tier: "thorough" });
 assert.equal(calls.filter((c) => c.pass === "checklist").length, 1);
 assert.equal(calls[0].pass, "section");
 assert.equal(t.result.checklist?.guideline, "STROBE");
+
+// --- no journal, with the authors' notes: every pass carries the same context; the start pays for the notes
+reset();
+const noted = await runReview({ ...opts, tier: "thorough", journalId: null, journalName: null, guidance: "  Check it against CONSORT.  " });
+assert.ok(calls.every((c) => c.body.journalId === null && c.body.guidance === "Check it against CONSORT."), "the same context on every pass, trimmed");
+assert.equal(starts.at(-1)!.journalId, null);
+assert.equal(starts.at(-1)!.guidanceChars, "Check it against CONSORT.".length);
+assert.equal(noted.result.journalName, null);
 
 // --- a section that keeps failing: three tries, recorded; the rest and the editor go on
 reset();

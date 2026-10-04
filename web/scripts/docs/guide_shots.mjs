@@ -126,11 +126,11 @@ if (want("review")) {
   await tidy();
   const step = (t) => `main section.clay:has(h2:text("${t}"))`;
   await shot("review-attach", [step("Attach your paper")], ['main button[aria-label^="Upload"]', "text=Loaded test-paper.pdf"]);
-  await shot("review-journal", [step("Choose a journal")], [page.getByRole("button", { name: /^JAMA/ }), page.getByRole("button", { name: /^IEEE Access/ }), `${step("Choose a journal")} .sheet`]);
+  await shot("review-journal", [step("Choose a journal")], [page.getByRole("button", { name: /^JAMA/ }), page.getByRole("button", { name: /^IEEE Access/ }), page.getByTestId("no-journal"), `${step("Choose a journal")} .sheet`]);
   await page.locator('[data-testid="review-outline"] summary').click();
   await page.waitForTimeout(300);
   const s3 = step("Get it reviewed");
-  await shot("review-depth", [`${s3} .grid:has([aria-pressed])`, `${s3} button.clay-primary`], [page.getByRole("button", { name: /^Quick/ }), page.getByRole("button", { name: /^Standard/ }), page.getByRole("button", { name: /^Thorough/ }), '[data-testid="review-outline"] select', '[data-testid="review-outline"] #outline-add-heading', `${s3} button.clay-primary`]);
+  await shot("review-depth", [`${s3} .grid:has([aria-pressed])`, `${s3} button.clay-primary`], [page.getByRole("button", { name: /^Quick/ }), page.getByRole("button", { name: /^Standard/ }), page.getByRole("button", { name: /^Thorough/ }), '[data-testid="review-outline"] select', '[data-testid="review-outline"] #outline-add-heading', '[data-testid="review-notes"]', `${s3} button.clay-primary`]);
   await page.getByRole("button", { name: /^Get a standard review by Claude \d+ M coins$/ }).click();
   await page.waitForSelector('[role="alertdialog"]');
   await shot("review-consent", ['[role="alertdialog"]'], ['[role="alertdialog"] p.text-away', '[role="alertdialog"] p.font-serif', '[data-testid="review-price"]', "text=Send it and review"]);

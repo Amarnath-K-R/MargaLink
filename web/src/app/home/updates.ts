@@ -37,6 +37,7 @@ export const UPDATES: Update[] = [
     points: [
       "Fix these first takes you straight to each finding",
       "Thorough adds the reporting checklist for your study type",
+      "No specific journal? Review on the paper's own merits, and paste your journal's guidelines or your own instructions as notes",
       "Kept on your device, with Download, Print or save as PDF, and Copy",
       "Papers longer than 50,000 characters now cost as much for each further 50,000 as for the first",
     ],

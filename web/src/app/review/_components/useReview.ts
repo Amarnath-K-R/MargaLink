@@ -5,7 +5,7 @@ import { extractFromFile } from "@/lib/paper/extract";
 import { findJournalRules } from "@/lib/journals/journalRules";
 import { checkRules, type RulesCheckResult } from "@/lib/checks/rulesCheck";
 import { MAX_REVIEW_CHARS, prepareForReview } from "@/lib/review/review";
-import { MAX_REVIEW_CHUNKS } from "@/lib/review/reviewLimits";
+import { MAX_GUIDANCE_CHARS, MAX_REVIEW_CHUNKS } from "@/lib/review/reviewLimits";
 import { TIER_PLAN } from "@/lib/review/reviewPrompt";
 import { browserKeeper, type ReviewKeeper } from "@/lib/review/reviewKeep";
 import { ReviewEditorError, ReviewEndedError, planReview, quoteReview, runReview, type ReviewState } from "@/lib/review/reviewOrchestrator";
@@ -17,12 +17,16 @@ import { errorMessage } from "@/lib/errorMessage";
 
 const TOO_LONG = "This paper is over 400,000 characters of text. Split off supplementary material and try again.";
 
-// The review flow — attach, choose a journal, edit the outline, run the
-// passes with cancel and resume — as one hook, shared by the /review page
-// and the writing workspace's Review window. The review itself runs as
-// several short passes (see reviewOrchestrator.ts), so this tracks progress,
-// partial results, and what a retry can resume from.
-export function useReview(keep: ReviewKeeper = browserKeeper) {
+// The journal choice that is none: the paper reviewed on its own merits (its notes may carry a journal's guidelines).
+export const NO_JOURNAL = "none";
+
+// The review flow — attach, choose a journal (or none), edit the outline, add
+// notes, run the passes with cancel and resume — as one hook, shared by the
+// /review page and the writing workspace's Review window. The review itself
+// runs as several short passes (see reviewOrchestrator.ts), so this tracks
+// progress, partial results, and what a retry can resume from. `notes`: the
+// workspace keeps a paper's notes with it, saved once typing pauses.
+export function useReview(keep: ReviewKeeper = browserKeeper, notes?: { initial: string; save: (text: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [source, setSource] = useState<File | null>(null);
   const [paperText, setPaperText] = useState<string | null>(null);
@@ -31,7 +35,8 @@ export function useReview(keep: ReviewKeeper = browserKeeper) {
   const [edits, setEdits] = useState<OutlineEdits>(NO_EDITS); // the user's corrections to the detected outline
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [selectedJournalId, setSelectedJournalId] = useState<string | null>(null);
+  const [selectedJournalId, setSelectedJournalId] = useState<string | null>(null); // a pilot journal's id, NO_JOURNAL, or null before a choice
+  const [guidance, setGuidanceText] = useState(notes?.initial ?? ""); // the authors' notes, sent with every pass
   const [rulesResult, setRulesResult] = useState<RulesCheckResult | null>(null);
   const [consentOpen, setConsentOpen] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -113,7 +118,7 @@ export function useReview(keep: ReviewKeeper = browserKeeper) {
         if (rules) {
           setSelectedJournalId(opts.journalId!);
           setRulesResult(checkRules(fullText, rules));
-        }
+        } else if (opts.journalId === NO_JOURNAL) setSelectedJournalId(NO_JOURNAL);
       } catch (err) {
         setUploadError(errorMessage(err));
       } finally {
@@ -131,13 +136,31 @@ export function useReview(keep: ReviewKeeper = browserKeeper) {
       if (reviewLoading || journalId === selectedJournalId) return;
       resetReview();
       setSelectedJournalId(journalId);
-      if (paperText) {
-        const rules = findJournalRules(journalId);
-        if (rules) setRulesResult(checkRules(paperText, rules));
-      }
+      const rules = findJournalRules(journalId);
+      setRulesResult(paperText && rules ? checkRules(paperText, rules) : null);
     },
     [paperText, resetReview, reviewLoading, selectedJournalId],
   );
+
+  // The notes are part of what a review sends and pays for: changing them starts afresh, like the journal or the depth.
+  const setGuidance = useCallback(
+    (text: string) => {
+      if (reviewLoading) return;
+      resetReview();
+      setGuidanceText(text);
+    },
+    [resetReview, reviewLoading],
+  );
+  const saveNotes = notes?.save;
+  const savedNotes = useRef(notes?.initial ?? "");
+  useEffect(() => {
+    if (!saveNotes || guidance === savedNotes.current) return;
+    const t = setTimeout(() => {
+      savedNotes.current = guidance;
+      saveNotes(guidance);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [guidance, saveNotes]);
 
   const selectTier = useCallback(
     (next: ReviewTier) => {
@@ -155,13 +178,18 @@ export function useReview(keep: ReviewKeeper = browserKeeper) {
   // What the server would refuse at the start, said before the consent instead of after it.
   const runProblem = !plan
     ? null
-    : plan.chunks.length === 0
+    : guidance.trim().length > MAX_GUIDANCE_CHARS
+      ? `Your notes are ${guidance.trim().length.toLocaleString("en")} characters; a review takes at most ${MAX_GUIDANCE_CHARS.toLocaleString("en")}. Shorten them, or keep only the parts that matter for this paper.`
+      : plan.chunks.length === 0
       ? "Every section is marked Don't send, so there's nothing to review."
       : plan.chunks.length > MAX_REVIEW_CHUNKS
         ? `This outline has ${plan.chunks.length} parts to send; a review sends at most ${MAX_REVIEW_CHUNKS}. Merge some sections in the outline.`
         : null;
   // What it costs, priced from exactly what would be sent (the server charges the same).
-  const price = useMemo(() => (reviewText ? quoteReview({ text: reviewText, hints: headings, outline: outline ?? undefined, tier }).coins : 0), [reviewText, headings, outline, tier]);
+  const price = useMemo(
+    () => (reviewText ? quoteReview({ text: reviewText, hints: headings, outline: outline ?? undefined, tier, guidance }).coins : 0),
+    [reviewText, headings, outline, tier, guidance],
+  );
   const outlineRows = useMemo(() => {
     if (!outline) return [];
     const reviewed = new Set((plan?.review ?? []).map((c) => c.sectionId));
@@ -201,8 +229,9 @@ export function useReview(keep: ReviewKeeper = browserKeeper) {
             text: reviewText,
             hints: headings,
             outline: outline ?? undefined,
-            journalId: selectedJournalId,
-            journalName: findJournalRules(selectedJournalId)?.journalName ?? selectedJournalId,
+            journalId: selectedJournalId === NO_JOURNAL ? null : selectedJournalId,
+            journalName: selectedJournalId === NO_JOURNAL ? null : (findJournalRules(selectedJournalId)?.journalName ?? selectedJournalId),
+            guidance,
             tier,
             signal: ac.signal,
             onCharged: setBalance,
@@ -253,12 +282,13 @@ export function useReview(keep: ReviewKeeper = browserKeeper) {
         setProgress(null);
       }
     },
-    [reviewText, headings, outline, selectedJournalId, tier, runProblem, keepReport],
+    [reviewText, headings, outline, selectedJournalId, guidance, tier, runProblem, keepReport],
   );
 
   const cancel = useCallback(() => abortRef.current?.abort(), []);
 
   const selectedRules = selectedJournalId ? findJournalRules(selectedJournalId) : undefined;
+  const journalChosen = selectedJournalId === NO_JOURNAL || !!selectedRules; // a journal, or none: the review can go ahead
   const coverage = reviewResult?.coverage;
   // Cancelled before any section finished → no partial result yet, but still resumable.
   const unfinished = reviewResult === null || (coverage?.pending.length ?? 0) > 0;
@@ -276,7 +306,10 @@ export function useReview(keep: ReviewKeeper = browserKeeper) {
     headings,
     selectedJournalId,
     selectedRules,
+    journalChosen,
     selectJournal,
+    guidance,
+    setGuidance,
     rulesResult,
     tier,
     selectTier,

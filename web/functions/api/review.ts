@@ -12,7 +12,7 @@
 // gate below defends against, is in ../../../docs/ARCHITECTURE.md under
 // "The AI review": read that before changing a prompt, a cap, or the grounding.
 import { findJournalRules } from "../../src/lib/journals/journalRules.ts";
-import { CHECKLIST_ID, editorOutsideDelivered, paperChars, parsePassRequest, passCallConfig, upstreamBody, validateEditorOutput } from "../../src/lib/review/reviewPasses.ts";
+import { CHECKLIST_ID, editorOutsideDelivered, parsePassRequest, passCallConfig, sentChars, upstreamBody, validateEditorOutput } from "../../src/lib/review/reviewPasses.ts";
 import { groundChecklistOutput, groundSectionOutput } from "../../src/lib/review/reviewGrounding.ts";
 import { DAILY, reserveUse } from "../../src/lib/accounts/dailyCaps.ts";
 import { TruncatedOutputError, UpstreamError, callAnthropicTool } from "../../src/lib/ai/anthropicStream.ts";
@@ -49,8 +49,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) 
   const req = parsePassRequest(body);
   if (typeof req === "string") return new Response(req, { status: 400 });
 
-  const rules = req.pass === "editor" ? findJournalRules(req.journalId) : undefined;
-  if (req.pass === "editor" && !rules) return new Response("No pilot rules for this journal", { status: 404 });
+  // Every pass names the journal (or none), so the shared prefix Anthropic caches is the same for all of them.
+  const rules = req.journalId === null ? undefined : findJournalRules(req.journalId);
+  if (req.journalId !== null && !rules) return new Response("No pilot rules for this journal", { status: 404 });
   const ticket = request.headers.get("x-review-ticket") ?? "";
   // The editor is shown only what this ticket's paid passes returned.
   const delivered = req.pass === "editor" ? await deliveredChunks(env.DB, ticket) : null;
@@ -67,7 +68,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) 
       : req.pass === "checklist"
         ? { chunkId: CHECKLIST_ID, chars: 0 }
         : {};
-  const refused = await claimReviewPass(env.DB, ticket, session.userId, { pass: req.pass, tier: req.tier, paperChars: paperChars(req.paper), ...part }, Date.now());
+  const refused = await claimReviewPass(env.DB, ticket, session.userId, { pass: req.pass, tier: req.tier, paperChars: sentChars(req), ...part }, Date.now());
   if (refused) {
     await held.release();
     return new Response(refused.message, { status: refused.status });
@@ -77,7 +78,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) 
   let toolInput: unknown;
   let stopReason: string | undefined;
   try {
-    ({ toolInput, stopReason } = await callAnthropicTool(env.ANTHROPIC_API_KEY, upstreamBody(req, cfg, MODEL), {
+    ({ toolInput, stopReason } = await callAnthropicTool(env.ANTHROPIC_API_KEY, upstreamBody(req, cfg, MODEL, rules), {
       toolName: cfg.toolName,
       timeoutMs: UPSTREAM_TIMEOUT_MS[req.pass],
       onUsage: usageSink(data, MODEL),

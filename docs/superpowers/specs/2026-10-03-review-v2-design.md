@@ -330,3 +330,18 @@ each tier stays under its ceiling.
   - Its output is only ids and short text.
 - **Quality is judged by people:** the live gate decides merge, not the
   selfchecks.
+
+## Addendum (owner, 2026-10-04): no journal, and the authors' notes
+
+- **No specific journal** is a choice beside the pilot journals. Every pass
+  is told "none chosen"; the editor gives a journal fit only if the authors'
+  notes describe a journal, and the report shows none otherwise. Without a
+  journal, the reviewers may comment on missing required statements (no
+  exact check was shown).
+- **Notes for the review**: optional text the authors paste (instructions,
+  or their journal's guidelines for authors), up to 20,000 characters. Sent
+  with every pass in the cached prefix, after the paper, inside
+  `<authors_notes>`; priced with the paper; named in the consent and the
+  privacy notice (v4). They steer what to check, never the job, the tool or
+  the rules. The writing workspace keeps them per paper
+  (`ProjectMeta.reviewNotes`, in backups).

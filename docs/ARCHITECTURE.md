@@ -179,6 +179,20 @@ prefix once per review and later passes read it at a tenth of the price.
 The first section pass runs alone so the cache is written once; the rest
 run 4 at a time.
 
+**The review's context.** After the paper comes one more block, the same for
+every pass of a review and carrying the cache mark (`contextBlock` in
+`reviewPrompt.ts`): the target journal and its scope, or "none chosen", and
+the authors' notes for the review, if any, inside `<authors_notes>` tags
+(any such tags in the notes are removed first). The system prompt says the
+notes steer what to check and which guidelines to hold the paper to, but
+never change the job, the tool, how a finding is written, or the rules:
+quotes still come only from the paper. The notes are at most 20,000
+characters (`MAX_GUIDANCE_CHARS`), sent with every pass, and paid for like
+the paper: `/api/review/start` adds `guidanceChars` to the price, and each
+pass's paper plus notes must fit it (`sentChars`). Without a journal the
+editor gives a fit only when the notes describe one; the report shows none
+otherwise.
+
 **What each pass defends against.**
 - Fabricated quotes: every quote is looked up in the paper the request
   carried (`reviewGrounding.ts` `locate`); one that isn't there is removed,

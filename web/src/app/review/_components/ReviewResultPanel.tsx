@@ -126,7 +126,7 @@ export default function ReviewResultPanel({
 
       <section className="mt-4" data-testid="review-overview">
         <h3 className="font-serif text-lg font-medium">Overview</h3>
-        {report.overview && fit ? (
+        {report.overview ? (
           <>
             <p className="mt-2 leading-relaxed">{report.overview.text}</p>
             {report.overview.strengths.length > 0 && (
@@ -136,11 +136,13 @@ export default function ReviewResultPanel({
                 ))}
               </ul>
             )}
-            <p className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="font-medium">Journal fit</span>
-              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${fitTone}`}>{fit.assessment}</span>
-              <span className="basis-full text-ink-soft">{fit.explanation}</span>
-            </p>
+            {fit && (
+              <p className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="font-medium">Journal fit</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${fitTone}`}>{fit.assessment}</span>
+                <span className="basis-full text-ink-soft">{fit.explanation}</span>
+              </p>
+            )}
           </>
         ) : (
           <p className="mt-2 text-ink-soft">The overview, the journal fit and what to fix first come once every section is back.</p>

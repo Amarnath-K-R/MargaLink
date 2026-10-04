@@ -31,7 +31,8 @@ export function reviewAnswer(req) {
   return {
     overview: "The paper asks a clear question and answers it with a sound design; its reporting of uncertainty is uneven, and the conclusion claims more than the results show.",
     strengths: ["A clear, focused aim.", "Data from several sites."],
-    journalFit: { assessment: "possible", explanation: "Scope overlaps the journal's remit." },
+    // No journal, and no notes describing one: the real editor leaves the explanation empty, and the fit isn't shown.
+    journalFit: req.journalId ? { assessment: "possible", explanation: "Scope overlaps the journal's remit." } : { assessment: "possible", explanation: "" },
     fixFirst: req.findings.slice(0, 2).map((f) => f.id),
     duplicates: [],
     verdicts: [],

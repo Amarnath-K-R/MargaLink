@@ -338,6 +338,22 @@ check(
 check("the Review window's review was paid for once", account.starts.length === 1);
 check("the status bar says something was sent", (await page.locator('[data-testid="workspace"]').textContent()).includes("carried text you agreed to send"));
 check(`the review's requests are the only ones with a body (${bodyRequests.length})`, bodyRequests.length > 0 && bodyRequests.every((u) => u.endsWith("/api/review") || u.endsWith("/api/review/start")));
+// The Review window's notes are kept with the paper (its settings, in this browser), once typing pauses.
+await page.click('[role="group"][aria-label="Tools"] button:has-text("Review")');
+const REVIEW_NOTES = "Our journal asks for STROBE; check the reporting closely.";
+await reviewWindow.getByTestId("review-notes").fill(REVIEW_NOTES);
+await page.waitForTimeout(1500);
+const keptNotes = await page.evaluate(async () => {
+  const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("margalink-write");
+  for await (const [, h] of root.entries()) {
+    if (h.kind !== "directory") continue;
+    const meta = await h.getFileHandle("project.json").then((f) => f.getFile()).then((f) => f.text()).then(JSON.parse).catch(() => null);
+    if (meta?.reviewNotes) return meta.reviewNotes;
+  }
+  return null;
+});
+check("the Review window's notes are kept with the paper", keptNotes === REVIEW_NOTES);
+await page.keyboard.press("Escape");
 
 // --- the Figures window: a figure from a spreadsheet, inserted into the paper (the plain article loads graphicx), reopened from its recipe ---
 await page.click("text=← All projects");

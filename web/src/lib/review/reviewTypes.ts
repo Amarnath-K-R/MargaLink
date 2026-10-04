@@ -31,10 +31,13 @@ export type PaperChunk = { id: string; title: string; kind: SectionKind; text: s
 export type Quote = { text: string; chunk: string };
 export type Finding = { title: string; severity: Severity; category: Category; quotes: Quote[]; why: string; suggestion: string; question: boolean; missing: boolean };
 
-export type SectionRequest = { pass: "section"; tier: ReviewTier; paper: PaperChunk[]; target: string };
+// Every pass of a review carries the same context: the target journal, if one was chosen, and the
+// authors' own notes (instructions, or their journal's guidelines), sent with the paper.
+export type ReviewContext = { journalId: string | null; guidance: string };
+export type SectionRequest = { pass: "section"; tier: ReviewTier; paper: PaperChunk[]; target: string } & ReviewContext;
 export type SectionResponse = { verdict: string; findings: Finding[]; keyNumbers: { measure: string; quote: Quote }[] };
 
-export type ChecklistRequest = { pass: "checklist"; tier: "thorough"; paper: PaperChunk[] };
+export type ChecklistRequest = { pass: "checklist"; tier: "thorough"; paper: PaperChunk[] } & ReviewContext;
 export type ChecklistItem = { item: string; status: "missing" | "partial"; note: string; quote: Quote | null };
 export type ChecklistResponse = { guideline: string | null; why: string; items: ChecklistItem[] };
 
@@ -43,11 +46,10 @@ export type EditorFinding = { id: string; title: string; severity: Severity; why
 export type EditorRequest = {
   pass: "editor";
   tier: ReviewTier;
-  journalId: string;
   paper: PaperChunk[];
   findings: EditorFinding[];
   keyNumbers: { id: string; measure: string; quote: string }[]; // id s3-k0
-};
+} & ReviewContext;
 export type Verdict = { id: string; action: "keep" | "soften" | "drop"; title: string; why: string; reason: string };
 export type EditorResponse = {
   overview: string;
@@ -73,9 +75,10 @@ export type ReportSection = { id: string; title: string; status: "done" | "faile
 export type ReviewReport = {
   version: 2;
   tier: ReviewTier;
-  journalName: string;
+  journalName: string | null; // null: no target journal was chosen
   createdAt: string;
-  overview: { text: string; strengths: string[]; journalFit: JournalFit } | null; // null until the editor has run
+  // null until the editor has run; journalFit null when there was no journal to judge against
+  overview: { text: string; strengths: string[]; journalFit: JournalFit | null } | null;
   fixFirst: { id: string; title: string; severity: Severity; section: string }[];
   sections: ReportSection[];
   acrossPaper: ShownFinding[];

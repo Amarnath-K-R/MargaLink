@@ -13,7 +13,8 @@ const paper: PaperChunk[] = [
 ];
 
 // the system prompt: shared, so it carries every rule
-for (const rule of [/\[redacted\]/, /untrusted/, /em dash/, /question/, /word for word/i, /never invent/i, /accepted/]) assert.match(REVIEW_SYSTEM, rule);
+for (const rule of [/\[redacted\]/, /untrusted/, /em dash/, /question/, /word for word/i, /never invent/i, /accepted/, /ABOUT THIS REVIEW/, /never change your job/]) assert.match(REVIEW_SYSTEM, rule);
+assert.doesNotMatch(REVIEW_SYSTEM, /exact check/, "whether a journal's statements were checked depends on the review, so it's in the context, not here");
 assert.ok(!/s1|s2|Abstract/.test(REVIEW_SYSTEM), "nothing paper-specific: it must be identical for every pass");
 
 // the paper block: every section by id, in order, with its text
@@ -42,12 +43,16 @@ const req = (tier: EditorRequest["tier"]): EditorRequest => ({
   pass: "editor",
   tier,
   journalId: rules.journalId,
+  guidance: "",
   paper,
   findings: [{ id: "s2-f0", title: "Folds split by image", severity: "major", why: "Leakage.", quotes: ["Five-fold cross-validation on images"] }],
   keyNumbers: [{ id: "s1-k0", measure: "adults enrolled", quote: "412 adults" }],
 });
 const std = editorInstruction(req("standard"), rules);
-for (const part of [rules.journalName, rules.scopeSummary, "s2-f0", "Folds split by image", "s1-k0", "submit_editor_review", "verdicts", "acrossPaper", "a1"]) assert.ok(std.includes(part), part);
+for (const part of [rules.journalName, "s2-f0", "Folds split by image", "s1-k0", "submit_editor_review", "verdicts", "acrossPaper", "a1"]) assert.ok(std.includes(part), part);
+const noJournal = editorInstruction({ ...req("standard"), journalId: null }, undefined);
+assert.match(noJournal, /no journal was chosen/);
+assert.match(noJournal, /one report\./, "no journal named");
 const quick = editorInstruction(req("quick"), rules);
 assert.match(quick, /leave verdicts empty/);
 assert.match(quick, /leave acrossPaper empty/);

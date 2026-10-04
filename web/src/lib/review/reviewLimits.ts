@@ -17,4 +17,6 @@ export const MAX_ACROSS = 12;
 export const MAX_CHECKLIST_ITEMS = 30;
 export const MAX_STRENGTHS = 3;
 export const MAX_OVERVIEW_CHARS = 2000;
+// The authors' own notes for a review (instructions, or their journal's guidelines), sent with every pass.
+export const MAX_GUIDANCE_CHARS = 20_000;
 export const clip = (s: string, max: number) => (s.length <= max ? s : `${s.slice(0, max - 1).trimEnd()}…`);

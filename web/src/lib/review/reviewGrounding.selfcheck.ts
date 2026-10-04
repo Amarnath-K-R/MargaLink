@@ -73,24 +73,24 @@ assert.equal(groundFinding(f({ title: "t".repeat(500) }), index, "s2", ["major"]
 // a section's output: capped at the depth's findings, key numbers located
 const out = groundSectionOutput(
   { verdict: "Sound design.", findings: Array.from({ length: 6 }, () => f()), keyNumbers: [{ measure: "patients", quote: "1,730 patients" }, { measure: "made up", quote: "999 people" }] },
-  { pass: "section", tier: "quick", paper, target: "s2" },
+  { pass: "section", tier: "quick", journalId: null, guidance: "", paper, target: "s2" },
 );
 assert.equal(out.findings.length, 4, "quick reports at most 4");
 assert.deepEqual(out.keyNumbers, [], "quick compares no numbers across sections, so keeps none");
 const std = groundSectionOutput(
   { verdict: "Sound design.", findings: [f()], keyNumbers: [{ measure: "patients", quote: "1,730 patients" }, { measure: "made up", quote: "999 people" }] },
-  { pass: "section", tier: "standard", paper, target: "s2" },
+  { pass: "section", tier: "standard", journalId: null, guidance: "", paper, target: "s2" },
 );
 assert.deepEqual(std.keyNumbers, [{ measure: "patients", quote: { text: "1,730 patients", chunk: "s2" } }]);
-assert.throws(() => groundSectionOutput({ verdict: 1 }, { pass: "section", tier: "quick", paper, target: "s2" }));
+assert.throws(() => groundSectionOutput({ verdict: 1 }, { pass: "section", tier: "quick", journalId: null, guidance: "", paper, target: "s2" }));
 
 // the checklist: a known guideline or none; an unfound quote becomes null, the item stays
 const ck = groundChecklistOutput(
   { guideline: "TRIPOD+AI", why: "A prediction model.", items: [{ item: "Sample size", status: "missing", note: "Say how.", quote: null }, { item: "Model updating", status: "partial", note: "Partly.", quote: "not in the paper at all" }] },
-  { pass: "checklist", tier: "thorough", paper },
+  { pass: "checklist", tier: "thorough", journalId: null, guidance: "", paper },
 );
 assert.deepEqual(ck.items.map((i) => i.quote), [null, null]);
-assert.throws(() => groundChecklistOutput({ guideline: "MADE-UP", why: "", items: [] }, { pass: "checklist", tier: "thorough", paper }));
-assert.deepEqual(groundChecklistOutput({ guideline: null, why: "None applies.", items: [{ item: "x", status: "missing", note: "y", quote: null }] }, { pass: "checklist", tier: "thorough", paper }).items, [], "no guideline, no items");
+assert.throws(() => groundChecklistOutput({ guideline: "MADE-UP", why: "", items: [] }, { pass: "checklist", tier: "thorough", journalId: null, guidance: "", paper }));
+assert.deepEqual(groundChecklistOutput({ guideline: null, why: "None applies.", items: [{ item: "x", status: "missing", note: "y", quote: null }] }, { pass: "checklist", tier: "thorough", journalId: null, guidance: "", paper }).items, [], "no guideline, no items");
 
 console.log("reviewGrounding.selfcheck: OK");

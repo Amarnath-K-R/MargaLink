@@ -8,7 +8,7 @@
 // from a folder you name (PDF, Word or plain text) and go only to Anthropic;
 // nothing is written into the repo. Reads ANTHROPIC_API_KEY from the
 // environment or web/.dev.vars, and never prints it.
-//   node scripts/eval/review_live.ts ~/review-papers [--tiers quick,standard,thorough] [--journal <id>] > review-live.md
+//   node scripts/eval/review_live.ts ~/review-papers [--tiers quick,standard,thorough] [--journal <id>|none] [--notes <file>] > review-live.md
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -38,8 +38,11 @@ const folder = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWi
 if (!folder) throw new Error("Name a folder of papers: node scripts/eval/review_live.ts <folder>");
 const opt = (name: string) => args[args.indexOf(`--${name}`) + 1];
 const tiers = (args.includes("--tiers") ? opt("tiers").split(",") : ["quick", "standard", "thorough"]) as ReviewTier[];
-const rules = args.includes("--journal") ? JOURNAL_RULES.find((j) => j.journalId === opt("journal")) : JOURNAL_RULES[0];
-if (!rules) throw new Error("Unknown --journal; use one of the pilot journals' ids");
+const noJournal = opt("journal") === "none" && args.includes("--journal");
+const rules = noJournal ? null : args.includes("--journal") ? JOURNAL_RULES.find((j) => j.journalId === opt("journal")) : JOURNAL_RULES[0];
+if (rules === undefined) throw new Error("Unknown --journal; use one of the pilot journals' ids, or none");
+// The authors' notes for the review, sent with every pass like the paper.
+const guidance = args.includes("--notes") ? readFileSync(opt("notes"), "utf8").trim() : "";
 
 const key = process.env.ANTHROPIC_API_KEY ?? readFileSync(new URL("../../.dev.vars", import.meta.url), "utf8").match(/^ANTHROPIC_API_KEY\s*=\s*"?([^"\n]+)"?/m)?.[1];
 if (!key) throw new Error("Set ANTHROPIC_API_KEY or put it in web/.dev.vars");
@@ -89,7 +92,7 @@ const nearDuplicates = (r: ReviewReport) => {
 
 const files = readdirSync(folder).filter((f) => /\.(pdf|docx|txt)$/i.test(f)).sort();
 if (files.length === 0) throw new Error(`No .pdf, .docx or .txt papers in ${folder}`);
-console.log(`# Review live check, ${new Date().toISOString().slice(0, 10)}, against ${rules.journalName}\n`);
+console.log(`# Review live check, ${new Date().toISOString().slice(0, 10)}, against ${rules ? rules.journalName : "no journal"}${guidance ? `, with ${guidance.length.toLocaleString("en")} characters of notes` : ""}\n`);
 const summary: string[] = [
   "| Paper | Depth | Chars | Passes | Time | Cost | Ceiling | Cache read | Output tokens: sections avg/max, checklist, editor | Major/minor/sugg. | Set aside | Near-duplicates |",
   "|---|---|---|---|---|---|---|---|---|---|---|---|",
@@ -106,7 +109,7 @@ for (const name of files) {
     const t0 = performance.now();
     let report: ReviewReport;
     try {
-      report = (await runReview({ text, hints: read.headings ?? [], journalId: rules.journalId, journalName: rules.journalName, tier, endpoint: "http://eval/api/review" })).result;
+      report = (await runReview({ text, hints: read.headings ?? [], journalId: rules?.journalId ?? null, journalName: rules?.journalName ?? null, guidance, tier, endpoint: "http://eval/api/review" })).result;
     } catch (err) {
       summary.push(`| ${name} | ${tier} | | ${passes.length} | | | | | ${outputs(passes)} | | | FAILED: ${err instanceof Error ? err.message : String(err)} |`);
       continue;
@@ -116,7 +119,7 @@ for (const name of files) {
     const cacheRead = passes.reduce((n, p) => n + (p.ai?.cacheRead ?? 0), 0);
     const all = [...report.sections.flatMap((s) => s.findings), ...report.acrossPaper];
     const by = (s: string) => all.filter((f) => f.severity === s).length;
-    const ceiling = ceilingFor(tier, text.length);
+    const ceiling = ceilingFor(tier, text.length + guidance.length);
     const dups = nearDuplicates(report);
     summary.push(
       `| ${name} | ${tier} | ${text.length.toLocaleString("en")} | ${passes.length} (${passes.filter((p) => p.status !== 200).length} failed) | ${secs.toFixed(0)} s | $${cost.toFixed(3)} | $${ceiling.toFixed(2)}${cost > ceiling ? " **OVER**" : ""} | ${cacheRead.toLocaleString("en")} | ${outputs(passes)} | ${by("major")}/${by("minor")}/${by("suggestion")} | ${report.coverage.setAside} | ${dups.length ? dups.join("; ") : "none"} |`,

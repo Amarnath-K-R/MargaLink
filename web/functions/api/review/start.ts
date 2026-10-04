@@ -25,7 +25,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!s) return text("Sign in to get a review.", 401);
   const req = parseStartRequest(await readJson(request));
   if (typeof req === "string") return text(req, 400);
-  if (!findJournalRules(req.journalId)) return text("No pilot rules for this journal", 400);
+  if (req.journalId !== null && !findJournalRules(req.journalId)) return text("No pilot rules for this journal", 400);
 
   const reviewed = req.chunks.filter((c) => c.review);
   const checklist = TIER_PLAN[req.tier].checklist;
@@ -36,9 +36,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (cap.user < passes) return text(`This account has reached today's limit of ${DAILY.reviewPass.user} review passes. It resets at midnight UTC; nothing was charged.`, 429);
 
   await sweepTickets(env.DB, now);
-  // The price covers the whole paper, which every pass carries; the ticket weighs the parts that
-  // run (each reviewed section by its billed length, the checklist as an average one) for refunds.
-  const coins = reviewPrice(req.tier, req.chunks.reduce((n, c) => n + billedChars(c.chars), 0));
+  // The price covers the whole paper and the authors' notes, which every pass carries; the ticket weighs
+  // the parts that run (each reviewed section by its billed length, the checklist as an average one) for refunds.
+  const coins = reviewPrice(req.tier, req.chunks.reduce((n, c) => n + billedChars(c.chars), 0) + req.guidanceChars);
   const weights: [string, number][] = reviewed.map((c) => [c.id, billedChars(c.chars)]);
   if (checklist) weights.push([CHECKLIST_ID, Math.round(weights.reduce((n, [, w]) => n + w, 0) / weights.length)]);
   const budget = passBudget(reviewed.length, checklist);

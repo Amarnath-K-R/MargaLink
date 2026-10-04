@@ -212,7 +212,7 @@ try {
   // more than the balance: 402 with the price and balance, nothing taken
   const big = await page.evaluate(async (journalId) => {
     const chunks = Array.from({ length: 60 }, (_, i) => ({ id: `s${i + 1}`, chars: 24000, review: true })); // the most sections a review may have (MAX_REVIEW_CHUNKS)
-    const r = await fetch("/api/review/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tier: "thorough", journalId, chunks }) });
+    const r = await fetch("/api/review/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tier: "thorough", journalId, guidanceChars: 0, chunks }) });
     return { status: r.status, body: await r.json() };
   }, JOURNAL_ID);
   check(`a review costing more than the balance is refused (${big.status})`, big.status === 402 && big.body.balance === afterReview.balance && big.body.coins > big.body.balance);
@@ -233,7 +233,7 @@ try {
 
   // a paid review that never ran: once its ticket expires, the sweep (real D1, json_each) refunds all of it
 const unused = await page.evaluate(async (journalId) => {
-    const r = await fetch("/api/review/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tier: "quick", journalId, chunks: [{ id: "s1", chars: 1000, review: true }, { id: "s2", chars: 1000, review: true }] }) });
+    const r = await fetch("/api/review/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tier: "quick", journalId, guidanceChars: 0, chunks: [{ id: "s1", chars: 1000, review: true }, { id: "s2", chars: 1000, review: true }] }) });
     return r.json();
   }, JOURNAL_ID);
   check("an unused review was charged", unused.balance === afterReview.balance - unused.coins);

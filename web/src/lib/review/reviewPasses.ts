@@ -4,12 +4,13 @@
 // upstream request every pass shares. Pure: selfchecked, safe in the Worker.
 import type { JournalRules } from "../journals/journalRules.ts";
 import { groundFinding, indexPaper } from "./reviewGrounding.ts";
-import { CHECKLIST_EFFORT, CHECKLIST_INSTRUCTION, CHECKLIST_MAX_TOKENS, REVIEW_SYSTEM, TIER_PLAN, editorInstruction, paperBlock, sectionInstruction, type Effort } from "./reviewPrompt.ts";
+import { CHECKLIST_EFFORT, CHECKLIST_INSTRUCTION, CHECKLIST_MAX_TOKENS, REVIEW_SYSTEM, TIER_PLAN, contextBlock, editorInstruction, paperBlock, sectionInstruction, type Effort } from "./reviewPrompt.ts";
 import { CHECKLIST_TOOL, EDITOR_TOOL, REVIEW_TOOLS, SECTION_TOOL } from "./reviewTool.ts";
 import {
   CHUNK_TEXT_MAX,
   MAX_ACROSS,
   MAX_EDITOR_FINDINGS,
+  MAX_GUIDANCE_CHARS,
   MAX_KEY_NUMBERS,
   MAX_MEASURE_CHARS,
   MAX_OVERVIEW_CHARS,
@@ -74,13 +75,22 @@ function parsePaper(p: unknown): PaperChunk[] | string {
   return p as PaperChunk[];
 }
 
-/** What a pass's paper weighs against what was paid for: each chunk billed as review/start.ts bills it. */
-export const paperChars = (paper: PaperChunk[]) => paper.reduce((n, c) => n + billedChars(c.text.length), 0);
+/** What a pass sends, against what was paid for: each chunk billed as review/start.ts bills it, and the authors' notes. */
+export const sentChars = (req: PassRequest) => req.paper.reduce((n, c) => n + billedChars(c.text.length), 0) + req.guidance.length;
+
+// The context every pass of a review carries: a journal id or none, and the authors' notes (may be empty).
+function contextError(body: Loose): string | null {
+  if (body.journalId !== null && !(typeof body.journalId === "string" && body.journalId.length >= 1 && body.journalId.length <= 64)) return "journalId must be a journal's id, or null for none";
+  if (!shortString(body.guidance, MAX_GUIDANCE_CHARS)) return `guidance must be text of at most ${MAX_GUIDANCE_CHARS.toLocaleString("en")} characters`;
+  return null;
+}
 
 function parseSection(body: Loose): SectionRequest | string {
-  const keyErr = keysExactly(body, ["pass", "tier", "paper", "target"], "request");
+  const keyErr = keysExactly(body, ["pass", "tier", "journalId", "guidance", "paper", "target"], "request");
   if (keyErr) return keyErr;
   if (!isTier(body.tier)) return "tier must be quick, standard or thorough";
+  const ctxErr = contextError(body);
+  if (ctxErr) return ctxErr;
   const paper = parsePaper(body.paper);
   if (typeof paper === "string") return paper;
   if (typeof body.target !== "string" || !paper.some((c) => c.id === body.target)) return "target must be the id of a section in the paper";
@@ -88,18 +98,21 @@ function parseSection(body: Loose): SectionRequest | string {
 }
 
 function parseChecklist(body: Loose): ChecklistRequest | string {
-  const keyErr = keysExactly(body, ["pass", "tier", "paper"], "request");
+  const keyErr = keysExactly(body, ["pass", "tier", "journalId", "guidance", "paper"], "request");
   if (keyErr) return keyErr;
   if (body.tier !== "thorough") return "the checklist is part of a thorough review only";
+  const ctxErr = contextError(body);
+  if (ctxErr) return ctxErr;
   const paper = parsePaper(body.paper);
   return typeof paper === "string" ? paper : (body as unknown as ChecklistRequest);
 }
 
 function parseEditor(body: Loose): EditorRequest | string {
-  const keyErr = keysExactly(body, ["pass", "tier", "journalId", "paper", "findings", "keyNumbers"], "request");
+  const keyErr = keysExactly(body, ["pass", "tier", "journalId", "guidance", "paper", "findings", "keyNumbers"], "request");
   if (keyErr) return keyErr;
   if (!isTier(body.tier)) return "tier must be quick, standard or thorough";
-  if (!shortString(body.journalId, 64)) return "journalId must be a string";
+  const ctxErr = contextError(body);
+  if (ctxErr) return ctxErr;
   const paper = parsePaper(body.paper);
   if (typeof paper === "string") return paper;
   const ids = new Set<string>();
@@ -137,15 +150,16 @@ export const DAILY_PASS_CAP = 1500;
 /** The passes a paid review may make: four tries for each reviewed section (and the checklist), and four for the editor. */
 export const passBudget = (reviewed: number, checklist: boolean) => ({ sections: 4 * (reviewed + (checklist ? 1 : 0)), editor: 4 });
 
-export type StartRequest = { tier: ReviewTier; journalId: string; chunks: { id: string; chars: number; review: boolean }[] };
+export type StartRequest = { tier: ReviewTier; journalId: string | null; guidanceChars: number; chunks: { id: string; chars: number; review: boolean }[] };
 
-/** POST /api/review/start's body: every chunk the review sends, as ids and lengths (never text), and which are reviewed. */
+/** POST /api/review/start's body: every chunk the review sends, as ids and lengths (never text), which are reviewed, and how long the authors' notes are. */
 export function parseStartRequest(body: unknown): StartRequest | string {
   if (!isObj(body)) return "Expected a JSON object";
-  const keyErr = keysExactly(body, ["tier", "journalId", "chunks"], "request");
+  const keyErr = keysExactly(body, ["tier", "journalId", "guidanceChars", "chunks"], "request");
   if (keyErr) return keyErr;
   if (!isTier(body.tier)) return "tier must be quick, standard or thorough";
-  if (!shortString(body.journalId, 64)) return "journalId must be a string";
+  if (body.journalId !== null && !(typeof body.journalId === "string" && body.journalId.length >= 1 && body.journalId.length <= 64)) return "journalId must be a journal's id, or null for none";
+  if (!isInt(body.guidanceChars) || body.guidanceChars < 0 || body.guidanceChars > MAX_GUIDANCE_CHARS) return `guidanceChars must be an integer from 0 to ${MAX_GUIDANCE_CHARS}`;
   const c = body.chunks;
   if (!Array.isArray(c) || c.length < 1 || c.length > MAX_REVIEW_CHUNKS) return `chunks must list 1 to ${MAX_REVIEW_CHUNKS} sections`;
   const seen = new Set<string>();
@@ -256,6 +270,7 @@ export function validateEditorOutput(output: unknown, req: EditorRequest): Edito
 
 export type PassConfig = { instruction: string; toolName: string; maxTokens: number; effort: Effort };
 
+// `rules`: the target journal's, or undefined when the authors chose none.
 export function passCallConfig(req: PassRequest, rules: JournalRules | undefined): PassConfig {
   const plan = TIER_PLAN[req.tier];
   if (req.pass === "section") {
@@ -263,18 +278,18 @@ export function passCallConfig(req: PassRequest, rules: JournalRules | undefined
     return { instruction: sectionInstruction(target, req.tier), toolName: SECTION_TOOL.name, maxTokens: plan.sectionMaxTokens, effort: plan.sectionEffort };
   }
   if (req.pass === "checklist") return { instruction: CHECKLIST_INSTRUCTION, toolName: CHECKLIST_TOOL.name, maxTokens: CHECKLIST_MAX_TOKENS, effort: CHECKLIST_EFFORT };
-  if (!rules) throw new Error("the editor needs the journal's rules");
   return { instruction: editorInstruction(req, rules), toolName: EDITOR_TOOL.name, maxTokens: plan.editorMaxTokens, effort: plan.editorEffort };
 }
 
 /**
- * The Messages API body for any pass. Tools, system prompt and paper come
- * first and are identical for every pass of a review, with the cache mark
- * on the paper: Anthropic caches that prefix once and every later pass
- * reads it at a tenth of the price. Only the instruction after it differs.
+ * The Messages API body for any pass. Tools, system prompt, paper and the
+ * review's context (journal, the authors' notes) come first and are
+ * identical for every pass of a review, with the cache mark on the context:
+ * Anthropic caches that prefix once and every later pass reads it at a tenth
+ * of the price. Only the instruction after it differs.
  * No tool_choice: it can't be combined with thinking; the instruction names the tool.
  */
-export function upstreamBody(req: PassRequest, cfg: PassConfig, model: string): Record<string, unknown> {
+export function upstreamBody(req: PassRequest, cfg: PassConfig, model: string, rules: JournalRules | undefined): Record<string, unknown> {
   return {
     model,
     max_tokens: cfg.maxTokens,
@@ -286,7 +301,8 @@ export function upstreamBody(req: PassRequest, cfg: PassConfig, model: string): 
       {
         role: "user",
         content: [
-          { type: "text", text: paperBlock(req.paper), cache_control: { type: "ephemeral" } },
+          { type: "text", text: paperBlock(req.paper) },
+          { type: "text", text: contextBlock(rules, req.guidance), cache_control: { type: "ephemeral" } },
           { type: "text", text: cfg.instruction },
         ],
       },

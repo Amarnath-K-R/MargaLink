@@ -12,6 +12,7 @@ import { Coin } from "../account/AccountButton";
 // sensitive (health) data about the user in a manuscript (GDPR Art. 9(2)(a)).
 export default function ReviewConsent({
   journalName,
+  notesChars,
   tier,
   passCount,
   excludedCount,
@@ -20,7 +21,8 @@ export default function ReviewConsent({
   onConfirm,
   onCancel,
 }: {
-  journalName: string;
+  journalName: string | null; // null: no target journal
+  notesChars: number; // the authors' notes sent with it (0: none)
   tier: ReviewTier;
   passCount: number;
   excludedCount: number;
@@ -39,9 +41,10 @@ export default function ReviewConsent({
       <p className="font-serif text-lg font-medium">Send this paper&apos;s text to Claude for a {tier} review?</p>
       <p className="mt-2 text-sm leading-relaxed text-ink-soft">
         Unlike matching and the structural checks, this sends your paper&apos;s text to Anthropic&apos;s Claude API, in the United States, to review it
-        against {journalName}&apos;s guidelines at {tier} depth. It goes in {passCount} requests: each carries the paper&apos;s text and does one part of
-        the review (a section each, the reporting checklist at thorough depth, then the final report), and Anthropic may hold the text in memory for a
-        few minutes to reuse it between them. We try to remove author names and email addresses first; this is automatic and can miss some, so check.
+        {journalName ? <> against {journalName}&apos;s guidelines</> : null} at {tier} depth. It goes in {passCount} requests: each carries the paper&apos;s
+        text{notesChars > 0 ? <>, and your notes for the review ({notesChars.toLocaleString("en")} characters),</> : null} and does one part of the review
+        (a section each, the reporting checklist at thorough depth, then the final report), and Anthropic may hold the text in memory for a few minutes
+        to reuse it between them. We try to remove author names and email addresses first; this is automatic and can miss some, so check.
         The paper&apos;s content itself is sent as it is. MargaLink doesn&apos;t store it; the finished review is kept only in your browser.
         Anthropic doesn&apos;t use it to train models and deletes it within 30 days; it may keep it longer only to enforce its Usage Policy or where the
         law requires. This is the one feature in MargaLink that sends your whole paper&apos;s text off your device; Rewrite sends only a passage you
@@ -75,7 +78,7 @@ export default function ReviewConsent({
       <label className="mt-4 flex items-start gap-2 text-sm leading-relaxed">
         <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1 accent-[var(--accent)]" />
         <span>
-          I agree to send this text to Anthropic for this review. If it contains health or other sensitive information about me, I give my explicit
+          I agree to send this text{notesChars > 0 ? " and my notes" : ""} to Anthropic for this review. If it contains health or other sensitive information about me, I give my explicit
           consent.
         </span>
       </label>

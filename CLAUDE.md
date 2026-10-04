@@ -48,7 +48,10 @@ none has a default-on path.
    `ReviewConsent.tsx`) sends the paper's text with every request: one per
    reviewed section, the reporting checklist at thorough depth, then one
    editor pass over the findings (Anthropic's prompt caching reuses the text
-   between them for a few minutes). This is the only feature that sends a
+   between them for a few minutes), with any notes the authors add for the
+   review (their instructions, or their journal's guidelines; ≤20,000
+   characters, priced like the paper; kept per paper in the workspace's
+   `ProjectMeta.reviewNotes`). A journal is optional. This is the only feature that sends a
    whole paper's content (Rewrite sends only a selected passage). The server
    keeps none of it between requests; the finished report is kept only in
    the browser (`reviewKeep.ts`, the project's `.margalink/review.json`).

@@ -116,6 +116,13 @@ for (const part of [
 }
 assert.ok(!md.includes("—"));
 
+// no journal, and no notes describing one: no journal in the title, no Journal fit
+const general = assembleReport({ ...input, journalName: null, editor: { ...input.editor!, journalFit: { assessment: "possible", explanation: "" } } });
+assert.equal(general.overview?.journalFit, null);
+const generalMd = reportMarkdown(general);
+assert.ok(generalMd.startsWith("# Pre-submission review (standard)\n"), generalMd.slice(0, 60));
+assert.ok(!generalMd.includes("Journal fit"));
+
 // what's kept is read back only if it is a v2 report
 assert.deepEqual(parseKept(JSON.stringify(r)), r);
 for (const bad of [null, "{", "[]", JSON.stringify({ version: 1 }), JSON.stringify({ version: 2 })]) assert.equal(parseKept(bad), null, String(bad));

@@ -280,10 +280,14 @@ export default function GuidePage() {
             alt="Step 1: the drop area, and the paper loaded"
             notes={[<>Drop the file here, or click to choose it.</>, <>A tick and the file&apos;s name once it&apos;s read.</>]}
           />
-          <DocPart title="2 · Choose a journal">
+          <DocPart title="2 · Choose a journal, or none">
             <p>
               The journals whose guidelines have been verified by hand: JAMA, PLoS ONE, Cureus, BMC Public Health, IEEE Access, Frontiers in Psychology,
               Nature Communications and Scientific Reports. For suggestions across the whole index, use Match.
+            </p>
+            <p>
+              Writing for another journal, or for none yet? Choose <strong>No specific journal</strong>: the paper is reviewed on its own merits, and
+              you can paste your journal&apos;s guidelines for authors into the notes in step 3.
             </p>
           </DocPart>
           <Shot
@@ -295,13 +299,16 @@ export default function GuidePage() {
               </>,
               <>Any other card switches to it.</>,
               <>
+                <strong>No specific journal</strong>: no journal fit, and no structural check; your notes can carry a journal&apos;s guidelines.
+              </>,
+              <>
                 <strong>Structural check</strong>: your word count against the limit for its main article type, the reference style it asks for (numbered
                 or author–year) where it sets one, and its required statements. Dated, and linked to the journal&apos;s own guidelines.
               </>,
             ]}
           />
           <DocPart title="3 · Get it reviewed">
-            <p>Choose how deep, check the outline, then ask. The notice tells you exactly what would be sent before anything is.</p>
+            <p>Choose how deep, check the outline, add notes if you like, then ask. The notice tells you exactly what would be sent before anything is.</p>
           </DocPart>
           <Shot
             name="review-depth"
@@ -321,6 +328,10 @@ export default function GuidePage() {
               </>,
               <>
                 <strong>Missing a heading?</strong> Type it exactly as it appears in the paper and add it.
+              </>,
+              <>
+                <strong>Notes for the review</strong> (optional): what to focus on, or your journal&apos;s guidelines for authors, pasted in. Sent with
+                the paper and counted in its length, up to 20,000 characters. In the writing workspace they&apos;re kept with the paper.
               </>,
               <>
                 <strong>Get a … review by Claude</strong>: opens the notice; nothing is sent yet.
@@ -378,8 +389,7 @@ export default function GuidePage() {
             </ul>
             <p>If your journal wants a disclosure, you can adapt this:</p>
             <blockquote className="clay-well rounded-xl p-4 text-sm">
-              The authors used MargaLink&apos;s AI review, which uses Claude by Anthropic, to check the manuscript against the journal&apos;s guidelines
-              before submission. The authors reviewed all suggestions and take full responsibility for the content.
+              The authors used MargaLink&apos;s AI review, which uses Claude by Anthropic, to check the manuscript before submission. The authors reviewed all suggestions and take full responsibility for the content.
             </blockquote>
           </DocPart>
           <DocPart title="While it runs">

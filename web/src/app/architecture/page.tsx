@@ -117,7 +117,8 @@ export default function ArchitecturePage() {
           <Aside tone="away" title="What the three exceptions send">
             <p>
               <strong>The review:</strong> the paper&apos;s text (author lines stripped, best effort) with every request, each doing one part: a section, the
-              checklist at thorough depth, then the editor. The paper block is cached by Anthropic for a few minutes between them. Sections the user marks
+              checklist at thorough depth, then the editor, with the review&apos;s context: the target journal (or none) and the user&apos;s own notes, if
+              any. The paper and context are cached by Anthropic for a few minutes between them. Sections the user marks
               Don&apos;t send, and references, are never in any request.
             </p>
             <p>

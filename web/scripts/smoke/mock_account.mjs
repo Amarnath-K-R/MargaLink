@@ -13,7 +13,7 @@ export async function mockAccount(context, { balance = 100, email = "smoke@examp
   await context.route("**/api/review/start", (route) => {
     const body = route.request().postDataJSON();
     state.starts.push(body);
-    const coins = reviewPrice(body.tier, body.chunks.reduce((n, c) => n + c.chars, 0));
+    const coins = reviewPrice(body.tier, body.chunks.reduce((n, c) => n + c.chars, 0) + (body.guidanceChars ?? 0));
     if (coins > state.balance) return route.fulfill({ status: 402, json: { coins, balance: state.balance } });
     state.balance -= coins;
     return route.fulfill({ json: { ticket: `ticket-${state.starts.length}`, coins, balance: state.balance } });

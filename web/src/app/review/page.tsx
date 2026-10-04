@@ -11,10 +11,11 @@ import JournalPicker from "./_components/JournalPicker.tsx";
 import ReviewRunner, { LastReview } from "./_components/ReviewRunner.tsx";
 import { useReview } from "./_components/useReview.ts";
 
-// Attach → choose a known journal directly → see Claude's review. Unlike
-// /match, there's no embedding/ranking here at all — the journal is an
+// Attach → choose a known journal directly, or none → see Claude's review.
+// Unlike /match, there's no embedding/ranking here at all — the journal is an
 // explicit choice, not a suggestion, so this flow never depends on a pilot
-// journal happening to land in anyone's top-10 matches. The flow itself
+// journal happening to land in anyone's top-10 matches; for any other
+// journal, the authors paste its guidelines into the review's notes. The flow itself
 // lives in useReview (shared with the writing workspace's Review window).
 const TINT = "#ecdcc0"; // the Review bead
 
@@ -28,7 +29,7 @@ export default function ReviewPage() {
         title="Get it reviewed."
         subtitle={
           <p className="mt-3 max-w-md text-lg text-ink-soft">
-            Attach a paper, choose a journal, and get a structural check plus an AI review, checked against that journal&apos;s actual guidelines.
+            Attach a paper, choose a journal or none, and get an AI review: against that journal&apos;s guidelines, or the ones you paste in.
           </p>
         }
       />
@@ -48,7 +49,7 @@ export default function ReviewPage() {
         </Step>
 
         {r.paperText && (
-          <Step n={2} tint={TINT} title="Choose a journal">
+          <Step n={2} tint={TINT} title="Choose a journal, or none">
             <fieldset disabled={r.reviewLoading} className="m-0 min-w-0 border-0 p-0">
               <JournalPicker selectedJournalId={r.selectedJournalId} onSelect={r.selectJournal} />
             </fieldset>
@@ -62,7 +63,7 @@ export default function ReviewPage() {
           </Step>
         )}
 
-        {r.selectedRules && (
+        {r.journalChosen && (
           <Step
             n={3}
             tint={TINT}
@@ -78,7 +79,7 @@ export default function ReviewPage() {
             <ReviewRunner review={r} />
           </Step>
         )}
-        {!r.selectedRules && <LastReview review={r} />}
+        {!r.journalChosen && <LastReview review={r} />}
       </div>
 
       <footer className="mt-16 border-t border-line/80 pt-6 text-sm text-ink-soft">

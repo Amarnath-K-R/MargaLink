@@ -213,6 +213,30 @@ await page.getByRole("button", { name: "Resume review" }).click();
 await page.waitForSelector('[data-testid="review-fix-first"]', { timeout: 30000 });
 check("and resuming it wasn't charged again", account.starts.length === startsBefore + 1);
 
+// No specific journal, with notes for the review: every pass carries no journal and the same notes, the
+// start is told their length, the consent names them, and the report has no journal fit.
+const noted = [];
+const onNoted = (r) => r.url().endsWith("/api/review") && r.method() === "POST" && noted.push(r.postDataJSON());
+page.on("request", onNoted);
+await page.getByTestId("no-journal").click();
+check("No specific journal can be chosen", (await page.getByTestId("no-journal").getAttribute("aria-pressed")) === "true");
+await page.getByTestId("review-notes").fill("x".repeat(20_001));
+check("notes over the limit are refused before the consent", (await page.locator("text=a review takes at most 20,000").isVisible()) && (await getReview().isDisabled()));
+const NOTES = "Check it against CONSORT, and look closely at the statistics.";
+await page.getByTestId("review-notes").fill(NOTES);
+await getReview().click();
+check("the consent names the notes", /your notes for the review \(\d+ characters\)/.test(await page.locator('[role="alertdialog"]').innerText()));
+check("and doesn't name a journal", !/against .*guidelines/.test(await page.locator('[role="alertdialog"]').innerText()));
+await page.getByLabel(/I agree to send this text and my notes to Anthropic/).check();
+await page.click("text=Send it and review");
+await page.waitForSelector('[data-testid="review-fix-first"]', { timeout: 30000 });
+await page.waitForFunction(() => !document.querySelector('[data-testid="review-progress"]'), null, { timeout: 30000 });
+page.off("request", onNoted);
+check(`every pass carried no journal and the notes (${noted.length})`, noted.length > 0 && noted.every((b) => b.journalId === null && b.guidance === NOTES));
+check("the start was told the notes' length", account.starts.at(-1).journalId === null && account.starts.at(-1).guidanceChars === NOTES.length);
+check("no journal, no journal fit", !(await page.locator('[data-testid="review-overview"]').innerText()).includes("Journal fit"));
+await page.getByTestId("review-notes").fill("");
+
 // Too few coins: the server says 402, the page says how many and won't send.
 account.balance = 0;
 await getReview().click();
