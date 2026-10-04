@@ -3,7 +3,8 @@
 // the client. Run directly:
 //   node src/lib/review/reviewGrounding.selfcheck.ts
 import assert from "node:assert/strict";
-import { quoteAppearsInSource, groundExtractOutput, normalizeText } from "./reviewGrounding.ts";
+import { groundChecklistOutput, groundFinding, groundSectionOutput, indexPaper, locate, normalizeText, quoteAppearsInSource } from "./reviewGrounding.ts";
+import type { PaperChunk } from "./reviewTypes.ts";
 
 const SOURCE = "The sample included 71 patients. No significant difference was found between groups (p=0.34).";
 
@@ -39,55 +40,52 @@ assert.equal(normalizeText("a\n\nb"), "a\n\nb", "normalizeText keeps newlines (s
 // Pinned, deliberate: numbers the model 'tidies' do not ground (Task 11 measures how often).
 assert.equal(quoteAppearsInSource("n = 1234 patients", "n = 1,234 patients"), false, "thousands separators are not folded");
 
-// groundExtractOutput: quotes verified against THIS chunk only, shape enforced defensively.
-const CHUNK = "Of the 71 patients enrolled, 45 (63%) completed follow-up. Mean age was 54.2 years.";
-const raw = {
-  claims: [
-    { quote: "Of the 71 patients enrolled, 45 (63%) completed follow-up", measure: "completed follow-up", values: [{ value: 71, unit: null }, { value: 45, unit: null }, { value: 63, unit: "%" }] },
-    { quote: "The sample included 200 patients.", measure: "fabricated", values: [{ value: 200, unit: null }] },
-    { quote: "Mean age was 54.2 years", measure: "no values", values: [] },
-    { quote: "Mean age was 54.2 years", measure: "non-finite", values: [{ value: Number.NaN, unit: "years" }] },
-    { quote: "Mean age was 54.2 years", measure: "mean age", values: [{ value: 54.2, unit: "years" }] },
-  ],
-  statisticalReporting: [
-    { description: "grounded", severity: "major", quote: "45 (63%) completed follow-up" },
-    { description: "ungrounded", severity: "minor", quote: "p < 0.05 for everything" },
-  ],
-  notes: [{ description: "keeps, quote nulled", quote: "not in the chunk at all" }, { description: "no quote", quote: null }],
-};
-const g = groundExtractOutput(raw, CHUNK, 1);
-assert.equal(g.claims.length, 1, "fabricated, empty-values and non-finite claims drop; the cap trims the rest");
-assert.equal(g.claims[0].measure, "completed follow-up");
-assert.deepEqual(g.statisticalReporting.map((s) => s.description), ["grounded"]);
-assert.deepEqual(g.notes.map((n) => n.quote), [null, null], "a note whose quote fails is kept with its quote nulled");
-assert.equal(groundExtractOutput(raw, CHUNK, 5).claims.length, 2, "cap 5 keeps both grounded claims");
-assert.throws(() => groundExtractOutput({ claims: "nope" }, CHUNK, 5), /malformed/i, "a non-array field is rejected, never trusted");
+const paper: PaperChunk[] = [
+  { id: "s1", title: "Front matter", kind: "other", text: "A study of sleep\n[redacted]\n[redacted]" },
+  { id: "s2", title: "Methods", kind: "methods", text: "We used five-fold cross-validation on 12,282 images from 1,730 patients." },
+  { id: "s3", title: "Results", kind: "results", text: "The pooled AUC was 0.783, below every fold's AUC of 0.804 to 0.834." },
+];
+const index = indexPaper(paper);
 
-// Clamps: nothing grounded here may later break the synthesis request's caps.
-{
-  const long = "Of the 71 patients enrolled " + "x".repeat(420);
-  const wide = "row 1 2 3 4 5 6 7 8 9 10 11 12 13 14 values";
-  const src = `${long}\n${wide}\n${"n".repeat(10)}`;
-  const g2 = groundExtractOutput(
-    {
-      claims: [
-        { quote: long, measure: "too long", values: [{ value: 71, unit: null }] },
-        { quote: wide, measure: "m".repeat(200), values: Array.from({ length: 14 }, (_, i) => ({ value: i + 1, unit: "u".repeat(60) })) },
-      ],
-      statisticalReporting: Array.from({ length: 30 }, () => ({ description: "d".repeat(600), severity: "minor", quote: wide })),
-      notes: Array.from({ length: 9 }, () => ({ description: "n".repeat(600), quote: null })),
-    },
-    src,
-    40
-  );
-  assert.equal(g2.claims.length, 1, "a quote over 400 chars is dropped");
-  assert.equal(g2.claims[0].values.length, 12, "values are capped at 12");
-  assert.ok(g2.claims[0].values.every((v) => (v.unit ?? "").length <= 40), "units are capped at 40 chars");
-  assert.equal(g2.claims[0].measure.length, 120, "measure is capped at 120 chars");
-  assert.equal(g2.statisticalReporting.length, 20, "at most 20 stats findings per chunk");
-  assert.ok(g2.statisticalReporting.every((s) => s.description.length <= 400));
-  assert.equal(g2.notes.length, 5, "at most 5 notes per chunk");
-  assert.ok(g2.notes.every((n) => n.description.length <= 400));
-}
+// locate: the chunk a quote is in, the target first
+assert.equal(locate("five-fold cross-validation on 12,282 images", index), "s2");
+assert.equal(locate("The pooled AUC was 0.783", index, "s2"), "s3", "found elsewhere when not in the target");
+assert.equal(locate("0.804 to 0.834", index, "s3"), "s3");
+assert.equal(locate("an invented sentence", index), null);
+assert.equal(locate("[redacted]", index), null, "our own marker is never a quote");
+assert.equal(locate("[redacted]\n[redacted]", index), null);
+assert.equal(locate("x".repeat(401), index), null, "longer than a quote can be");
+assert.equal(locate(42, index), null);
+
+// groundFinding: quotes found or removed; a finding needs one unless it's about something missing
+const f = (more: Record<string, unknown> = {}) => ({ title: "Folds split by image, not patient", severity: "major", category: "design", quotes: ["five-fold cross-validation on 12,282 images", "invented passage that is long"], why: "Leakage.", suggestion: "Split by patient.", question: false, missing: false, ...more });
+const g = groundFinding(f(), index, "s2", ["major", "minor"])!;
+assert.deepEqual(g.quotes, [{ text: "five-fold cross-validation on 12,282 images", chunk: "s2" }], "the unfound quote is removed");
+assert.equal(groundFinding(f({ quotes: ["invented passage that is long"] }), index, "s2", ["major", "minor"]), null, "nothing left to point at");
+assert.ok(groundFinding(f({ quotes: [], missing: true }), index, "s2", ["major", "minor"]), "something missing may have no quote");
+assert.equal(groundFinding(f({ severity: "suggestion" }), index, "s2", ["major", "minor"]), null, "a severity this depth doesn't report");
+assert.equal(groundFinding(f({ title: "Front matter has a redacted placeholder", quotes: [], missing: true }), index, "s1", ["major", "minor"]), null, "never a finding about our marker");
+assert.equal(groundFinding(f({ category: "vibes" }), index, "s2", ["major"]), null);
+const twice = groundFinding(f({ quotes: ["The pooled AUC was 0.783", "The pooled AUC was 0.783"] }), index, "s3", ["major"])!;
+assert.equal(twice.quotes.length, 1, "the same quote once");
+assert.equal(groundFinding(f({ title: "t".repeat(500) }), index, "s2", ["major"])!.title.length, 160, "clipped");
+
+// a section's output: capped at the depth's findings, key numbers located
+const out = groundSectionOutput(
+  { verdict: "Sound design.", findings: Array.from({ length: 6 }, () => f()), keyNumbers: [{ measure: "patients", quote: "1,730 patients" }, { measure: "made up", quote: "999 people" }] },
+  { pass: "section", tier: "quick", paper, target: "s2" },
+);
+assert.equal(out.findings.length, 4, "quick reports at most 4");
+assert.deepEqual(out.keyNumbers, [{ measure: "patients", quote: { text: "1,730 patients", chunk: "s2" } }]);
+assert.throws(() => groundSectionOutput({ verdict: 1 }, { pass: "section", tier: "quick", paper, target: "s2" }));
+
+// the checklist: a known guideline or none; an unfound quote becomes null, the item stays
+const ck = groundChecklistOutput(
+  { guideline: "TRIPOD+AI", why: "A prediction model.", items: [{ item: "Sample size", status: "missing", note: "Say how.", quote: null }, { item: "Model updating", status: "partial", note: "Partly.", quote: "not in the paper at all" }] },
+  { pass: "checklist", tier: "thorough", paper },
+);
+assert.deepEqual(ck.items.map((i) => i.quote), [null, null]);
+assert.throws(() => groundChecklistOutput({ guideline: "MADE-UP", why: "", items: [] }, { pass: "checklist", tier: "thorough", paper }));
+assert.deepEqual(groundChecklistOutput({ guideline: null, why: "None applies.", items: [{ item: "x", status: "missing", note: "y", quote: null }] }, { pass: "checklist", tier: "thorough", paper }).items, [], "no guideline, no items");
 
 console.log("reviewGrounding.selfcheck: OK");
