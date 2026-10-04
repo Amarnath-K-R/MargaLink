@@ -49,14 +49,14 @@ stubFetch([TOOL_STREAM.slice(0, 5).join("") + ev("message_delta", { delta: { sto
 await assert.rejects(call, TruncatedOutputError, "max_tokens with parseable JSON is still truncation");
 
 // token counts, for the console: input from message_start, output from the last message_delta; reported on truncation too (it was billed)
-const usage: { input: number; output: number }[] = [];
+const usage: { input: number; output: number; cacheRead: number; cacheWrite: number }[] = [];
 const counted = () => callAnthropicTool("key", { model: "m", messages: [] }, { toolName: "submit_extraction", timeoutMs: 5000, onUsage: (u) => void usage.push(u) });
 stubFetch([ev("message_start", { message: { id: "m", usage: { input_tokens: 1500, output_tokens: 1 } } }), ...TOOL_STREAM.slice(1, 5), ev("message_delta", { delta: { stop_reason: "end_turn" }, usage: { output_tokens: 420 } })]);
 await counted();
-assert.deepEqual(usage, [{ input: 1500, output: 420 }]);
+assert.deepEqual(usage, [{ input: 1500, output: 420, cacheRead: 0, cacheWrite: 0 }]);
 stubFetch([ev("message_start", { message: { usage: { input_tokens: 900, output_tokens: 1 } } }), ev("message_delta", { delta: { stop_reason: "max_tokens" }, usage: { output_tokens: 8000 } })]);
 await assert.rejects(counted, TruncatedOutputError);
-assert.deepEqual(usage[1], { input: 900, output: 8000 });
+assert.deepEqual(usage[1], { input: 900, output: 8000, cacheRead: 0, cacheWrite: 0 });
 stubFetch([TOOL_STREAM.join("")]);
 await counted();
 assert.equal(usage.length, 2, "no usage in the stream, nothing reported");
@@ -82,5 +82,19 @@ assert.deepEqual((await call()).toolInput, { claims: [] }, "comment lines and pi
 
 stubFetch([TOOL_STREAM[0] + TOOL_STREAM[5]]);
 assert.deepEqual(await call(), { toolInput: undefined, stopReason: "end_turn" }, "no tool_use → undefined, not a throw");
+
+// cached prompt tokens: a write costs 1.25x input and a read 0.1x, counted as input-equivalent; reads and writes reported too
+const cached: { input: number; output: number; cacheRead: number; cacheWrite: number }[] = [];
+const withCache = (u: Record<string, number>) => [
+  ev("message_start", { message: { usage: { output_tokens: 1, ...u } } }),
+  ev("content_block_start", { index: 0, content_block: { type: "tool_use", name: "submit_extraction" } }),
+  ev("content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{}" } }),
+  ev("message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 50 } }),
+];
+for (const u of [{ input_tokens: 100, cache_creation_input_tokens: 1000, cache_read_input_tokens: 0 }, { input_tokens: 100, cache_read_input_tokens: 1000 }]) {
+  stubFetch(withCache(u));
+  await callAnthropicTool("key", { model: "m", messages: [] }, { toolName: "submit_extraction", timeoutMs: 5000, onUsage: (x) => void cached.push(x) });
+}
+assert.deepEqual(cached, [{ input: 1350, output: 50, cacheRead: 0, cacheWrite: 1000 }, { input: 200, output: 50, cacheRead: 1000, cacheWrite: 0 }]);
 
 console.log("anthropicStream.selfcheck: OK");

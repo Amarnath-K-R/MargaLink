@@ -6,7 +6,7 @@
 // 30 days, and deleted with the account.
 export const EVENTS_KEPT_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type AiUsage = { model: string; input: number; output: number };
+export type AiUsage = { model: string; input: number; output: number; cacheRead?: number };
 export type ApiEvent = { at: number; idHash: string | null; route: string; method: string; status: number; ms: number; ai?: AiUsage };
 
 export function logEvent(db: D1Database, e: ApiEvent) {
@@ -24,7 +24,9 @@ export function purgeEvents(db: D1Database, now: number) {
 }
 
 /** For callAnthropicTool's onUsage: adds a call's tokens to the request's row (a request may call more than once). */
-export const usageSink = (data: Record<string, unknown>, model: string) => (u: { input: number; output: number }) => {
+// Cache reads (the review's cached paper) are summed too, for the live check; the log keeps only input and output.
+export const usageSink = (data: Record<string, unknown>, model: string) => (u: { input: number; output: number; cacheRead?: number }) => {
   const prev = data.ai as AiUsage | undefined;
-  data.ai = { model, input: (prev?.input ?? 0) + u.input, output: (prev?.output ?? 0) + u.output } satisfies AiUsage;
+  const cacheRead = (prev?.cacheRead ?? 0) + (u.cacheRead ?? 0);
+  data.ai = { model, input: (prev?.input ?? 0) + u.input, output: (prev?.output ?? 0) + u.output, ...(cacheRead ? { cacheRead } : {}) } satisfies AiUsage;
 };

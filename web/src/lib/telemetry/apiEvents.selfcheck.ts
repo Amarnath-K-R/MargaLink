@@ -34,6 +34,12 @@ sink({ input: 1200, output: 300 });
 sink({ input: 800, output: 100 });
 await logEvent(db, { at: now, idHash, route: "/api/figure", method: "POST", status: 200, ms: 9000, ai: data.ai as never });
 assert.deepEqual((await rows()).at(-1), { user_id: ann.id, route: "/api/figure", method: "POST", status: 200, ms: 9000, model: "claude-sonnet-5", input_tokens: 2000, output_tokens: 400 });
+assert.deepEqual(data.ai, { model: "claude-sonnet-5", input: 2000, output: 400 }, "no cache reads, no cacheRead field");
+const cachedData: Record<string, unknown> = {};
+const cachedSink = usageSink(cachedData, "claude-sonnet-5");
+cachedSink({ input: 200, output: 50, cacheRead: 1000 });
+cachedSink({ input: 1350, output: 50, cacheRead: 0 });
+assert.deepEqual(cachedData.ai, { model: "claude-sonnet-5", input: 1550, output: 100, cacheRead: 1000 }, "cache reads are summed for the live check");
 
 // 30 days, then gone
 await logEvent(db, { at: now - EVENTS_KEPT_MS - 1, idHash, route: "/api/old", method: "GET", status: 200, ms: 1 });
