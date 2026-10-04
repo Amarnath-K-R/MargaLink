@@ -60,7 +60,7 @@ export function assembleReport(x: ReportInput): ReviewReport {
   });
   const acrossPaper = (ed?.acrossPaper ?? []).map((f) => {
     const s = show(f, f.id);
-    shown.set(f.id, { finding: s, section: "Across the paper" });
+    shown.set(f.id, { finding: s, section: ACROSS_THE_PAPER });
     return s;
   });
   const fixFirst = (ed?.fixFirst ?? []).flatMap((id) => {
@@ -103,6 +103,19 @@ export function coverageLine({ reviewed, failed, pending, skipped, setAside }: R
 }
 
 const LABEL: Record<Severity, string> = { major: "Major", minor: "Minor", suggestion: "Suggestion" };
+export const ACROSS_THE_PAPER = "Across the paper";
+
+/** Fix these first with each finding in full: where to make the change (its section, and the passages it quotes) and what to do. */
+export function fixFirstDetails(r: ReviewReport): { item: ReviewReport["fixFirst"][number]; finding: ShownFinding | null; home: string | null }[] {
+  const byId = new Map([...r.sections.flatMap((s) => s.findings), ...r.acrossPaper].map((f) => [f.id, f]));
+  return r.fixFirst.map((item) => ({ item, finding: byId.get(item.id) ?? null, home: item.section === ACROSS_THE_PAPER ? null : item.section }));
+}
+
+/** Where a Fix these first item's change goes, in words. */
+export function whereLine(d: ReturnType<typeof fixFirstDetails>[number]): string {
+  if (!d.home) return d.finding && d.finding.citations.length > 1 ? `In ${d.finding.citations.length} places` : "Across the paper";
+  return d.finding?.missing && d.finding.citations.length === 0 ? `${d.home}: something to add` : d.home;
+}
 
 export function reportMarkdown(r: ReviewReport): string {
   const finding = (f: ShownFinding) => [
@@ -122,7 +135,15 @@ export function reportMarkdown(r: ReviewReport): string {
     if (r.overview.strengths.length) out.push("Strengths:", ...r.overview.strengths.map((s) => `- ${s}`), "");
     out.push(`Journal fit: ${r.overview.journalFit.assessment}. ${r.overview.journalFit.explanation}`, "");
   }
-  if (r.fixFirst.length) out.push("## Fix these first", "", ...r.fixFirst.map((f, i) => `${i + 1}. ${LABEL[f.severity]}: ${f.title} (${f.section})`), "");
+  if (r.fixFirst.length) {
+    out.push("## Fix these first", "");
+    fixFirstDetails(r).forEach((d, i) => {
+      out.push(`${i + 1}. **${LABEL[d.item.severity]}: ${d.item.title}**`, `   Where: ${whereLine(d)}`);
+      for (const c of d.finding?.citations ?? []) out.push(`   > "${c.quote}" (${c.section})`);
+      if (d.finding) out.push(`   What to do: ${d.finding.suggestion}`);
+      out.push("");
+    });
+  }
   out.push("## Section by section", "");
   for (const s of r.sections) {
     out.push(`### ${s.title}`, "");

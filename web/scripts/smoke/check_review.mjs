@@ -95,7 +95,7 @@ check("the healed section no longer reads as failed", !/couldn't be checked/.tes
 check("retry re-ran only the failed section + the editor", sectionCount === sectionsBeforeRetry + 1 && editorCount === 2);
 
 const fixFirst = await page.locator('[data-testid="review-fix-first"]').innerText();
-check("Fix these first rendered", (await page.locator('[data-testid="review-fix-first"] li').count()) === 2 && fixFirst.length > 0);
+check("Fix these first rendered", (await page.locator('[data-testid="review-fix-first"] > ol > li').count()) === 2 && fixFirst.length > 0);
 check("findings carry grounded citations", (await page.locator('[data-testid="review-sections"] [data-finding] li').count()) >= 1);
 const titles = await page.locator("[data-finding] > p:first-child > span:last-child").allInnerTexts();
 check(`every finding shows once (${titles.length})`, titles.length > 0 && new Set(titles).size === titles.length);

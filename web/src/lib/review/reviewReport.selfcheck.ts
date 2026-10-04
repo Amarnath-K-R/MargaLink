@@ -5,7 +5,7 @@
 // it's one.
 //   node src/lib/review/reviewReport.selfcheck.ts
 import assert from "node:assert/strict";
-import { assembleReport, coverageLine, parseKept, reportMarkdown, type ReportInput } from "./reviewReport.ts";
+import { assembleReport, coverageLine, fixFirstDetails, parseKept, reportMarkdown, whereLine, type ReportInput } from "./reviewReport.ts";
 import type { Finding, Severity } from "./reviewTypes.ts";
 
 const f = (title: string, severity: Severity, chunk: string): Finding => ({
@@ -83,13 +83,27 @@ assert.deepEqual(assembleReport({ ...input, checklist: null, checklistFailed: "t
   reason: "the answer came back cut short",
 });
 
+// Fix these first in full: where the change goes, the passages, what to do
+const details = fixFirstDetails(r);
+assert.deepEqual(details.map((d) => [d.item.id, d.home, whereLine(d), d.finding?.suggestion]), [
+  ["s2-f0", "Methods", "Methods", "Fix it."],
+  ["s2-f1", "Methods", "Methods", "Fix it."],
+  ["a1", null, "Across the paper", "Fix it."],
+]);
+assert.equal(details[1].finding?.citations[0].section, "Results", "a passage quoted from another section says which");
+const missing = { ...details[0], finding: { ...details[0].finding!, missing: true, citations: [] } };
+assert.equal(whereLine(missing), "Methods: something to add");
+const twoPlaces = { ...details[2], finding: { ...details[2].finding!, citations: [details[0].finding!.citations[0], details[1].finding!.citations[0]] } };
+assert.equal(whereLine(twoPlaces), "In 2 places");
+
 // the Markdown export: the same report, headed by section
 const md = reportMarkdown(r);
 for (const part of [
   "# Pre-submission review (standard) for JAMA",
   "## Overview",
   "## Fix these first",
-  "1. Major: Folds split by image, not patient (Methods)",
+  "1. **Major: Folds split by image, not patient**\n   Where: Methods\n   > \"Folds split by image, not patient quote\" (Methods)\n   What to do: Fix it.",
+  "3. **Major: Abstract and results disagree on n**\n   Where: Across the paper",
   "## Section by section",
   "### Methods",
   "## Across the paper",

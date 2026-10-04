@@ -328,6 +328,7 @@ await page.waitForFunction(() => !document.querySelector('[data-testid="review-p
 await reviewWindow.locator("[data-testid=review-sections] details:not([open]) > summary").first().click({ timeout: 2000 }).catch(() => {});
 const jumps = reviewWindow.getByRole("button", { name: "Jump to source" });
 check("review citations offer Jump to source", (await jumps.count()) >= 1);
+check("Fix these first says where, with Jump to source", (await reviewWindow.locator('[data-testid="review-fix-first"] li li button:text-is("Jump to source")').count()) >= 1);
 await jumps.first().click();
 await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 }).catch(() => {});
 check(

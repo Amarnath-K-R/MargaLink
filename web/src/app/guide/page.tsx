@@ -397,7 +397,7 @@ export default function GuidePage() {
                 <strong>Overview</strong>: what the paper does, its strengths and main weaknesses, and the journal fit.
               </>,
               <>
-                <strong>Fix these first</strong>: the findings that matter most, in order; each one takes you to it.
+                <strong>Fix these first</strong>: the findings that matter most, in order, each with where to change it (the section and the passage) and what to do. In the writing workspace, <strong>Jump to source</strong> takes you to the passage.
               </>,
               <>
                 <strong>Download</strong>, <strong>Print or save as PDF</strong>, <strong>Copy</strong>: keep the report. It&apos;s also kept in this browser until you forget it.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { coverageLine, reportMarkdown } from "@/lib/review/reviewReport";
+import { coverageLine, fixFirstDetails, reportMarkdown, whereLine } from "@/lib/review/reviewReport";
 import type { Citation, ReviewReport, Severity, ShownFinding } from "@/lib/review/reviewTypes";
 import { downloadBytes } from "@/app/write/_components/download";
 
@@ -20,13 +20,14 @@ function Chip({ severity }: { severity: Severity }) {
   return <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${s.tone}`}>{s.label}</span>;
 }
 
-function Quotes({ citations, onCitation }: { citations: Citation[]; onCitation?: (c: Citation) => void }) {
+// `home`: the section already named beside the quotes, so it isn't repeated after each one.
+function Quotes({ citations, onCitation, home }: { citations: Citation[]; onCitation?: (c: Citation) => void; home?: string | null }) {
   if (citations.length === 0) return null;
   return (
     <ul className="mt-2 space-y-1.5">
       {citations.map((c, i) => (
         <li key={i} className="border-l-2 border-accent/35 pl-3 text-xs italic leading-relaxed text-ink-soft">
-          &ldquo;{c.quote}&rdquo; <span className="not-italic">({c.section})</span>
+          &ldquo;{c.quote}&rdquo; {c.section !== home && <span className="not-italic">({c.section})</span>}
           {onCitation && (
             <button type="button" onClick={() => onCitation(c)} className="clay-chip ml-2 h-6 not-italic" data-print-hide>
               Jump to source
@@ -147,14 +148,29 @@ export default function ReviewResultPanel({
         {report.fixFirst.length > 0 && (
           <div className="mt-5" data-testid="review-fix-first">
             <p className="font-medium">Fix these first</p>
-            <ol className="mt-2 list-decimal space-y-1.5 pl-5 marker:text-ink-soft">
-              {report.fixFirst.map((f) => (
-                <li key={f.id}>
-                  <button type="button" onClick={() => go(f.id)} className="inline-flex items-start gap-2 text-left hover:text-accent">
-                    <Chip severity={f.severity} />
-                    <span>
-                      {f.title} <span className="text-ink-soft">({f.section})</span>
-                    </span>
+            <ol className="mt-2 space-y-2.5">
+              {fixFirstDetails(report).map((d, i) => (
+                <li key={d.item.id} className="break-inside-avoid rounded-xl border border-line/70 px-4 py-3">
+                  <p className="flex items-start gap-2 font-medium leading-snug">
+                    <span className="mt-0.5 w-4 shrink-0 tabular-nums text-ink-soft">{i + 1}.</span>
+                    <Chip severity={d.item.severity} />
+                    <span>{d.item.title}</span>
+                  </p>
+                  <dl className="mt-2 grid gap-x-4 gap-y-1 pl-6 sm:grid-cols-[6rem_1fr]">
+                    <dt className="text-xs font-medium text-ink-soft sm:pt-0.5">Where</dt>
+                    <dd className="min-w-0">
+                      {whereLine(d)}
+                      {d.finding && <Quotes citations={d.finding.citations} onCitation={onCitation} home={d.home} />}
+                    </dd>
+                    {d.finding && (
+                      <>
+                        <dt className="mt-1 text-xs font-medium text-ink-soft sm:mt-0 sm:pt-0.5">What to do</dt>
+                        <dd className="leading-relaxed text-ink-soft">{d.finding.suggestion}</dd>
+                      </>
+                    )}
+                  </dl>
+                  <button type="button" onClick={() => go(d.item.id)} className="mt-2 ml-6 text-xs text-accent hover:underline" data-print-hide>
+                    Why it matters
                   </button>
                 </li>
               ))}
