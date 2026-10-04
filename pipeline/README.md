@@ -34,8 +34,7 @@ uv run --env-file .env enrich_doaj.py     # DOAJ: fee, licence, review process (
 uv run --env-file .env enrich_nlm.py      # NLM Catalog: MEDLINE indexing (only biomedical-adjacent fields)
 uv run fetch_nlm_abbrevs.py               # NLM journal abbreviations ("J Am Coll Cardiol"), one ~9 MB file
 uv run build_index.py                     # held-out split, centres, topics, quality pass → web/public/index/* (~7 h at ~110 papers/s; vectors cached)
-uv run --env-file .env fetch_heldout_refs.py  # resolves 500 held-out papers' references, for the reference signal's evaluation
-cd ../web && node scripts/eval/eval_match.ts --refs --fit --write-manifest   # measures, fits and publishes the ranking
+cd ../web && node scripts/eval/eval_match.ts --fit --write-manifest   # measures, fits and publishes the ranking
 cd ../pipeline && uv run backup.py push   # keeps this run's data and index in R2 (see Backups)
 ```
 
@@ -109,13 +108,12 @@ uv run ruff check .
 | `fetch_works.py` | up to 200 papers/journal (the expensive step) |
 | `enrich_doaj.py` | DOAJ enrichment |
 | `enrich_nlm.py` | MEDLINE/NLM enrichment |
-| `fetch_nlm_abbrevs.py` | NLM's journal abbreviations, added to journal names for reference matching |
+| `fetch_nlm_abbrevs.py` | NLM's journal abbreviations, added to journal names (`names` in meta.json); unread since matching stopped reading references, so it can go at the next rebuild |
 | `fetch_topics.py` | all OpenAlex topics (names and fields) |
 | `embedding.py` | the one embedding model (name, prefix, batching), shared by the build and the bake-off |
 | `kmeans.py` | the per-journal centres (k-means over a journal's papers) |
 | `quality.py` | the quality pass: coherence floor, field fit, placeholder sources |
 | `build_index.py` | joins everything, embeds, writes the production index |
-| `fetch_heldout_refs.py` | resolves held-out papers' references, for evaluating the reference signal |
 | `bakeoff.py` | compares candidate embedding models |
 | `backup.py` | keeps `data/` and the built index in R2, and restores them |
 | `selfcheck.py` | runs all of the above's `_self_check()` in one pass |

@@ -14,7 +14,6 @@ import embedding
 import enrich_doaj
 import enrich_nlm
 import enrichment
-import fetch_heldout_refs
 import fetch_sources
 import fetch_topics
 import fetch_works
@@ -22,7 +21,7 @@ import kmeans
 import openalex
 import quality
 
-MODULES = [openalex, embedding, kmeans, quality, enrichment, fetch_sources, fetch_topics, fetch_works, enrich_doaj, enrich_nlm, build_index, bakeoff, fetch_heldout_refs, backup]
+MODULES = [openalex, embedding, kmeans, quality, enrichment, fetch_sources, fetch_topics, fetch_works, enrich_doaj, enrich_nlm, build_index, bakeoff, backup]
 
 if __name__ == "__main__":
     for module in MODULES:

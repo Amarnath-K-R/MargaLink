@@ -29,8 +29,7 @@ References
   assert.deepEqual(q.keywords, ["heart failure", "readmission", "health systems"]);
   assert.ok(q.queryText.startsWith(q.title) && q.queryText.includes("Rates varied fourfold"));
   assert.ok(!/University|@|Correspondence/.test(q.queryText), "no affiliations in the query");
-  assert.ok(q.references?.includes("N Engl J Med") && q.references.includes("BMJ 2018"), String(q.references));
-  assert.ok(!q.references?.startsWith("References"), "the heading line isn't part of the list");
+  assert.ok(!("references" in q) && !q.queryText.includes("N Engl J Med"), "the reference list is never read");
 }
 
 // 2. No abstract heading (a preprint's first page): fall back, but never embed contact lines
@@ -46,7 +45,6 @@ predictions from standard transport formulae, finding systematic overprediction 
   assert.equal(q.abstract, null);
   assert.ok(q.queryText.includes("bedload"), q.queryText);
   assert.ok(q.queryText.split("\n").every((l) => !/@|University/.test(l)), "fallback strips affiliation and email lines");
-  assert.equal(q.references, null);
 }
 
 // 3. Pasted text
@@ -55,7 +53,6 @@ predictions from standard transport formulae, finding systematic overprediction 
   assert.equal(p.title, "My title here");
   assert.ok(p.abstract?.startsWith("Heart failure"));
   assert.equal(p.source, "pasted");
-  assert.equal(p.references, null);
   const one = queryFromPasted("  just one paragraph of abstract text  ");
   assert.equal(one.title, "");
   assert.equal(one.queryText, "just one paragraph of abstract text");
@@ -84,5 +81,13 @@ const fb = buildQuery({ fullText: NOHEAD });
 assert.equal(fb.source, "fallback");
 assert.ok(fb.queryText.includes("admitted to hospital"), fb.queryText);
 assert.ok(!fb.queryText.includes("Department of Cardiology") && !fb.queryText.includes("Foroutan") && !fb.queryText.includes("@"), fb.queryText);
+
+// 10. A title broken after its colon, the subtitle on the next line (a real review's title page), with or without Word's blank lines
+for (const gap of ["\n", "\n\n"]) {
+  assert.equal(
+    buildQuery({ fullText: `Listening Between Appointments:${gap}Wearable Technology from Sensor Validation to Clinical Intelligence${gap}Abstract${gap}${ABSTRACT}` }).title,
+    "Listening Between Appointments: Wearable Technology from Sensor Validation to Clinical Intelligence",
+  );
+}
 
 console.log("matchQuery.selfcheck: OK");

@@ -140,10 +140,10 @@ export default function ArchitecturePage() {
             tint="#cfe0e1"
             steps={[
               { title: "Read the paper", detail: "PDF text via pdf.js, DOCX via mammoth, or pasted text as a first-class entry.", files: "extract.ts" },
-              { title: "Decide what to read", detail: "The title, the real abstract, keywords and the reference list; not the first few thousand characters, which are mostly authors.", files: "matchQuery.ts" },
+              { title: "Decide what to read", detail: "The title, the real abstract and keywords; never the references. Without an abstract, the start of the paper with author and affiliation lines removed.", files: "matchQuery.ts" },
               { title: "Embed", detail: "A small model (named in the manifest) turns the title and abstract into a 384-dimension vector, in the browser.", files: "embed.ts" },
-              { title: "Topics and citations", detail: "The paper's likely research topics, and which journals its own references cite (a name counts only where a journal sits in a reference).", files: "topics.ts · references.ts" },
-              { title: "Rank", detail: "Four signals (embedding similarity to each journal's closest centre, topic overlap, citations, a small activity prior), fused with fitted weights.", files: "rank.ts" },
+              { title: "Topics", detail: "The paper's likely research topics, from the same vector.", files: "topics.ts" },
+              { title: "Rank", detail: "Three signals (embedding similarity to each journal's closest centre, topic overlap, a small activity prior), fused with fitted weights.", files: "rank.ts" },
               { title: "Say how good a match is", detail: "A calibrated fit: \"Fit 78\" is as close as 78% of real paper→journal pairings. An uncalibrated build shows raw similarity.", files: "rank.ts · manifest.json" },
             ]}
           />

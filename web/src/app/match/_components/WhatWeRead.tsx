@@ -4,17 +4,16 @@ import { useState } from "react";
 import type { PaperQuery } from "@/lib/match/matchQuery";
 import type { TopicEstimate } from "@/lib/match/rank";
 
-// What the matcher actually read — shown so a bad read is visible, with the
+// What the matcher actually read (the title, abstract and keywords; never the
+// main text or the references), shown so a bad read is visible, with the
 // paste box as the fix. All of it stays in this tab.
 export default function WhatWeRead({
   query,
-  refs,
   topics,
   busy,
   onCorrect,
 }: {
   query: PaperQuery;
-  refs: { entries: number; matched: number } | null;
   topics: TopicEstimate[];
   busy: boolean;
   onCorrect: (text: string) => void;
@@ -49,13 +48,9 @@ export default function WhatWeRead({
             <dd>{query.keywords.join("; ")}</dd>
           </>
         )}
-        <dt>References</dt>
-        <dd data-testid="refs-line">
-          {query.source === "pasted" && !refs
-            ? "Pasted text: no reference list, so the citation signal is off"
-            : refs && refs.entries > 0
-              ? `${refs.entries} found · ${refs.matched} name a journal we know`
-              : "None found"}
+        <dt>Not read</dt>
+        <dd data-testid="not-read">
+          {query.source === "pasted" ? "Anything you didn't paste" : "The rest of the paper, references included"}
         </dd>
         {topics.length > 0 && (
           <>
@@ -95,7 +90,6 @@ export default function WhatWeRead({
           >
             Use this instead
           </button>
-          <span className="ml-3 text-xs text-ink-soft">Your file&apos;s reference list still counts.</span>
         </form>
       </details>
     </section>

@@ -51,7 +51,7 @@ INDEX = "web/public/index"
 SKIP = ("works.jsonl", "sources_v1.jsonl", "*_works_1500_*", "index_v1_backup/*", "*.log", "*.partial.npy", "*.done", "*.restoring", ".*", "*/.*", "__pycache__/*")
 
 # A job that writes into pipeline/data or the index; a snapshot taken under it could keep a half-written file.
-JOBS = ("fetch_sources.py", "fetch_topics.py", "fetch_works.py", "enrich_doaj.py", "enrich_nlm.py", "fetch_nlm_abbrevs.py", "build_index.py", "fetch_heldout_refs.py", "eval_match.ts")
+JOBS = ("fetch_sources.py", "fetch_topics.py", "fetch_works.py", "enrich_doaj.py", "enrich_nlm.py", "fetch_nlm_abbrevs.py", "build_index.py", "eval_match.ts")
 
 Put = Callable[[str, Path], None]
 Get = Callable[[str, Path], bool]  # False when the key isn't there

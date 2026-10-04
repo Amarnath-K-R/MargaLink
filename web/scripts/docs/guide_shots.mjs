@@ -107,7 +107,7 @@ if (want("match")) {
   await page.waitForSelector("[data-testid=results] li", { timeout: 180_000 });
   await tidy();
   await shot("match-input", ["main section.clay"], ['[role="tablist"]', 'main button[aria-label^="Upload"]', 'main [role="status"] li:first-child']);
-  await shot("match-read", ["[data-testid=what-we-read]"], ["[data-testid=what-we-read] p.font-serif", "[data-testid=refs-line]", "[data-testid=paper-topics]", "[data-testid=what-we-read] summary"]);
+  await shot("match-read", ["[data-testid=what-we-read]"], ["[data-testid=what-we-read] p.font-serif", "[data-testid=not-read]", "[data-testid=paper-topics]", "[data-testid=what-we-read] summary"]);
   const filters = page.locator("div.clay:has(> label select)").first();
   await shot("match-filters", [filters], [filters.locator("select").nth(0), filters.locator("select").nth(1), filters.locator("select").nth(2), filters.locator("label").nth(3), filters.locator("label").nth(4)]);
   await page.getByRole("button", { name: "Why this journal" }).first().click();

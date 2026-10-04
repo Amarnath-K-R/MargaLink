@@ -7,11 +7,11 @@
 // web/public/index/manifest.json.
 //
 // Needs a built index and pipeline/data/heldout.* (pipeline/build_index.py).
-//   node scripts/eval/eval_match.ts [--sample 5000] [--seed 1] [--refs] [--fit] [--write-manifest]
+//   node scripts/eval/eval_match.ts [--sample 5000] [--seed 1] [--fit] [--write-manifest]
 import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { DEFAULT_RANKING, validateRanking, type RankingConfig } from "../../src/lib/match/manifest.ts";
 import type { JournalMeta } from "../../src/lib/match/match.ts";
-import { contentScore, calibrate, candidatePool, fusedOrder, type PoolEntry, type RankInput } from "../../src/lib/match/rank.ts";
+import { calibrate, candidatePool, fuse, fusedOrder, type PoolEntry, type RankInput } from "../../src/lib/match/rank.ts";
 import { topicShares, type TopicTable } from "../../src/lib/match/topics.ts";
 
 const INDEX = new URL("../../public/index/", import.meta.url).pathname;
@@ -62,14 +62,11 @@ const topicSubfield = new Map(topics.rows.map((t) => [t.id, t.subfield]));
 const heldout = json<Heldout>(`${DATA}heldout.json`);
 const hvecs = int8(`${DATA}heldout.bin`);
 if (heldout.model_id !== manifest.model_id) throw new Error(`held-out set is from ${heldout.model_id}, index from ${manifest.model_id}`);
-const refs: Record<string, Record<string, number>> = flag("--refs") && existsSync(`${DATA}heldout_refs.json`) ? json(`${DATA}heldout_refs.json`) : {};
 const query = (i: number) => hvecs.subarray(i * dim, (i + 1) * dim);
 const all = meta.map((_, j) => j);
 const topicCfg = { topicTop: DEFAULT_RANKING.topicTop, topicTemperature: DEFAULT_RANKING.topicTemperature };
 
 function input(i: number, over: Partial<RankInput> = {}): RankInput {
-  const w = heldout.papers[i].work;
-  const cited = new Map(Object.entries(w && refs[w] ? refs[w] : {}));
   return {
     queryInt8: query(i),
     dim,
@@ -78,7 +75,6 @@ function input(i: number, over: Partial<RankInput> = {}): RankInput {
     candidates: all,
     paperTopics: topics.rows.length ? topicShares(query(i), topics, topicCfg) : [],
     topicSubfield,
-    cited,
     k: 10,
     year: YEAR,
     ...over,
@@ -89,7 +85,7 @@ function input(i: number, over: Partial<RankInput> = {}): RankInput {
 {
   const drift = json<{ i: number; top10: number[] }[]>(`${DATA}drift_sample.json`);
   for (const d of drift) {
-    const got = fusedOrder(candidatePool(input(d.i, { paperTopics: [], cited: new Map() })), DEFAULT_RANKING.weights)
+    const got = fusedOrder(candidatePool(input(d.i, { paperTopics: [] })), DEFAULT_RANKING.weights)
       .slice(0, 10)
       .map((x) => x.entry.j);
     if (JSON.stringify(got) !== JSON.stringify(d.top10)) {
@@ -101,12 +97,7 @@ function input(i: number, over: Partial<RankInput> = {}): RankInput {
 }
 
 // --- the sample, its pools (weight-independent), and a "today" baseline pool ---
-// Every paper with a resolved reference list joins the random sample: those
-// are a separate random draw of ~500 (heldout_sample.json), so intersecting
-// the two left only a handful to measure the reference signal on. Shuffled
-// again so both halves of the fit get their share of them.
-const refPapers = heldout.papers.flatMap((p, i) => (p.work && refs[p.work] ? [i] : []));
-const sample = shuffle([...new Set([...shuffle(heldout.papers.map((_, i) => i), SEED).slice(0, SAMPLE), ...refPapers])], SEED);
+const sample = shuffle(heldout.papers.map((_, i) => i), SEED).slice(0, SAMPLE);
 // The v1 baseline: one averaged vector per journal (pipeline/data/mean_centroids.bin).
 const means = existsSync(`${DATA}mean_centroids.bin`) ? int8(`${DATA}mean_centroids.bin`) : null;
 const oneVectorMeta = meta.map((m, j) => ({ ...m, centres: [j, 1] as [number, number] }));
@@ -115,7 +106,7 @@ const pools = new Map<number, PoolEntry[]>();
 const todayPools = new Map<number, PoolEntry[]>();
 for (const i of sample) {
   pools.set(i, candidatePool(input(i)));
-  if (means) todayPools.set(i, candidatePool(input(i, { meta: oneVectorMeta, centres: means, paperTopics: [], cited: new Map() })));
+  if (means) todayPools.set(i, candidatePool(input(i, { meta: oneVectorMeta, centres: means, paperTopics: [] })));
 }
 console.log(`scored ${sample.length} held-out papers against ${meta.length} journals (${centres.length / dim} centres) in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 
@@ -139,16 +130,11 @@ const pct = (x: number) => `${(100 * x).toFixed(1)}%`.padStart(7);
 const row = (label: string, m: Metrics) =>
   console.log(`${label.padEnd(24)} n=${String(m.n).padStart(5)}  top1${pct(m.top1)}  top5${pct(m.top5)}  top10${pct(m.top10)}  MRR ${m.mrr.toFixed(3)}  field@1${pct(m.field1)}`);
 
-const W = (topic: number, ref: number, prior: number) => ({ emb: 1, topic, ref, prior });
+const W = (topic: number, prior: number) => ({ emb: 1, topic, prior });
 console.log("\nladder (each step adds one thing):");
-if (means) row("v1 (mean vector, emb)", evaluate(sample, W(0, 0, 0), todayPools));
-row("+ multi-centre", evaluate(sample, W(0, 0, 0)));
-if (topics.rows.length) for (const t of [0.01, 0.03, 0.1]) row(`+ topic (w=${t})`, evaluate(sample, W(t, 0, 0)));
-const withRefs = sample.filter((i) => heldout.papers[i].work && refs[heldout.papers[i].work!]);
-if (withRefs.length) {
-  row("refs sample, no ref", evaluate(withRefs, W(0, 0, 0)));
-  for (const r of [0.01, 0.03, 0.1]) row(`refs sample, + ref (w=${r})`, evaluate(withRefs, W(0, r, 0)));
-}
+if (means) row("v1 (mean vector, emb)", evaluate(sample, W(0, 0), todayPools));
+row("+ multi-centre", evaluate(sample, W(0, 0)));
+if (topics.rows.length) for (const t of [0.01, 0.03, 0.1]) row(`+ topic (w=${t})`, evaluate(sample, W(t, 0)));
 
 // Topic estimate quality, where held-out papers carry their real OpenAlex topics.
 {
@@ -176,39 +162,22 @@ const half = Math.floor(sample.length / 2);
 const A = sample.slice(0, half);
 const B = sample.slice(half);
 const better = (a: Metrics, b: Metrics) => a.top10 > b.top10 || (a.top10 === b.top10 && a.mrr > b.mrr);
-let best = { w: W(0, 0, 0), m: evaluate(A, W(0, 0, 0)) };
+let best = { w: W(0, 0), m: evaluate(A, W(0, 0)) };
 for (const topic of topics.rows.length ? [0, 0.003, 0.01, 0.02, 0.03, 0.05, 0.1] : [0]) {
   for (const prior of [0, 0.001, 0.003, 0.01]) {
-    const m = evaluate(A, W(topic, 0, prior));
-    if (better(m, best.m)) best = { w: W(topic, 0, prior), m };
+    const m = evaluate(A, W(topic, prior));
+    if (better(m, best.m)) best = { w: W(topic, prior), m };
   }
-}
-// The reference weight is fitted on the papers whose references were resolved.
-const refsA = A.filter((i) => withRefs.includes(i));
-if (refsA.length) {
-  let bestRef = { ref: 0, m: evaluate(refsA, best.w) };
-  for (const ref of [0.003, 0.01, 0.02, 0.03, 0.05, 0.1]) {
-    const m = evaluate(refsA, { ...best.w, ref });
-    if (better(m, bestRef.m)) bestRef = { ref, m };
-  }
-  best.w = { ...best.w, ref: bestRef.ref };
-} else {
-  // No resolved references to fit on: a conservative weight — about the gap
-  // between a good and a middling journal's similarity — so citations count
-  // without overriding the text.
-  best.w = { ...best.w, ref: 0.02 };
 }
 console.log(`\nfitted weights: ${JSON.stringify(best.w)}`);
 
-// Fit scale: the share of real paper→journal pairings (half B) whose content
-// score (the fused score without citations, rank.ts contentScore) is at or
-// below a given score — "as close as N% of real pairings". Without
-// citations, because most uploads carry references and few held-out papers
-// do; and every true journal counts, also one outside the candidate pool.
+// Fit scale: the share of real paper→journal pairings (half B) whose fused
+// score is at or below a given score — "as close as N% of real pairings".
+// Every true journal counts, also one outside the candidate pool.
 const trueScores = B.map((i) => {
   const truth = heldout.papers[i].j;
   const entry = pools.get(i)!.find((x) => x.j === truth) ?? candidatePool(input(i, { candidates: [truth] }))[0];
-  return contentScore(entry.signals, best.w);
+  return fuse(entry.signals, best.w);
 }).sort((a, b) => a - b);
 const edges: number[] = [];
 const probs: number[] = [];
@@ -229,10 +198,6 @@ for (const i of B) {
 }
 for (const f of Object.keys(byField)) byField[f].top10 = byField[f].n ? byField[f].top10 / byField[f].n : 0;
 row("\nfitted, on held-out half B", fitB);
-// Half B includes the papers with resolved references (every one joins the
-// sample), so the fitted row carries the reference signal for them; content
-// alone is this row.
-row("same weights, references off", evaluate(B, { ...best.w, ref: 0 }));
 console.log("\nper field (half B, top-10):");
 for (const [f, v] of Object.entries(byField).sort((a, b) => b[1].n - a[1].n)) console.log(`  ${f.padEnd(48)} n=${String(v.n).padStart(4)} ${pct(v.top10)}`);
 

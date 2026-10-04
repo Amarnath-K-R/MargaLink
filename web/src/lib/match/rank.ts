@@ -2,21 +2,20 @@
 // (scripts/eval/eval_match.ts) run this exact code, so the published accuracy is
 // the accuracy of what users get. No DOM, no fetch.
 //
-// Four signals per candidate journal, weighted and calibrated by the build's
-// manifest (ranking), never by constants here:
+// Three signals per candidate journal, all from the paper's title and
+// abstract (never its reference list), weighted and calibrated by the
+// build's manifest (ranking), never by constants here:
 //   emb   — the paper's cosine to the journal's closest centre (1-4 per journal)
 //   topic — overlap between the paper's estimated OpenAlex topics and the
 //           journal's recent-paper topic profile
-//   ref   — how often the paper's own reference list cites the journal
 //   prior — a small activity prior (output volume, published recently)
 import type { RankingConfig } from "./manifest.ts";
 import type { JournalMeta } from "./match.ts";
 
 export type TopicEstimate = { id: string; name: string; subfield: string; share: number };
-export type Signals = { emb: number; topic: number; ref: number; prior: number };
+export type Signals = { emb: number; topic: number; prior: number };
 export type Why = {
   topics: { id: string; name: string; paperShare: number; journalShare: number }[];
-  cited: number;
   centre: { cos: number; label: string };
 };
 export type Band = "strong" | "possible" | "weak" | "unfitted";
@@ -30,13 +29,11 @@ export type RankInput = {
   candidates: number[]; // journal rows passing the filters
   paperTopics: TopicEstimate[];
   topicSubfield: Map<string, string>; // topic id → subfield
-  cited: Map<string, number>; // journal id → times the paper cites it (empty when unknown)
   k: number;
   year: number; // the current year, for the activity prior (passed in: the harness must be reproducible)
 };
 
-// How many journals, by embedding alone, get the full scoring. Cited journals
-// outside it are added, so a journal the paper cites often can still surface.
+// How many journals, by embedding alone, get the full scoring.
 export const EMB_POOL = 200;
 const Q = 127 * 127;
 
@@ -87,10 +84,6 @@ export function topicScore(
   return { score, shared: shared.slice(0, 3) };
 }
 
-export function refScore(cited: number, maxCited: number): number {
-  return maxCited > 0 ? Math.log1p(cited) / Math.log1p(maxCited) : 0;
-}
-
 export function priorScore(m: JournalMeta, year: number): number {
   const volume = Math.min(1, Math.max(0, Math.log10((m.works_count ?? 0) + 1) / 5));
   const recent = m.last_publication_year != null && m.last_publication_year >= year - 2 ? 1 : 0;
@@ -98,12 +91,10 @@ export function priorScore(m: JournalMeta, year: number): number {
 }
 
 export function fuse(s: Signals, w: RankingConfig["weights"]): number {
-  return w.emb * s.emb + w.topic * s.topic + w.ref * s.ref + w.prior * s.prior;
+  return w.emb * s.emb + w.topic * s.topic + w.prior * s.prior;
 }
 
 // Piecewise-linear, clamped to the first/last probability.
-/** The fused score without the reference signal: what Fit is calibrated on. */
-export const contentScore = (s: Signals, w: RankingConfig["weights"]) => fuse({ ...s, ref: 0 }, w);
 
 export function calibrate(x: number, cal: RankingConfig["calibration"]): number {
   const { edges, probs } = cal;
@@ -125,31 +116,20 @@ export function band(fit: number | null, cfg: RankingConfig): Band {
 // Everything about a candidate that doesn't depend on the weights — computed
 // once per paper, so the harness can try many weightings cheaply on the
 // same code path the browser runs.
-export type PoolEntry = { j: number; cos: number; centre: number; signals: Signals; shared: Why["topics"]; cited: number };
+export type PoolEntry = { j: number; cos: number; centre: number; signals: Signals; shared: Why["topics"] };
 
 export function candidatePool(input: RankInput): PoolEntry[] {
-  const { queryInt8, dim, centres, meta, candidates, cited } = input;
+  const { queryInt8, dim, centres, meta, candidates } = input;
   const scored = candidates.map((j) => {
     const [start, count] = centreSpan(meta[j], j);
     return { j, ...bestCentre(queryInt8, centres, dim, start, count) };
   });
   // Ties break by row so the order is exactly reproducible (the drift check).
   scored.sort((a, b) => b.dot - a.dot || a.j - b.j);
-  const pool = scored.slice(0, EMB_POOL);
-  const inPool = new Set(pool.map((s) => s.j));
-  const idOf = new Map(candidates.map((j) => [meta[j].id, j]));
-  for (const id of cited.keys()) {
-    const j = idOf.get(id);
-    if (j !== undefined && !inPool.has(j)) pool.push(scored.find((s) => s.j === j)!);
-  }
-  // Scaled against the most-cited journal in the index: citations of sources
-  // outside it (preprints, books) don't count (the browser never sees them).
-  const maxCited = Math.max(0, ...[...cited].filter(([id]) => idOf.has(id)).map(([, n]) => n));
-  return pool.map(({ j, cos, centre }) => {
+  return scored.slice(0, EMB_POOL).map(({ j, cos, centre }) => {
     const m = meta[j];
     const t = input.paperTopics.length ? topicScore(input.paperTopics, m.topics ?? [], input.topicSubfield) : { score: 0, shared: [] };
-    const n = cited.get(m.id) ?? 0;
-    return { j, cos, centre, cited: n, shared: t.shared, signals: { emb: cos, topic: t.score, ref: refScore(n, maxCited), prior: priorScore(m, input.year) } };
+    return { j, cos, centre, shared: t.shared, signals: { emb: cos, topic: t.score, prior: priorScore(m, input.year) } };
   });
 }
 
@@ -163,8 +143,7 @@ export function scorePool(pool: PoolEntry[], meta: JournalMeta[], cfg: RankingCo
     .slice(0, k)
     .map(({ entry, fused }) => {
       const m = meta[entry.j];
-      // Fit is the text's fit (calibrated on it, eval_match.ts): citations reorder the list, but don't move it.
-      const fit = cfg.fitted ? calibrate(contentScore(entry.signals, cfg.weights), cfg.calibration) : null;
+      const fit = cfg.fitted ? calibrate(fused, cfg.calibration) : null;
       const [start] = centreSpan(m, entry.j);
       return {
         ...m,
@@ -173,7 +152,7 @@ export function scorePool(pool: PoolEntry[], meta: JournalMeta[], cfg: RankingCo
         band: band(fit, cfg),
         fused,
         signals: entry.signals,
-        why: { topics: entry.shared, cited: entry.cited, centre: { cos: entry.cos, label: m.centre_topics?.[entry.centre - start] ?? "" } },
+        why: { topics: entry.shared, centre: { cos: entry.cos, label: m.centre_topics?.[entry.centre - start] ?? "" } },
       };
     });
 }
