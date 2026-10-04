@@ -2,8 +2,9 @@
 // The M coin ledger's SQL (server-side only). Append-only: the balance is
 // SUM(delta), a debit is one conditional INSERT (so two at once can't both
 // spend the last coins), and UNIQUE(kind, ref) makes every row idempotent.
-import { canonicalEmail, dueProGrants, ledgerLabel, proCoinsLeft, PRO, WELCOME_COINS, type LedgerKind } from "./coins.ts";
+import { canonicalEmail, dueProGrants, ledgerLabel, maxPaidChars, proCoinsLeft, PRO, WELCOME_COINS, type LedgerKind } from "./coins.ts";
 import { fingerprint, sha256Hex } from "./auth.ts";
+import type { ReviewTier } from "../review/reviewTypes.ts";
 
 export async function balance(db: D1Database, userId: string): Promise<number> {
   return (await db.prepare("SELECT COALESCE(SUM(delta), 0) AS b FROM coin_ledger WHERE user_id = ?").bind(userId).first<number>("b")) ?? 0;
@@ -95,7 +96,8 @@ export async function grantWelcome(db: D1Database, userId: string, email: string
 /**
  * Review runs past their expiry: each is refunded for the share it didn't
  * deliver, once (the refund's ref is the ticket's). Sections weigh by their
- * length and the final cross-check like an average section, so padding a
+ * length and the final report like an average section (the checklist is in
+ * the ticket as one, weighed as an average section), so padding a
  * review with tiny sections buys nothing; the result is rounded up, so any
  * part that didn't come back returns at least a coin. The parts that came
  * back are kept. Every expired ticket is deleted (its deliveries with it).
@@ -183,17 +185,18 @@ export async function markDelivered(db: D1Database, ticket: string, chunkId: str
 
 /**
  * Spends one pass of a paid review, or says why not: 403 when the ticket
- * can't be used (not this account's, expired or about to, another tier, a
- * section not paid for or longer than paid), 409 when this section or the
- * cross-check is done with (already delivered, or out of tries). Called
- * before the upstream request, so a refused pass never reaches Claude. The
- * tries are counted in the same statement that checks them.
+ * can't be used (not this account's, expired or about to, another depth, a
+ * section not paid for or longer than paid, more paper than its price
+ * covers), 409 when this section, the checklist or the final report is done
+ * with (already delivered, or out of tries). Called before the upstream
+ * request, so a refused pass never reaches Claude. The tries are counted in
+ * the same statement that checks them.
  */
 export async function claimReviewPass(
   db: D1Database,
   ticket: string,
   userId: string,
-  want: { pass: "extract" | "synthesize"; tier: string; chunkId?: string; chars?: number },
+  want: { pass: "section" | "checklist" | "editor"; tier: string; paperChars: number; chunkId?: string; chars?: number },
   now: number,
 ): Promise<PassRefusal | null> {
   const refuse = (status: 403 | 409, message: string) => ({ status, message });
@@ -201,17 +204,19 @@ export async function claimReviewPass(
   const idHash = await sha256Hex(ticket);
   const t = await db
     .prepare(
-      `SELECT tier, chunks, synthesized, synth_basis, synth_left, (SELECT COUNT(*) FROM review_deliveries WHERE ticket = id_hash) AS delivered
+      `SELECT tier, coins, chunks, synthesized, synth_basis, synth_left, (SELECT COUNT(*) FROM review_deliveries WHERE ticket = id_hash) AS delivered
        FROM review_tickets WHERE id_hash = ? AND user_id = ? AND expires_at > ?`,
     )
     .bind(idHash, userId, now + CLAIM_MARGIN_MS)
-    .first<{ tier: string; chunks: string; synthesized: number; synth_basis: number; synth_left: number; delivered: number }>();
+    .first<{ tier: string; coins: number; chunks: string; synthesized: number; synth_basis: number; synth_left: number; delivered: number }>();
   if (!t) return refuse(403, "This review's ticket has expired. Start a new review; what the old one didn't finish is refunded automatically.");
   if (t.tier !== want.tier) return refuse(403, "This pass doesn't match the review that was paid for.");
-  if (want.pass === "synthesize") {
-    // Only over sections that came back, and again only once more have (a Retry fixed one).
-    if (t.delivered === 0) return refuse(409, "No section of this review has come back yet, so there's nothing to cross-check.");
-    if (t.delivered <= t.synth_basis) return refuse(409, "This review was already cross-checked.");
+  // Every pass carries the paper; it may not be longer than the price paid for.
+  if (want.paperChars > maxPaidChars(t.tier as ReviewTier, t.coins)) return refuse(403, "This pass sends more of the paper than the review paid for.");
+  if (want.pass === "editor") {
+    // Only over parts that came back, and again only once more have (a Retry fixed one).
+    if (t.delivered === 0) return refuse(409, "No section of this review has come back yet, so there's nothing to put together.");
+    if (t.delivered <= t.synth_basis) return refuse(409, "This review's report is already put together.");
     const r = await db
       .prepare(
         `UPDATE review_tickets SET synth_left = synth_left - 1
@@ -219,7 +224,7 @@ export async function claimReviewPass(
       )
       .bind(idHash, now + CLAIM_MARGIN_MS)
       .run();
-    return r.meta.changes === 1 ? null : refuse(409, "The cross-check has no tries left; its share of the coins comes back automatically.");
+    return r.meta.changes === 1 ? null : refuse(409, "The final report has no tries left; its share of the coins comes back automatically.");
   }
   const id = want.chunkId ?? "";
   const paid = (JSON.parse(t.chunks) as Record<string, number>)[id];
@@ -230,9 +235,9 @@ export async function claimReviewPass(
       `UPDATE review_tickets SET extract_left = extract_left - 1, passes = json_set(passes, ?2, COALESCE(json_extract(passes, ?2), 0) + 1)
        WHERE id_hash = ?1 AND extract_left > 0 AND expires_at > ?3 AND COALESCE(json_extract(passes, ?2), 0) < ?4`,
     )
-    .bind(idHash, `$."${id}"`, now + CLAIM_MARGIN_MS, TRIES_PER_SECTION) // id matched CHUNK_ID (s3, s3-p2) upstream
+    .bind(idHash, `$."${id}"`, now + CLAIM_MARGIN_MS, TRIES_PER_SECTION) // id is CHUNK_ID-shaped (s3, s3-p2) or CHECKLIST_ID
     .run();
-  return r.meta.changes === 1 ? null : refuse(409, "This section has no tries left; its share of the coins comes back automatically.");
+  return r.meta.changes === 1 ? null : refuse(409, "This part has no tries left; its share of the coins comes back automatically.");
 }
 
 /** A review whose synthesis came back: it's finished, so its coins are kept. `basis`: the sections it covered. */
