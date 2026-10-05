@@ -4,9 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { extractFromFile } from "@/lib/paper/extract";
 import { embed } from "@/lib/match/embed";
 import { loadManifest, type IndexManifest } from "@/lib/match/manifest";
-import { matchJournals, getAvailableFields, estimatePaperTopics, loadNameIndex, type MatchResult, type MatchInput, type JournalFilters } from "@/lib/match/match";
+import { matchJournals, getAvailableFields, estimatePaperTopics, type MatchResult, type MatchInput, type JournalFilters } from "@/lib/match/match";
 import { buildQuery, queryFromPasted, type PaperQuery } from "@/lib/match/matchQuery";
-import { countCitedJournals } from "@/lib/paper/references";
 import { loadTopicNames } from "@/lib/match/topics";
 import type { TopicEstimate } from "@/lib/match/rank";
 import { checkFormat, type FormatCheckResult } from "@/lib/checks/formatCheck";
@@ -15,7 +14,6 @@ import { checkRules, type RulesCheckResult } from "@/lib/checks/rulesCheck";
 import { errorMessage } from "@/lib/errorMessage";
 
 export type MatchStage = "idle" | "reading" | "embedding" | "matching" | "done" | "error";
-export type MatchRefs = { entries: number; matched: number; cited: Map<string, number> };
 
 // The whole matching run — file → text → query → vector → topics → rank,
 // all on this device — and the state the results UI reads, as one hook so
@@ -29,7 +27,6 @@ export function useMatch() {
   const [source, setSource] = useState<File | null>(null);
   const [matchInput, setMatchInput] = useState<MatchInput | null>(null);
   const [query, setQuery] = useState<PaperQuery | null>(null);
-  const [refs, setRefs] = useState<MatchRefs | null>(null);
   const [paperTopics, setPaperTopics] = useState<TopicEstimate[]>([]);
   const [availableFields, setAvailableFields] = useState<string[]>([]);
   const [filters, setFiltersState] = useState<JournalFilters>({});
@@ -61,12 +58,10 @@ export function useMatch() {
     loadTopicNames().then(setTopicNames, () => {});
   }, []);
 
-  // query → vector → topics → rank, all on this device. `cited` comes from
-  // the file's reference list (none for pasted text).
+  // query → vector → topics → rank, all on this device.
   const run = useCallback(
-    async (q: PaperQuery, found: MatchRefs | null) => {
+    async (q: PaperQuery) => {
       setQuery(q);
-      setRefs(found);
       setStage("embedding");
       log(q.source === "abstract" ? `Read title + abstract (${q.queryText.length.toLocaleString()} characters)` : q.source === "pasted" ? "Using the pasted title and abstract" : "No abstract heading found, so using the start of the paper, author lines removed");
       log("Loading the embedding model (cached after first run)");
@@ -76,7 +71,7 @@ export function useMatch() {
       setPaperTopics(topics);
       if (topics.length) log(`Estimated topics: ${topics.slice(0, 2).map((t) => t.name).join("; ")}`);
       setStage("matching");
-      const input: MatchInput = { vector, paperTopics: topics, cited: found?.cited };
+      const input: MatchInput = { vector, paperTopics: topics };
       setMatchInput(input);
       const mySeq = ++matchSeq.current;
       const matches = await matchJournals(input, 10, filtersRef.current);
@@ -117,14 +112,7 @@ export function useMatch() {
         }
         setFormatResult(checkFormat(fullText));
         setPaperText(fullText);
-        const q = buildQuery({ fullText });
-        let found: MatchRefs | null = null;
-        if (q.references) {
-          const r = countCitedJournals(q.references, await loadNameIndex());
-          found = { entries: r.entries, matched: r.matched, cited: r.counts };
-          log(`Read ${r.entries} references; ${r.matched} name a journal in the index`);
-        }
-        await run(q, found);
+        await run(buildQuery({ fullText }));
       } catch (err) {
         setErrorMsg(errorMessage(err));
         setStage("error");
@@ -133,12 +121,10 @@ export function useMatch() {
     [log, reset, run, setFilters],
   );
 
-  // Pasted text: as a first entry (no file), or to correct what we read from
-  // a file — then the file's references still count.
+  // Pasted text: as a first entry (no file), or to correct what we read from a file.
   const processPasted = useCallback(
-    async (text: string, keepRefs: boolean) => {
-      const kept = keepRefs ? refs : null;
-      if (!keepRefs) {
+    async (text: string, fromFile: boolean) => {
+      if (!fromFile) {
         reset();
         setFilters({});
         setSource(null);
@@ -146,13 +132,13 @@ export function useMatch() {
         setTrace([]);
       }
       try {
-        await run(queryFromPasted(text), kept);
+        await run(queryFromPasted(text));
       } catch (err) {
         setErrorMsg(errorMessage(err));
         setStage("error");
       }
     },
-    [refs, reset, run, setFilters],
+    [reset, run, setFilters],
   );
 
   const busy = stage === "reading" || stage === "embedding" || stage === "matching";
@@ -204,7 +190,6 @@ export function useMatch() {
     errorMsg,
     source,
     query,
-    refs,
     paperTopics,
     matchInput,
     results,

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { DEFAULT_RANKING, validateRanking, type RankingConfig } from "./manifest.ts";
 import type { JournalMeta } from "./match.ts";
-import { bestCentre, calibrate, fuse, priorScore, rankJournals, refScore, topicScore, type RankInput } from "./rank.ts";
+import { bestCentre, calibrate, fuse, priorScore, rankJournals, topicScore, type RankInput } from "./rank.ts";
 
 const dim = 4;
 const v = (...xs: number[]) => Int8Array.from(xs);
@@ -51,14 +51,13 @@ const input = (over: Partial<RankInput> = {}): RankInput => ({
   candidates: [0, 1, 2, 3, 4, 5],
   paperTopics: [],
   topicSubfield,
-  cited: new Map(),
   k: 3,
   year: 2026,
   ...over,
 });
 const fitted: RankingConfig = {
   ...DEFAULT_RANKING,
-  weights: { emb: 1, topic: 1, ref: 1, prior: 0 },
+  weights: { emb: 1, topic: 1, prior: 0 },
   calibration: { edges: [0, 1, 2], probs: [0, 0.5, 1] },
   fitted: true,
 };
@@ -79,13 +78,10 @@ assert.equal(bestCentre(v(127, 0, 0, 0), centres, dim, 0, 1).cos, 1);
   assert.equal(topicScore(paper, [], topicSubfield).score, 0);
 }
 
-// 3. reference, prior, fusion, calibration
-assert.equal(refScore(0, 0), 0);
-assert.equal(refScore(4, 4), 1);
-assert.ok(refScore(1, 4) > 0 && refScore(1, 4) < 1);
+// 3. prior, fusion, calibration
 assert.equal(priorScore(base("x", 0, { works_count: 99_999, last_publication_year: 2025 }), 2026), 1);
 assert.equal(priorScore(base("x", 0), 2026), 0);
-assert.equal(fuse({ emb: 0.5, topic: 0.2, ref: 1, prior: 1 }, { emb: 1, topic: 2, ref: 0.5, prior: 0.1 }), 0.5 + 0.4 + 0.5 + 0.1);
+assert.equal(fuse({ emb: 0.5, topic: 0.2, prior: 1 }, { emb: 1, topic: 2, prior: 0.1 }), 0.5 + 0.4 + 0.1);
 assert.equal(calibrate(-1, fitted.calibration), 0);
 assert.equal(calibrate(1.5, fitted.calibration), 0.75);
 assert.equal(calibrate(9, fitted.calibration), 1);
@@ -99,14 +95,10 @@ assert.equal(calibrate(9, fitted.calibration), 1);
   assert.equal(r[1].why.centre.label, "Heart and lungs", "the label of the centre that matched");
 }
 
-// 5. a cited journal outside the embedding pool can surface; one failing the filters never does
+// 5. a journal failing the filters never ranks
 {
-  const cited = new Map([["J4", 5]]);
-  const r = rankJournals(input({ cited }), fitted);
-  assert.ok(r.some((x) => x.id === "J4"), "cited 5 times with a zero cosine still ranks");
-  assert.equal(r.find((x) => x.id === "J4")!.why.cited, 5);
-  const filtered = rankJournals(input({ cited, candidates: [0, 1, 2] }), fitted);
-  assert.ok(!filtered.some((x) => x.id === "J4"), "a cited journal excluded by the filters stays out");
+  const filtered = rankJournals(input({ k: 6, candidates: [1, 2] }), fitted);
+  assert.deepEqual(filtered.map((x) => x.id), ["J1", "J2"]);
   assert.deepEqual(rankJournals(input({ candidates: [] }), fitted), [], "no candidates, no results");
 }
 
@@ -131,24 +123,16 @@ assert.equal(calibrate(9, fitted.calibration), 1);
 // 8. manifest validation never throws, falls back to the unfitted default
 assert.equal(validateRanking(undefined), DEFAULT_RANKING);
 assert.equal(validateRanking({}), DEFAULT_RANKING);
-assert.equal(validateRanking({ ...fitted, weights: { emb: 1, topic: -1, ref: 0, prior: 0 } }), DEFAULT_RANKING);
+assert.equal(validateRanking({ ...fitted, weights: { emb: 1, topic: -1, prior: 0 } }), DEFAULT_RANKING);
 assert.equal(validateRanking({ ...fitted, calibration: { edges: [0, 0], probs: [0, 1] } }), DEFAULT_RANKING, "edges must increase");
 assert.equal(validateRanking({ ...fitted, calibration: { edges: [0, 1], probs: [1, 0] } }), DEFAULT_RANKING, "probabilities must not fall");
 assert.equal(validateRanking({ ...fitted, accuracy: { n: 1 } }), DEFAULT_RANKING);
 assert.equal(validateRanking(fitted), fitted);
-
-// 9. citations of journals outside the index don't shrink the indexed ones' reference scores (the harness's refs include them)
+// A build fitted while the reference signal existed still loads; its reference weight is ignored.
 {
-  const onlyIndexed = rankJournals(input({ k: 6, cited: new Map([["J4", 2]]) }), fitted).find((x) => x.id === "J4")!;
-  const withOutsiders = rankJournals(input({ k: 6, cited: new Map([["J4", 2], ["NOT-IN-INDEX", 40]]) }), fitted).find((x) => x.id === "J4")!;
-  assert.equal(withOutsiders.signals.ref, onlyIndexed.signals.ref);
-}
-// 10. Fit is the text's fit: citations reorder the list, but don't move a journal's Fit
-{
-  const plain = rankJournals(input(), fitted).find((x) => x.id === "J0")!;
-  const cited = rankJournals(input({ cited: new Map([["J0", 9]]) }), fitted).find((x) => x.id === "J0")!;
-  assert.ok(cited.fused > plain.fused, "the citation raises its rank score");
-  assert.equal(cited.fit, plain.fit, "but not its Fit");
+  const old = { ...fitted, weights: { ...fitted.weights, ref: 0.05 } };
+  assert.equal(validateRanking(old), old);
+  assert.deepEqual(rankJournals(input({ k: 6 }), validateRanking(old)), rankJournals(input({ k: 6 }), fitted));
 }
 
 console.log("rank.selfcheck: OK");

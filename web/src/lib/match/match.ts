@@ -3,7 +3,6 @@
 // file makes are for public, non-personal static assets - never the paper.
 import { loadManifest, type RankingConfig } from "./manifest.ts";
 import { rankJournals, type RankedJournal, type TopicEstimate } from "./rank.ts";
-import { buildNameIndex, type NameIndex } from "../paper/references.ts";
 import { loadTopics, topicShares } from "./topics.ts";
 
 export type JournalMeta = {
@@ -35,7 +34,7 @@ export type JournalMeta = {
   centres?: [number, number]; // [first row in index.bin, count]
   centre_topics?: string[]; // one topic label per centre ("" when unknown)
   topics?: [string, number][]; // recent-paper topic profile: [OpenAlex topic id, share], descending
-  names?: string[]; // abbreviation + alternate titles, for the reference-list matcher
+  names?: string[]; // abbreviation + alternate titles; unread since matching stopped reading references (drop at the next index rebuild)
   h_index?: number | null;
   cited_2yr?: number | null;
   is_oa?: boolean | null;
@@ -43,7 +42,7 @@ export type JournalMeta = {
 
 export type MatchResult = RankedJournal;
 // Everything the ranker needs from the paper, all computed on this device.
-export type MatchInput = { vector: Float32Array; paperTopics?: TopicEstimate[]; cited?: Map<string, number> };
+export type MatchInput = { vector: Float32Array; paperTopics?: TopicEstimate[] };
 
 export type JournalFilters = {
   field?: string;
@@ -125,7 +124,6 @@ export async function matchJournals(input: MatchInput, k = 10, filters: JournalF
       candidates,
       paperTopics: input.paperTopics ?? [],
       topicSubfield: new Map(topics.rows.map((t) => [t.id, t.subfield])),
-      cited: input.cited ?? new Map(),
       k,
       year: new Date().getFullYear(),
     },
@@ -138,11 +136,4 @@ export async function estimatePaperTopics(vector: Float32Array): Promise<TopicEs
   const { dim, ranking } = await loadIndex();
   const table = await loadTopics(dim);
   return table.rows.length ? topicShares(quantizeInt8(vector), table, ranking) : [];
-}
-
-let nameIndexCache: NameIndex | null = null;
-/** Every journal's names, for matching the paper's own reference list (references.ts). */
-export async function loadNameIndex(): Promise<NameIndex> {
-  nameIndexCache ??= buildNameIndex(await loadMeta());
-  return nameIndexCache;
 }

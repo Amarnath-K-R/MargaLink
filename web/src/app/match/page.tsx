@@ -38,7 +38,7 @@ export default function MatchPage() {
       </section>
 
 
-      {m.query && <WhatWeRead query={m.query} refs={m.refs} topics={m.paperTopics} busy={m.busy} onCorrect={(text) => void m.processPasted(text, true)} />}
+      {m.query && <WhatWeRead query={m.query} topics={m.paperTopics} busy={m.busy} onCorrect={(text) => void m.processPasted(text, true)} />}
 
       {m.matchInput && (
         <section className="mt-14">

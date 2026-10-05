@@ -18,7 +18,7 @@ Postgres/pgvector. That was never built. What exists instead:
    (gitignored in source control — see [pipeline/README.md](../pipeline/README.md)).
 2. The browser downloads that index once (it's public data, same trust
    category as the page's own JS) and does the entire match — extract
-   text, embed, estimate topics, read the reference list, rank — locally.
+   text, embed, estimate topics, rank — locally.
    `src/lib/match/rank.ts` is the whole ranker: no network round-trip carries
    anything from the user's paper.
 
@@ -45,26 +45,23 @@ Design and plan: `docs/specs/2026-09-24-matching-v2-design.md`,
 `docs/plans/2026-09-24-matching-v2.md`.
 
 - **What is read** (`matchQuery.ts`): the title, the real abstract
-  (`formatCheck.extractAbstract`), keywords and the reference list — not the
-  first 3,000 characters, which for most PDFs is authors and affiliations.
+  (`formatCheck.extractAbstract`) and keywords; never the main text or the
+  reference list. Without an abstract, the first 3,000 characters with the
+  author, affiliation and contact lines removed.
   The page shows it ("What we read") with a paste box to correct it, and
   pasted text is a first-class entry for phones.
 - **Journals** are 1–4 centres each (k-means over their recent papers,
   `pipeline/kmeans.py`), so a broad journal is several clusters rather than
   one average that matches none; a journal scores by its closest centre.
-- **Four signals** (`rank.ts`): embedding similarity; overlap between the
+- **Three signals** (`rank.ts`): embedding similarity; overlap between the
   paper's estimated OpenAlex topics (`topics.ts`) and the journal's recent
-  topic profile; how often the paper's own reference list cites the journal
-  (`references.ts` — a name counts only where a journal name sits in a
-  reference, so "Science" in a title doesn't); a small activity prior. The
-  top 200 by embedding plus every cited journal are scored. A journal's
-  names include NLM's standard abbreviations for its ISSNs ("J Am Coll
-  Cardiol", `pipeline/fetch_nlm_abbrevs.py`), since medical reference lists
-  use those rather than full titles: 12,356 journals have one.
+  topic profile; a small activity prior. The top 200 by embedding are
+  scored. The paper's reference list was a fourth signal until 2026-10-04:
+  it rewarded the journals a paper cites rather than the ones it fits.
 - **Weights and the fit scale are measured, not chosen.** `build_index.py`
   holds back each journal's newest papers (never indexed);
   `web/scripts/eval/eval_match.ts` runs `rank.ts` itself over them, reports a
-  ladder (today → multi-centre → + topics → + references), fits the weights
+  ladder (today → multi-centre → + topics), fits the weights
   on one half and the fit scale on the other, and writes both with the
   accuracy into the manifest. "Fit 78" means the match is as close as 78% of
   real paper→journal pairings; an unfitted build shows raw similarity, no
@@ -83,40 +80,30 @@ Design and plan: `docs/specs/2026-09-24-matching-v2-design.md`,
   (Proceedings of the CSEE, TAIWANIA, Chinese Annals of Mathematics) stay.
   The coherence floor (0.85) sits under the lowest real journal (Cureus,
   0.858; `data/coherence.tsv` lists all), so in practice it drops nothing.
-- **Reference names** must start where a journal name starts in a
-  reference, right after the title, as well as be followed by a year or
-  volume (`references.ts`). Without the left edge, NLM abbreviations (built
-  from parts) credited an unindexed journal's citation to an indexed one
-  whose abbreviation it ends in ("Acta Belg Med Phys" to Medical Physics).
-  On one synthetic Vancouver citation per MEDLINE journal: 12,750 of 13,548
-  indexed journals credited correctly, 1 to the wrong one, and 132 of
-  24,512 unindexed journals credited to some indexed one.
-
-**Measured (2026-10-02, 18,965 journals, 54,369 centres).** The held-out
+**Measured (2026-10-04, 18,965 journals, 54,369 centres).** The held-out
 set is each journal's newest papers, never indexed (347,619); the harness
-scores a seeded sample of 5,345 of them, which always includes the 351 with
-a resolved reference list. The real journal's rank:
+scores a seeded sample of 5,000 of them (title and abstract). The real
+journal's rank:
 
 | Configuration | top 1 | top 5 | top 10 |
 |---|---|---|---|
-| One averaged vector per journal (v1), whole sample | 12.6% | 30.0% | 40.5% |
-| Multi-centre, whole sample | 12.7% | 29.4% | 40.0% |
-| Fitted (emb 1, topic 0.02, ref 0.05), unseen half | 13.3% | 30.3% | 40.2% |
-| Same weights, references off (content alone), unseen half | 13.1% | 29.8% | 39.8% |
-| Papers with a resolved reference list (351): no references | 11.7% | 25.9% | 38.5% |
-| Same papers, references at 0.03 | 15.1% | 38.7% | 48.4% |
+| One averaged vector per journal (v1), whole sample | 12.7% | 30.0% | 40.2% |
+| Multi-centre, whole sample | 12.8% | 29.7% | 40.1% |
+| Fitted (emb 1, topic 0.02, prior 0), unseen half (2,500) | 12.8% | 30.2% | 40.2% |
 
-On 18,965 journals, content alone finds the real one in the top 10 for
-about 4 papers in 10. Multi-centre and the topic signal don't beat one
-averaged vector on this measure (the differences are within noise); they're
-kept for what they explain (a result's closest cluster and shared topics).
-The paper's own reference list adds about 10 points, measured with
-references resolved perfectly through OpenAlex: parsing a real PDF's list
-finds fewer, so that gain is an upper bound. The top result's field is
-right about 66% of the time either way (58% before a journal's field came
-from its own papers rather than OpenAlex's label). Real PDFs: IJBNPA #1, J Clin Sleep
-Med #2; a heart failure paper in JACC ranks heart failure journals and the
-journals it cites most (Int J Cardiol, J Card Fail) above JACC.
+On 18,965 journals, the title and abstract find the real one in the top 10
+for about 4 papers in 10, and the top result's field is right about 65% of
+the time. Multi-centre and the topic signal don't beat one averaged vector
+on this measure (the differences are within noise); they're kept for what
+they explain (a result's closest cluster and shared topics).
+
+**Tried and not shipped: the methods and results** (branch `matching-v3`,
+2026-10-04). On 369 open-access full texts from Europe PMC (biomedical
+only), re-ranking with the methods (and results) added nothing over the
+abstract (top 10: 30.8% with them, 35.1% without), and for a paper without
+an abstract, its methods matched worse than its opening (29.2% against
+35.7%). The journal centres are built from abstracts, so text that reads
+like an abstract is what they recognise.
 
 ## Why only some journals get a real URL
 
@@ -759,11 +746,10 @@ in code, sharing one canvas setup.
 "`lib/` conventions" below). Each `*.selfcheck.ts` sits beside the file it
 checks.
 
-*`src/lib/paper/`*: reading a paper (PDF/DOCX → text, headings, references).
+*`src/lib/paper/`*: reading a paper (PDF/DOCX → text, headings).
 
 | File | What |
 |---|---|
-| `references.ts` | A paper's reference list → the journals it cites. |
 | `extract.ts` | PDF/DOCX → text (browser-only: uses `pdfjs-dist`/`mammoth`); with `{ headings: true }` (the review only) also the document's heading structure. A .docx's text is `docxText` over mammoth's document, which writes in the numbers Word draws on numbered lists (selfchecked). |
 | `headingHints.ts` | Pure: the document's own heading structure — `pickPdfHeadings()` from per-line font data, `pickDocxHeadings()` from Word heading styles. |
 
@@ -771,7 +757,7 @@ checks.
 
 | File | What |
 |---|---|
-| `match.ts` | Loads the index and runs the ranker: `matchJournals`, `estimatePaperTopics`, `loadNameIndex`, filters. |
+| `match.ts` | Loads the index and runs the ranker: `matchJournals`, `estimatePaperTopics`, filters. |
 | `rank.ts` | The ranker the browser and the harness share — signals, fusion, calibration, explanations. Read this first. |
 | `matchQuery.ts`, `topics.ts` | What is read from a paper for matching; its estimated topics. |
 | `embed.ts` | Text → vector (browser-only: `@huggingface/transformers`). |

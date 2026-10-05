@@ -31,6 +31,15 @@ export const TAG_TINT: Record<UpdateTag, string> = {
 export const UPDATES: Update[] = [
   {
     date: "2026-10-04",
+    tag: "Match",
+    title: "Matching reads your abstract, not your references",
+    summary: "Journals are now matched on your title, abstract and keywords alone. The journals your reference list cites no longer push the ranking, so a paper is matched on what it is about rather than on what it cites.",
+    points: ["What we read says what it never reads", "Without an abstract, the start of your paper is read; pasting your abstract matches better"],
+    href: "/match",
+    cta: "Match a paper",
+  },
+  {
+    date: "2026-10-04",
     tag: "Review",
     title: "A new AI review, section by section",
     summary: "The review now reads like a reviewer's report: each section reviewed in turn with the whole paper in view, then an overview and what to fix first. Nothing is repeated, and every quote is checked against your paper.",

@@ -181,26 +181,26 @@ export default function GuidePage() {
                 <strong>Drop a PDF or DOCX</strong>, or click to choose one.
               </>,
               <>
-                <strong>On this device</strong>: every step as it runs: reading the file, finding references, reading the title and abstract, loading the
+                <strong>On this device</strong>: every step as it runs: reading the file, reading the title and abstract, loading the
                 matching model (once, then cached), making the paper&apos;s vector, estimating its topics, ranking the journals.
               </>,
             ]}
           />
           <Shot
             name="match-read"
-            alt="What the matcher read: the title, the abstract, the references and the topics"
+            alt="What the matcher read: the title, the abstract and the topics"
             notes={[
               <>
                 <strong>Title and abstract</strong> as they were read. More shows the rest.
               </>,
               <>
-                <strong>References</strong>: how many were found and how many name a journal in the index. Journals you cite count toward the ranking.
+                <strong>Not read</strong>: the rest of the paper, references included. Only the title, abstract and keywords are matched; without an abstract, the start of the paper.
               </>,
               <>
                 <strong>Reads as</strong>: the research topics your paper most resembles, with their share.
               </>,
               <>
-                <strong>Not right?</strong> Paste your title and abstract to match on those instead; your file&apos;s reference list still counts.
+                <strong>Not right?</strong> Paste your title and abstract to match on those instead.
               </>,
             ]}
           />
@@ -239,8 +239,8 @@ export default function GuidePage() {
                 <strong>Write for this journal</strong>: a new workspace project in its publisher&apos;s template.
               </>,
               <>
-                <strong>The reasons</strong>: the topics you share with its recent papers (yours against its), how often your references cite it, and the
-                cluster of its papers yours sits closest to.
+                <strong>The reasons</strong>: the topics you share with its recent papers (yours against its), and the cluster of its papers yours sits
+                closest to.
               </>,
             ]}
             caption="For the journals with hand-verified guidelines, a result also offers Check against its rules (the structural check, inline) and AI review available (the Review page)."

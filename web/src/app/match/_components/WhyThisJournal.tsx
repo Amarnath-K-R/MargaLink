@@ -1,8 +1,8 @@
 import type { RankedJournal } from "@/lib/match/rank";
 
 // The reasons behind one result: the topics your paper shares with the
-// journal's recent papers, how often you cite it, and which of its clusters
-// of papers yours sits closest to.
+// journal's recent papers, and which of its clusters of papers yours sits
+// closest to.
 export default function WhyThisJournal({ r }: { r: RankedJournal }) {
   const { why } = r;
   return (
@@ -21,19 +21,12 @@ export default function WhyThisJournal({ r }: { r: RankedJournal }) {
           </ul>
         </div>
       )}
-      {why.cited > 0 && <p className="mt-2">{citedLine(why.cited)}</p>}
       <p className="mt-2 text-ink-soft">
         Closest to its papers {why.centre.label ? <>on <span className="text-ink">{why.centre.label}</span> </> : ""}
         (similarity {why.centre.cos.toFixed(2)}).
       </p>
     </div>
   );
-}
-
-// Counts are whole unless a journal's name is shared with another journal, which splits the credit.
-function citedLine(cited: number): string {
-  if (Number.isInteger(cited)) return `Your reference list cites it ${cited} time${cited === 1 ? "" : "s"}.`;
-  return `Your reference list cites a name it shares with another journal (${Math.ceil(cited)} time${Math.ceil(cited) === 1 ? "" : "s"}).`;
 }
 
 function Bar({ label, value }: { label: string; value: number }) {

@@ -1,8 +1,10 @@
-// What the matcher reads from a paper: its title, its real abstract, its
-// keywords, and its reference list — instead of "the first 3,000 characters",
-// which for most PDFs is a title page of authors and affiliations. Pure and
-// local; the page shows the result ("What we read") so a bad read is visible.
-import { extractAbstract, referencesStart } from "../checks/formatCheck.ts";
+// What the matcher reads from a paper: its title, its real abstract and its
+// keywords, never its reference list or its main text. Without an abstract,
+// the start of the paper with the author and affiliation lines removed (the
+// best of what we measured on full texts without one: better than the
+// methods). Pure and local; the page shows the result ("What we read") so a
+// bad read is visible.
+import { extractAbstract } from "../checks/formatCheck.ts";
 
 export type PaperQuery = {
   title: string;
@@ -10,7 +12,6 @@ export type PaperQuery = {
   keywords: string[];
   queryText: string; // what gets embedded
   source: "abstract" | "fallback" | "pasted";
-  references: string | null; // the reference list's text, for references.ts
 };
 
 // Lines that are never content, wherever they are: contact details, dates
@@ -52,9 +53,10 @@ function findTitle(head: string): string {
     if (l.length < 20 || l.length > 300 || notContent(l) || /^(abstract|summary)\b/i.test(l)) continue;
     // "Original research article" banners and all-caps journal names aren't titles.
     if (l === l.toUpperCase() && /[A-Z]/.test(l) && l.split(" ").length <= 6) continue;
-    // A title wrapped onto a second line that continues it in lower case.
-    const next = lines[i + 1] ?? "";
-    return !/[.:?!]$/.test(l) && /^[a-z]/.test(next) && !notContent(next) ? `${l} ${next}` : l;
+    // A title wrapped onto a second line that continues it in lower case, or a subtitle after its colon.
+    const next = lines.slice(i + 1).find((x) => x) ?? ""; // a Word document puts a blank line between paragraphs
+    const continues = (!/[.:?!]$/.test(l) && /^[a-z]/.test(next)) || (/:$/.test(l) && next.length >= 10 && next.length <= 300 && !/^(abstract|summary)\b/i.test(next));
+    return continues && !notContent(next) ? `${l} ${next}` : l;
   }
   return "";
 }
@@ -64,13 +66,6 @@ function findKeywords(head: string): string[] {
   return m ? m[1].split(/[;,·•]/).map((k) => k.trim()).filter((k) => k.length > 1 && k.length < 80).slice(0, 10) : [];
 }
 
-// Everything after the paper's last reference-list heading (formatCheck.ts's rule).
-function findReferences(fullText: string): string | null {
-  const at = referencesStart(fullText);
-  const text = at !== null ? fullText.slice(at).trim() : "";
-  return text || null;
-}
-
 export function buildQuery(paper: { fullText: string }): PaperQuery {
   const { fullText } = paper;
   const head = fullText.slice(0, 6000);
@@ -78,12 +73,11 @@ export function buildQuery(paper: { fullText: string }): PaperQuery {
   const found = extractAbstract(fullText)?.text ?? "";
   const abstract = found.length >= 200 ? found : null;
   const keywords = findKeywords(head);
-  const references = findReferences(fullText);
   if (abstract) {
     const kw = keywords.length ? `\n\n${keywords.join("; ")}` : "";
-    return { title, abstract, keywords, queryText: `${title}\n\n${abstract}${kw}`.trim(), source: "abstract", references };
+    return { title, abstract, keywords, queryText: `${title}\n\n${abstract}${kw}`.trim(), source: "abstract" };
   }
-  return { title, abstract: null, keywords, queryText: stripAffiliations(fullText.slice(0, 3000)), source: "fallback", references };
+  return { title, abstract: null, keywords, queryText: stripAffiliations(fullText.slice(0, 3000)), source: "fallback" };
 }
 
 // The paste box: first line is the title when there's more than one line.
@@ -92,5 +86,5 @@ export function queryFromPasted(text: string): PaperQuery {
   const multi = lines.length > 1;
   const title = multi ? lines[0].trim() : "";
   const abstract = (multi ? lines.slice(1).join("\n") : text).trim();
-  return { title, abstract, keywords: [], queryText: text.trim(), source: "pasted", references: null };
+  return { title, abstract, keywords: [], queryText: text.trim(), source: "pasted" };
 }

@@ -3,7 +3,7 @@
 // the pipeline writes both (pipeline/embedding.py is their one source).
 export type RankingConfig = {
   version: 2;
-  weights: { emb: number; topic: number; ref: number; prior: number };
+  weights: { emb: number; topic: number; prior: number }; // a build fitted with a reference weight still loads; it is ignored
   topicTop: number; // topics kept in a paper's estimate
   topicTemperature: number; // softmax temperature over topic cosines
   calibration: { edges: number[]; probs: number[] }; // fused score → P(true journal), piecewise linear
@@ -23,7 +23,7 @@ export type RankingConfig = {
 // alone, no percentages shown.
 export const DEFAULT_RANKING: RankingConfig = {
   version: 2,
-  weights: { emb: 1, topic: 0, ref: 0, prior: 0 },
+  weights: { emb: 1, topic: 0, prior: 0 },
   topicTop: 10,
   topicTemperature: 0.05,
   calibration: { edges: [0, 1], probs: [0, 1] },
@@ -51,7 +51,7 @@ const obj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "o
 export function validateRanking(v: unknown): RankingConfig {
   if (!obj(v) || v.version !== 2) return DEFAULT_RANKING;
   const w = v.weights;
-  if (!obj(w) || !["emb", "topic", "ref", "prior"].every((k) => num(w[k]))) return DEFAULT_RANKING;
+  if (!obj(w) || !["emb", "topic", "prior"].every((k) => num(w[k]))) return DEFAULT_RANKING;
   if (!num(v.topicTop, 1, 50) || !Number.isInteger(v.topicTop) || !num(v.topicTemperature) || v.topicTemperature === 0) return DEFAULT_RANKING;
   const c = v.calibration;
   if (!obj(c) || !Array.isArray(c.edges) || !Array.isArray(c.probs) || c.edges.length < 2 || c.edges.length !== c.probs.length) return DEFAULT_RANKING;
